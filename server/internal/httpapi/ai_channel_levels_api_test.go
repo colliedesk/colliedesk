@@ -305,6 +305,19 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"attach_threshold": 0.8}}); response.Code != http.StatusAccepted {
 		t.Fatalf("loosen: %+v", response)
 	}
+	// Masking more is a tightening; masking less a raise; a label is a word, not a sentence.
+	labels := map[string]any{"attach_threshold": 0.95, "contact_labels": map[string]any{"account": []string{"stk", "số tài khoản"}, "id": []string{"cccd"}}}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": labels}); response.Code != http.StatusOK {
+		t.Fatalf("mask more: %+v", response)
+	}
+	fewer := map[string]any{"attach_threshold": 0.95, "contact_labels": map[string]any{"account": []string{"stk"}, "id": []string{"cccd"}}}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": fewer}); response.Code != http.StatusAccepted {
+		t.Fatalf("mask less: %+v", response)
+	}
+	bad := map[string]any{"contact_labels": map[string]any{"account": []string{" stk "}}}
+	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": bad}); response.Code != http.StatusBadRequest {
+		t.Fatalf("a label with spaces at its ends: %+v", response)
+	}
 	// A person who is not an admin cannot change a level.
 	agent := joinAsAgent(t, d.api, d.adminA, "agent@level-a.example.com")
 	if response := d.setLevel(t, agent, d.chatA, "triage", map[string]any{"scope": "", "level": "off"}); response.Code != http.StatusForbidden {

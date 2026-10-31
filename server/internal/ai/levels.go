@@ -156,6 +156,15 @@ type IntakeOptions struct {
 	Instructions *string `json:"instructions,omitempty"`
 	// RedactKeywords are words that mark a secret in the channel's language (a password, a code).
 	RedactKeywords []string `json:"redact_keywords,omitempty"`
+	// ContactLabels are words of the channel's language that name a bank account or an identity
+	// document before its number, which is masked like the ones the frame's English words name.
+	ContactLabels *IntakeContactLabels `json:"contact_labels,omitempty"`
+}
+
+// IntakeContactLabels are the words that name a bank account (Account) or an identity document (ID).
+type IntakeContactLabels struct {
+	Account []string `json:"account,omitempty"`
+	ID      []string `json:"id,omitempty"`
 }
 
 // IntakeSources are the context sources intake may read, and whether each is on by default.
@@ -210,10 +219,15 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	if keywords == nil {
 		keywords = []string{}
 	}
+	labels := IntakeContactLabels{Account: []string{}, ID: []string{}}
+	if o.ContactLabels != nil {
+		labels.Account = append(labels.Account, o.ContactLabels.Account...)
+		labels.ID = append(labels.ID, o.ContactLabels.ID...)
+	}
 	return IntakeOptions{CreateThreshold: number(o.CreateThreshold, defaultCreateThreshold), AttachThreshold: number(o.AttachThreshold, defaultAttachThreshold),
 		IgnoreThreshold: number(o.IgnoreThreshold, defaultIgnoreThreshold), AttachRequiresSingleCandidate: &single,
 		AutoMaxAgeSeconds: whole(o.AutoMaxAgeSeconds, defaultAutoMaxAgeSeconds), ReopenWindowDays: whole(o.ReopenWindowDays, defaultReopenWindowDays),
-		Sources: sources, Instructions: &instructions, RedactKeywords: keywords}
+		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels}
 }
 
 var keywordPattern = regexp.MustCompile(`^\S(.{0,78}\S)?$`)
@@ -227,7 +241,7 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&options); err != nil {
-		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions and redact_keywords.")
+		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords and contact_labels.")
 	}
 	for name, value := range map[string]*float64{"create_threshold": options.CreateThreshold, "attach_threshold": options.AttachThreshold, "ignore_threshold": options.IgnoreThreshold} {
 		if value != nil && (*value < 0.5 || *value > 0.99) {
@@ -260,6 +274,16 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	for _, word := range options.RedactKeywords {
 		if !keywordPattern.MatchString(word) {
 			return options, invalid("Each of redact_keywords is 1 to 80 characters without spaces at its ends.")
+		}
+	}
+	if labels := options.ContactLabels; labels != nil {
+		if len(labels.Account) > 50 || len(labels.ID) > 50 {
+			return options, invalid("contact_labels holds at most 50 words for account and 50 for id.")
+		}
+		for _, word := range append(slices.Clone(labels.Account), labels.ID...) {
+			if !keywordPattern.MatchString(word) {
+				return options, invalid("Each of contact_labels is 1 to 80 characters without spaces at its ends.")
+			}
 		}
 	}
 	return options, nil
@@ -295,7 +319,7 @@ func sortedKeys(m map[string]bool) []string {
 
 // optionsLoosen says whether going from before to after lets intake do more by itself: a lower
 // threshold, attaching among several candidates, older batches, a longer reopen window, a source
-// turned on, fewer words redacted, or other instructions. Only a change that tightens needs no approval.
+// turned on, fewer words redacted or masked, or other instructions. Only a change that tightens needs no approval.
 func optionsLoosen(before, after IntakeOptions) bool {
 	b, a := before.Effective(), after.Effective()
 	if *a.CreateThreshold < *b.CreateThreshold || *a.AttachThreshold < *b.AttachThreshold || *a.IgnoreThreshold < *b.IgnoreThreshold {
@@ -314,6 +338,16 @@ func optionsLoosen(before, after IntakeOptions) bool {
 	}
 	for _, word := range b.RedactKeywords {
 		if !slices.Contains(a.RedactKeywords, word) {
+			return true
+		}
+	}
+	for _, word := range b.ContactLabels.Account {
+		if !slices.Contains(a.ContactLabels.Account, word) {
+			return true
+		}
+	}
+	for _, word := range b.ContactLabels.ID {
+		if !slices.Contains(a.ContactLabels.ID, word) {
 			return true
 		}
 	}

@@ -25,6 +25,17 @@ export const chatItemSchema = z.object({
 
 const deciderSchema = z.enum(['rules', 'ai', 'agent']);
 const ignoreReasonSchema = z.enum(['chat', 'handled_in_chat', 'duplicate', 'other']);
+const replyKindSchema = z.enum(['substantive', 'acknowledgement']);
+
+const intakeSuggestionSchema = z.object({
+  decision_id: uuid, action: z.enum(['create', 'attach', 'ignore']), target_conversation_id: uuid.nullable(), target_subject: z.string().nullable(),
+  target_status: statusSchema.nullable(), runner_up_conversation_id: uuid.nullable(), runner_up_subject: z.string().nullable(), runner_up_confidence: z.number().nullable(),
+  confidence: z.number().nullable(), command: z.string().nullable(), subject: z.string().nullable(), reply_kind: replyKindSchema.nullable(),
+  ignore_reason: ignoreReasonSchema.nullable(), reason: z.string().nullable(),
+  not_applied_reason: z.enum(['level_suggest', 'below_threshold', 'too_old', 'credential', 'person_first', 'target_changed', 'lane_blocked', 'gate_closed', 'limit', 'error',
+    'several_candidates', 'no_content']),
+  created_at: date,
+}) satisfies z.ZodType<Generated<'IntakeSuggestion'>>;
 
 export const intakeGatheringSchema = z.object({
   id: uuid, channel_id: uuid, scope: z.string(), thread_id: uuid.nullable(), lane_key: z.string(), contact_id: uuid.nullable(),
@@ -35,14 +46,16 @@ export const intakeGatheringSchema = z.object({
   ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), opened_at: date, closed_at: date, decide_by: date.nullable(),
   requeued_at: date.nullable(), requeued_by_agent_id: uuid.nullable(), item_count: z.number().int(), sender: chatSenderSchema,
   place: z.object({ kind: z.enum(['direct', 'group']), name: z.string().nullable() }).nullable(), preview: z.string(),
+  suggestion: intakeSuggestionSchema.nullable(),
 }) satisfies z.ZodType<Generated<'IntakeGathering'>>;
 
 export const intakeDecisionSchema = z.object({
   id: uuid, decider: z.enum(['ai', 'agent']), basis: z.enum(['model', 'person']), action: z.enum(['create', 'attach', 'ignore', 'review']),
   target_conversation_id: uuid.nullable(), runner_up_conversation_id: uuid.nullable(), runner_up_confidence: z.number().nullable(),
-  command: z.string().nullable(), subject: z.string().nullable(), reply_kind: z.enum(['substantive', 'acknowledgement']).nullable(),
+  command: z.string().nullable(), subject: z.string().nullable(), reply_kind: replyKindSchema.nullable(),
   confidence: z.number().nullable(), reason: z.string().nullable(), applied: z.boolean(), not_applied_reason: z.string().nullable(),
-  ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), corrects_decision_id: uuid.nullable(), model: z.string().nullable(), agent_id: uuid.nullable(), via_token: z.boolean(), created_at: date,
+  ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), corrects_decision_id: uuid.nullable(),
+  follows_decision_id: uuid.nullable(), error_code: z.string().nullable(), model: z.string().nullable(), agent_id: uuid.nullable(), via_token: z.boolean(), created_at: date,
 }) satisfies z.ZodType<Generated<'IntakeDecision'>>;
 
 export const intakeCandidateSchema = z.object({
@@ -66,6 +79,7 @@ export type IntakeGathering = z.infer<typeof intakeGatheringSchema>;
 export type IntakeGatheringDetail = z.infer<typeof intakeGatheringDetailSchema>;
 export type IntakeDecision = z.infer<typeof intakeDecisionSchema>;
 export type IntakeCandidate = z.infer<typeof intakeCandidateSchema>;
+export type IntakeSuggestion = z.infer<typeof intakeSuggestionSchema>;
 export type IntakeStats = z.infer<typeof intakeStatsSchema>;
 export type IntakeDecideInput = RequestBody<'decideIntakeGathering'>;
 export type IntakeIgnoreReason = z.infer<typeof ignoreReasonSchema>;

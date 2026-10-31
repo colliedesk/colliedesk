@@ -16,6 +16,9 @@ const (
 	// PrivilegeAgentRequestPrune clears the call and answer of agent requests decided more than 90
 	// days ago, in every workspace; the audit rows stay.
 	PrivilegeAgentRequestPrune Privilege = "agent-request-prune"
+	// PrivilegeIntakeReasonPrune erases, in every workspace, the reason AI gave for an intake decision
+	// more than 90 days ago; the decision stays.
+	PrivilegeIntakeReasonPrune Privilege = "intake-reason-prune"
 	// PrivilegeSavedReplyPurge deletes, in every workspace, the saved replies that have been in the
 	// trash for more than 30 days, with their history.
 	PrivilegeSavedReplyPurge Privilege = "saved-reply-purge"

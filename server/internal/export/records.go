@@ -149,6 +149,7 @@ type IntakeDecision struct {
 	ItemsSeen              []string        `json:"items_seen"`
 	Fallback               bool            `json:"fallback"`
 	CorrectsDecisionID     *string         `json:"corrects_decision_id"`
+	FollowsDecisionID      *string         `json:"follows_decision_id"`
 	Manifest               json.RawMessage `json:"manifest"`
 	TaskID                 *string         `json:"task_id"`
 	Model                  *string         `json:"model"`
@@ -939,11 +940,14 @@ type Message struct {
 	GatheringID *string `json:"gathering_id"`
 	// OtherContactID is the contact whose conversation a customer message was moved from; DetachedAt when a
 	// chat message was taken back to the intake queue (it is out of the timeline, not deleted).
-	OtherContactID    *string      `json:"other_contact_id"`
-	DetachedAt        *time.Time   `json:"detached_at"`
-	DetachedByAgentID *string      `json:"detached_by_agent_id"`
-	CreatedAt         time.Time    `json:"created_at"`
-	Attachments       []Attachment `json:"attachments"`
+	OtherContactID    *string    `json:"other_contact_id"`
+	DetachedAt        *time.Time `json:"detached_at"`
+	DetachedByAgentID *string    `json:"detached_by_agent_id"`
+	// IntakeReplyKind is what intake said a chat message added to its conversation (acknowledgement:
+	// it kept a resolved conversation resolved).
+	IntakeReplyKind *string      `json:"intake_reply_kind"`
+	CreatedAt       time.Time    `json:"created_at"`
+	Attachments     []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.

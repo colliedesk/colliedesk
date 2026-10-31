@@ -4733,6 +4733,11 @@ export interface components {
             instructions?: string;
             /** @description Words that mark a secret in the channel's language (a password, a code). */
             redact_keywords?: string[];
+            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Removing one needs the approval raising AI needs. */
+            contact_labels?: {
+                account?: string[];
+                id?: string[];
+            };
         };
         AIChannelLevel: {
             /** Format: uuid */
@@ -4924,6 +4929,48 @@ export interface components {
             } | null;
             /** @description The beginning of what the customer wrote first. */
             preview: string;
+            /** @description What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done. */
+            suggestion: components["schemas"]["IntakeSuggestion"] | null;
+        };
+        IntakeSuggestion: {
+            /** Format: uuid */
+            decision_id: string;
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore";
+            /**
+             * Format: uuid
+             * @description With attach.
+             */
+            target_conversation_id: string | null;
+            target_subject: string | null;
+            /** @description resolved or closed: following it reopens the conversation, except a resolved one when reply_kind is acknowledgement. */
+            target_status: components["schemas"]["ConversationStatus"] | null;
+            /**
+             * Format: uuid
+             * @description The second most likely conversation.
+             */
+            runner_up_conversation_id: string | null;
+            runner_up_subject: string | null;
+            runner_up_confidence: number | null;
+            confidence: number | null;
+            /** @description With create: the command whose tags and priority it opens with. */
+            command: string | null;
+            /** @description With create. */
+            subject: string | null;
+            /**
+             * @description acknowledgement: the customer only thanked or acknowledged.
+             * @enum {string|null}
+             */
+            reply_kind: "substantive" | "acknowledgement" | null;
+            ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
+            reason: string | null;
+            /**
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).
+             * @enum {string}
+             */
+            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";
+            /** Format: date-time */
+            created_at: string;
         };
         /**
          * @description chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.
@@ -4991,8 +5038,18 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             not_applied_reason: string | null;
             fallback: boolean;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The AI decision a person undid or decided otherwise than.
+             */
             corrects_decision_id: string | null;
+            /**
+             * Format: uuid
+             * @description The AI suggestion a person decided as.
+             */
+            follows_decision_id: string | null;
+            /** @description What failed when AI's answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject. */
+            error_code: string | null;
             model: string | null;
             /** Format: uuid */
             agent_id: string | null;
@@ -5025,6 +5082,11 @@ export interface components {
             /** @description With create. */
             subject?: string;
             ignore_reason?: components["schemas"]["IntakeIgnoreReason"];
+            /**
+             * Format: uuid
+             * @description The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card's, or no AI decision, is refused.
+             */
+            follows_decision_id?: string;
         };
         IntakeStats: {
             days: number;
@@ -7230,6 +7292,11 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
+            /**
+             * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
+             * @enum {string|null}
+             */
+            intake_reply_kind?: "substantive" | "acknowledgement" | null;
             /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
             external_id?: string | null;
             /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */

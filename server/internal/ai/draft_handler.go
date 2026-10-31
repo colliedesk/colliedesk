@@ -15,7 +15,11 @@ import (
 )
 
 // TaskError fails a task with its own code (a refused or cut-off answer), which the worker records.
-type TaskError struct{ Code string }
+type TaskError struct {
+	Code string
+	// Cancelled says the task was not wanted any more rather than failed.
+	Cancelled bool
+}
 
 func (e *TaskError) Error() string { return "AI task failed: " + e.Code }
 
@@ -147,11 +151,6 @@ func cut(text string, runes int) string {
 	return string([]rune(text)[:runes]) + "…"
 }
 
-// escapeData keeps text inside its section: a customer cannot close the tag the prompt wraps them in.
-func escapeData(text string) string {
-	return strings.NewReplacer("<", "‹", ">", "›").Replace(text)
-}
-
 // writeSources puts the retrieved articles and past conversations in the prompt, each with the id the
 // model cites it by (kb1, past1, …), and records those ids. about adds a line to a past conversation.
 func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[string]store.AIRetrievedDoc, about func(store.AIRetrievedDoc) string) {
@@ -162,7 +161,7 @@ func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[st
 			k++
 			id := fmt.Sprintf("kb%d", k)
 			ids[id] = doc
-			fmt.Fprintf(b, "<kb_article id=%q title=%q>\n%s\n</kb_article>\n", id, escapeData(doc.Title), escapeData(doc.Text))
+			fmt.Fprintf(b, "<kb_article id=%q title=%q>\n%s\n</kb_article>\n", id, aiprovider.EscapeData(doc.Title), aiprovider.EscapeData(doc.Text))
 		case store.AIRetrievedConversation:
 			p++
 			id := fmt.Sprintf("past%d", p)
@@ -173,7 +172,7 @@ func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[st
 					text += "\n" + line
 				}
 			}
-			fmt.Fprintf(b, "<past_conversation id=%q>\n%s\n</past_conversation>\n", id, escapeData(text))
+			fmt.Fprintf(b, "<past_conversation id=%q>\n%s\n</past_conversation>\n", id, aiprovider.EscapeData(text))
 		}
 	}
 }
@@ -200,17 +199,17 @@ func citedSources(ids map[string]store.AIRetrievedDoc, cited []string) []DraftSo
 func draftUserTurn(c draftContext) (string, map[string]store.AIRetrievedDoc) {
 	ids := map[string]store.AIRetrievedDoc{}
 	var b strings.Builder
-	b.WriteString("<untrusted_customer_content>\nSubject: " + escapeData(c.subject) + "\n")
+	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(c.subject) + "\n")
 	if c.contactName != "" {
-		b.WriteString("Customer name: " + escapeData(c.contactName) + "\n")
+		b.WriteString("Customer name: " + aiprovider.EscapeData(c.contactName) + "\n")
 	}
-	b.WriteString(escapeData(c.threadText) + "\n</untrusted_customer_content>\n")
+	b.WriteString(aiprovider.EscapeData(c.threadText) + "\n</untrusted_customer_content>\n")
 	writeSources(&b, c.sources, ids, nil)
 	prompt := c.prompt
 	if prompt == "" {
 		prompt = "Draft a helpful reply to the customer's newest message."
 	}
-	b.WriteString("<agent_request>\n" + escapeData(prompt) + "\n</agent_request>")
+	b.WriteString("<agent_request>\n" + aiprovider.EscapeData(prompt) + "\n</agent_request>")
 	return b.String(), ids
 }
 

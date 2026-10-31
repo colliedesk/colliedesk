@@ -165,6 +165,17 @@ decide in time, the rules' decision applies (the card says **fallback**), and no
 A card behind one of the same customer that waits for a person waits right after it, and goes back to
 be decided once that one is.
 
+AI reads one card of a customer at a time, in the order they were said. It sees what the customer wrote
+with the messages just before it in the same place and the conversations the card may join, with people
+named only "Customer A" or "Team 1", phone numbers, email addresses and account or ID numbers masked, and
+passwords and codes hidden (also a login and its password sent as two messages). For now AI never acts on
+its own, even at **Auto**: it says what it would do (open a conversation, add the card to one, or set it
+aside, how sure it is, and why) and the rules decide at once, without waiting the two minutes. Its
+suggestion shows on the card until a person decides. At **Suggest**, the rules decide as they always did and AI's suggestion shows on
+the card. When a person decides as AI suggested, the decision says it followed AI; otherwise that it
+corrected it. A person who adds a card to a conversation that was merged into another adds it to the one it
+was merged into.
+
 A card names the chat place it was said in, what the rules decided and whether they had evidence (a
 command, a reply to a message of a conversation: **match**) or decided by default. While it waits, it lists
 the conversations it may join without the reply going to someone else: in a group, the open or pending
@@ -185,7 +196,8 @@ For AI agents and the API: `GET /api/v1/intake/gatherings` (`state=review`, `dec
 `decided`, `channel_id`, `scope`, `decided_by` `rules`, `ai` or `agent`), `GET
 /api/v1/intake/gatherings/{id}` (with `candidates` and `commands`), `POST
 /api/v1/intake/gatherings/{id}/decide` (`action` `create`, `attach` with `conversation_id`, or `ignore`
-with an optional `ignore_reason` `chat`, `handled_in_chat`, `duplicate` or `other`), `POST
+with an optional `ignore_reason` `chat`, `handled_in_chat`, `duplicate` or `other`; `follows_decision_id`
+names the card's `suggestion` it follows), `POST
 /api/v1/intake/gatherings/{id}/requeue`, `GET /api/v1/intake/summary` (how many cards wait for a person
 and for AI, and the channels and scopes they come from), `GET /api/v1/intake/stats` and `GET
 /api/v1/conversations/{id}/intake` (why each message is in a conversation), and the MCP tools

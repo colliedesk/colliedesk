@@ -395,7 +395,9 @@ const (
 		`"reopen_window_days":{"type":"integer","minimum":0,"maximum":90,"description":"How long a resolved conversation stays a candidate. Default 7."},` +
 		`"sources":{"type":"object","additionalProperties":{"type":"boolean"},"description":"Context sources on or off: incoming, thread_window, open_conversations, corrections (off by default), contact, kb, images."},` +
 		`"instructions":{"type":"string","maxLength":4000,"description":"The channel's own words added to the prompt."},` +
-		`"redact_keywords":{"type":"array","maxItems":100,"items":{"type":"string","minLength":1,"maxLength":80},"description":"Words that mark a secret in the channel's language."}}}`
+		`"redact_keywords":{"type":"array","maxItems":100,"items":{"type":"string","minLength":1,"maxLength":80},"description":"Words that mark a secret in the channel's language."},` +
+		`"contact_labels":{"type":"object","additionalProperties":false,"description":"Words of the channel's language that name a bank account (account) or an identity document (id) before its number, which is masked.",` +
+		`"properties":{"account":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}},"id":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}}}}}}`
 	channelAISchema = `{"type":"object","required":["channel_id","scopes"],"properties":{"channel_id":{"type":"string"},"scopes":{"type":"array","items":{"type":"object","required":["scope","slots"],` +
 		`"properties":{"scope":{"type":"string"},"slots":{"type":"array","items":{"type":"object","required":["slot","level","effective_level","source","off_reason"],"properties":{` +
 		`"slot":` + aiSlotName + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}],"description":"This scope's own level; null follows the channel, then the workspace."},` +

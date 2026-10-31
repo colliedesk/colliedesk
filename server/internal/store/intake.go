@@ -56,11 +56,13 @@ func unblockLane(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID string
 		return fmt.Errorf("unblock gathering lane: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
-		_, err = tx.Exec(ctx, `UPDATE channel_thread_items i SET disposition='gathering',disposition_reason='deciding' FROM intake_gatherings g
+		if _, err = tx.Exec(ctx, `UPDATE channel_thread_items i SET disposition='gathering',disposition_reason='deciding' FROM intake_gatherings g
 			WHERE i.workspace_id=$1 AND g.workspace_id=i.workspace_id AND g.id=i.gathering_id AND g.state='deciding'
-			AND i.disposition='pending_review'`, workspaceID)
+			AND i.disposition='pending_review'`, workspaceID); err != nil {
+			return err
+		}
 	}
-	return err
+	return enqueueLaneTurn(ctx, tx, workspaceID, gatheringID, now)
 }
 
 // Intake levels a scope's intake is at (ai_level).
@@ -195,8 +197,14 @@ func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWr
 		due := journal.now.Add(DecideWithin)
 		g.decideBy = &due
 	}
-	if _, err := recordGathering(ctx, tx, journal, in, g); err != nil {
+	id, err := recordGathering(ctx, tx, journal, in, g)
+	if err != nil {
 		return result, err
+	}
+	if g.state == GatheringDeciding {
+		if err := enqueueLaneTurn(ctx, tx, journal.channel.WorkspaceID, id, journal.now); err != nil {
+			return result, err
+		}
 	}
 	return finish(result)
 }
@@ -233,6 +241,9 @@ type IntakeApply struct {
 	// Command and Subject are a person's for the conversation a new request opens: the command's tags
 	// and priority, and its subject.
 	Command, Subject string
+	// ReplyKind is what the batch adds to the conversation it joins: an acknowledgement keeps a resolved
+	// conversation resolved (a closed one still opens, so the message is seen) and asks for no automatic draft.
+	ReplyKind string
 	// Decision is the row intake_decisions keeps of an AI's or a person's decision; nil for the rules.
 	Decision *IntakeDecisionInput
 }
@@ -244,6 +255,26 @@ type IntakeDecisionInput struct {
 	IgnoreReason       string
 	Confidence         *float64
 	CorrectsDecisionID string
+	// FollowsDecisionID is the AI suggestion a person decided as.
+	FollowsDecisionID string
+	// RelatedConversationID is, for a new request, the customer's newest conversation before it.
+	RelatedConversationID string
+	AIDecisionDetail
+}
+
+// AIDecisionDetail is what an AI decision keeps besides what it decided: the second conversation it
+// weighed, why it was not applied, and how it was made (what it read, without the content).
+type AIDecisionDetail struct {
+	RunnerUpConversationID string
+	RunnerUpConfidence     *float64
+	NotAppliedReason       string
+	ErrorCode              string
+	Manifest               []byte
+	TaskID, Model          string
+	PromptVersion          string
+	LatencyMS              *int
+	// ItemsSeen are the journal events it read; the gathering's events when nil.
+	ItemsSeen []string
 }
 
 // pendingGathering is an undecided gathering, locked, with its events.
@@ -321,6 +352,14 @@ func concludeGathering(ctx context.Context, tx pgx.Tx, workspaceID string, apply
 	if err := unblockLane(ctx, tx, workspaceID, g.id, now); err != nil {
 		return err
 	}
+	if apply.Decision != nil && state == GatheringCreated && contactID != "" {
+		decision := *apply.Decision
+		var err error
+		if decision.RelatedConversationID, err = relatedConversation(ctx, tx, workspaceID, contactID, conversationID); err != nil {
+			return err
+		}
+		apply.Decision = &decision
+	}
 	return recordIntakeDecision(ctx, tx, workspaceID, apply, g, now)
 }
 
@@ -333,12 +372,30 @@ func recordIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID string, ap
 	if apply.Decider == DecidedByAI {
 		basis = "model"
 	}
+	seen := d.ItemsSeen
+	if seen == nil {
+		seen = g.events
+	}
+	return insertIntakeDecision(ctx, tx, workspaceID, g.id, apply.Decider, basis, *d, seen, apply.Fallback, apply.Actor, now)
+}
+
+// insertIntakeDecision writes one row of intake_decisions: applied unless it says why not.
+func insertIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID, decider, basis string, d IntakeDecisionInput, seen []string, fallback bool,
+	actor ChannelActor, now time.Time) error {
+	manifest := d.Manifest
+	if len(manifest) == 0 {
+		manifest = []byte("{}")
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,command,subject,reply_kind,confidence,reason,
-			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at,ignore_reason)
-		VALUES($1,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),true,$12::uuid[],$13,NULLIF($14,'')::uuid,
-			NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,$17,NULLIF($18,''))`,
-		workspaceID, g.id, apply.Decider, basis, d.Action, d.TargetConversationID, d.Command, clip(d.Subject, 200), d.ReplyKind, d.Confidence, clip(d.Reason, 2000),
-		g.events, apply.Fallback, d.CorrectsDecisionID, apply.Actor.AgentID, apply.Actor.TokenID, now, d.IgnoreReason); err != nil {
+			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at,ignore_reason,follows_decision_id,
+			runner_up_conversation_id,runner_up_confidence,not_applied_reason,error_code,manifest,task_id,model,prompt_version,latency_ms,related_conversation_id)
+		VALUES($1,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),$12,$13::uuid[],$14,NULLIF($15,'')::uuid,
+			NULLIF($16,'')::uuid,NULLIF($17,'')::uuid,$18,NULLIF($19,''),NULLIF($20,'')::uuid,
+			NULLIF($21,'')::uuid,$22,NULLIF($23,''),NULLIF($24,''),$25,NULLIF($26,'')::uuid,NULLIF($27,''),NULLIF($28,''),$29,NULLIF($30,'')::uuid)`,
+		workspaceID, gatheringID, decider, basis, d.Action, d.TargetConversationID, d.Command, clip(d.Subject, 200), d.ReplyKind, d.Confidence, clip(d.Reason, 2000),
+		d.NotAppliedReason == "", seen, fallback, d.CorrectsDecisionID, actor.AgentID, actor.TokenID, now, d.IgnoreReason, d.FollowsDecisionID,
+		d.RunnerUpConversationID, d.RunnerUpConfidence, d.NotAppliedReason, d.ErrorCode, manifest, d.TaskID, clip(d.Model, 200), d.PromptVersion, d.LatencyMS,
+		d.RelatedConversationID); err != nil {
 		return fmt.Errorf("record intake decision: %w", err)
 	}
 	return nil

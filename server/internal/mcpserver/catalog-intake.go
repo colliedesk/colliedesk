@@ -22,6 +22,9 @@ const (
 		`"decided_by_agent_id":{"type":["string","null"]},"ignore_reason":{"type":["string","null"],"enum":["chat","handled_in_chat","duplicate","other",null]},` +
 		`"fallback":{"type":"boolean"},"opened_at":{"type":"string"},"closed_at":{"type":"string"},"decide_by":{"type":["string","null"]},"item_count":{"type":"integer"},` +
 		`"place_kind":{"type":["string","null"],"enum":["direct","group",null],"description":"A one-to-one chat or a group."},` +
+		`"suggestion":{"type":["object","null"],"description":"What AI suggested and did not do (not_applied_reason says why), unless a person decided since: ` +
+		`action, target_conversation_id, target_status, runner_up_conversation_id, runner_up_confidence, confidence, command, reply_kind, ignore_reason; its subject, reason and the ` +
+		`conversations' subjects under untrusted_customer_content. Follow it with colliedesk_intake_decide and follows_decision_id = its decision_id."},` +
 		`"untrusted_customer_content":{"type":"object","properties":{"sender_name":{"type":"string"},"sender":{"type":"string"},"preview":{"type":"string"},` +
 		`"place_name":{"type":"string","description":"The group's name on the channel."}}}}}`
 	intakeCandidateSchema = `{"type":"object","required":["conversation_id","status","resolved","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
@@ -70,7 +73,8 @@ func intakeDecideSpec() Spec {
 		Name: "colliedesk_intake_decide", Title: "Decide an intake card",
 		Description: `Decide a card that waits for a person or for AI: create opens a conversation with what the customer said, as one message ` +
 			`(optional command: one of the channel's commands that opens a request, for its tags and priority; optional subject); attach adds it to conversation_id ` +
-			`(one of the card's candidates, so the reply goes to the same customer); ignore sets it aside, with an optional ignore_reason (colliedesk_intake_requeue takes it back). The same decision again changes nothing; another one once the card is decided ` +
+			`(one of the card's candidates, so the reply goes to the same customer); ignore sets it aside, with an optional ignore_reason (colliedesk_intake_requeue takes it back). ` +
+			`To decide as AI suggested, send its action and conversation with follows_decision_id. The same decision again changes nothing; another one once the card is decided ` +
 			`fails with gathering_decided and how it stands. Opening a conversation may tell the customer it was received, so create needs the send tier; ` +
 			`a token below it files a request a person approves.` + "\n\nTier: draft (create: send).",
 		Tier: "draft",
@@ -78,7 +82,8 @@ func intakeDecideSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"required":["gathering_id","action"],"properties":{` + intakeIDInput + `,` +
 			`"action":{"type":"string","enum":["create","attach","ignore"]},"conversation_id":{"type":"string",` + uuid + `,"description":"With attach."},` +
 			`"command":{"type":"string","minLength":1,"maxLength":40},"subject":{"type":"string","minLength":1,"maxLength":200},` +
-			`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."}}}`,
+			`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."},` +
+			`"follows_decision_id":{"type":"string",` + uuid + `,"description":"The card's suggestion.decision_id when deciding as AI suggested; its reply_kind comes with it."}}}`,
 		Output: `{"type":"object","properties":{"card":` + intakeCardSchema + `,"items":{"type":"array"},"decisions":{"type":"array"},"agent_request":` + filedRequestSchema +
 			`,"next":{"type":"string"}},"anyOf":[{"required":["card"]},{"required":["agent_request","next"]}]}`,
 		run: intakeDecide,
@@ -166,7 +171,8 @@ type intakeCardJSON struct {
 		Kind string  `json:"kind"`
 		Name *string `json:"name"`
 	} `json:"place"`
-	Preview string `json:"preview"`
+	Preview    string         `json:"preview"`
+	Suggestion map[string]any `json:"suggestion"`
 }
 
 type intakeCandidateJSON struct {
@@ -207,7 +213,27 @@ func intakeCardOut(card intakeCardJSON) map[string]any {
 		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID,
 		"decided_by": card.DecidedBy, "decided_at": card.DecidedAt, "decided_by_agent_id": card.DecidedByAgent, "ignore_reason": card.IgnoreReason,
 		"fallback": card.Fallback, "opened_at": card.OpenedAt, "closed_at": card.ClosedAt, "decide_by": card.DecideBy, "item_count": card.ItemCount,
-		"place_kind": placeKind, "untrusted_customer_content": untrusted}
+		"place_kind": placeKind, "suggestion": suggestionOut(card.Suggestion), "untrusted_customer_content": untrusted}
+}
+
+// suggestionOut keeps what AI wrote from the customer's words, and the conversations' subjects, apart.
+func suggestionOut(suggestion map[string]any) map[string]any {
+	if suggestion == nil {
+		return nil
+	}
+	out, untrusted := map[string]any{}, map[string]any{}
+	for key, value := range suggestion {
+		switch key {
+		case "subject", "reason", "target_subject", "runner_up_subject":
+			if value != nil {
+				untrusted[key] = value
+			}
+		default:
+			out[key] = value
+		}
+	}
+	out["untrusted_customer_content"] = untrusted
+	return out
 }
 
 // intakeDetailOut keeps a decision's subject and reason, written from what the customer said, apart.

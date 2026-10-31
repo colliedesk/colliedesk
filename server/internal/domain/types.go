@@ -295,6 +295,9 @@ type Message struct {
 	// OtherContactID is the contact whose conversation a customer message was moved from, while it sits
 	// in a conversation of another contact.
 	OtherContactID *string `json:"other_contact_id"`
+	// IntakeReplyKind is what intake said a chat customer's message added to the conversation it joined:
+	// an acknowledgement kept a resolved conversation resolved.
+	IntakeReplyKind *string `json:"intake_reply_kind,omitempty"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the

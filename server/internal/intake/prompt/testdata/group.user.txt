@@ -1,0 +1,20 @@
+Place: a group chat «Store 12 support».
+<commands>
+open — opens a request
+urgent — opens an urgent request
+</commands>
+<open_conversations>
+C1 · reported by Customer A · open · updated 10-26 13:00 · subject «Sales report missing for Customer A» · last message «we will check»
+C2 · reported by Customer B · pending · updated 10-26 14:02 · subject «Blank labels» · last message «Customer B, we are looking at it»
+</open_conversations>
+<contact>
+Customer A · company Store 12 · open conversations: 1
+</contact>
+<conversation>
+   10-26 14:00 Customer B in C2: the printer at the till prints blank labels
+   10-26 14:02 Team 1 in C2: Customer B, we are looking at it
+   10-26 14:05 Customer A: good morning everyone
+>> 10-26 14:10 Customer A: [image] Team 1 the sales report shows 0 for yesterday, call me on [phone]
+>> 10-26 14:11 Customer A: [reply to Customer B's message of 10-26 14:00 in C2: «the printer at the till prints blank labels»] same as last week
+</conversation>
+Decide what to do with the messages marked >>, from Customer A.

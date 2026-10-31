@@ -413,8 +413,15 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}); err != nil {
 			return held, err
 		}
-		if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision}); err != nil {
+		id, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision})
+		if err != nil {
 			return held, err
+		}
+		// A person decides; at suggest AI says what it would.
+		if level == intakeSuggest {
+			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
+				return held, err
+			}
 		}
 		return finish(held)
 	}
@@ -474,6 +481,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	conversationID := decision.ConversationID
+	// What intake said the batch adds to a conversation it joins; the rules never say.
+	replyKind := ""
+	if request.Intake != nil && conversationID != "" {
+		replyKind = request.Intake.ReplyKind
+	}
 	var files []EmailFile
 	if files, err = s.putInboundFiles(ctx, workspaceID, in.Files); err != nil {
 		return result, err
@@ -505,12 +517,21 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := setStatusActor(ctx, tx, ""); err != nil {
 			return result, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,
-			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
+		// An acknowledgement keeps a resolved conversation resolved, and only then is the message marked as
+		// one: joined to an open conversation it kept nothing, and a closed one opens so it is seen.
+		var status string
+		if err := tx.QueryRow(ctx, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, conversationID).Scan(&status); err != nil {
+			return result, fmt.Errorf("read conversation status: %w", err)
+		}
+		if replyKind == ReplyAcknowledgement && status != "resolved" {
+			replyKind = ReplySubstantive
+		}
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
 	}
-	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, in)
+	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, replyKind, in)
 	if err != nil {
 		return result, err
 	}
@@ -566,8 +587,14 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		case result.Status == channels.ResultCreated:
 			decided.state = GatheringCreated
 		}
-		if _, err := recordGathering(ctx, tx, &journal, in, decided); err != nil {
+		id, err := recordGathering(ctx, tx, &journal, in, decided)
+		if err != nil {
 			return result, err
+		}
+		if decided.state == GatheringApplied {
+			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
+				return result, err
+			}
 		}
 	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
@@ -658,6 +685,16 @@ func linkChannelFiles(ctx context.Context, tx pgx.Tx, storage attachments.Storag
 	return original, linkFiles(ctx, tx, storage, workspaceID, messageID, linked)
 }
 
+// knownContact is the contact a sender's identity on a channel already belongs to (the one it was merged
+// into); pgx.ErrNoRows when the identity is new. It creates nothing.
+func knownContact(ctx context.Context, tx pgx.Tx, workspaceID, channelID, kind, value string) (string, error) {
+	var contactID string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(c.merged_into_id,c.id)::text FROM contact_identities i
+		JOIN contacts c ON c.workspace_id=i.workspace_id AND c.id=i.contact_id
+		WHERE i.workspace_id=$1 AND i.channel_id=$2 AND i.kind=$3 AND i.value=$4`, workspaceID, channelID, kind, value).Scan(&contactID)
+	return contactID, err
+}
+
 // contactForIdentity finds or creates the contact a sender is: by email address, or by the sender's
 // identity on the channel, which a new contact without an email address gets.
 func (s *Store) contactForIdentity(ctx context.Context, tx pgx.Tx, channel channels.Channel, sender channels.Sender) (string, error) {
@@ -669,11 +706,7 @@ func (s *Store) contactForIdentity(ctx context.Context, tx pgx.Tx, channel chann
 		}
 		return contactForEmail(ctx, tx, channel.WorkspaceID, name, identity.Value)
 	}
-	var contactID string
-	err := tx.QueryRow(ctx, `SELECT COALESCE(c.merged_into_id,c.id)::text FROM contact_identities i
-		JOIN contacts c ON c.workspace_id=i.workspace_id AND c.id=i.contact_id
-		WHERE i.workspace_id=$1 AND i.channel_id=$2 AND i.kind=$3 AND i.value=$4`,
-		channel.WorkspaceID, channel.ID, identity.Kind, identity.Value).Scan(&contactID)
+	contactID, err := knownContact(ctx, tx, channel.WorkspaceID, channel.ID, string(identity.Kind), identity.Value)
 	if err == nil {
 		if _, err := tx.Exec(ctx, `UPDATE contact_identities SET display_name=NULLIF($5,''),updated_at=now()
 			WHERE workspace_id=$1 AND channel_id=$2 AND kind=$3 AND value=$4 AND display_name IS DISTINCT FROM NULLIF($5,'')`,
@@ -841,7 +874,7 @@ func tagConversation(ctx context.Context, tx pgx.Tx, workspaceID, conversationID
 	return nil
 }
 
-func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Channel, conversationID, externalID string, in channels.Inbound) (string, error) {
+func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Channel, conversationID, externalID, replyKind string, in channels.Inbound) (string, error) {
 	var envelope []byte
 	if in.EmailMeta != nil {
 		var err error
@@ -858,9 +891,9 @@ func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Chann
 		sentAt = &in.SentAt
 	}
 	var messageID string
-	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html,external_id,channel_id,channel_meta,email_meta,created_at)
-		VALUES($1,$2,'incoming',$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,COALESCE($9,now())) RETURNING id::text`,
-		channel.WorkspaceID, conversationID, in.Text, in.HTML, externalID, channel.ID, meta, envelope, sentAt).Scan(&messageID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html,external_id,channel_id,channel_meta,email_meta,created_at,intake_reply_kind)
+		VALUES($1,$2,'incoming',$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,COALESCE($9,now()),NULLIF($10,'')) RETURNING id::text`,
+		channel.WorkspaceID, conversationID, in.Text, in.HTML, externalID, channel.ID, meta, envelope, sentAt, replyKind).Scan(&messageID); err != nil {
 		return "", fmt.Errorf("store inbound message: %w", err)
 	}
 	return messageID, nil
