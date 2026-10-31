@@ -7812,6 +7812,13 @@ export interface components {
             last_inbound_at: string | null;
             /** @description Whether this is its type's default channel: a call, link or address that names no channel uses it. */
             is_default?: boolean;
+            /**
+             * Format: date-time
+             * @description When the channel's processing was paused (null while it runs): what arrives waits in its journal as it came, nothing is decided, opened or sent; once resumed it is processed in order by the channel's rules.
+             */
+            processing_paused_at?: string | null;
+            /** @description Messages kept while the channel's processing is paused, waiting to be processed (0 while it runs). */
+            paused_count?: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -7938,6 +7945,8 @@ export interface components {
             is_default?: boolean;
             config?: components["schemas"]["ChannelConfigInput"];
             settings?: components["schemas"]["ChannelSettings"];
+            /** @description true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose messages wait in a journal (Zalo) can be paused; another answers 400. */
+            processing_paused?: boolean;
         };
         ChannelCredentialInput: {
             name: string;
@@ -7954,7 +7963,7 @@ export interface components {
             /** Format: date-time */
             at: string;
             /** @enum {string} */
-            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed" | "ai_changed";
+            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed" | "ai_changed" | "paused" | "resumed";
             /** Format: uuid */
             channel_id: string;
             channel_name: string;

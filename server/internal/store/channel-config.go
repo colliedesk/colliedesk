@@ -28,6 +28,9 @@ type ChannelInput struct {
 	// IsDefault, true, makes the channel its type's default; the one that was loses it. A type keeps
 	// a default while it has a channel, so false is refused: make another channel the default.
 	IsDefault *bool
+	// ProcessingPaused pauses (true) or resumes (false) the channel's processing; only a type whose
+	// messages wait in the journal (Async) can be paused.
+	ProcessingPaused *bool
 }
 
 // nameTaken returns the live channel of the type that has the name (whatever its case), other than
@@ -376,6 +379,23 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 			return channels.Channel{}, err
 		}
 	}
+	if input.ProcessingPaused != nil && *input.ProcessingPaused != (current.ProcessingPausedAt != nil) {
+		if *input.ProcessingPaused && adapter.Inbound().Mode() != channels.Async {
+			return channels.Channel{}, &channels.FieldError{Fields: map[string]string{"processing_paused": "This channel takes each message as it comes: it cannot be paused."},
+				Message: "Check the channel."}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE channels SET processing_paused_at=CASE WHEN $3 THEN now() END,processing_paused_by_agent_id=CASE WHEN $3 THEN NULLIF($4,'')::uuid END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, *input.ProcessingPaused, actor.AgentID); err != nil {
+			return channels.Channel{}, fmt.Errorf("pause or resume channel: %w", err)
+		}
+		kind := "resumed"
+		if *input.ProcessingPaused {
+			kind = "paused"
+		}
+		if err := insertChannelEvent(ctx, tx, current, kind, actor, nil); err != nil {
+			return channels.Channel{}, err
+		}
+	}
 	var change channels.ConfigChange
 	if input.Config != nil {
 		if change, err = adapter.Config().Validate(ctx, tx, workspaceID, &current, input.Config); err != nil {
@@ -535,6 +555,8 @@ type ChannelPublic struct {
 	Status   channels.Status
 	Held     int
 	Unsent   int
+	// Paused counts the messages kept while the channel's processing is paused (0 while it runs).
+	Paused   int
 	LastSeen *string
 }
 
@@ -570,8 +592,9 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		(SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='held' AND hold_reason=$3),
 		(SELECT count(*) FROM channel_outbox WHERE workspace_id=$1 AND channel_id=$2 AND status='failed' AND last_error_code=$4),
 		(SELECT to_char(max(received_at) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') FROM channel_inbound_events
-			WHERE workspace_id=$1 AND channel_id=$2 AND state NOT IN ('received','failed'))`,
-		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff).Scan(&public.Held, &public.Unsent, &public.LastSeen); err != nil {
+			WHERE workspace_id=$1 AND channel_id=$2 AND state NOT IN ('received','failed')),
+		CASE WHEN $5 THEN (SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state IN ('received','failed','pending')) ELSE 0 END`,
+		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff, channel.ProcessingPausedAt != nil).Scan(&public.Held, &public.Unsent, &public.LastSeen, &public.Paused); err != nil {
 		return public, fmt.Errorf("count channel messages: %w", err)
 	}
 	// Any event the channel received and decided on (made a message, held, dropped as the desk's own
