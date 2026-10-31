@@ -77,6 +77,19 @@ func (a *API) listChannelThreads(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, page)
 }
 
+func (a *API) listChannelSenders(response http.ResponseWriter, request *http.Request) {
+	id, ok := channelID(response, request)
+	if !ok {
+		return
+	}
+	senders, err := a.store.ChannelSenders(request.Context(), principal(request).Workspace.ID, id)
+	if err != nil {
+		writeChannelError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": senders})
+}
+
 func (a *API) listThreadItems(response http.ResponseWriter, request *http.Request) {
 	id, ok := channelID(response, request)
 	if !ok {

@@ -47,6 +47,7 @@ func TestChatToolsReturnWhatCustomersWroteAsUntrusted(t *testing.T) {
 	}{
 		{"colliedesk_channel_threads_list", map[string]any{"channel_id": channel}},
 		{"colliedesk_channel_thread_items", map[string]any{"channel_id": channel, "thread_id": thread}},
+		{"colliedesk_channel_senders", map[string]any{"channel_id": channel}},
 		{"colliedesk_conversation_chat_get", map[string]any{"conversation_id": conversationOf(t, e, w.admin)}},
 	} {
 		result := structured(t, e.call(session, call.tool, call.args))

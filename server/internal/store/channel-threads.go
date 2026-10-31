@@ -244,6 +244,52 @@ type ChatThreadPage struct {
 	Next  *string      `json:"next_cursor"`
 }
 
+// ChannelSender is someone who wrote in a channel's chats: where and when they last wrote, and the name the
+// channel last gave them.
+type ChannelSender struct {
+	Kind       string    `json:"kind"`
+	Value      string    `json:"value"`
+	Name       *string   `json:"name"`
+	Role       string    `json:"role"`
+	LastAt     time.Time `json:"last_at"`
+	ThreadID   string    `json:"thread_id"`
+	ThreadName *string   `json:"thread_name"`
+}
+
+// MaxChannelSenders is the most people ChannelSenders lists.
+const MaxChannelSenders = 200
+
+// ChannelSenders lists the people who wrote in a channel's chats (customers and the team, never the
+// channel itself), each once, most recent first: every member of a group, not only its last writer.
+func (s *Store) ChannelSenders(ctx context.Context, workspaceID, channelID string) ([]ChannelSender, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]ChannelSender, error) {
+		if _, err := s.channelByID(ctx, tx, workspaceID, channelID); err != nil {
+			return nil, err
+		}
+		rows, err := tx.Query(ctx, `SELECT x.sender_kind,x.sender_value,x.name,x.role,x.last_at,x.thread_id::text,t.name FROM (
+				SELECT sender_kind,sender_value,max(occurred_at) AS last_at,
+					(array_agg(sender_name ORDER BY occurred_at DESC,id DESC) FILTER (WHERE sender_name IS NOT NULL))[1] AS name,
+					(array_agg(role ORDER BY occurred_at DESC,id DESC))[1] AS role,
+					(array_agg(thread_id ORDER BY occurred_at DESC,id DESC))[1] AS thread_id
+				FROM channel_thread_items WHERE workspace_id=$1 AND channel_id=$2::uuid AND role<>'bot' AND sender_value IS NOT NULL AND sender_kind IS NOT NULL
+				GROUP BY sender_kind,sender_value ORDER BY last_at DESC LIMIT $3) x
+			JOIN channel_threads t ON t.workspace_id=$1 AND t.id=x.thread_id ORDER BY x.last_at DESC,x.sender_value`, workspaceID, channelID, MaxChannelSenders)
+		if err != nil {
+			return nil, fmt.Errorf("read chat senders: %w", err)
+		}
+		senders, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChannelSender, error) {
+			var sender ChannelSender
+			err := row.Scan(&sender.Kind, &sender.Value, &sender.Name, &sender.Role, &sender.LastAt, &sender.ThreadID, &sender.ThreadName)
+			sender.LastAt = domain.UTC(sender.LastAt)
+			return sender, err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("read chat senders: %w", err)
+		}
+		return senders, nil
+	})
+}
+
 // MaxChatPage is the most items or threads a page holds.
 const MaxChatPage = 100
 

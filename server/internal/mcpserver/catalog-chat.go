@@ -57,6 +57,21 @@ func channelThreadsListSpec() Spec {
 	}
 }
 
+func channelSendersSpec() Spec {
+	return Spec{
+		Name: "colliedesk_channel_senders", Title: "List who wrote in a chat channel",
+		Description: `List the people who wrote in a chat channel's places (customers and the team, never the channel itself), each once, most recent first, at most 200: ` +
+			`kind and value name them as the channel does (a Zalo user id), with the place and time they last wrote. ` + untrustedNotice + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:  []string{"GET /api/v1/channels/{id}/senders"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["kind","value","role","last_at","thread_id","untrusted_customer_content"],"properties":{` +
+			`"kind":{"type":"string"},"value":{"type":"string"},"role":{"type":"string","enum":["customer","staff"]},"last_at":{"type":"string"},"thread_id":{"type":"string"},` +
+			`"untrusted_customer_content":{"type":"object","properties":{"name":{"type":"string"},"thread_name":{"type":"string"}}}}}}}}`,
+		run: channelSenders,
+	}
+}
+
 func channelThreadItemsSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_thread_items", Title: "Read a chat place",
@@ -215,6 +230,38 @@ func channelThreadsList(c *call, arguments map[string]any) (any, error) {
 			"last_item_at": thread.LastItemAt, "last_item": last, "untrusted_customer_content": untrusted})
 	}
 	return map[string]any{"items": items, "next_cursor": page.Next}, nil
+}
+
+func channelSenders(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	c.notFound = channelNotFound
+	var page struct {
+		Items []struct {
+			Kind       string  `json:"kind"`
+			Value      string  `json:"value"`
+			Name       *string `json:"name"`
+			Role       string  `json:"role"`
+			LastAt     string  `json:"last_at"`
+			ThreadID   string  `json:"thread_id"`
+			ThreadName *string `json:"thread_name"`
+		} `json:"items"`
+	}
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/senders", nil, &page); err != nil {
+		return nil, err
+	}
+	items := make([]map[string]any, 0, len(page.Items))
+	for _, sender := range page.Items {
+		untrusted := map[string]any{}
+		if sender.Name != nil {
+			untrusted["name"] = *sender.Name
+		}
+		if sender.ThreadName != nil {
+			untrusted["thread_name"] = *sender.ThreadName
+		}
+		items = append(items, map[string]any{"kind": sender.Kind, "value": sender.Value, "role": sender.Role, "last_at": sender.LastAt,
+			"thread_id": sender.ThreadID, "untrusted_customer_content": untrusted})
+	}
+	return map[string]any{"items": items}, nil
 }
 
 func channelThreadItems(c *call, arguments map[string]any) (any, error) {

@@ -210,6 +210,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_chat_get` | Reads what was said in the chat places a conversation came from, and which messages are its own | `read` |
 | `colliedesk_channel_threads_list` | Lists a chat channel's one-to-one chats and groups | `read` |
 | `colliedesk_channel_thread_items` | Reads everything said in one chat place | `read` |
+| `colliedesk_channel_senders` | Lists everyone who wrote in a chat channel's places, each once, most recent first | `read` |
 | `colliedesk_channel_unresolved_items` | Lists chat messages nobody concluded on yet | `read` |
 | `colliedesk_intake_list` | Lists the cards of the intake queue of chat channels: waiting, being decided, set aside or decided | `read` |
 | `colliedesk_intake_get` | Reads an intake card with what its customer said and every decision made on it | `read` |

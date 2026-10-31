@@ -1,0 +1,1 @@
+DROP INDEX channel_thread_items_sender;
