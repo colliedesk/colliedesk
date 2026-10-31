@@ -114,3 +114,19 @@ test('asked for from the billing page the same form has no welcome or receipt', 
   expect(screen.queryByText(/next charge/i)).not.toBeInTheDocument();
   expect(screen.getByText('We run the import with you on a short call. Send your Freshdesk address and times that suit you.')).toBeInTheDocument();
 });
+
+test('focus starts inside the dialog, so Escape closes it from the keyboard at once', () => {
+  const { dialog, onDismiss } = open();
+  expect(document.activeElement).not.toBe(document.body);
+  expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+});
+
+test('once the request is sent, focus moves to Done, so the keyboard stays in the dialog', async () => {
+  const { dialog } = open();
+  fill('northwind.freshdesk.com');
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Send to Colliedesk' })); });
+  const done = await within(dialog).findByRole('button', { name: 'Done' });
+  expect(done).toHaveFocus();
+});

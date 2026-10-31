@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { InvalidRequestError } from '../../api/client';
 import type { z } from 'zod';
@@ -38,6 +38,10 @@ export function MigrationDialog({ welcome, plan: asked, onSend, onDismiss }: Mig
   const [timesError, setTimesError] = useState<string>();
   const [sent, setSent] = useState<MigrationRequest>();
   const sending = state === 'sending';
+  // Focus starts on the step's heading, not on a field: a phone keeps its keyboard down until the buyer taps, and
+  // Escape and Tab already work from the first key.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
 
   async function submit(_event?: FormEvent) {
     if (sending) return;
@@ -58,7 +62,7 @@ export function MigrationDialog({ welcome, plan: asked, onSend, onDismiss }: Mig
   }
 
   const footer = state === 'sent'
-    ? <button type="button" className="primary-action" onClick={onDismiss}>{billingMessages.migrationDone}</button>
+    ? <button key="done" type="button" className="primary-action" autoFocus onClick={onDismiss}>{billingMessages.migrationDone}</button>
     : <>
       <button type="submit" className="primary-action" aria-busy={sending || undefined} disabled={sending}>
         {sending ? <><span className="spinner" aria-hidden="true" />{billingMessages.migrationSending}</> : state === 'failed' ? billingMessages.migrationRetry : billingMessages.migrationSend}</button>
@@ -75,7 +79,7 @@ export function MigrationDialog({ welcome, plan: asked, onSend, onDismiss }: Mig
           <div className="sent-note" role="status"><CheckCircleIcon /><p>{billingMessages.migrationSent}</p></div>
           <dl className="order-summary"><dt>{billingMessages.migrationSentFreshdesk}</dt><dd>{sent.freshdesk_address}</dd>
             {sent.times && <><dt>{billingMessages.migrationSentTimes}</dt><dd>{sent.times}</dd></>}</dl></> : <>
-          <h3 id="migration-heading">{billingMessages.migrationHeading}</h3>
+          <h3 id="migration-heading" ref={heading} tabIndex={-1}>{billingMessages.migrationHeading}</h3>
           <p>{plan === 'founding' ? billingMessages.migrationFounding : billingMessages.migrationTeam25}</p>
           <Field id="fd-address" label={billingMessages.freshdeskAddress} error={addressError}>
             {(props) => <input {...props} name="address" autoComplete="url" placeholder={billingMessages.freshdeskPlaceholder} value={address} readOnly={sending} onChange={(event) => setAddress(event.target.value)} />}</Field>
