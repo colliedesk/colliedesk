@@ -37,8 +37,10 @@ export function tidyPlainText(text: string): string {
 
 // Customer email is untrusted: show it as written. No Markdown, so no remote images and no link
 // whose text differs from its target; visible http(s) URLs become links that show their real href.
-export function PlainTextBody({ text: raw }: { text: string }) {
-  const text = unwrapHardWraps(tidyPlainText(raw));
+// keepBreaks is for chat, where every line break is one the customer typed, never a mail client's wrap.
+export function PlainTextBody({ text: raw, keepBreaks = false }: { text: string; keepBreaks?: boolean }) {
+  const tidy = tidyPlainText(raw);
+  const text = keepBreaks ? tidy : unwrapHardWraps(tidy);
   const parts: ReactNode[] = [];
   let last = 0;
   for (const match of text.matchAll(urlPattern)) {

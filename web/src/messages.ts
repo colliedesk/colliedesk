@@ -285,6 +285,8 @@ export const messages = {
   minutes: (count: number) => `${count} minute${count === 1 ? '' : 's'}`,
   requests: 'Requests',
   requestsWaiting: (count: number) => `Requests, ${count} waiting`,
+  review: 'Review',
+  reviewWaiting: (count: number) => `Review, ${count} waiting`,
   someone: 'someone',
   replyDraftBy: (person: string, token: string) => `Reply draft by ${person} via ${token}`,
   draftText: 'Draft text',
