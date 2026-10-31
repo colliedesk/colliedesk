@@ -204,3 +204,11 @@ test('the time names its timezone in its title, and on screen when it is not the
   expect(time).toHaveAttribute('title', 'Oct 28, 2026, 7:42 PM GMT+14');
   expect(time).toHaveTextContent(/7:42\sPM GMT\+14$/);
 });
+
+test('a notice the channel sent by itself says so and is not shown as a reply of the team', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', author_name: null, email: null, notice_kind: 'received', body: 'Đã nhận yêu cầu của anh/chị.' }} timezone="UTC" />);
+  expect(screen.getByText('Sent by the channel · not a reply')).toBeInTheDocument();
+  expect(screen.queryByText('Reply')).toBeNull();
+  expect(screen.queryByText('Someone')).toBeNull();
+  expect(screen.getByText('Đã nhận yêu cầu của anh/chị.')).toBeInTheDocument();
+});

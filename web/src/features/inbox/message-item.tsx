@@ -19,6 +19,8 @@ interface MessageItemProps {
   // label says more about where the message came from (why a chat message is here); menu acts on it.
   label?: ReactNode;
   menu?: ReactNode;
+  // channelName is the conversation's channel, the author of a notice it sent by itself (named even once removed).
+  channelName?: string;
 }
 
 export function MessageItem(props: MessageItemProps) {
@@ -44,7 +46,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, channelName }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -57,17 +59,19 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu 
   const sender = approvedBy ?? item.author_name ?? messages.someone;
   // A token or draft line already names the person; the plain name would repeat it.
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
+  const noticeAuthor = item.notice_kind ? channelName : undefined;
   return (
     <article className={`message message-${item.kind}`}>
       <header className="message-meta">
-        <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
+        <Avatar name={item.author_name ?? item.email?.from ?? (item.notice_kind ? noticeAuthor || messages.channelNoticeAuthor : kindLabel(item))} />
         <div className="message-byline">
           {plainAuthor && <span className="message-author">{item.author_name}</span>}
+          {noticeAuthor && <span className="message-author">{noticeAuthor}</span>}
           {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
           {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
-          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
+          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item)}</span>
           {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
             {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
           {label}
@@ -93,7 +97,9 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu 
   );
 }
 
-function kindLabel(kind: Message['kind']) {
+// A notice the channel sent by itself (its received notice) is no reply of the team, and says so.
+function kindLabel({ kind, notice_kind }: Pick<Message, 'kind' | 'notice_kind'>) {
+  if (notice_kind) return messages.channelNotice;
   if (kind === 'note') return messages.noteMode;
   return kind === 'incoming' ? messages.incoming : messages.replyMode;
 }

@@ -141,6 +141,8 @@ export const messages = {
   useOtherTabDraft: 'Use it',
   keepMyDraft: 'Keep mine',
   replyMode: 'Reply',
+  channelNotice: 'Sent by the channel · not a reply',
+  channelNoticeAuthor: 'Channel',
   incoming: 'Incoming',
   noteMode: 'Private note',
   attachments: 'Attachments',

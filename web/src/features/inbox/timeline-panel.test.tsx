@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, expect, test, vi } from 'vitest';
-import type { Message } from '../../api/schemas';
+import type { Conversation, Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
@@ -194,4 +194,15 @@ test('a help chat conversation says its sender is unverified and links the chat 
 test('another conversation shows neither', () => {
   render(<TimelinePanel conversation={thread} items={[]} timezone="UTC" />);
   expect(screen.queryByText('Unverified sender (Help chat)')).not.toBeInTheDocument();
+});
+
+test('a notice the channel sent by itself is written by the channel, named even when it was removed', () => {
+  const notice: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Đã nhận yêu cầu.', notice_kind: 'received' };
+  const conversation = (deleted: boolean) => ({ id: base.conversation_id, subject: 'Máy in', channel_ref: { id: '77777777-7777-4777-8777-777777777777', type: 'zalo_oa', name: 'Hảo Đạt OA', enabled: true, deleted, replies_via: null } }) as unknown as Conversation;
+  const { unmount } = render(<TimelinePanel conversation={conversation(false)} items={[notice]} timezone="UTC" />);
+  expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
+  expect(screen.getByText('Sent by the channel · not a reply')).toBeInTheDocument();
+  unmount();
+  render(<TimelinePanel conversation={conversation(true)} items={[notice]} timezone="UTC" />);
+  expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
 });

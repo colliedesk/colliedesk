@@ -166,8 +166,10 @@ ones whole, so send them all.
 - A notice's text (`settings.notices.received`, `settings.notices.unmatched`) may only name placeholders
   the channel fills; it fills none yet, so `{ref}` and the like are refused when the settings are saved.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
-  its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
-  the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
+  its message is marked (`notice_kind: received`) and shows in the conversation under the channel's name as
+  "Sent by the channel · not a reply". It is no one's work: the conversation still waits for a first reply
+  in the inbox and in Results, still offers "Not a new request? Move it…", and a teammate who opened it
+  before the notice is not told someone replied.
 - A team member writing in a group on the chat app itself is part of the place, never a customer's
   request: it opens and joins nothing, unless they name a command that opens one.
 
