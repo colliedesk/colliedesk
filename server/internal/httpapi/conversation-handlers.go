@@ -1,15 +1,19 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -138,8 +142,10 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 		Priority   *string         `json:"priority"`
 		AssigneeID json.RawMessage `json:"assignee_id"`
 		TagIDs     *[]string       `json:"tag_ids"`
+		Notify     *bool           `json:"notify"`
 	}
-	if err := decodeJSON(request, &input); err != nil {
+	raw, err := readBody(request)
+	if err != nil || decodeJSON(request, &input) != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Conversation changes are invalid.")
 		return
 	}
@@ -153,8 +159,13 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 		assignee = &value
 	}
 	identity := principal(request)
+	quiet := input.Notify != nil && !*input.Notify
+	if a.statusNeedsApproval(response, request, Route{Method: http.MethodPatch, Pattern: "/api/v1/conversations/{id}"}, identity, raw,
+		[]string{request.PathValue("id")}, input.Status, quiet) {
+		return
+	}
 	item, err := a.store.UpdateConversation(request.Context(), identity.Workspace.ID, request.PathValue("id"), store.ConversationUpdate{
-		Status: input.Status, Priority: input.Priority, AssigneeID: assignee, TagIDs: input.TagIDs, ActorID: identity.Agent.ID,
+		Status: input.Status, Priority: input.Priority, AssigneeID: assignee, TagIDs: input.TagIDs, ActorID: identity.Agent.ID, TokenID: tokenOf(request), Quiet: quiet,
 	})
 	if err != nil {
 		writeStoreError(response, err)
@@ -169,4 +180,61 @@ func positiveInt(value string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+// statusNeedsApproval files the call as an agent request when it is a token's that may not write to
+// customers and the status it sets would tell one (the channel's status notice): it answers 202 and says
+// so. A quiet change (notify false) never asks.
+func (a *API) statusNeedsApproval(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, raw json.RawMessage,
+	ids []string, status *string, quiet bool) bool {
+	if status == nil || quiet || !who.IsToken() || who.Allows(auth.PermMessagesSend) {
+		return false
+	}
+	notices, err := a.store.StatusNoticePreview(request.Context(), who.Workspace.ID, ids, *status)
+	if err != nil {
+		writeStoreError(response, err)
+		return true
+	}
+	if len(notices) == 0 {
+		return false
+	}
+	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, raw, statusRequestSummary(ids, *status, notices))
+	return true
+}
+
+// statusRequestSummary says what a status change that waits for a person does, as the approval card
+// reads it: "Set REF-1 to Resolved and tell the customer on Zalo: REF-1: fixed.", or for several
+// "Set 3 conversations to Resolved and tell their customers on Zalo, Web chat".
+func statusRequestSummary(ids []string, status string, notices []domain.StatusNoticePreview) string {
+	label := strings.ToUpper(status[:1]) + status[1:]
+	if len(ids) == 1 {
+		return fmt.Sprintf("Set %s to %s and tell the customer on %s: %s", notices[0].ExampleRef, label, notices[0].ChannelName, notices[0].Text)
+	}
+	names := make([]string, len(notices))
+	for index, notice := range notices {
+		names[index] = notice.ChannelName
+	}
+	return fmt.Sprintf("Set %d conversations to %s and tell their customers on %s", len(ids), label, strings.Join(names, ", "))
+}
+
+// tokenOf is the id of the AI agent's token making a call, or "" for a person's own: a token's request a
+// person approved is still the token's, made with their approval.
+func tokenOf(request *http.Request) string {
+	if replay, ok := approvalOf(request.Context()); ok {
+		return replay.tokenID
+	}
+	if who := principal(request); who.IsToken() {
+		return who.SessionID
+	}
+	return ""
+}
+
+// readBody reads the JSON body once and puts it back for decodeJSON, so a call can be filed as it came.
+func readBody(request *http.Request) (json.RawMessage, error) {
+	raw, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	request.Body = io.NopCloser(bytes.NewReader(raw))
+	return raw, nil
 }

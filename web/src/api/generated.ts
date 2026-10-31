@@ -875,7 +875,7 @@ export interface paths {
         head?: never;
         /**
          * Change up to 50 conversations at once
-         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added.
+         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50 conversations as for one; a conversation whose status changes again before then is told only the later change.
          */
         patch: operations["bulkUpdateConversations"];
         trace?: never;
@@ -895,6 +895,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A token that may not write to customers (below the send tier) asks a person first (202) when the change would tell one, with a summary that quotes the notice; a quiet change does not ask. The conversation's `status_notices` says beforehand which statuses would tell. */
         patch: operations["updateConversation"];
         trace?: never;
     };
@@ -4691,6 +4692,18 @@ export interface components {
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
+            /** @description What approving a status change would tell customers now, one per chat channel: missing for other calls, a quiet change and once decided, and in a list without detail=full. */
+            notices?: {
+                /** Format: uuid */
+                channel_id: string;
+                channel_name: string;
+                /** @description The display_ref of one of its conversations, whose notice text is */
+                example_ref: string;
+                /** @description The notice as that conversation's customer would read it, its placeholders filled */
+                text: string;
+                /** @description How many of the conversations it tells on this channel */
+                told: number;
+            }[];
             /** @description For a request that edits, deletes or restores a saved reply: the reply as it was when the token asked (before) and as it is now (current, null once it is deleted for good), so the change can be shown as a difference. Only with detail=full and on a single request; null otherwise. */
             saved_reply: null | {
                 /** Format: uuid */
@@ -7496,6 +7509,10 @@ export interface components {
         Conversation: {
             /** @description The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply. */
             latest_reply_number: number;
+            /** @description The newest change of its status and who made it; null when it never changed in Colliedesk or an import. */
+            last_status_change?: components["schemas"]["StatusChange"] | null;
+            /** @description The statuses that, set by the team now, would tell its customer: the ones its live chat channel has a notice for, other than its status. Only on GET /conversations/{id}; missing in lists and for a conversation of no chat. */
+            status_notices?: components["schemas"]["ConversationStatus"][];
             /** @description Its number in number_series, which counts on and never restarts. */
             number?: number;
             /** @description The series it is numbered in: default, or the one its channel names (settings.number_series). */
@@ -7524,6 +7541,18 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        StatusChange: {
+            to: components["schemas"]["ConversationStatus"];
+            /** Format: date-time */
+            at: string;
+            /**
+             * @description agent: a team member; token: an AI agent's token (a request of it a person approved included); customer: the customer writing again; command: the customer's reopen command; auto_close: the channel closing it by itself (auto_close_hours); import: an import.
+             * @enum {string}
+             */
+            by: "agent" | "token" | "customer" | "command" | "auto_close" | "import";
+            /** @description The team member's name, or the token's label; for a token's request approved by a person other than its owner, "<label> · approved by <name>". Missing for the others. */
+            name?: string;
         };
         ConversationOrigin: {
             /** @description Source system, for example freshdesk */
@@ -7567,10 +7596,14 @@ export interface components {
                 assignee_id?: string | null;
                 add_tag_ids?: string[];
                 remove_tag_ids?: string[];
+                /** @description false sets the status without telling the customers (the channels' status notices); a token below the send tier asks a person first when one would be told. true by default. */
+                notify?: boolean;
             };
         };
         BulkConversationUpdateResult: {
             updated: number;
+            /** @description How many customers its status change tells in their chats, a few seconds after it commits; 0 for a quiet change or no status. */
+            told?: number;
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
@@ -7686,7 +7719,7 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
-            /** @description A reply the channel sent by itself (received, unmatched, ask_confirm, cancelled, ask_description, expired), which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. Null for a reply of the team. */
+            /** @description A reply the channel sent by itself, which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. received, unmatched, ask_confirm, cancelled, ask_description and expired come with chat intake; reopened, reopen_noted, reopen_not_found and reopen_legacy answer a reopen command (reopened also tells a status the team set to open); help answers the help command; status_pending, status_resolved and status_closed tell a status the team set (status_closed also when the channel closes it by itself). Null for a reply of the team. */
             notice_kind?: string | null;
             /**
              * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
@@ -8167,7 +8200,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat), unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, status_pending, status_resolved, status_closed (what the team setting that status tells the customer; reopened for open), help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat), unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation resolved after it was turned on closes by itself that long after its resolve and the customer's last message, telling the customer with status_closed, quietly for one resolved quietly or imported resolved and untouched since; one resolved before it was turned on never closes by itself, and changing the hours keeps when it was turned on). Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };
@@ -11436,6 +11469,8 @@ export interface operations {
                     /** Format: uuid */
                     assignee_id?: string | null;
                     tag_ids?: string[];
+                    /** @description false sets the status without telling the customer (the channel's status notice). true by default. */
+                    notify?: boolean;
                 };
             };
         };
