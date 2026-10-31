@@ -468,3 +468,31 @@ func UTCOptional(value *time.Time) *time.Time {
 	normalized := value.UTC()
 	return &normalized
 }
+
+// MarshalJSON writes the origin as the contract has it whatever the row held: an import that recorded
+// none of its lists (a bundle, an older row) reads with empty lists, never null.
+func (o ConversationOrigin) MarshalJSON() ([]byte, error) {
+	type plain ConversationOrigin
+	if o.CC == nil {
+		o.CC = []string{}
+	}
+	if o.ForwardedTo == nil {
+		o.ForwardedTo = []string{}
+	}
+	return json.Marshal(plain(o))
+}
+
+// MarshalJSON writes the origin as the contract has it: lists are never null, and an item the source did
+// not classify is "other".
+func (o MessageOrigin) MarshalJSON() ([]byte, error) {
+	type plain MessageOrigin
+	for _, list := range []*[]string{&o.To, &o.CC, &o.BCC} {
+		if *list == nil {
+			*list = []string{}
+		}
+	}
+	if o.Kind == "" {
+		o.Kind = "other"
+	}
+	return json.Marshal(plain(o))
+}
