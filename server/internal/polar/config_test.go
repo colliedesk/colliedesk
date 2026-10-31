@@ -148,3 +148,25 @@ func TestCheckoutPlansAndPlansOnSaleFollowTheConfiguredProducts(t *testing.T) {
 		t.Errorf("Small with one product: plans on sale %s, want Small left out", got)
 	}
 }
+
+func TestCheckoutPlanOfNamesThePlanAndPeriodAProductIsSoldAs(t *testing.T) {
+	products := polar.Products{
+		TeamMonthly: "prod-team-m", TeamYearly: "prod-team-y", Founding: "prod-founding",
+		Team25Monthly: "prod-t25-m", Team25Yearly: "prod-t25-y", SoloMonthly: "prod-solo-m", SmallYearly: "prod-small-y",
+		Retired: map[string]string{"prod-old-team": "team"},
+	}
+	for product, want := range map[string]string{
+		"prod-team-m": "team_monthly", "prod-team-y": "team_yearly", "prod-founding": "founding",
+		"prod-t25-m": "team25_monthly", "prod-t25-y": "team25_yearly", "prod-solo-m": "solo_monthly", "prod-small-y": "small_yearly",
+		// A retired product may have sold at another price, and an unset or unknown id is not for sale here.
+		"prod-old-team": "", "prod-elsewhere": "", "": "",
+	} {
+		if got := products.CheckoutPlanOf(product); got != want {
+			t.Errorf("CheckoutPlanOf(%q)=%q, want %q", product, got, want)
+		}
+	}
+	// An optional plan with no product configured must not claim an empty product id.
+	if got := (polar.Products{TeamMonthly: "a", TeamYearly: "b", Founding: "c"}).CheckoutPlanOf(""); got != "" {
+		t.Errorf("CheckoutPlanOf(\"\")=%q with unset optional products, want empty", got)
+	}
+}

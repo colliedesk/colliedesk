@@ -1,10 +1,10 @@
-import type { Billing, CheckoutPlan } from '../../api/schemas';
+import type { Billing } from '../../api/schemas';
 import { formatDay, formatMonthDay } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { ExternalLinkIcon } from '../../ui/icons';
 import './purchase.css';
 import { billingMessages } from './billing-messages';
-import { priceOfPlan } from './plan-price-line';
+import { purchasedPrice } from './plan-price-line';
 import { gibOf } from './usage-format';
 
 interface MigrationState { requestedAt: string | null; done: boolean }
@@ -14,8 +14,6 @@ interface PaidBillingRowsProps {
   timezone: string;
   // migration is set only for a paid Founding or Team 25 workspace whose import state is known.
   migration?: MigrationState;
-  // remembered is the checkout this browser just made, which names the price of a plan with two (Team 25).
-  remembered?: CheckoutPlan;
   // dialogOpen is true while a dialog sits over the page: its button is then the only ink button.
   dialogOpen?: boolean;
   onRequestMigration: () => void;
@@ -43,10 +41,10 @@ function MigrationRow({ migration, timezone, primary, onRequest }: { migration: 
 // PaidBillingRows is Plan and billing for a workspace that has a paid plan: one row for each thing an admin
 // comes to read (plan, next charge, seats, storage, migration, invoices), each with at most one small
 // button, and Cancel plan as a quiet link under them. A complimentary plan has no charge, portal or cancel.
-export function PaidBillingRows({ billing, timezone, migration, remembered, dialogOpen = false, onRequestMigration, onManage }: PaidBillingRowsProps) {
+export function PaidBillingRows({ billing, timezone, migration, dialogOpen = false, onRequestMigration, onManage }: PaidBillingRowsProps) {
   const complimentary = billing.complimentary;
   const planName = messages.plans[billing.plan];
-  const price = complimentary ? undefined : priceOfPlan(billing.plan as 'founding' | 'team25', remembered);
+  const price = complimentary || !billing.purchased_plan ? undefined : purchasedPrice(billing.purchased_plan);
   const periodEnd = billing.current_period_end ? formatDay(billing.current_period_end, timezone) : undefined;
   const cancelled = billing.cancel_at_period_end || billing.status === 'canceled';
   const storage = billing.limits.storage_bytes;

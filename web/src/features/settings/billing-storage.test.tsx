@@ -6,7 +6,7 @@ import { BillingPage } from './billing-page';
 const GiB = 1024 ** 3;
 const founding = (used: number): Billing => ({
   plan: 'founding', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2027-10-01T00:00:00Z',
-  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_refusals: [], migration_requested_at: null, storage_upgrade_plan: 'team', checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_refusals: [], migration_requested_at: null, storage_upgrade_plan: 'team', purchased_plan: 'founding', checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 20 * GiB, storage_warn_bytes: 16 * GiB },
   usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: used },
 });

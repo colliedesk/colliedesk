@@ -161,6 +161,7 @@ type Subscription struct {
 	Plan              string // solo, small, team, team25 or founding: what the product bought
 	SubscriptionID    string
 	CustomerID        string
+	ProductID         string // the Polar product the subscription runs on; "" for a complimentary plan or a row stored before it was kept
 	Status            string // the Polar status
 	CurrentPeriodEnd  *time.Time
 	CancelAtPeriodEnd bool
@@ -430,6 +431,13 @@ type Billing struct {
 	CheckoutRefusals []CheckoutRefusal `json:"checkout_refusals"`
 	// StorageUpgradePlan is the plan to move to for more storage, nil when none is on sale.
 	StorageUpgradePlan *string `json:"storage_upgrade_plan"`
+	// PurchasedPlan is the checkout plan the paid subscription in effect was bought as ("team25_yearly"),
+	// which says its price and period. Nil on the trial, for a complimentary plan, and when the product is
+	// not on sale or the row was stored before its product was kept.
+	PurchasedPlan *string `json:"purchased_plan"`
+	// ProductID is the Polar product of the paid subscription in effect, "" when none; the API turns it
+	// into PurchasedPlan.
+	ProductID string `json:"-"`
 	// MigrationRequestedAt is when an admin last asked Colliedesk to move the workspace's Freshdesk data;
 	// nil when none did.
 	MigrationRequestedAt *time.Time `json:"migration_requested_at"`
@@ -474,6 +482,9 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 		billing.Status = shown.Status
 		billing.CurrentPeriodEnd = UTCOptional(shown.CurrentPeriodEnd)
 		billing.CancelAtPeriodEnd = shown.CancelAtPeriodEnd
+	}
+	if best != nil {
+		billing.ProductID = best.ProductID
 	}
 	if best != nil && best.Complimentary() {
 		billing.Complimentary, billing.ComplimentaryUntil = true, UTCOptional(best.CurrentPeriodEnd)

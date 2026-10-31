@@ -4,8 +4,8 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 import { paidBilling, trialBilling } from './billing-fixtures';
 
-const founding = paidBilling('founding', 10, 20);
-const team25 = paidBilling('team25', 25, 250, { current_period_end: '2026-11-30T09:00:00Z' });
+const founding = paidBilling('founding', 10, 20, { purchased_plan: 'founding' });
+const team25 = paidBilling('team25', 25, 250, { purchased_plan: 'team25_monthly', current_period_end: '2026-11-30T09:00:00Z' });
 const sent = { freshdesk_address: 'northwind.freshdesk.com', times: '', requested_at: '2026-10-30T09:00:00Z' };
 
 function show(billing: Billing, props: Partial<Parameters<typeof BillingPage>[0]> = {}) {
@@ -53,12 +53,19 @@ test('when the plan flips to paid the wait gives way to the welcome, without a r
   expect(document.querySelectorAll('.primary-action')).toHaveLength(1);
 });
 
-test('the welcome of Team 25 names the plan and the charge date, and the price when this browser chose it', () => {
-  show(team25, { checkoutReturned: true, welcome: true, pendingPlan: 'team25_monthly' });
+test('the welcome of Team 25 names the plan, its price and the charge date, whichever browser opens it', () => {
+  show(team25, { checkoutReturned: true, welcome: true });
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByText('Team 25 · $149 a month')).toBeInTheDocument();
   expect(within(dialog).getByText('Next charge: $149 on Nov 30, 2026')).toBeInTheDocument();
   expect(within(dialog).getByText(/we run the import with you on a short call/i)).toBeInTheDocument();
+});
+
+test('the welcome of a yearly Team 25 states the yearly price', () => {
+  show({ ...team25, purchased_plan: 'team25_yearly' }, { checkoutReturned: true, welcome: true });
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByText(/^Team 25 · \$1,490 a year/)).toBeInTheDocument();
+  expect(within(dialog).getByText('Next charge: $1,490 on Nov 30, 2026')).toBeInTheDocument();
 });
 
 test('the welcome opens only on the return from a checkout, and only until it was closed once', () => {

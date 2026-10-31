@@ -22,6 +22,9 @@ func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
+	if plan := a.config.Billing.Products.CheckoutPlanOf(billing.ProductID); plan != "" {
+		billing.PurchasedPlan = &plan
+	}
 	billing.CheckoutPlans = a.checkoutPlans()
 	billing.CheckoutRefusals = []domain.CheckoutRefusal{}
 	// Billing switched off: the plan stays visible and the portal cancels it, but nothing is offered for sale.

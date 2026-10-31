@@ -39,7 +39,7 @@ const selfHostedConfig = { ...config, cloud_sign_in: { enabled: false, publishab
 // Founding is full in these fixtures, so the server sells the plan ladder.
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, migration_requested_at: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly'],
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, purchased_plan: null, migration_requested_at: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly'],
   limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 

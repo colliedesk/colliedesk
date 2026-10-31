@@ -25,7 +25,7 @@ const me = (role: 'admin' | 'agent', admins?: string[]) => ({
   plan: admins ? { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, admins } : null,
 });
 const free = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, complimentary: false, complimentary_until: null, migration_requested_at: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, purchased_plan: null, complimentary: false, complimentary_until: null, migration_requested_at: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 // Once the Founding slots are taken the server stops offering it and the whole plan ladder is sold.
@@ -278,7 +278,7 @@ test('with billing switched off a workspace that never paid sees no billing, and
 });
 
 // The step after paying: the wait for the payment provider, the welcome once, and the migration row.
-const foundingPaid = { ...free, plan: 'founding', status: 'active', active_subscriptions: 1, current_period_end: '2027-01-30T09:00:00Z', checkout_plans: [], limits: { ...free.limits, agents: 10, replies_per_24h: null } };
+const foundingPaid = { ...free, plan: 'founding', purchased_plan: 'founding', status: 'active', active_subscriptions: 1, current_period_end: '2027-01-30T09:00:00Z', checkout_plans: [], limits: { ...free.limits, agents: 10, replies_per_24h: null } };
 const setup = (importState: 'none' | 'running' | 'done') => ({
   steps: [{ key: 'email', state: 'none', detail: null }, { key: 'import', state: importState, detail: null }, { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null }],
   complete: false, recommended: null,

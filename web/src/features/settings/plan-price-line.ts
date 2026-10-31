@@ -1,6 +1,5 @@
 import type { CheckoutPlan } from '../../api/schemas';
 import { planCardsFor } from './plan-options';
-import type { PlanId } from './plan-options';
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
@@ -21,11 +20,4 @@ export function purchasedPrice(plan: CheckoutPlan): PurchasedPrice | undefined {
   if (!card || !price) return undefined;
   const text = `${price.amount} ${price.per}${price.note ? `, ${lowerFirst(price.note)}` : ''}`;
   return { name: card.name, amount: price.amount, text, detail: `${price.amount} ${price.per}${price.note ? ` · ${lowerFirst(price.note)}` : ''}` };
-}
-
-// priceOfPlan is the price of a paid plan when it is known. Founding has one price. Team 25 has two and the
-// subscription does not say which was bought, so it is known only for the checkout this browser just made.
-export function priceOfPlan(plan: PlanId, remembered?: CheckoutPlan): PurchasedPrice | undefined {
-  if (remembered?.startsWith(plan)) return purchasedPrice(remembered);
-  return plan === 'founding' ? purchasedPrice('founding') : undefined;
 }

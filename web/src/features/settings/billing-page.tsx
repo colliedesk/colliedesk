@@ -11,7 +11,7 @@ import { PaidBillingRows } from './paid-billing-rows';
 import { PaymentConfirming } from './payment-confirming';
 import type { PlanIntent } from './plan-intent';
 import { PlanPicker } from './plan-picker';
-import { priceOfPlan } from './plan-price-line';
+import { purchasedPrice } from './plan-price-line';
 import { SettingsNav } from './settings-nav';
 import { formatDay } from '../../lib/format-date';
 
@@ -57,7 +57,7 @@ export function BillingPage({ billing, timezone, importDone, freshdeskAgents, pl
   const [welcomed, setWelcomed] = useState(false);
   const paid = isPaid(billing);
   const migrationPlan = isMigrationPlan(billing.plan) && !billing.complimentary ? billing.plan : undefined;
-  const price = migrationPlan ? priceOfPlan(migrationPlan, pendingPlan) : undefined;
+  const price = billing.purchased_plan ? purchasedPrice(billing.purchased_plan) : undefined;
   const periodEnd = billing.current_period_end ? formatDay(billing.current_period_end, timezone) : undefined;
   const welcoming = checkoutReturned && paid && welcome && !welcomed && migrationPlan !== undefined && periodEnd !== undefined;
   const dialogOpen = welcoming || (requesting && migrationPlan !== undefined);
@@ -74,7 +74,7 @@ export function BillingPage({ billing, timezone, importDone, freshdeskAgents, pl
           <BillingAlerts billing={billing} switchedOff={switchedOff} portalFailed={portalFailed} />
           {checkoutReturned && paid && !welcoming && <p role="status">{billingMessages.checkoutConfirmed(messages.plans[billing.plan])}</p>}
           {paid
-            ? <PaidBillingRows billing={billing} timezone={timezone} remembered={pendingPlan} dialogOpen={dialogOpen} onManage={onManage} onRequestMigration={() => setRequesting(true)}
+            ? <PaidBillingRows billing={billing} timezone={timezone} dialogOpen={dialogOpen} onManage={onManage} onRequestMigration={() => setRequesting(true)}
               migration={migrationPlan && importDone !== undefined ? { requestedAt: billing.migration_requested_at, done: importDone } : undefined} />
             : <>
               <TrialLine billing={billing} timezone={timezone} />
