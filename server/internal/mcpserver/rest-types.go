@@ -62,6 +62,10 @@ type restConversation struct {
 	DisplayRef string `json:"display_ref"`
 	// SLA is its response clocks, as the API shows them.
 	SLA json.RawMessage `json:"sla"`
+	// LastStatusChange is the newest change of its status and who made it, as the API shows it.
+	LastStatusChange json.RawMessage `json:"last_status_change"`
+	// MayTellCustomer says a status set now may tell its customer in their chat.
+	MayTellCustomer bool `json:"may_tell_customer"`
 }
 
 type restDelivery struct {

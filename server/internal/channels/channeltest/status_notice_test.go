@@ -120,8 +120,30 @@ func TestAStatusChangeTellsTheCustomer(t *testing.T) {
 	if item.LastStatusChange == nil || item.LastStatusChange.To != "pending" || item.LastStatusChange.By != "agent" || fmt.Sprint(item.StatusNotices) != "[open resolved closed]" {
 		t.Fatalf("last change = %+v, notices = %v", item.LastStatusChange, item.StatusNotices)
 	}
-	if none, err := d.store.GetConversation(ctx, d.workspaceID, started); err != nil || len(none.StatusNotices) != 0 {
+	if none, err := d.store.GetConversation(ctx, d.workspaceID, started); err != nil || len(none.StatusNotices) != 0 || none.MayTellCustomer || !item.MayTellCustomer {
 		t.Fatalf("a conversation of no chat would tell %v (%v)", none.StatusNotices, err)
+	}
+	// The list says it too, for each row: the inbox offers to tell the customers before a bulk change.
+	mayTell := func() string {
+		t.Helper()
+		page, err := d.store.ListConversations(ctx, d.workspaceID, store.ConversationFilter{Page: 1, PageSize: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		told := map[string]bool{}
+		for _, row := range page.Items {
+			told[row.ID] = row.MayTellCustomer
+		}
+		return fmt.Sprintf("chat=%v other=%v none=%v", told[id], told[other], told[started])
+	}
+	if got := mayTell(); got != "chat=true other=true none=false" {
+		t.Fatalf("may tell = %s", got)
+	}
+	// A chat message moved into a conversation that came by no chat puts it in that chat.
+	d.one(t, `INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason)
+		SELECT workspace_id,$2::uuid,item_id,'agent' FROM conversation_thread_items WHERE workspace_id=$1 AND conversation_id=$3 LIMIT 1 RETURNING 'ok'`, started, other)
+	if got := mayTell(); got != "chat=true other=true none=true" {
+		t.Fatalf("may tell after a chat message moved in = %s", got)
 	}
 	// The customer writing opens a resolved conversation again: theirs.
 	if _, err := d.store.UpdateConversation(ctx, d.workspaceID, other, store.ConversationUpdate{Status: &resolved, ActorID: d.agentID, Quiet: true}); err != nil {
@@ -373,7 +395,7 @@ func TestARemovedChannelTellsNothing(t *testing.T) {
 	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND notice_kind LIKE 'status_%'`); got != "0" {
 		t.Fatalf("a removed channel told %s", got)
 	}
-	if read, err := d.store.GetConversation(ctx, d.workspaceID, item.ID); err != nil || len(read.StatusNotices) != 0 {
+	if read, err := d.store.GetConversation(ctx, d.workspaceID, item.ID); err != nil || len(read.StatusNotices) != 0 || read.MayTellCustomer {
 		t.Fatalf("status notices = %v %v", read.StatusNotices, err)
 	}
 }

@@ -7513,6 +7513,8 @@ export interface components {
             last_status_change?: components["schemas"]["StatusChange"] | null;
             /** @description The statuses that, set by the team now, would tell its customer: the ones its live chat channel has a notice for, other than its status. Only on GET /conversations/{id}; missing in lists and for a conversation of no chat. */
             status_notices?: components["schemas"]["ConversationStatus"][];
+            /** @description true when a status the team sets now may tell its customer: the chat it is in (a chat message moved into it included) has a live channel with a notice for a status other than its own. In lists too, so a bulk change can offer to tell; status_notices on the detail names which statuses. */
+            may_tell_customer?: boolean;
             /** @description Its number in number_series, which counts on and never restarts. */
             number?: number;
             /** @description The series it is numbered in: default, or the one its channel names (settings.number_series). */

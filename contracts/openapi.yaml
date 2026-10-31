@@ -10859,6 +10859,12 @@ components:
             The statuses that, set by the team now, would tell its customer: the ones its live chat channel has
             a notice for, other than its status. Only on GET /conversations/{id};
             missing in lists and for a conversation of no chat.
+        may_tell_customer:
+          type: boolean
+          description: >-
+            true when a status the team sets now may tell its customer: the chat it is in (a chat message moved
+            into it included) has a live channel with a notice for a status other than its own. In lists too,
+            so a bulk change can offer to tell; status_notices on the detail names which statuses.
         number: {type: integer, minimum: 1, description: 'Its number in number_series, which counts on and never restarts.'}
         number_series: {type: string, description: 'The series it is numbered in: default, or the one its channel names (settings.number_series).'}
         display_ref: {type: string, description: 'The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=.'}

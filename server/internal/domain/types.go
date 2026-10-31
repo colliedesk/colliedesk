@@ -165,6 +165,11 @@ type Conversation struct {
 	// StatusNotices are the statuses that, set by the team now, would tell its customer (its chat channel
 	// has words for them); read with one conversation only.
 	StatusNotices []string `json:"status_notices,omitempty"`
+	// MayTellCustomer says a status the team sets may tell its customer: its chat channel is live and has
+	// words for a status other than this one (StatusNotices names which, on the detail).
+	MayTellCustomer bool `json:"may_tell_customer"`
+	// ChatChannelID is the channel of the chat it is in (its newest linked item's), read with it.
+	ChatChannelID *string `json:"-"`
 }
 
 // ConversationSLA is a conversation's response clocks and the most pressing of their states: overdue,

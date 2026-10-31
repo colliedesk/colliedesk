@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
@@ -64,4 +65,18 @@ func (s *Store) attachStatusNotices(ctx context.Context, tx pgx.Tx, workspaceID 
 		}
 	}
 	return nil
+}
+
+// mayTell says setting a conversation of status to another status may tell its customer through its chat
+// channel: live, with words for one of them (as StatusNoticeWouldSend and attachStatusNotices read it).
+func mayTell(channel *channels.Channel, status string) bool {
+	if channel == nil || !channel.Live() {
+		return false
+	}
+	for _, other := range conversationStatuses {
+		if _, text := statusNotice(channel.Settings, other); text != "" && other != status {
+			return true
+		}
+	}
+	return false
 }
