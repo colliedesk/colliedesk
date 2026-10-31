@@ -9647,6 +9647,7 @@ components:
         updated_before: {type: string, format: date-time}
         sort: {$ref: '#/components/schemas/ConversationSort'}
         search: {type: string, minLength: 1, maxLength: 200}
+        sla: {type: array, maxItems: 2, uniqueItems: true, items: {type: string, enum: [overdue, due_soon]}, description: 'overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target).'}
     SavedViewScope: {type: string, enum: [personal, shared]}
     SavedViewInput:
       type: object

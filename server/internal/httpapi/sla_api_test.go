@@ -163,6 +163,25 @@ func TestAConversationCarriesItsResponseClocks(t *testing.T) {
 	if response := request(t, api, http.MethodGet, "/api/v1/conversations?sla=late", nil, admin, nil); response.Code != http.StatusBadRequest {
 		t.Fatalf("?sla=late: %d", response.Code)
 	}
+	// A saved view keeps them: opened, it lists the overdue, the earliest due first.
+	saved := request(t, api, http.MethodPost, "/api/v1/saved-views", map[string]any{"name": "Overdue", "scope": "shared", "filters": map[string]any{"sla": []string{"overdue"}, "sort": "due"}}, admin, nil)
+	if saved.Code != http.StatusCreated {
+		t.Fatalf("a view of the overdue: %d %s", saved.Code, saved.Body.String())
+	}
+	var stored struct {
+		Filters struct {
+			SLA  []string `json:"sla"`
+			Sort string   `json:"sort"`
+		} `json:"filters"`
+	}
+	decode(t, saved, &stored)
+	if got := list(admin, "sla="+strings.Join(stored.Filters.SLA, ",")+"&sort="+stored.Filters.Sort); len(got) != 1 || got[0] != late {
+		t.Fatalf("the saved view = %+v: %v", stored.Filters, got)
+	}
+	if response := request(t, api, http.MethodPost, "/api/v1/saved-views", map[string]any{"name": "Late", "scope": "shared", "filters": map[string]any{"sla": []string{"late"}}},
+		admin, nil); response.Code != http.StatusBadRequest {
+		t.Fatalf("a view of sla late: %d %s", response.Code, response.Body.String())
+	}
 	if got := list(other, "sla=overdue,due_soon"); len(got) != 0 {
 		t.Fatalf("another workspace's = %v", got)
 	}

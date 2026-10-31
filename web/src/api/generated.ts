@@ -6362,6 +6362,8 @@ export interface components {
             updated_before?: string;
             sort?: components["schemas"]["ConversationSort"];
             search?: string;
+            /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target). */
+            sla?: ("overdue" | "due_soon")[];
         };
         /** @enum {string} */
         SavedViewScope: "personal" | "shared";
