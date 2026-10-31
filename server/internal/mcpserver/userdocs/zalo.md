@@ -13,7 +13,9 @@ An admin opens **Settings → Channels → Add channel → Connect Zalo OA** and
    is reached through. One OA is one channel on the whole server: an OA already connected, in this
    workspace or another, is refused with "This OA is connected elsewhere."
 2. **App secret** and **OA secret key** (optional here, settable later): stored encrypted, never shown
-   again.
+   again. Each is stored on its own: one the server refuses (for example a server without
+   `MAILBOX_TOKEN_KEYS`) leaves the channel added and the other secret stored, and the Connection tab says
+   which one was not saved and why.
 
 The channel's page then has four tabs of its own, before AI and History:
 

@@ -66,6 +66,30 @@ test('connect checks the ids, adds the OA with them, then stores its two secrets
   expect(channelsApi.setCredential).toHaveBeenCalledWith(ID, 'oa_secret_key', 'oa-key-7c20');
 });
 
+test('a secret that could not be stored on the new channel does not stop the others, and Connection says which and why', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  channelsApi.setCredential.mockImplementation(async (_id: string, name: string) => {
+    if (name === 'app_secret') throw new mocks.ConflictError('Secrets cannot be stored: this server has no MAILBOX_TOKEN_KEYS.', { code: 'secret_keys_missing' });
+    return { name, hint: '7c20' };
+  });
+  const create = vi.fn(async (_input: unknown, beforeOpen?: (created: ChannelDetail) => Promise<void>) => { await beforeOpen?.(channel()); return channel(); });
+  const { unmount } = render(<QueryClientProvider client={client}><Connect canManage timezone="UTC" create={create} /></QueryClientProvider>);
+  fireEvent.change(screen.getByLabelText('OA ID'), { target: { value: '4318002291772207' } });
+  fireEvent.change(screen.getByLabelText('App ID'), { target: { value: '1188200455' } });
+  fireEvent.change(screen.getByLabelText('App secret'), { target: { value: 'app-secret-a1f9' } });
+  fireEvent.change(screen.getByLabelText('OA secret key'), { target: { value: 'oa-key-7c20' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Zalo OA' }));
+  await waitFor(() => expect(create).toHaveBeenCalled());
+  await waitFor(() => expect(channelsApi.setCredential).toHaveBeenCalledWith(ID, 'oa_secret_key', 'oa-key-7c20'));
+  unmount();
+  const unset = channel({ credentials: credentials({ oa_secret_key: '7c20' }) });
+  const { rerender } = render(<QueryClientProvider client={client}><Tabs.connection channel={unset} canManage timezone="UTC" /></QueryClientProvider>);
+  expect(screen.getByRole('alert')).toHaveTextContent('Hảo Đạt OA was added, but the app secret could not be saved: Secrets cannot be stored: this server has no MAILBOX_TOKEN_KEYS.');
+  // Once it is set, the note has done its work.
+  rerender(<QueryClientProvider client={client}><Tabs.connection channel={channel()} canManage timezone="UTC" /></QueryClientProvider>);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
 test('an OA connected to another channel, here or in another workspace, is said to be connected elsewhere', async () => {
   const create = vi.fn().mockRejectedValue(new mocks.ConflictError('That account is already connected to a channel.', { code: 'channel_account_taken' }));
   view(<Connect canManage timezone="UTC" create={create} />);
@@ -150,6 +174,16 @@ test('staff: none says what that means; an account is added from who wrote, and 
   const ask = screen.getByRole('alertdialog', { name: 'Stop treating Long Bùi as staff?' });
   fireEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenLastCalledWith(ID, { config: { staff_user_ids: ['9930004402'] } }));
+});
+
+test('an account with no name is named once, by its user id', async () => {
+  channelsApi.threads.mockImplementation(async (_id: string, kind: string) => ({ items: kind === 'direct' ? [thread('direct', 'user:7012003391')] : [], next_cursor: null }));
+  view(<Tabs.staff channel={channel({ staff_user_ids: ['9930004402'] })} canManage timezone="UTC" />);
+  const row = screen.getByRole('listitem');
+  expect(row.textContent?.match(/uid 9930004402/g)).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
+  const option = await screen.findByRole('radio', { name: /7012003391/ });
+  expect(option.closest('label')?.textContent?.match(/7012003391/g)).toHaveLength(1);
 });
 
 test('a pasted user id that is not a number, or already staff, is refused before anything is sent', async () => {
