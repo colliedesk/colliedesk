@@ -78,6 +78,7 @@ func TestACustomerReopensAConversationByItsCode(t *testing.T) {
 		t.Fatalf("another group was linked to %s conversations", got)
 	}
 	// Someone else's, another group's, a code this server never gave: one answer, nothing added.
+	*d.clock = d.clock.Add(time.Second)
 	d.send(t, channeltest.LoopbackEvent{ID: "r-3", From: "u2", Text: "not fixed " + code(170)})
 	*d.clock = d.clock.Add(time.Second)
 	d.send(t, channeltest.LoopbackEvent{ID: "r-4", From: "u5", Group: "g2", Text: "not fixed " + code(171)})
