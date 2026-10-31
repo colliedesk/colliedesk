@@ -110,6 +110,16 @@ type Message struct {
 	AuthorName  string    `json:"author_name,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	Files       []File    `json:"files,omitempty"`
+	// Sender is who wrote an incoming message in the conversation's chat when it is not its customer
+	// (another member of a group): how the channel knows them, and their name.
+	Sender *Sender `json:"sender,omitempty"`
+}
+
+// Sender is a person of a chat as its channel knows them.
+type Sender struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+	Name  string `json:"name,omitempty"`
 }
 
 // File is a file of a message, stored in the archive at Path (under files/).
@@ -348,6 +358,9 @@ func (a Archive) check() error {
 				return refuse("%s: an id once, kind incoming, outgoing or note, created_at", where)
 			}
 			messages[message.ID] = true
+			if s := message.Sender; s != nil && (message.Kind != "incoming" || s.Kind == "" || s.Value == "" || len(s.Kind) > 40 || len(s.Value) > 200 || len([]rune(s.Name)) > 200) {
+				return refuse("%s.sender: only on an incoming message, with a kind and a value", where)
+			}
 			for f, file := range message.Files {
 				stored, ok := a.files[file.Path]
 				switch {

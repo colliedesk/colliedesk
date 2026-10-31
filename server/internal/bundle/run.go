@@ -504,6 +504,10 @@ func (w *writer) chatItem(ctx context.Context, c Conversation, thread string, me
 	}
 	direction, role, contact, agent, sender := "in", "customer", any(w.contacts[c.Contact]), any(nil), contactName(w.archive.Bundle, c.Contact)
 	identity := contactIdentity(w.archive.Bundle, c.Contact, c.ChannelID)
+	if s := message.Sender; s != nil && message.Kind == "incoming" && (s.Kind != identity.Kind || s.Value != identity.Value) {
+		// Another member of the chat: named as they wrote, no contact of the conversation.
+		identity, sender, contact = Identity{Kind: s.Kind, Value: s.Value}, s.Name, nil
+	}
 	if message.Kind == "outgoing" {
 		direction, role, contact, sender, identity = "out", "staff", nil, message.AuthorName, Identity{}
 		if id := w.agents[strings.ToLower(message.AuthorEmail)]; message.AuthorEmail != "" && id != "" {

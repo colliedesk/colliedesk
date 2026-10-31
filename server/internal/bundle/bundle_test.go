@@ -442,6 +442,22 @@ func TestBundlesOfTwoSourcesShareMessageIDsAndAPlaceNamesItsKind(t *testing.T) {
 	if report, err := bundle.Run(ctx, d.pool, pack(t, b, files), bundle.Options{WorkspaceSlug: d.slug, Storage: d.storage}); err != nil || report.Status != bundle.StatusOK {
 		t.Fatalf("second with the same message ids = %+v %v", report, err)
 	}
+	// A sender is only on a customer's message, with how the channel knows them.
+	misnamed, _ := sample(d.channel)
+	misnamed.Conversations[0].Messages[1].Sender = &bundle.Sender{Kind: "zalo_user", Value: "9"}
+	var mb bytes.Buffer
+	mw := zip.NewWriter(&mb)
+	mm, _ := json.Marshal(misnamed)
+	mf, _ := mw.Create("bundle.json")
+	_, _ = mf.Write(mm)
+	for name, data := range files {
+		f, _ := mw.Create(name)
+		_, _ = f.Write(data)
+	}
+	_ = mw.Close()
+	if _, err := bundle.Read(bytes.NewReader(mb.Bytes()), int64(mb.Len())); err == nil || !strings.Contains(err.Error(), "messages.1.sender") {
+		t.Fatalf("a sender on a reply: %v", err)
+	}
 	for _, place := range []bundle.Place{{Kind: "direct", ExternalID: "group:g1"}, {Kind: "group", ExternalID: "user:100"}, {Kind: "direct", ExternalID: "100"}} {
 		wrong, _ := sample(d.channel)
 		wrong.Conversations[0].Place = &place

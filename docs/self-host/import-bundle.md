@@ -78,7 +78,9 @@ conversation points at; they take space, nothing else.
    `group`, `external_id` as the channel names it (`user:<id>` for a direct chat, `group:<id>` for a
    group), and a `name`. Its customer's messages and the team's replies show in that chat (notes do not),
    its customer is one of the channel's senders, a reply to it goes to that chat (a group's to the group),
-   and a customer reopens it by its code from that chat only, as one opened in Colliedesk.
+   and a customer reopens it by its code from that chat only, as one opened in Colliedesk. A customer's
+   message written by another member of a group carries `sender` (`kind`, `value` as the channel knows
+   them, `name`): its item in the chat is theirs, and they are one of the channel's senders.
 5. `number_series` (the series' key, in any case: `REF` is `ref`), `number` and `number_year` keep the
    code the customer has; without them the conversation takes the next number of its series. A number of this year or later in a series whose
    code shows the year (or any number in one whose code does not) moves the series' next number past it.

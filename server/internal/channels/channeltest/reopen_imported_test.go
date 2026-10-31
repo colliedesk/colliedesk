@@ -47,9 +47,11 @@ func TestAnImportedConversationIsReopenedByItsCodeFromItsPlace(t *testing.T) {
 					{ID: "m2", Kind: "outgoing", Body: "fixed", CreatedAt: at.Add(time.Hour)}, {ID: "m3", Kind: "note", Body: "checked", CreatedAt: at.Add(2 * time.Hour)}}},
 			{ID: "t2", Contact: "u3", Subject: "Scanner", Status: "open", Priority: "normal", ChannelID: d.channel.ID, NumberSeries: "ref", Number: 121, NumberYear: year,
 				Place: &bundle.Place{Kind: "group", ExternalID: "group:g1", Name: "Branch one"}, ThreadKeys: []string{"group:g1"}, CreatedAt: at, UpdatedAt: at,
-				Messages: []bundle.Message{{ID: "m4", Kind: "incoming", Body: "the scanner is offline", CreatedAt: at}}},
+				Messages: []bundle.Message{{ID: "m4", Kind: "incoming", Body: "the scanner is offline", CreatedAt: at},
+					{ID: "m5", Kind: "incoming", Body: "here too", AuthorName: "Nine", CreatedAt: at.Add(time.Minute),
+						Sender: &bundle.Sender{Kind: channeltest.LoopbackIdentity, Value: "u9", Name: "Nine"}}}},
 		},
-		Counts: bundle.Counts{Contacts: 2, Identities: 2, Conversations: 2, Incoming: 2, Outgoing: 1, Notes: 2, ThreadKeys: 2},
+		Counts: bundle.Counts{Contacts: 2, Identities: 2, Conversations: 2, Incoming: 3, Outgoing: 1, Notes: 2, ThreadKeys: 2},
 	}
 	var buffer bytes.Buffer
 	w := zip.NewWriter(&buffer)
@@ -68,19 +70,23 @@ func TestAnImportedConversationIsReopenedByItsCodeFromItsPlace(t *testing.T) {
 	// Their chats show what was said there; a note is no part of a chat.
 	if got := d.one(t, `SELECT string_agg(t.external_id||':'||t.kind||':'||i.role||':'||i.body,'|' ORDER BY t.external_id,i.occurred_at) FROM channel_thread_items i
 		JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id WHERE i.workspace_id=$1`); got !=
-		"group:g1:group:customer:the scanner is offline|user:u1:direct:customer:the printer jams|user:u1:direct:staff:fixed" {
+		"group:g1:group:customer:the scanner is offline|group:g1:group:customer:here too|user:u1:direct:customer:the printer jams|user:u1:direct:staff:fixed" {
 		t.Fatalf("chats = %s", got)
 	}
 	// The people who wrote there are the channel's senders; the items are the conversations', named apart
 	// from the channel's own message ids.
 	if got := d.one(t, `SELECT string_agg(s.sender_value||':'||s.role||':'||t.external_id,',' ORDER BY s.sender_value) FROM channel_senders s
-		JOIN channel_threads t ON t.workspace_id=s.workspace_id AND t.id=s.thread_id WHERE s.workspace_id=$1`); got != "u1:customer:user:u1,u3:customer:group:g1" {
+		JOIN channel_threads t ON t.workspace_id=s.workspace_id AND t.id=s.thread_id WHERE s.workspace_id=$1`); got != "u1:customer:user:u1,u3:customer:group:g1,u9:customer:group:g1" {
 		t.Fatalf("senders = %s", got)
 	}
 	if got := d.one(t, `SELECT string_agg(i.external_id||'>'||c.display_ref,',' ORDER BY i.external_id) FROM channel_thread_items i
 		JOIN conversation_thread_items l ON l.workspace_id=i.workspace_id AND l.item_id=i.id AND l.reason='import' JOIN conversations c ON c.id=l.conversation_id WHERE i.workspace_id=$1`); got !=
-		fmt.Sprintf("bundle:chat:m1>REF-%[1]d-0120,bundle:chat:m2>REF-%[1]d-0120,bundle:chat:m4>REF-%[1]d-0121", year) {
+		fmt.Sprintf("bundle:chat:m1>REF-%[1]d-0120,bundle:chat:m2>REF-%[1]d-0120,bundle:chat:m4>REF-%[1]d-0121,bundle:chat:m5>REF-%[1]d-0121", year) {
 		t.Fatalf("linked items = %s", got)
+	}
+	// A group member who is not the conversation's customer is named as they wrote it, and is no contact.
+	if got := d.one(t, `SELECT COALESCE(sender_name,'')||':'||(contact_id IS NULL)::text FROM channel_thread_items WHERE workspace_id=$1 AND external_id='bundle:chat:m5'`); got != "Nine:true" {
+		t.Fatalf("another member's item = %s", got)
 	}
 	// A reply goes to the chat the conversation is in: the group's to the group, never one to one.
 	for _, number := range []int{120, 121} {
