@@ -20,6 +20,8 @@ func TestACustomerReopensAConversationByItsCode(t *testing.T) {
 	loop.Defaults.Commands = map[string]channels.Command{"reopen": {Action: channels.ActionReopen, Match: channels.MatchWords, Phrases: []string{"not fixed"}}}
 	loop.Defaults.Notices.ReopenNotFound = "No request {ref} here."
 	loop.Defaults.Notices.ReopenLegacy = "{old_ref} was in the old system: this is {ref} now."
+	loop.Defaults.Notices.Reopened = "{ref} is open again."
+	loop.Defaults.Notices.ReopenNoted = "Added to {ref}, which is being worked on."
 	d := newLoopDesk(t, loop)
 	ctx := context.Background()
 	year := d.clock.Year()
@@ -47,6 +49,34 @@ func TestACustomerReopensAConversationByItsCode(t *testing.T) {
 	if got := landed("r-1") + "," + landed("r-2"); got != code(170)+":open,"+code(171)+":open" {
 		t.Fatalf("reopened = %s", got)
 	}
+	// Each is told: one resolved opens again, one still open takes the note.
+	if got := d.one(t, `SELECT string_agg(notice_kind||':'||body,'|' ORDER BY created_at) FROM messages WHERE workspace_id=$1 AND notice_kind IN ('reopened','reopen_noted')`); got !=
+		"reopened:"+code(170)+" is open again.|reopened:"+code(171)+" is open again." {
+		t.Fatalf("reopen notices = %s", got)
+	}
+	*d.clock = d.clock.Add(time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-1b", From: "u1", Text: "not fixed " + code(170) + " and the tray"})
+	if got := landed("r-1b"); got != code(170)+":open" {
+		t.Fatalf("a note to an open one = %s", got)
+	}
+	if got := d.one(t, `SELECT body FROM messages WHERE workspace_id=$1 AND notice_kind='reopen_noted'`); got != "Added to "+code(170)+", which is being worked on." {
+		t.Fatalf("noted notice = %s", got)
+	}
+	// Its own customer writing from a group, or a member of another group, never reach it: the code
+	// names a conversation of the place it was opened in, and that place only.
+	*d.clock = d.clock.Add(time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-g2", From: "u1", Group: "g2", Text: "not fixed " + code(170)})
+	*d.clock = d.clock.Add(time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-g3", From: "u3", Group: "g2", Text: "not fixed " + code(171)})
+	*d.clock = d.clock.Add(time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-g4", From: "u6", Group: "g2", Text: "not fixed " + code(171)})
+	if got := landed("r-g2") + "," + landed("r-g3") + "," + landed("r-g4"); got != "-,-,-" {
+		t.Fatalf("from another place = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM conversation_thread_items l JOIN channel_thread_items i ON i.id=l.item_id JOIN channel_threads th ON th.id=i.thread_id
+		WHERE l.workspace_id=$1 AND th.external_id='group:g2'`); got != "0" {
+		t.Fatalf("another group was linked to %s conversations", got)
+	}
 	// Someone else's, another group's, a code this server never gave: one answer, nothing added.
 	d.send(t, channeltest.LoopbackEvent{ID: "r-3", From: "u2", Text: "not fixed " + code(170)})
 	*d.clock = d.clock.Add(time.Second)
@@ -57,7 +87,7 @@ func TestACustomerReopensAConversationByItsCode(t *testing.T) {
 		t.Fatalf("not found ones landed in %s", got)
 	}
 	if got := d.one(t, `SELECT string_agg(i.body,'|' ORDER BY i.occurred_at,i.id) FROM channel_thread_items i WHERE i.workspace_id=$1 AND i.role='bot' AND i.disposition_reason=$2`, channels.NoticeReopenNotFound); got !=
-		"No request "+code(170)+" here.|No request "+code(171)+" here.|No request "+code(500)+" here." {
+		"No request "+code(170)+" here.|No request "+code(171)+" here.|No request "+code(171)+" here.|No request "+code(170)+" here.|No request "+code(171)+" here.|No request "+code(500)+" here." {
 		t.Fatalf("not found notices = %s", got)
 	}
 	// A code of the system before: below the start this year, or of an earlier year.

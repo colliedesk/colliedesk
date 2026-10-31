@@ -192,8 +192,12 @@ ones whole, so send them all.
   types back. The other notices fill none, but the reopen ones below.
 - A command with `action: reopen` adds the message to the conversation whose code follows it ("not fixed
   #12 still broken": the first word after the command is the code, the rest the customer's note). It
-  finds the customer's own conversation, or in a group one of the group's; the code is read as `?ref=`
-  reads it. Any other code (mistyped, someone else's, another group's, one this server never gave) adds
+  finds a conversation opened in the same place: in a group, one opened in that group; one to one, the
+  customer's own opened in that chat. The code is read as `?ref=` reads it. The customer is told with
+  `settings.notices.reopened` when the conversation was resolved or closed and opens again, or
+  `settings.notices.reopen_noted` when it is still being worked on (both fill `{ref}`).
+  Any other code (mistyped, someone else's, another group's, one this server never gave, or the customer's
+  own written from another place) adds
   the message to nothing and is answered with `settings.notices.reopen_not_found` (`{ref}`: the code
   typed), the same words whatever the reason. A code of the system the channel's series was taken over
   from (below its `start`, in its `start_year` or an earlier year; see

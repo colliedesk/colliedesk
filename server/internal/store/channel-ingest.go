@@ -595,7 +595,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// yet: the contact is found once the message is stored. A reopen command names the sender's own
 	// conversation, which needs the contact first; it is a match, never held.
 	reopening := request.IntoConversation == "" && commanded && command.Action == channels.ActionReopen && in.Intent.Ref != ""
-	var contactID, legacyRef string
+	var contactID, legacyRef, priorStatus string
 	if level != intakeAuto || reopening {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
 			return result, err
@@ -621,23 +621,25 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	} else {
 		if commanded && command.Action == channels.ActionReopen && in.Intent.Ref != "" {
-			// The code is the first word after the command; what follows is the customer's note. It names
-			// the customer's own conversation, or, in a group, one of the group's.
+			// The code is the first word after the command; what follows is the customer's note. It names a
+			// conversation opened in this place: in a group, one of the group's; one to one, the customer's own
+			// opened there. From anywhere else, its own customer included, it names none.
 			typed := strings.Fields(in.Intent.Ref)[0]
-			group := ""
-			if in.Place != nil && in.Place.Kind == channels.PlaceGroup {
-				group = in.Place.ExternalID
+			place, group := "", false
+			if in.Place != nil {
+				place, group = in.Place.ExternalID, in.Place.Kind == channels.PlaceGroup
 			}
 			named, err := conversationsByCode(ctx, tx, workspaceID, typed)
 			if err != nil {
 				return result, err
 			}
+			// The place a conversation was opened in is its first message's.
 			err = tx.QueryRow(ctx, `SELECT c.id::text FROM conversations c WHERE c.workspace_id=$1 AND (c.id::text=$2 OR c.id=ANY($6::uuid[]))
-				AND (c.contact_id=$3 OR ($4<>'' AND EXISTS(SELECT 1 FROM conversation_thread_items l
-					JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
-					JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
-					WHERE l.workspace_id=c.workspace_id AND l.conversation_id=c.id AND l.unlinked_at IS NULL AND t.channel_id=$5 AND t.external_id=$4)))
-				ORDER BY c.created_at DESC LIMIT 1`, workspaceID, typed, contactID, group, channel.ID, named).Scan(&facts.RefConversation)
+				AND ($7 OR c.contact_id=$3)
+				AND ($4='' AND c.contact_id=$3 OR EXISTS(SELECT 1 FROM channel_thread_items i JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
+					WHERE i.workspace_id=c.workspace_id AND t.channel_id=$5 AND t.external_id=$4
+						AND i.message_id=(SELECT m.id FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id ORDER BY m.created_at,m.id LIMIT 1)))
+				ORDER BY c.created_at DESC LIMIT 1`, workspaceID, typed, contactID, place, channel.ID, named, group).Scan(&facts.RefConversation)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
 			}
@@ -718,6 +720,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := tx.QueryRow(ctx, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, conversationID).Scan(&status); err != nil {
 			return result, fmt.Errorf("read conversation status: %w", err)
 		}
+		priorStatus = status
 		if replyKind == ReplyAcknowledgement && status != "resolved" {
 			replyKind = ReplySubstantive
 		}
@@ -801,7 +804,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if legacyRef != "" && channel.Settings.Notices.ReopenLegacy != "" {
 		notice, kind = channel.Settings.Notices.ReopenLegacy, channels.NoticeReopenLegacy
 	}
-	if result.Status == channels.ResultCreated && notice != "" {
+	// A conversation the customer named by its code says what became of their message: opened again, or
+	// added to while it is being worked on.
+	reopened := decision.Rule == rules.CommandReopen && result.Status != channels.ResultCreated
+	if reopened {
+		notice, kind = channel.Settings.Notices.ReopenNoted, channels.NoticeReopenNoted
+		if priorStatus == "resolved" || priorStatus == "closed" {
+			notice, kind = channel.Settings.Notices.Reopened, channels.NoticeReopened
+		}
+	}
+	if (result.Status == channels.ResultCreated || reopened) && notice != "" {
 		// {ref} is the code of the conversation, which the customer types back.
 		var ref string
 		if err := tx.QueryRow(ctx, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&ref); err != nil {
