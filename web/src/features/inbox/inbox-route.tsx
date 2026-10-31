@@ -16,6 +16,7 @@ import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
 import { useSLARefresh } from './sla-refresh';
+import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
@@ -149,6 +150,8 @@ export function InboxRoute() {
   // row of the list, whose composer would send a reply to the wrong customer.
   const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
   // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
+  // The Markdown of replies loads while the list does, before a conversation opens.
+  useEffect(() => markdownPart.preload(), []);
   const refreshTargets = useCallback(() => void client.invalidateQueries({ queryKey: ['conversations'] }), [client]);
   useSLARefresh([...(conversations.data?.items ?? []), ...(opened.data ? [opened.data] : [])], refreshTargets);
   // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so

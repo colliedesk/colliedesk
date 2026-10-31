@@ -294,6 +294,8 @@ The same day its Usage tab, the paused and allowance notices and the automatic-r
 
 On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter, the public share page's route and the strings of a refreshed list: 201,489 → 202,056 bytes (+567); the share page is a lazy part of its own. Its CSS went from 15,890 to 15,893: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
 
+On 2026-10-31 the Zalo OA pages, conversation numbers and response targets (their Settings pages are lazy parts) left 24 bytes under the gate with what the inbox itself needs (a conversation's code and target mark, the Targets filter, one timer that reads the list again when a mark comes due). The Markdown renderer of replies and notes (`react-markdown` with micromark and mdast, which `kb-chunk` shares) moved to a lazy part, `markdown-render`: the inbox starts it when it opens, before a conversation does, and a reply reads as plain text until it is there. First bundle 204,776 → 166,996 bytes; the renderer's shared chunk is 36,962 bytes gzip.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
 ## Operator console bundle
