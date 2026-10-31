@@ -33,7 +33,10 @@ and its state:
   inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
   message works without it. Web form: it is on but lists no website origin, so no
   page can post to it. Help chat: the AI chat feature is off in **Settings → Built-in AI**, so the
-  help center shows no chat.
+  help center shows no chat. Zalo OA: a secret or the tokens are not set, or an event's signature did
+  not match the OA secret key; the Connection tab says which ([Zalo OA](zalo.md)).
+- **Processing paused**: a Zalo OA whose processing an admin paused; it keeps what arrives and shows how
+  many messages wait. See [Pause processing](#pause-processing).
 
 ## Add a channel
 
@@ -141,7 +144,8 @@ A chat channel's scopes (its one-to-one chats, its groups) can each set how a cu
 requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change). `GET
 /api/v1/channels/{id}` answers `settings`, what the channel stores over its type's defaults, and
 `effective_settings`, the rules in force; `PATCH /api/v1/channels/{id}` with `settings` replaces the stored
-ones whole, so send them all.
+ones whole, so send them all. On a Zalo OA, the channel's **Messages** tab sets the commands, the
+notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab)).
 - `gather` collects what a customer says close together into one batch: `quiet_seconds` of silence
   closes it, `max_seconds` after its first message at the latest. With `pre_command_seconds`, what the
   customer said that long before a command (a screenshot sent just before "report a bug") is part of
@@ -295,9 +299,10 @@ token is refused, so a secret never waits in a request. A channel's AI levels ar
 
 ## Pause processing
 
-Moving a channel over from another system, you can pause its processing (`PATCH /api/v1/channels/{id}`
-with `{"processing_paused": true}`; Zalo channels only, whose messages wait in a journal). While it is
-paused, every message that arrives is kept as it came and nothing is decided, opened, answered or sent;
+Moving a channel over from another system, you can pause its processing: **Pause processing** at the top
+of a Zalo OA's page (admins; it asks first), and **Resume processing** in its place while paused. With the
+API: `PATCH /api/v1/channels/{id}` with `{"processing_paused": true}` (Zalo channels only, whose messages
+wait in a journal). While it is paused, every message that arrives is kept as it came and nothing is decided, opened, answered or sent;
 replies you write wait too. Resume it (`{"processing_paused": false}`) and what arrived is processed in
 order by the channel's rules, as if it had just come, and the waiting replies go out. The channel's
 history shows who paused and resumed it; `processing_paused_at` on the channel says it is paused and

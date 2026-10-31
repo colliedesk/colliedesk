@@ -15,11 +15,12 @@ export interface ChannelPanelProps {
   navigate?: (href: string) => void;
 }
 
-// What the type's connect form gets: create posts POST /api/v1/channels for this type.
+// What the type's connect form gets: create posts POST /api/v1/channels for this type, then runs
+// beforeOpen (a type's secrets, stored on the new channel) before the channel's page opens.
 export interface ConnectProps {
   canManage: boolean;
   timezone: string;
-  create: (input: Omit<ChannelCreate, 'type'>) => Promise<unknown>;
+  create: (input: Omit<ChannelCreate, 'type'>, beforeOpen?: (created: ChannelDetail) => Promise<void>) => Promise<unknown>;
 }
 
 // What a type's home (Settings → the type's name) gets: the workspace's channels, every type.
@@ -73,6 +74,9 @@ export interface ChannelUI {
   defaultBadge?: string;
   // caches: the query keys of the type's own settings, reloaded when the channel is turned on or off.
   caches?: string[];
+  // pausable: the type keeps what arrives in a journal, so its processing can pause and resume
+  // (PATCH processing_paused); its page offers Pause and Resume.
+  pausable?: boolean;
 }
 
 // The order here is the order of the Add channel list and of the empty page.

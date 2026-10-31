@@ -76,9 +76,10 @@ export class ChangedElsewhereError extends ConflictError {
 
 async function invalidRequest(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown }; current?: unknown };
     if (typeof body.error?.message === 'string' && body.error.message) {
-      if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
+      // The version saved meanwhile comes with it where the route sends it (response targets), so the page can show it.
+      if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message, { ...body.error, current: body.current });
       // The replies are only shown, as text, so they are taken as sent.
       if (response.status === 409 && body.error.code === 'reply_conflict') {
         const { latest_reply_number: latest, newer_replies: newer } = body.error as { latest_reply_number?: number; newer_replies?: Message[] };
