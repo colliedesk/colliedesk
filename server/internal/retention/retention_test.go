@@ -175,6 +175,7 @@ func (e *env) workspace(t *testing.T, name string, trialEnd string, admins ...st
 			SELECT sha256(convert_to($1::text, 'UTF8')), $1, $3, 'dispatch', id, repeat('v', 43), now() + interval '10 minutes' FROM f`, created.ID, conversation.ID, agentID)
 	e.exec(t, `INSERT INTO autofix_connectors (workspace_id, kind, enabled, consent_name, consent_at, consent_version, credential_key_id, credential_sealed, credential_set_by_name, credential_set_at)
 		VALUES ($1, 'cursor_api', true, 'Ada', now(), '1', 'k1', '\x00', 'Ada', now())`, created.ID)
+	e.exec(t, `INSERT INTO workspace_migration_requests (workspace_id, requested_by, freshdesk_address, times, requested_at) VALUES ($1, $2, 'shop.freshdesk.com', 'Tuesday afternoon', now())`, created.ID, agentID)
 	return result
 }
 
@@ -273,7 +274,7 @@ func TestNoticeThirtyDaysBeforeThenDeletionAfterTwelveMonths(t *testing.T) {
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example", "bob@alpha.example")
 	b := e.workspace(t, "Beta", "2027-03-01T00:00:00Z", "carl@beta.example")
 	beforeB := e.rows(t, b.ID)
-	for _, table := range []string{"autofix_github_installations", "autofix_repos", "autofix_connectors", "fix_attempts", "fix_attempt_events", "autofix_oauth_states"} {
+	for _, table := range []string{"autofix_github_installations", "autofix_repos", "autofix_connectors", "fix_attempts", "fix_attempt_events", "autofix_oauth_states", "workspace_migration_requests"} {
 		if beforeB[table] != 1 {
 			t.Fatalf("the fixture lacks %s: %v", table, beforeB)
 		}

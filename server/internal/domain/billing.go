@@ -430,6 +430,9 @@ type Billing struct {
 	CheckoutRefusals []CheckoutRefusal `json:"checkout_refusals"`
 	// StorageUpgradePlan is the plan to move to for more storage, nil when none is on sale.
 	StorageUpgradePlan *string `json:"storage_upgrade_plan"`
+	// MigrationRequestedAt is when an admin last asked Colliedesk to move the workspace's Freshdesk data;
+	// nil when none did.
+	MigrationRequestedAt *time.Time `json:"migration_requested_at"`
 	// PlanRefusals maps each plan id the workspace does not fit to the reason (see PlanFitRefusal).
 	PlanRefusals map[string]string `json:"-"`
 }
