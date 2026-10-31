@@ -44,7 +44,7 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   // The session cookie from the sign-up opens the new workspace with its trial banner.
   await page.goto(baseURL);
   await expect(appNavigationWith(page, name)).toHaveCount(1);
-  await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
+  await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
   await expect(page.getByRole('button', { name: 'Choose a plan' })).toBeVisible();
   // The goal given at sign-up picks the first step of the empty inbox.
   const firstStep = page.getByRole('region', { name: 'Finish setting up' }).getByRole('listitem').first();
@@ -66,7 +66,7 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   // server derives the state on every request.
   psql(`UPDATE workspaces SET trial_ends_at = now() - interval '1 hour' WHERE slug = '${body.workspace.slug}'`, database);
   await page.goto(baseURL);
-  await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeVisible();
   await expect(appNavigationWith(page, name)).toHaveCount(1);
   // While Founding has free slots it is the plan on sale, as on the website.
   await expect(page.getByRole('button', { name: /Founding, \$99 per quarter/ })).toBeVisible();
@@ -95,9 +95,10 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   // A browser that opens the spent link lands back in the app with the reason, never on a JSON page.
   await page.goto(`${baseURL}${url}`);
   await expect(page.getByRole('alert')).toContainText('already used or has expired');
-  await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeVisible();
 
-  // Signing out ends the session and lands on the sign-in page.
+  // Signing out ends the session and lands on the sign-in page. The locked screen has no button of its own: the way out is the account menu.
+  await page.getByRole('button', { name: 'Account' }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(`${baseURL}/sign-in?signed_out=true`);
   await expect(page.getByRole('alert')).toContainText('You are signed out');
