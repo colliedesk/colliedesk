@@ -11209,6 +11209,13 @@ components:
         unsent_count: {type: integer, minimum: 0, description: 'Replies whose delivery failed with channel_off; retry them once the channel is on.'}
         last_inbound_at: {type: [string, 'null'], format: date-time}
         is_default: {type: boolean, description: 'Whether this is its type''s default channel: a call, link or address that names no channel uses it.'}
+        processing_paused_at:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            When the channel's processing was paused (null while it runs): what arrives waits in its journal as it
+            came, nothing is decided, opened or sent; once resumed it is processed in order by the channel's rules.
+        paused_count: {type: integer, minimum: 0, description: 'Messages kept while the channel''s processing is paused, waiting to be processed (0 while it runs).'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         deleted_at: {type: string, format: date-time, description: 'Only on a removed channel, which only `include_removed=true` lists.'}
@@ -11371,6 +11378,11 @@ components:
             the default instead.
         config: {$ref: '#/components/schemas/ChannelConfigInput'}
         settings: {$ref: '#/components/schemas/ChannelSettings'}
+        processing_paused:
+          type: boolean
+          description: >-
+            true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose
+            messages wait in a journal (Zalo) can be paused; another answers 400.
     ChannelCredentialInput:
       type: object
       additionalProperties: false
@@ -11392,7 +11404,7 @@ components:
         at: {type: string, format: date-time}
         kind:
           type: string
-          enum: [added, renamed, enabled, disabled, config_changed, credential_changed, removed, held_replayed, held_discarded, default_changed, ai_changed]
+          enum: [added, renamed, enabled, disabled, config_changed, credential_changed, removed, held_replayed, held_discarded, default_changed, ai_changed, paused, resumed]
         channel_id: {type: string, format: uuid}
         channel_name: {type: string}
         channel_type: {type: string}

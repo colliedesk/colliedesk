@@ -52,6 +52,8 @@ type Channel struct {
 	DeletedAt       *time.Time      `json:"deleted_at"`
 	// IsDefault marks its type's default channel.
 	IsDefault bool `json:"is_default"`
+	// ProcessingPausedAt is when its processing was paused; null while it runs.
+	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
 }
 
 // ChannelAILevel is the level a channel sets for an AI feature on one of its scopes (” is the

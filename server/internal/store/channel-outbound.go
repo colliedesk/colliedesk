@@ -508,6 +508,7 @@ func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, le
 		rows, err := tx.Query(ctx, `WITH due AS (
 				SELECT id FROM channel_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
 					AND NOT (channel_type=ANY($4))
+					AND NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id=channel_outbox.workspace_id AND c.id=channel_outbox.channel_id AND c.processing_paused_at IS NOT NULL)
 				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
 			UPDATE channel_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
 			RETURNING o.id::text,o.workspace_id::text,COALESCE(o.message_id::text,''),COALESCE(o.thread_item_id::text,''),o.claim_token::text,o.attempts,o.channel_type,

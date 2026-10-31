@@ -15,7 +15,7 @@ const channelStateSchema = z.object({
 export const channelSchema = z.object({
   id: z.string().uuid(), type: channelTypeSchema, name: z.string(), enabled: z.boolean(), status: channelStateSchema, summary: z.string(),
   capabilities: z.array(z.string()), held_count: z.number().int().nonnegative(), unsent_count: z.number().int().nonnegative(),
-  last_inbound_at: nullableDate, is_default: z.boolean().optional(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  last_inbound_at: nullableDate, is_default: z.boolean().optional(), processing_paused_at: nullableDate.optional(), paused_count: z.number().int().nonnegative().optional(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   deleted_at: z.string().datetime().optional(),
 }) satisfies z.ZodType<Generated<'Channel'>>;
 // The configuration is the type's own schema; the type's panels read it, the shared pages never do. A type
@@ -33,7 +33,7 @@ const channelTypeInfoSchema = z.object({
 export const channelListSchema = z.object({ items: z.array(channelSchema), types: z.array(channelTypeInfoSchema) }) satisfies z.ZodType<Generated<'ChannelList'>>;
 export const channelEventSchema = z.object({
   id: z.string().uuid(), at: z.string().datetime(),
-  kind: z.enum(['added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed', 'removed', 'held_replayed', 'held_discarded', 'default_changed', 'ai_changed']),
+  kind: z.enum(['added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed', 'removed', 'held_replayed', 'held_discarded', 'default_changed', 'ai_changed', 'paused', 'resumed']),
   channel_id: z.string().uuid(), channel_name: z.string(), channel_type: z.string(),
   actor: z.object({ agent_id: z.string().uuid().nullable(), name: z.string().nullable(), token_label: z.string().nullable() }),
   fields: z.array(z.string()).optional(), count: z.number().int().nullable().optional(),
