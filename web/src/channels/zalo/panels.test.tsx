@@ -270,7 +270,7 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
     commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'], tags: ['zalo'] }, cancel: { action: 'cancel', match: 'fuzzy', phrases: ['hủy'] } },
-    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '' },
+    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '' },
     scopes: { direct: { mode: 'commands', unmatched: 'notice' } },
   } });
 });
@@ -423,9 +423,12 @@ test('the reopen notices are saved with the others, and the received notice says
   expect(screen.getByLabelText('When a conversation opens')).toHaveAccessibleDescription(/\{ref\} becomes the conversation’s code/);
   fireEvent.change(screen.getByLabelText('When Reopen names a code that is not found'), { target: { value: 'Không tìm thấy {ref}.' } });
   fireEvent.change(screen.getByLabelText('When Reopen names a code from before Colliedesk'), { target: { value: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' } });
+  fireEvent.change(screen.getByLabelText('When Reopen reopens a resolved or closed conversation'), { target: { value: 'Đã mở lại {ref}.' } });
+  fireEvent.change(screen.getByLabelText('When Reopen names a conversation still open'), { target: { value: 'Đã ghi nhận vào {ref}.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
-  expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ reopen_not_found: 'Không tìm thấy {ref}.', reopen_legacy: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' });
+  expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ reopen_not_found: 'Không tìm thấy {ref}.', reopen_legacy: 'Phiếu {old_ref} cũ, phiếu mới {ref}.',
+    reopened: 'Đã mở lại {ref}.', reopen_noted: 'Đã ghi nhận vào {ref}.' });
 });
 
 test('references count the next code\'s year where the workspace is, not where the agent is', async () => {
