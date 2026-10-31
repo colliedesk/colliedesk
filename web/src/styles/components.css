@@ -600,6 +600,16 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .bulk-actions .icon-button { color: var(--text-2); }
 .bulk-actions .icon-button:hover:not(:disabled), .action-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
 .bulk-actions .bulk-resolve { color: var(--text-1); }
+/* Tell customers: between the count and the icons (DOM order = reading order), pushing the icons right. */
+.bulk-tell { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: var(--control); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.bulk-tell input { margin: 0; }
+.bulk-tell + .bulk-actions { margin-left: 0; }
+@media (pointer: coarse), (max-width: 30rem) { .bulk-tell { min-height: var(--touch); } }
+/* Narrow: the count and Tell customers on the first line, the icons on the second, right-aligned. */
+@media (max-width: 44rem) {
+  .bulk-bar:has(.bulk-tell) { flex-wrap: wrap; row-gap: 0; }
+  .bulk-bar .bulk-tell + .bulk-actions { flex-basis: 100%; justify-content: flex-end; }
+}
 .action-menu { position: relative; }
 .action-menu summary {
   min-height: var(--control, 32px); min-width: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: 2px;

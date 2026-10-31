@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AgentRequest, Conversation, ConversationViewer, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
-import { BulkActionBar } from './bulk-action-bar';
+import { BulkActionBar, mayTellCustomers } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
 import { AITriageSlot } from './ai-triage-slot';
@@ -126,6 +126,14 @@ function ShownCount({ count, page, pageSize, more }: { count: number; page: numb
   return <span><span aria-hidden="true">{`${first}–${last}`}</span><span className="sr-only">{messages.inboxShown(first, last)}</span></span>;
 }
 
+// What a bulk change says once done: a status that may have told customers in a chat says so, with the
+// server's count when it gives one.
+function bulkSaid(count: number, changes: BulkConversationChanges, rows: Conversation[], result: unknown) {
+  if (!changes.status || changes.notify === false || !mayTellCustomers(rows)) return messages.bulkUpdated(count);
+  const told = result && typeof result === 'object' && 'told' in result && typeof result.told === 'number' ? result.told : undefined;
+  return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
+}
+
 export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
@@ -166,9 +174,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
     setBulkFailed(false);
     setBulkNotice('');
     try {
-      await onBulkUpdate(ids, changes);
+      const result = await onBulkUpdate(ids, changes);
       setChecked(new Set());
-      setBulkNotice(messages.bulkUpdated(ids.length));
+      setBulkNotice(bulkSaid(ids.length, changes, conversations.filter((item) => checked.has(item.id)), result));
       setRefocus((count) => count + 1);
     } catch {
       setBulkFailed(true);

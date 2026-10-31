@@ -104,6 +104,15 @@ export const messages = {
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
+  // Telling customers in a chat when the team sets a status (a chat channel's status notices).
+  tellCustomers: 'Tell customers',
+  tellCustomersTip: 'Customers in a chat whose channel has words for the new status are told',
+  resolveAndTellBulk: 'Resolve and tell customers',
+  resolveQuietlyBulk: 'Resolve quietly',
+  setStatusQuietly: 'Set status quietly',
+  bulkMayHaveTold: ' Customers in a chat were told where their channel has a message for that status.',
+  customersTold: (count: number, status: 'open' | 'pending' | 'resolved' | 'closed', told: number) =>
+    `${count} conversation${count === 1 ? '' : 's'} ${status === 'resolved' || status === 'closed' ? status : `set to ${status === 'open' ? 'Open' : 'Pending'}`}; ${told === 0 ? 'no customer was told' : `${told} customer${told === 1 ? ' was' : 's were'} told`}.`,
   bulkUpdateFailed: 'The conversations could not be updated. Nothing was changed; try again.',
   clearFilters: 'Clear filters',
   showContactConversations: (name: string) => `All conversations of ${name}`,
