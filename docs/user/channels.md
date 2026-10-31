@@ -220,8 +220,9 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   after it, it is an ordinary message.
 - A status the team sets tells the customer in the conversation's chat, when the channel has words for it:
   `settings.notices.status_pending`, `status_resolved` and `status_closed` (they fill `{ref}` and
-  `{subject}`), and `reopened` when the team opens it again. It is the channel's own message, quoting what
-  the customer wrote first one to one, and changes neither the status nor the response clocks. Empty texts
+  `{subject}`), and `reopened` when the team opens it again. It is the channel's own message, quoting the
+  customer's first message only one to one (in a group, and for a chat moved into another conversation, it
+  quotes nothing), and changes neither the status nor the response clocks. Empty texts
   (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
   MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
   the team started) or of a channel removed or turned off is told nothing; a chat message moved into a
