@@ -38,9 +38,9 @@ func (s *Store) DueSLAAlerts(ctx context.Context, now time.Time, limit int) ([]S
 			CROSS JOIN LATERAL (SELECT CASE WHEN v.due<=$1 THEN 'overdue' WHEN v.warn<=$1 THEN 'reminder' END AS threshold,
 				CASE WHEN v.due<=$1 THEN v.due ELSE v.warn END AS reached) th
 			WHERE c.sla_warn_at<=$1 AND c.sla_applies AND NOT c.sla_stale AND v.state='running' AND th.threshold IS NOT NULL
-				AND th.reached>=COALESCE(c.sla_alert_since,c.created_at)
+				AND th.reached>=COALESCE(c.sla_alert_since,c.created_at) AND th.reached>=COALESCE(t.alerts_since,'-infinity')
 				AND NOT EXISTS(SELECT 1 FROM conversation_sla_alerts a WHERE a.workspace_id=c.workspace_id AND a.conversation_id=c.id
-					AND a.clock=v.clock AND a.threshold=th.threshold AND a.due_at=v.due AND a.recipient='')
+					AND a.clock=v.clock AND a.threshold=th.threshold AND a.recipient='')
 			ORDER BY th.reached LIMIT $2`, now, limit)
 		if err != nil {
 			return err
@@ -62,7 +62,7 @@ func (s *Store) DueSLAAlerts(ctx context.Context, now time.Time, limit int) ([]S
 // closeSettled marks a threshold done once everyone who gets it has their email settled (sent or rejected).
 const closeSettled = `INSERT INTO conversation_sla_alerts(workspace_id,conversation_id,clock,threshold,due_at,recipient,status)
 	SELECT $1,$2,$3,$4,$5,'','done' WHERE (SELECT count(*) FROM conversation_sla_alerts WHERE workspace_id=$1 AND conversation_id=$2 AND clock=$3 AND threshold=$4
-		AND due_at=$5 AND recipient=ANY($6) AND status IN ('sent','rejected'))=cardinality($6::text[])
+		AND recipient=ANY($6) AND status IN ('sent','rejected'))=cardinality($6::text[])
 	ON CONFLICT DO NOTHING`
 
 // PrepareSLAAlert finds who gets an alert: the assignee, or the admins while nobody is assigned, each
@@ -103,7 +103,7 @@ func (s *Store) ClaimSLARecipient(ctx context.Context, alert SLAAlert, to string
 	return scoped(ctx, s, alert.WorkspaceID, func(tx pgx.Tx) (bool, error) {
 		var claimed bool
 		err := tx.QueryRow(ctx, `INSERT INTO conversation_sla_alerts(workspace_id,conversation_id,clock,threshold,due_at,recipient) VALUES($1,$2,$3,$4,$5,$6)
-			ON CONFLICT (workspace_id,conversation_id,clock,threshold,due_at,recipient) DO UPDATE SET created_at=now()
+			ON CONFLICT (workspace_id,conversation_id,clock,threshold,recipient) DO UPDATE SET created_at=now()
 			WHERE conversation_sla_alerts.status='sending' AND conversation_sla_alerts.created_at<now()-make_interval(secs => $7)
 			RETURNING true`, alert.WorkspaceID, alert.ConversationID, alert.Clock, alert.Threshold, alert.DueAt, to, abandoned.Seconds()).Scan(&claimed)
 		if err == pgx.ErrNoRows {
@@ -120,12 +120,12 @@ func (s *Store) ClaimSLARecipient(ctx context.Context, alert SLAAlert, to string
 // later round (a send that failed for now). Once everyone's is settled, the threshold is done.
 func (s *Store) SettleSLAAlert(ctx context.Context, alert SLAAlert, recipient, status string) error {
 	_, err := scoped(ctx, s, alert.WorkspaceID, func(tx pgx.Tx) (struct{}, error) {
-		key := []any{alert.WorkspaceID, alert.ConversationID, alert.Clock, alert.Threshold, alert.DueAt, recipient}
+		key := []any{alert.WorkspaceID, alert.ConversationID, alert.Clock, alert.Threshold, recipient}
 		if status == "" {
-			_, err := tx.Exec(ctx, `DELETE FROM conversation_sla_alerts WHERE workspace_id=$1 AND conversation_id=$2 AND clock=$3 AND threshold=$4 AND due_at=$5 AND recipient=$6`, key...)
+			_, err := tx.Exec(ctx, `DELETE FROM conversation_sla_alerts WHERE workspace_id=$1 AND conversation_id=$2 AND clock=$3 AND threshold=$4 AND recipient=$5`, key...)
 			return struct{}{}, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversation_sla_alerts SET status=$7 WHERE workspace_id=$1 AND conversation_id=$2 AND clock=$3 AND threshold=$4 AND due_at=$5 AND recipient=$6`,
+		if _, err := tx.Exec(ctx, `UPDATE conversation_sla_alerts SET status=$6 WHERE workspace_id=$1 AND conversation_id=$2 AND clock=$3 AND threshold=$4 AND recipient=$5`,
 			append(key, status)...); err != nil {
 			return struct{}{}, err
 		}

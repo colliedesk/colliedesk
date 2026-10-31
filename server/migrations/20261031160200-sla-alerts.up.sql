@@ -14,12 +14,15 @@ CREATE TABLE conversation_sla_alerts (
     recipient text NOT NULL DEFAULT '' CHECK (char_length(recipient) <= 320),
     status text NOT NULL DEFAULT 'sending' CHECK (status IN ('sending', 'sent', 'rejected', 'done', 'nobody')),
     created_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, conversation_id, clock, threshold, due_at, recipient),
+    -- Once per conversation, clock, threshold and recipient: a pause moves due_at, never a second email.
+    UNIQUE (workspace_id, conversation_id, clock, threshold, recipient),
     CHECK ((recipient = '') = (status IN ('done', 'nobody'))),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE CASCADE
 );
 CREATE INDEX conversation_sla_alerts_conversation ON conversation_sla_alerts(workspace_id, conversation_id, created_at);
 ALTER TABLE agents ADD COLUMN sla_alert_email boolean NOT NULL DEFAULT true;
+-- When the emails last came on (targets on and alert_email): a threshold reached before sends nothing.
+ALTER TABLE response_targets ADD COLUMN alerts_since timestamptz;
 ALTER TABLE conversations ADD COLUMN sla_alert_since timestamptz;
 UPDATE conversations SET sla_alert_since = created_at WHERE sla_applies;
 CREATE INDEX conversations_sla_warn ON conversations(sla_warn_at) WHERE sla_warn_at IS NOT NULL;
