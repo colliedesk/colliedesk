@@ -505,6 +505,35 @@ test('resolving the open conversation never swaps the screen to another one, so 
   expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
 });
 
+test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo }], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue({ ...alpha, channel_ref: zalo, status_notices: ['resolved'] });
+  api.updateConversation.mockResolvedValue({ ...alpha, channel_ref: zalo });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const more = within(await screen.findByRole('group', { name: 'More ways to resolve' }));
+  fireEvent.click(more.getByRole('button', { name: 'Resolve without telling the customer' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved', notify: false }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenLastCalledWith(alpha.id, { status: 'resolved' }));
+});
+
+test('an email conversation in the list is not read again to open it', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(api.conversation).not.toHaveBeenCalled();
+});
+
 test('when the caught-up check fails, the inbox does not pretend the workspace is new', async () => {
   quietApis();
   api.conversations.mockReset();

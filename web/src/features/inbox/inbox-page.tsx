@@ -62,7 +62,8 @@ interface InboxPageProps {
   savedRepliesState?: 'loading' | 'failed' | 'ready';
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   // Changes one conversation's status and settles when the server answered: the thread header and Send and resolve.
-  onSetStatus?: (conversationId: string, status: Conversation['status']) => Promise<unknown>;
+  // notify false sets it without telling the customer in their chat.
+  onSetStatus?: (conversationId: string, status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;
   onCreateTag?: (conversationId: string, name: string) => void;
@@ -249,7 +250,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
             timezone={timezone} currentAgentId={currentAgentId} agentNames={agentNames} />} />}
           messageLabel={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeLabel conversation={selected} message={item} />} />)}
           messageMenu={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />)}
-          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status) => onSetStatus(selected.id, status) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
+          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
         {sendsFrom && <p className="composer-from">{sendsFrom}</p>}

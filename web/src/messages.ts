@@ -104,6 +104,16 @@ export const messages = {
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
+  // The header's Resolve / Reopen when the change would tell the customer in their chat.
+  resolveAndTell: 'Resolve and tell',
+  reopenAndTell: 'Reopen and tell',
+  resolveAndTellName: (channel: string) => `Resolve and tell the customer on ${channel}`,
+  reopenAndTellName: (channel: string) => `Reopen and tell the customer on ${channel}`,
+  moreWaysToResolve: 'More ways to resolve',
+  moreWaysToReopen: 'More ways to reopen',
+  resolveQuietly: 'Resolve without telling the customer',
+  reopenQuietly: 'Reopen without telling the customer',
+  reopenQuietlyUse: 'To add a note or fix a detail',
   // Telling customers in a chat when the team sets a status (a chat channel's status notices).
   tellCustomers: 'Tell customers',
   tellCustomersTip: 'Customers in a chat whose channel has words for the new status are told',

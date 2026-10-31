@@ -5,6 +5,7 @@ import { messages } from '../../messages';
 import { CheckCircleIcon, ChevronLeftIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
 import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
+import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
 import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
@@ -38,7 +39,8 @@ interface TimelinePanelProps {
   // The others who have this conversation open now, and whether one is writing a reply.
   viewers?: ConversationViewer[];
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
-  onSetStatus?: (status: Conversation['status']) => Promise<unknown>;
+  // notify false sets it without telling the customer (their chat channel's status notice).
+  onSetStatus?: (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
   // Returns to the list; the button shows only where the thread replaces the list (a phone).
   onBack?: () => void;
   // The server runs Autofix: narrow screens get the fix's one line under the header.
@@ -51,20 +53,31 @@ interface TimelinePanelProps {
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
 // closed one offers the way back. A failure says so beside the button.
-function StatusButton({ status, onSetStatus }: { status: Conversation['status']; onSetStatus: (status: Conversation['status']) => Promise<unknown> }) {
+type SetStatus = (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+
+function StatusButton({ conversation, onSetStatus }: { conversation: Conversation; onSetStatus: SetStatus }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const done = status === 'resolved' || status === 'closed';
-  const change = () => {
+  const done = conversation.status === 'resolved' || conversation.status === 'closed';
+  const target = done ? 'open' : 'resolved';
+  // The server says which statuses would tell the customer now; only then is there a quiet way to offer.
+  const channel = conversation.channel_ref?.name;
+  const tells = Boolean(channel) && (conversation.status_notices ?? []).includes(target);
+  const change = (quiet: boolean) => {
     if (busy) return;
     setBusy(true);
     setFailed(false);
-    onSetStatus(done ? 'open' : 'resolved').catch(() => setFailed(true)).finally(() => setBusy(false));
+    (quiet ? onSetStatus(target, { notify: false }) : onSetStatus(target)).catch(() => setFailed(true)).finally(() => setBusy(false));
   };
+  // aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place.
+  const button = <button type="button" className="status-button" aria-disabled={busy || undefined} onClick={() => change(false)}
+    aria-label={tells && channel ? (done ? messages.reopenAndTellName(channel) : messages.resolveAndTellName(channel)) : undefined}>
+    {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{tells ? (done ? messages.reopenAndTell : messages.resolveAndTell) : done ? messages.reopen : messages.resolve}</button>;
   return <>
-    {/* aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place. */}
-    <button type="button" className="status-button" aria-disabled={busy || undefined} onClick={change}>
-      {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{done ? messages.reopen : messages.resolve}</button>
+    {tells ? <span className="status-split">{button}
+      <ActionMenu label={done ? messages.moreWaysToReopen : messages.moreWaysToResolve} icon={null} disabled={busy} onApply={() => change(true)}>
+        {(apply) => <button type="button" onClick={() => apply(undefined)}>{done ? <>{messages.reopenQuietly}{' '}<small>{messages.reopenQuietlyUse}</small></> : messages.resolveQuietly}</button>}
+      </ActionMenu></span> : button}
     {failed && <p role="alert" className="error-copy status-button-error">{messages.statusChangeFailed}</p>}
   </>;
 }
@@ -89,7 +102,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && (onSetStatus || onToggleDetails) && <div className="timeline-actions">
-          {onSetStatus && <StatusButton key={conversation.id} status={conversation.status} onSetStatus={onSetStatus} />}
+          {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} />}
           {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
             aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
             aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>

@@ -195,6 +195,19 @@ body:has(.status-tabs input:not([value="all"]):checked) .conversation-meta .stat
 .timeline-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-left: auto; }
 .status-button svg { width: 14px; height: 14px; }
 .status-button[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+/* Resolve / Reopen that would tell the customer: the one press and an arrow menu with the quiet way. The menu
+   hangs from the header's action group (its right edge is the panel's), never wider than the screen. */
+.timeline-actions { position: relative; }
+.status-split { display: inline-flex; align-items: stretch; }
+.status-split > .status-button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.status-split > .action-menu { position: static; display: flex; }
+.status-split > .action-menu > summary { height: auto; align-self: stretch; min-height: var(--control); margin-left: -1px; padding: 0 6px; border: 1px solid var(--line-control);
+  border-top-left-radius: 0; border-bottom-left-radius: 0; background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-2); }
+.status-split > .action-menu > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.status-split .action-popover { right: 0; left: auto; min-width: 17rem; max-width: calc(100vw - 2 * var(--space-4)); }
+.status-split .action-popover button { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; white-space: normal; text-align: left; height: auto; padding-block: 6px; }
+.status-split .action-popover small { display: block; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
+@media (pointer: coarse), (max-width: 30rem) { .status-split > .action-menu > summary { min-width: var(--touch); } }
 .status-button-error { flex-basis: 100%; margin: 0; text-align: right; font-size: var(--fs-label); }
 .timeline-scroll { overflow-y: auto; padding: var(--space-5) var(--space-6); }
 .timeline-stack { max-width: 46rem; margin: 0 auto; display: grid; gap: var(--space-4); }

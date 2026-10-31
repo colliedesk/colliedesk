@@ -179,6 +179,32 @@ test('the header button ignores presses while the change runs, keeps the focus, 
   expect(resolve).not.toHaveAttribute('aria-disabled');
 });
 
+const zaloRef = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+test('a change that would tell the customer says so on the button, and its arrow offers the quiet one', async () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, status_notices: ['resolved', 'closed'] }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' });
+  expect(resolve).toHaveTextContent('Resolve and tell');
+  expect(resolve).not.toHaveAttribute('data-tip');
+  const more = screen.getByLabelText('More ways to resolve', { selector: 'summary' });
+  expect(more).toHaveAttribute('data-tip', 'More ways to resolve');
+  fireEvent.click(within(screen.getByRole('group', { name: 'More ways to resolve' })).getByRole('button', { name: 'Resolve without telling the customer' }));
+  expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
+  await waitFor(() => expect(resolve).not.toHaveAttribute('aria-disabled'));
+  fireEvent.click(resolve);
+  expect(onSetStatus).toHaveBeenLastCalledWith('resolved');
+});
+
+test('Reopen that tells offers a quiet reopen, to add a note; a change that tells nothing has no arrow', async () => {
+  const { unmount } = render(<TimelinePanel conversation={{ ...thread, status: 'closed', channel_ref: zaloRef, status_notices: ['open'] }} items={[]} timezone="UTC" onSetStatus={vi.fn().mockResolvedValue(undefined)} />);
+  expect(screen.getByRole('button', { name: 'Reopen and tell the customer on Hảo Đạt OA' })).toHaveTextContent('Reopen and tell');
+  expect(within(screen.getByRole('group', { name: 'More ways to reopen' })).getByRole('button', { name: /Reopen without telling the customer/ })).toHaveTextContent('To add a note or fix a detail');
+  unmount();
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, status_notices: ['open'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('More ways to resolve')).not.toBeInTheDocument();
+});
+
 test('no conversation, no status button', () => {
   render(<TimelinePanel items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
   expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
