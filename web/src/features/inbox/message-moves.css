@@ -3,6 +3,8 @@
 .message-meta:has(> .message-move-menu) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
 /* A mouse gets a compact menu button in the header; a finger keeps the 44 px target. */
 @media (pointer: fine) { .message-move-menu .action-menu summary { min-width: 28px; min-height: 28px; } }
+/* The menu sits at the right edge of the message, which the timeline clips sideways: its tip hangs from that edge. */
+.message-move-menu .action-menu > summary[data-tip]::after { left: auto; right: 0; translate: 0 0; }
 .message-move-problem { grid-column: 1 / -1; margin: 0; font-size: var(--fs-small); }
 .message-intake { color: var(--text-3); }
 

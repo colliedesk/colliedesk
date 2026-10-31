@@ -230,6 +230,11 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   // Its arrow's tip is read whole: the thread pane clips sideways.
   await page.setViewportSize({ width: 1440, height: 900 });
   expect(await tipFits(page, 'summary[aria-label="More ways to resolve"]')).toBe('fits');
+  // So is the tip of the customer message's own menu (Move this message), at every width.
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await tipFits(page, '.message-move-menu summary')).toBe('fits');
+  }
 
   // At 390 px nothing scrolls sideways, the quiet menu open or closed.
   await page.setViewportSize({ width: 390, height: 844 });
