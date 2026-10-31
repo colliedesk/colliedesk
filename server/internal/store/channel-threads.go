@@ -105,14 +105,20 @@ func recordThreadItems(ctx context.Context, tx pgx.Tx, journal *journalWriter, i
 		if len(in.Thread.References) > 0 {
 			quote = in.Thread.References[0]
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,sender_name,
+		inserted, err := tx.Exec(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,sender_name,
 				contact_id,external_id,quote_external_id,body,inbound_event_id,message_id,disposition,disposition_reason,occurred_at)
 			VALUES($1,$2,$3,'in',$4,NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,'')::uuid,NULLIF($9,''),NULLIF($10,''),$11,$12::uuid,
 				NULLIF($13,'')::uuid,$14,NULLIF($15,''),$16)
 			ON CONFLICT DO NOTHING`, channel.WorkspaceID, channel.ID, threadID, role, clip(in.Sender.Identity.Kind, 40), clip(in.Sender.Identity.Value, 200),
 			clip(in.Sender.Name, 200), outcome.contactID, clip(in.ExternalID, 1000), clip(quote, 1000), clip(in.Text, 20000), eventIDs[0],
-			outcome.messageID, outcome.disposition, outcome.reason, occurred); err != nil {
+			outcome.messageID, outcome.disposition, outcome.reason, occurred)
+		if err != nil {
 			return fmt.Errorf("record chat item: %w", err)
+		}
+		if inserted.RowsAffected() == 1 {
+			if err := recordSender(ctx, tx, channel, threadID, role, in.Sender, occurred); err != nil {
+				return err
+			}
 		}
 	}
 	if outcome.conversationID == "" {
@@ -122,6 +128,28 @@ func recordThreadItems(ctx context.Context, tx pgx.Tx, journal *journalWriter, i
 		SELECT $1,$2,id,$4,NULLIF($5,'')::uuid FROM channel_thread_items WHERE workspace_id=$1 AND inbound_event_id::text=ANY($3)
 		ON CONFLICT DO NOTHING`, channel.WorkspaceID, outcome.conversationID, eventIDs, outcome.linkReason, journal.request.DecidedBy); err != nil {
 		return fmt.Errorf("link chat items: %w", err)
+	}
+	return nil
+}
+
+// recordSender keeps who wrote an item in channel_senders: where and when they last wrote, and the last
+// name the channel gave them. A message older than what is kept (a late delivery, a replay) moves
+// nothing back; the channel's own account (its external_account now) is no person and is left out.
+func recordSender(ctx context.Context, tx pgx.Tx, channel channels.Channel, threadID, role string, sender channels.Sender, at time.Time) error {
+	kind, value := clip(sender.Identity.Kind, 40), clip(sender.Identity.Value, 200)
+	if kind == "" || value == "" || (role != channels.RoleCustomer && role != channels.RoleStaff) || (channel.ExternalAccount != "" && value == channel.ExternalAccount) {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO channel_senders(workspace_id,channel_id,sender_kind,sender_value,name,role,last_at,thread_id)
+		SELECT $1,$2,$3,$4,NULLIF($5,''),$6,$7,$8 FROM channels c WHERE c.workspace_id=$1 AND c.id=$2 AND $4 IS DISTINCT FROM c.external_account
+		ON CONFLICT (workspace_id,channel_id,sender_kind,sender_value) DO UPDATE SET
+			name=CASE WHEN EXCLUDED.last_at>=channel_senders.last_at AND EXCLUDED.name IS NOT NULL THEN EXCLUDED.name ELSE COALESCE(channel_senders.name,EXCLUDED.name) END,
+			role=CASE WHEN EXCLUDED.last_at>=channel_senders.last_at THEN EXCLUDED.role ELSE channel_senders.role END,
+			thread_id=CASE WHEN EXCLUDED.last_at>=channel_senders.last_at THEN EXCLUDED.thread_id ELSE channel_senders.thread_id END,
+			last_at=GREATEST(channel_senders.last_at,EXCLUDED.last_at)`,
+		channel.WorkspaceID, channel.ID, kind, value, clip(sender.Name, 200), role, at, threadID)
+	if err != nil {
+		return fmt.Errorf("record chat sender: %w", err)
 	}
 	return nil
 }
@@ -256,8 +284,8 @@ type ChannelSender struct {
 	ThreadName *string   `json:"thread_name"`
 }
 
-// MaxChannelSenders is the most people ChannelSenders lists.
-const MaxChannelSenders = 200
+// MaxChatSenders is the most people ChannelSenders lists.
+const MaxChatSenders = 200
 
 // ChannelSenders lists the people who wrote in a channel's chats (customers and the team, never the
 // channel itself), each once, most recent first: every member of a group, not only its last writer.
@@ -266,14 +294,9 @@ func (s *Store) ChannelSenders(ctx context.Context, workspaceID, channelID strin
 		if _, err := s.channelByID(ctx, tx, workspaceID, channelID); err != nil {
 			return nil, err
 		}
-		rows, err := tx.Query(ctx, `SELECT x.sender_kind,x.sender_value,x.name,x.role,x.last_at,x.thread_id::text,t.name FROM (
-				SELECT sender_kind,sender_value,max(occurred_at) AS last_at,
-					(array_agg(sender_name ORDER BY occurred_at DESC,id DESC) FILTER (WHERE sender_name IS NOT NULL))[1] AS name,
-					(array_agg(role ORDER BY occurred_at DESC,id DESC))[1] AS role,
-					(array_agg(thread_id ORDER BY occurred_at DESC,id DESC))[1] AS thread_id
-				FROM channel_thread_items WHERE workspace_id=$1 AND channel_id=$2::uuid AND role<>'bot' AND sender_value IS NOT NULL AND sender_kind IS NOT NULL
-				GROUP BY sender_kind,sender_value ORDER BY last_at DESC LIMIT $3) x
-			JOIN channel_threads t ON t.workspace_id=$1 AND t.id=x.thread_id ORDER BY x.last_at DESC,x.sender_value`, workspaceID, channelID, MaxChannelSenders)
+		rows, err := tx.Query(ctx, `SELECT s.sender_kind,s.sender_value,s.name,s.role,s.last_at,s.thread_id::text,t.name FROM channel_senders s
+				JOIN channel_threads t ON t.workspace_id=s.workspace_id AND t.id=s.thread_id
+			WHERE s.workspace_id=$1 AND s.channel_id=$2::uuid ORDER BY s.last_at DESC,s.sender_value LIMIT $3`, workspaceID, channelID, MaxChatSenders)
 		if err != nil {
 			return nil, fmt.Errorf("read chat senders: %w", err)
 		}

@@ -475,6 +475,15 @@ func TestAChannelListsEveryoneWhoWroteInItsChats(t *testing.T) {
 	send("user_send_group_text", "1110002", "g-5", "s-2")
 	send("user_send_group_text", "1110009", "g-5", "s-3")
 	send("user_send_text", "1110001", d.oaA, "s-4")
+	// What the OA itself wrote on Zalo's own app is the channel's, not a person's; nor is it once the channel
+	// moves to another OA, nor the new OA's.
+	send("oa_send_text", d.oaA, "1110001", "s-5")
+	oaB := fmt.Sprint(800000 + time.Now().UnixNano()%100000)
+	if response := request(t, api, http.MethodPatch, "/api/v1/channels/"+d.channelA, map[string]any{"config": map[string]any{"oa_id": oaB, "app_id": "700001"}}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("move to another OA: %d %s", response.Code, response.Body.String())
+	}
+	d.oaA = oaB
+	send("oa_send_text", oaB, "1110001", "s-6")
 	response := request(t, api, http.MethodGet, "/api/v1/channels/"+d.channelA+"/senders", nil, d.adminA, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("senders: %d %s", response.Code, response.Body.String())
@@ -509,5 +518,46 @@ func TestAChannelListsEveryoneWhoWroteInItsChats(t *testing.T) {
 	}
 	if response := request(t, api, http.MethodGet, "/api/v1/channels/"+d.channelA+"/senders", nil, other, nil); response.Code != http.StatusNotFound {
 		t.Fatalf("another workspace read them: %d", response.Code)
+	}
+	// Another workspace's own channel lists none of these.
+	otherChannel := zaloDesk{api: api, pool: pool}.connect(t, other, fmt.Sprint(900000+time.Now().UnixNano()%100000), "oa-secret-b")
+	if response := request(t, api, http.MethodGet, "/api/v1/channels/"+otherChannel+"/senders", nil, other, nil); response.Code != http.StatusOK || strings.Contains(response.Body.String(), "1110001") {
+		t.Fatalf("another workspace's channel: %d %s", response.Code, response.Body.String())
+	}
+}
+
+// Listing who wrote reads a few hundred rows whatever a channel holds: 200,000 messages by 3,000 people.
+func TestListingWhoWroteStaysFastOnABusyChannel(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+		config.Google = google.Config{Keys: keys}
+	})
+	d := zaloDesk{api: api, pool: pool}
+	admin := createSession(t, api, service, "Zalo Busy", "admin@zalo-busy.example.com")
+	channel := d.connect(t, admin, fmt.Sprint(600000+time.Now().UnixNano()%100000), "oa-secret-a")
+	if _, err := pool.Exec(context.Background(), `WITH c AS (SELECT workspace_id,id FROM channels WHERE id=$1),
+			t AS (INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id,last_item_at) SELECT workspace_id,id,'group','group:busy',now() FROM c RETURNING workspace_id,channel_id,id),
+			i AS (INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,body,disposition,occurred_at)
+				SELECT t.workspace_id,t.channel_id,t.id,'in','customer','zalo_user',(n%3000)::text,'hi','archived',now()-make_interval(secs => n) FROM t, generate_series(1,200000) n RETURNING 1)
+		INSERT INTO channel_senders(workspace_id,channel_id,sender_kind,sender_value,role,last_at,thread_id)
+			SELECT t.workspace_id,t.channel_id,'zalo_user',n::text,'customer',now()-make_interval(secs => n),t.id FROM t, generate_series(0,2999) n`, channel); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `ANALYZE channel_senders`); err != nil {
+		t.Fatal(err)
+	}
+	workspace := queryString(t, pool, `SELECT workspace_id::text FROM channels WHERE id=$1`, channel)
+	st := store.New(pool)
+	best := time.Hour
+	for range 5 {
+		start := time.Now()
+		senders, err := st.ChannelSenders(context.Background(), workspace, channel)
+		if err != nil || len(senders) != store.MaxChatSenders {
+			t.Fatalf("senders = %d, %v", len(senders), err)
+		}
+		best = min(best, time.Since(start))
+	}
+	if best > 20*time.Millisecond {
+		t.Fatalf("listing who wrote took %s, want under 20 ms", best)
 	}
 }

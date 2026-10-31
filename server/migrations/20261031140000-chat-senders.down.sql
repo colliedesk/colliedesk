@@ -1,1 +1,1 @@
-DROP INDEX channel_thread_items_sender;
+DROP TABLE channel_senders;
