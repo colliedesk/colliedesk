@@ -33,6 +33,8 @@ type ResponseTargets struct {
 	AlertEmail        bool                     `json:"alert_email"`
 	EnabledAt         *time.Time               `json:"enabled_at"`
 	UpdatedAt         *time.Time               `json:"updated_at"`
+	// MyAlertEmail says whether the reader gets the reminder and overdue emails (their own setting).
+	MyAlertEmail *bool `json:"my_alert_email,omitempty"`
 }
 
 // ResponseTargetsError says which part of the document is wrong.

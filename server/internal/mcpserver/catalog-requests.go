@@ -6,6 +6,7 @@ package mcpserver
 
 import (
 	"encoding/json"
+	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
@@ -214,6 +215,24 @@ func responseTargetsSetRequestSpec() Spec {
 			`"holidays":{"type":"array","maxItems":500,"items":{"type":"object","required":["date","name"],"properties":{"date":{"type":"string"},"name":{"type":"string","maxLength":100}}}},`+
 			`"targets":{"type":"object"},"warn_before_minutes":{"type":"integer","minimum":0,"maximum":10080},"channel_ids":{"type":["array","null"],"items":{"type":"string"}},"alert_email":{"type":"boolean"}}}`,
 		responseTargetsSetRequest)
+}
+
+func mySLAAlertsSetSpec() Spec {
+	return Spec{
+		Name: "colliedesk_my_sla_alerts_set", Title: "Turn your response target emails on or off",
+		Description: `Turn the reminder and overdue emails of response targets on or off for the person this token acts as (colliedesk_response_targets_get shows my_alert_email).` + "\n\nTier: draft.",
+		Tier:        "draft", Idempotent: true,
+		REST:   []string{"PATCH /api/v1/agents/me/sla-alerts"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["email"],"properties":{"email":{"type":"boolean"}}}`,
+		Output: `{"type":"object","required":["email"],"properties":{"email":{"type":"boolean"}}}`,
+		run: func(c *call, arguments map[string]any) (any, error) {
+			var out map[string]any
+			if err := c.send(http.MethodPatch, "/api/v1/agents/me/sla-alerts", arguments, &out); err != nil {
+				return nil, err
+			}
+			return out, nil
+		},
+	}
 }
 
 func workspaceSlugRequestSpec() Spec {

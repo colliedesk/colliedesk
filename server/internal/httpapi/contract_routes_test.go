@@ -226,6 +226,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PUT /api/v1/conversation-number-series/{series}":            {"/api/v1/conversation-number-series/ref", map[string]any{"format": "REF-{yyyy}-{n:04}", "next": 10}, admin, 200, ""},
 		"PUT /api/v1/response-targets":                               {"/api/v1/response-targets", map[string]any{"enabled": false, "hours": []any{}, "targets": map[string]any{}}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/timezone":                           {"/api/v1/agents/me/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
+		"PATCH /api/v1/agents/me/sla-alerts":                         {"/api/v1/agents/me/sla-alerts", map[string]any{"email": true}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/display-name":                       {"/api/v1/agents/me/display-name", map[string]any{"display_name": "Contract Admin"}, admin, 200, ""},
 		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"role": "agent"}, admin, 200, ""},
 		"GET /api/v1/tags":                                           {"/api/v1/tags", nil, admin, 200, ""},
