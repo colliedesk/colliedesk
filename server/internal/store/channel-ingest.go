@@ -314,14 +314,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	if commanded && command.Action == channels.ActionConfirm {
 		// Where a request being written is asked about, a confirm sends it now; the confirm itself is no part
-		// of it. Before the question, or with nothing being written, it is an ordinary message.
+		// of it. Before the question, or after the customer added to it since (the question is asked again,
+		// as the batch's flush asks it), or with nothing being written, it is an ordinary message.
 		var sent bool
 		asks := scope.Gather != nil && scope.Gather.ConfirmSeconds > 0 && channel.Settings.Notices.AskConfirm != ""
 		if in.Aggregate != nil {
 			tag, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET flush_at=$5 WHERE workspace_id=$1 AND channel_id=$2 AND state='pending'
 				AND aggregate_key=$3 AND NOT (id::text=ANY(COALESCE($4::text[],'{}')))
 				AND EXISTS(SELECT 1 FROM channel_inbound_events c WHERE c.workspace_id=$1 AND c.channel_id=$2 AND c.state='pending' AND c.aggregate_key=$3 AND c.command IS NOT NULL)
-				AND (NOT $6 OR EXISTS(SELECT 1 FROM channel_inbound_events q WHERE q.workspace_id=$1 AND q.channel_id=$2 AND q.state='pending' AND q.aggregate_key=$3 AND q.confirm_asked_at IS NOT NULL))`,
+				AND (NOT $6 OR NOT EXISTS(SELECT 1 FROM channel_inbound_events q WHERE q.workspace_id=$1 AND q.channel_id=$2 AND q.state='pending' AND q.aggregate_key=$3
+					AND q.confirm_asked_at IS NULL AND NOT (q.id::text=ANY(COALESCE($4::text[],'{}')))))`,
 				workspaceID, channel.ID, in.Aggregate.Key, request.EventIDs, now, asks)
 			if err != nil {
 				return result, fmt.Errorf("send a confirmed request: %w", err)

@@ -153,7 +153,8 @@ ones whole, so send them all.
   exact`) opens it at once and is no part of it; more messages join it and the question is asked again once
   the customer is quiet; silence opens it; a cancel throws it away. A confirm with nothing being written is
   an ordinary message. 0 (the default) asks nothing.
-  An OK written before the question is part of the request. A journal processed late (a paused channel
+  An OK written before the question, or after the customer added to the request since it was asked (the
+  question is then asked again), is part of the request. A journal processed late (a paused channel
   resumed) keeps the times its messages came: a request whose customer was quiet longer than the question
   would have waited opens without one. A request of any length opens whole.
 - A conversation a command opens is called by the first line of what follows the command ("report bug: the
