@@ -695,6 +695,14 @@ const deferred = () => {
   return { promise, ...settle };
 };
 
+test('Send and resolve on a chat that tells says so in its tooltip', () => {
+  const { unmount } = render(<ReplyComposer onSubmit={vi.fn()} onResolve={vi.fn()} resolveTells="Hảo Đạt OA" />);
+  expect(screen.getByRole('button', { name: 'Send and resolve' })).toHaveAttribute('title', 'Send and resolve (Ctrl+Shift+Enter) · Hảo Đạt OA also tells the customer');
+  unmount();
+  render(<ReplyComposer onSubmit={vi.fn()} onResolve={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Send and resolve' })).toHaveAttribute('title', 'Send and resolve (Ctrl+Shift+Enter)');
+});
+
 test('Send and resolve sends the reply, then resolves only after the send succeeded', async () => {
   const send = deferred();
   const onSubmit = vi.fn(() => send.promise);

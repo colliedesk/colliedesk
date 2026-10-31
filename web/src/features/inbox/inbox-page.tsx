@@ -265,6 +265,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
           // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
           onResolve={selected && onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
+          resolveTells={selected?.status_notices?.includes('resolved') ? selected.channel_ref?.name : undefined}
           aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
           findSent={selected && onFindSent ? (key) => onFindSent(selected.id, key) : undefined} />
       </div>

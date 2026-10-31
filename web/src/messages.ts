@@ -1,3 +1,6 @@
+// "A", "A and B", "A, B and C".
+const listWords = (words: string[]) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
+
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
@@ -114,6 +117,13 @@ export const messages = {
   resolveQuietly: 'Resolve without telling the customer',
   reopenQuietly: 'Reopen without telling the customer',
   reopenQuietlyUse: 'To add a note or fix a detail',
+  // Details · Status on a chat that tells its customer.
+  tellCustomer: 'Tell the customer',
+  tellWhich: (channel: string, told: string[], quiet: string[]) =>
+    `${channel} tells ${listWords(told)}${quiet.length ? `; ${listWords(quiet)} ${quiet.length === 1 ? 'stays' : 'stay'} quiet` : ''}.`,
+  tellUnticked: 'Unticked: the status you pick now is set quietly.',
+  // A status as a change to it reads: open is reopening.
+  statusChange: { open: 'Reopened', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
   // Telling customers in a chat when the team sets a status (a chat channel's status notices).
   tellCustomers: 'Tell customers',
   tellCustomersTip: 'Customers in a chat whose channel has words for the new status are told',
@@ -149,6 +159,7 @@ export const messages = {
   sendShortcut: 'to send',
   reply: 'Send reply',
   sendAndResolve: 'Send and resolve',
+  sendAndResolveTells: (channel: string) => ` · ${channel} also tells the customer`,
   resolveShortcutAdd: ', add',
   resolveShortcut: 'to resolve',
   resolvedAfterReplyFailed: 'Your reply was sent, but the conversation could not be resolved. Press Resolve to try again.',

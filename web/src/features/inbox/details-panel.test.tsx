@@ -69,3 +69,42 @@ test('a conversation without targets shows no Targets section', () => {
   render(<DetailsPanel conversation={{ ...conversation(null), sla: null } as unknown as Conversation} agents={[]} tags={[]} timezone="UTC" />);
   expect(screen.queryByRole('region', { name: 'Targets' })).toBeNull();
 });
+
+const zaloRef = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+test('on a chat that tells, Status is a menu: Tell the customer first, ticked, and unticked the status is set quietly', () => {
+  const onUpdate = vi.fn();
+  const chat = { ...conversation(null), channel_ref: zaloRef, status_notices: ['resolved', 'closed', 'open'] } as Conversation;
+  render(<DetailsPanel conversation={{ ...chat, status: 'pending' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+  const summary = screen.getByText('Pending', { selector: '.status-pick summary *' }).closest('summary') as HTMLElement;
+  expect(summary).toHaveAccessibleName('Status Pending');
+  const menu = within(screen.getByRole('group', { name: 'Status' }));
+  const tell = menu.getByRole('checkbox', { name: 'Tell the customer' });
+  expect(tell).toBeChecked();
+  expect(menu.getByText('Hảo Đạt OA tells Resolved, Closed and Reopened.')).toBeInTheDocument();
+  expect(tell.compareDocumentPosition(menu.getByRole('button', { name: 'Resolved' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(menu.queryByRole('button', { name: 'Pending' })).not.toBeInTheDocument();
+  fireEvent.click(menu.getByRole('button', { name: 'Resolved' }));
+  expect(onUpdate).toHaveBeenLastCalledWith(chat.id, { status: 'resolved' });
+  fireEvent.click(tell);
+  expect(menu.getByText('Unticked: the status you pick now is set quietly.')).toBeInTheDocument();
+  fireEvent.click(menu.getByRole('button', { name: 'Closed' }));
+  expect(onUpdate).toHaveBeenLastCalledWith(chat.id, { status: 'closed', notify: false });
+});
+
+test('the menu says which statuses stay quiet, and ticks Tell the customer again each time it opens', () => {
+  const chat = { ...conversation(null), status: 'open', channel_ref: zaloRef, status_notices: ['resolved'] } as Conversation;
+  render(<DetailsPanel conversation={chat} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+  const menu = within(screen.getByRole('group', { name: 'Status' }));
+  expect(menu.getByText('Hảo Đạt OA tells Resolved; Pending and Closed stay quiet.')).toBeInTheDocument();
+  fireEvent.click(menu.getByRole('checkbox', { name: 'Tell the customer' }));
+  const details = document.querySelector('.status-pick') as HTMLDetailsElement;
+  details.open = true;
+  fireEvent(details, new Event('toggle'));
+  expect(menu.getByRole('checkbox', { name: 'Tell the customer' })).toBeChecked();
+});
+
+test('email keeps the Status select', () => {
+  render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'Status' })).toBeInTheDocument();
+});
