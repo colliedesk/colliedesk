@@ -2334,6 +2334,23 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/senders:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listChannelSenders
+      x-permission: conversations:read
+      description: >
+        The people who wrote in a chat channel's places (customers and the team, never the channel itself),
+        each once with the place and time they last wrote, most recent first, at most 200: every member of a
+        group, not only its last writer. Empty for a channel type without places.
+      responses:
+        '200':
+          description: The people who wrote
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChatSenderList'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/channels/{id}/threads/{threadId}/items:
     parameters:
       - {$ref: '#/components/parameters/ID'}
@@ -8286,6 +8303,24 @@ components:
         opens_conversations: {type: boolean}
         last_item_at: {type: [string, 'null'], format: date-time}
         last_item: {anyOf: [{$ref: '#/components/schemas/ChatItem'}, {type: 'null'}]}
+    ChatSenderList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [kind, value, name, role, last_at, thread_id, thread_name]
+            properties:
+              kind: {type: string, description: 'How the channel names them (zalo_user).'}
+              value: {type: string, description: 'Their id on the channel (a Zalo user id).'}
+              name: {type: [string, 'null'], description: 'The name the channel last gave them; null while it gave none.'}
+              role: {type: string, enum: [customer, staff], description: 'What their last message was taken as: a team member of the channel, or a customer.'}
+              last_at: {type: string, format: date-time}
+              thread_id: {type: string, format: uuid, description: 'The place they last wrote in.'}
+              thread_name: {type: [string, 'null']}
     ChatThreadPage:
       type: object
       required: [items, next_cursor]
