@@ -508,14 +508,14 @@ func (s *Store) UnresolvedItems(ctx context.Context, workspaceID string, olderTh
 // again (a second delivery, a replay), and a chat answered with this kind of notice less than every ago
 // (counted from when the last was queued) is not answered again yet: a lock of the chat keeps two
 // messages at once to one notice.
-func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, kind, text string, every time.Duration) error {
-	if journal.eventID == "" || text == "" {
+func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, eventID, kind, text string, every time.Duration) error {
+	if eventID == "" || text == "" {
 		return nil
 	}
 	channel := journal.channel
 	var threadID string
 	err := tx.QueryRow(ctx, `SELECT thread_id::text FROM channel_thread_items WHERE workspace_id=$1 AND inbound_event_id=$2::uuid AND direction='in' LIMIT 1`,
-		channel.WorkspaceID, journal.eventID).Scan(&threadID)
+		channel.WorkspaceID, eventID).Scan(&threadID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -533,7 +533,7 @@ func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, k
 			LIMIT 1)
 		INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,quote_external_id,body,disposition,disposition_reason,occurred_at,created_at)
 		SELECT $1,$3,thread_id,'out','bot',external_id,left($4,20000),'bot',$5,$6,$6 FROM customer RETURNING id::text`,
-		channel.WorkspaceID, journal.eventID, channel.ID, text, kind, journal.now, every.Seconds()).Scan(&itemID)
+		channel.WorkspaceID, eventID, channel.ID, text, kind, journal.now, every.Seconds()).Scan(&itemID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
