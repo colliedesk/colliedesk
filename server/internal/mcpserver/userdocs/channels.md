@@ -214,6 +214,18 @@ ones whole, so send them all.
   any other. A reopen command is answered as it comes, even where messages are collected: it is no part
   of the request being written, asks nothing and waits for nothing, and two of them are two. Without a code
   after it, it is an ordinary message.
+- A status the team sets tells the customer in the conversation's chat, when the channel has words for it:
+  `settings.notices.status_pending`, `status_resolved` and `status_closed` (they fill `{ref}` and
+  `{subject}`), and `reopened` when the team opens it again. It is the channel's own message, quoting what
+  the customer wrote first one to one, and changes neither the status nor the response clocks. Empty texts
+  (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
+  MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
+  the team started) is told nothing. An AI agent's token below the send tier asks a person first when its
+  change would tell a customer.
+- `settings.auto_close_hours` (0 to 720, none by default) closes a conversation that stayed resolved that
+  long after its resolve and the customer's last message, and tells the customer with `status_closed`. One
+  imported resolved and untouched here since closes quietly (the system before had told them). A customer
+  writing again before then opens it, as always.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
   the inbox and in Results; a teammate who opened it before the notice is not told someone replied.

@@ -15,11 +15,29 @@ type ConversationUpdate struct {
 	TagIDs     *[]string
 	// ActorID is the agent making the change; it is recorded when the assignee changes.
 	ActorID string
+	// Quiet changes the status without telling the customer (the channel's status notices).
+	Quiet bool
 }
 
+// UpdateConversation changes a conversation; a status the team sets is told to its customer in its chat
+// when the channel has words for it, unless the change is quiet.
 func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return s.withChannelRef(ctx, tx, workspaceID)(updateConversation(ctx, tx, workspaceID, id, update))
+		var before map[string]string
+		if update.Status != nil && !update.Quiet {
+			var err error
+			if before, err = statusesBefore(ctx, tx, workspaceID, []string{id}); err != nil {
+				return domain.Conversation{}, err
+			}
+		}
+		item, err := updateConversation(ctx, tx, workspaceID, id, update)
+		if err == nil && before != nil {
+			if err := s.sendStatusNotices(ctx, tx, workspaceID, before, *update.Status); err != nil {
+				return domain.Conversation{}, err
+			}
+			item, err = getConversation(ctx, tx, workspaceID, id)
+		}
+		return s.withChannelRef(ctx, tx, workspaceID)(item, err)
 	})
 }
 

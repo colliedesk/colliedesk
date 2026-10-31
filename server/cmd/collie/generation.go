@@ -12,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/autoclose"
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
@@ -200,6 +201,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	journal := pipeline.New(channelStore, nil).WithWake(wake)
 	// Response clocks a change made stale are counted again (docs/user/response-targets.md).
 	g.Go(func(ctx context.Context) { sla.Worker{Store: channelStore}.Run(ctx, 15*time.Second) })
+	// A chat channel's resolved conversations close by themselves after its auto_close_hours.
+	g.Go(func(ctx context.Context) { autoclose.Worker{Store: channelStore}.Run(ctx, time.Minute) })
 	// Their reminder and overdue emails go from the platform address, on a server that sends mail.
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		alerts := sla.Alerts{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,

@@ -38,6 +38,7 @@ var privilegedCallSites = []string{
 	"internal/serverconfig/store.go: PrivilegeServerConfig",
 	"internal/store/agent-requests.go: PrivilegeAgentRequestPrune",
 	"internal/store/ai-retrieval.go: PrivilegeAIRetrievalQueue",
+	"internal/store/auto-close.go: PrivilegeAutoCloseClaim",
 	"internal/store/autofix-github-routing.go: PrivilegeGitHubInstallation",
 	"internal/store/billing-reconcile.go: PrivilegeBillingReconcile",
 	"internal/store/callback-routing.go: PrivilegeCallbackRouting",

@@ -19,6 +19,8 @@ type BulkConversationUpdate struct {
 	RemoveTagIDs []string
 	// ActorID is the agent making the change; it is recorded in the status history.
 	ActorID string
+	// Quiet changes the status without telling the customers (the channel's status notices).
+	Quiet bool
 }
 
 // BulkUpdateConversations applies update to every conversation in ids in one transaction and
@@ -26,7 +28,18 @@ type BulkConversationUpdate struct {
 // whole update with a "not found" error and changes nothing.
 func (s *Store) BulkUpdateConversations(ctx context.Context, workspaceID string, ids []string, update BulkConversationUpdate) (int, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (int, error) {
-		return bulkUpdateConversations(ctx, tx, workspaceID, ids, update)
+		var before map[string]string
+		if update.Status != nil && !update.Quiet {
+			var err error
+			if before, err = statusesBefore(ctx, tx, workspaceID, ids); err != nil {
+				return 0, err
+			}
+		}
+		updated, err := bulkUpdateConversations(ctx, tx, workspaceID, ids, update)
+		if err == nil && before != nil {
+			err = s.sendStatusNotices(ctx, tx, workspaceID, before, *update.Status)
+		}
+		return updated, err
 	})
 }
 
