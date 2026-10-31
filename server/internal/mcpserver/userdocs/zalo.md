@@ -129,7 +129,8 @@ resolve or the customer's last message, whichever is later. It applies to conver
 the time you turn it on: earlier ones never close by themselves. A new number while it is on also applies
 to those resolved since; a smaller one closes those already past it within minutes of saving. The
 sentence under the box says what it will do, and whether the customer is told (only when **When set to
-Closed** has words). A conversation that closed by itself opens again with **Reopen**.
+Closed** has words, and the conversation was not resolved quietly: one resolved without telling closes
+quietly too). A conversation that closed by itself opens again with **Reopen**.
 
 ### Ask before opening (one-to-one)
 
