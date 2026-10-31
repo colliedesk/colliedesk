@@ -110,7 +110,7 @@ while empty:
 7. **When a request is cancelled**: after the Cancel command.
 8. **When a request waiting for its description is forgotten**: see Commands above.
 
-### When a conversation's status changes
+### When the status of a conversation changes
 
 The OA tells the customer when someone on your team, an AI agent or the closing rule below sets a
 conversation's status, as a reply to the customer's first message in that chat. `{ref}` is the

@@ -350,7 +350,7 @@ See [Plan and billing](billing.md).
 
 - A conversation of a chat (a Zalo OA) tells its customer when its status is set to Pending, Resolved or
   Closed, or reopened, if its channel has words for that status (a Zalo OA's **When a conversation's
-  status changes**, see [Zalo OA](zalo.md#when-a-conversations-status-changes)). The words come from the
+  status changes**, see [Zalo OA](zalo.md#when-the-status-of-a-conversation-changes)). The words come from the
   channel, as its own message, shown in the timeline as **Sent by the channel · not a reply**. Email and
   web form conversations are never told.
 - Every way to set a status has a quiet one: the arrow next to **Resolve** / **Reopen**, unticking **Tell
