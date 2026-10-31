@@ -13,7 +13,7 @@ export const numbersMessages = {
   add: 'Add a series',
   addTitle: 'Add a number series',
   editTitle: (name: string) => `Change the ${name} series`,
-  editHelp: 'A new format applies to conversations opened from now on; codes already given stay as they are.',
+  editHelp: 'A new format applies to conversations opened from now on; codes already given stay as they are, and customers can still send them back.',
   name: 'Name',
   nameHint: 'What a channel’s settings name: a lowercase letter, then letters, digits, - or _; 20 at most.',
   nameBad: 'Start with a lowercase letter; then letters, digits, - or _, 20 at most.',

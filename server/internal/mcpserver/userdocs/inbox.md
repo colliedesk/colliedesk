@@ -63,7 +63,7 @@ stopped: codes below it that are not here belong to the system before.
 In the web app, a conversation numbered in a series of its own shows its code first on its row and in
 its header, with a button that copies it; the default series' `#12` is not shown, so an inbox of email and
 web forms reads as before. **Settings → Conversation numbers** lists the series with the code the next
-conversation gets; admins change a series' format or next number (it only goes up: a lower one is refused
+conversation gets; admins change a series' format (codes already given keep theirs and still find their conversations) or next number (it only goes up: a lower one is refused
 before anything is sent), set where it was taken over (**Taken over at**, **In the year**), and add a
 series. A channel picks its series on its page (Zalo OA: Connection → References). A link with `?ref=`
 opens the list on that conversation, in every status, with a **Reference** chip that removes it.
