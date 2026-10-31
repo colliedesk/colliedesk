@@ -1309,6 +1309,13 @@ paths:
           in: query
           description: 'One priority or several, comma-separated: high,urgent.'
           schema: {type: string, example: 'high,urgent'}
+        - name: sla
+          in: query
+          description: >-
+            overdue (a running response target is past), due_soon (one is within warn_before_minutes of its
+            target), or both comma-separated. While the response targets are off nothing matches. A
+            conversation changed in the last seconds may be a round of the server behind.
+          schema: {type: string, example: 'overdue,due_soon'}
         - name: assignee
           in: query
           description: >-
@@ -1379,7 +1386,8 @@ paths:
           description: >-
             updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first,
             then the most recently updated), waiting_longest (conversations awaiting the team, the
-            oldest customer message first, then every other conversation by last update).
+            oldest customer message first, then every other conversation by last update), due (the earliest
+            running response target first, then the rest by last update).
           schema: {$ref: '#/components/schemas/ConversationSort'}
         - name: search
           in: query
@@ -9556,7 +9564,7 @@ components:
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
         also writes agent. problem_report: an agent's Report a problem.
-    ConversationSort: {type: string, enum: [updated_desc, updated_asc, created_desc, created_asc, priority, waiting_longest], default: updated_desc}
+    ConversationSort: {type: string, enum: [updated_desc, updated_asc, created_desc, created_asc, priority, waiting_longest, due], default: updated_desc}
     ConversationFilters:
       type: object
       additionalProperties: false
@@ -9592,6 +9600,7 @@ components:
         updated_before: {type: string, format: date-time}
         sort: {$ref: '#/components/schemas/ConversationSort'}
         search: {type: string, minLength: 1, maxLength: 200}
+        sla: {type: array, maxItems: 2, uniqueItems: true, items: {type: string, enum: [overdue, due_soon]}, description: 'overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target).'}
     SavedViewScope: {type: string, enum: [personal, shared]}
     SavedViewInput:
       type: object
@@ -10661,6 +10670,25 @@ components:
         required: {type: number}
         passes: {type: boolean}
         suggestion: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Null when it passes: else the nearest color for field that passes every pair of that field.'}
+    ConversationSLA:
+      type: object
+      required: [state, first_response, resolution]
+      properties:
+        state: {type: string, enum: [overdue, due_soon, ok, paused, stopped, met], description: 'The most pressing of its clocks.'}
+        first_response: {oneOf: [{$ref: '#/components/schemas/SLAClock'}, {type: 'null'}], description: 'Null when its priority has no first-response target.'}
+        resolution: {oneOf: [{$ref: '#/components/schemas/SLAClock'}, {type: 'null'}], description: 'Null when its priority has no resolution target.'}
+    SLAClock:
+      type: object
+      required: [state, due_at, warn_at, met_at, breached_at, due_soon, overdue, business_minutes_left]
+      properties:
+        state: {type: string, enum: [running, paused, stopped, met], description: 'running while it is open; paused while pending; stopped once resolved or closed; met by the first reply.'}
+        due_at: {type: [string, 'null'], format: date-time}
+        warn_at: {type: [string, 'null'], format: date-time, description: 'When it is due soon: warn_before_minutes of business time before due_at.'}
+        met_at: {type: [string, 'null'], format: date-time}
+        breached_at: {type: [string, 'null'], format: date-time, description: 'due_at, once a running clock passed it.'}
+        due_soon: {type: boolean}
+        overdue: {type: boolean}
+        business_minutes_left: {type: [integer, 'null'], description: 'Business minutes to due_at at the time of the request; negative once late; null unless running.'}
     BusinessDay:
       type: object
       required: [day, open]
@@ -10734,6 +10762,9 @@ components:
         number: {type: integer, minimum: 1, description: 'Its number in number_series, which counts on and never restarts.'}
         number_series: {type: string, description: 'The series it is numbered in: default, or the one its channel names (settings.number_series).'}
         display_ref: {type: string, description: 'The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=.'}
+        sla:
+          oneOf: [{$ref: '#/components/schemas/ConversationSLA'}, {type: 'null'}]
+          description: Its response clocks; null while the response targets are off or none applies to it (opened before they were on, on a channel they leave out, imported).
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
         contact_name: {type: string}

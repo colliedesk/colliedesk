@@ -31,6 +31,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
+	"github.com/colliedesk/colliedesk/server/internal/sla"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/colliedesk/colliedesk/server/internal/trialreminder"
@@ -197,6 +198,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 	}
 	journal := pipeline.New(channelStore, nil).WithWake(wake)
+	// Response clocks a change made stale are counted again (docs/user/response-targets.md).
+	g.Go(func(ctx context.Context) { sla.Worker{Store: channelStore}.Run(ctx, 15*time.Second) })
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
 	intakeSweep := intake.New(channelStore, journal, nil)

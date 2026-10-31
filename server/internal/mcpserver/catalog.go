@@ -99,7 +99,8 @@ const (
 
 // conversationRowSchema lists how a conversation started from the registry (channel-values.go), so it is not a constant.
 var conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
-	`"id":{"type":"string"},"display_ref":{"type":"string","description":"The code customers see and type back (#12); find one with ref."},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
+	`"id":{"type":"string"},"display_ref":{"type":"string","description":"The code customers see and type back (#12); find one with ref."},` +
+	`"sla":{"type":"object","description":"Its response clocks (state overdue, due_soon, ok, paused, stopped or met; first_response and resolution with due_at, overdue, business_minutes_left); left out when it has none."},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
 	`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
 	`"tags":{"type":"array","items":{"type":"string"}},` +
 	`"channel":{"type":"string","enum":` + conversationChannelEnum + `,"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +

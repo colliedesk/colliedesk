@@ -18,3 +18,19 @@ imported conversations have none. Turning them off hides every target and keeps 
 For AI agents and the API: `GET /api/v1/response-targets` and `PUT /api/v1/response-targets` (one
 document; an agent token asks a person first), MCP `colliedesk_response_targets_get` and
 `colliedesk_response_targets_set_request`. A wrong part answers 400 with its path, such as `hours.2.to`.
+
+## On each conversation
+
+A conversation opened while the targets are on, on a channel they cover, carries its clocks: the first
+reply (met by the team's first reply; a note or the channel's own notice is none) and, when its priority
+has one, resolving. A clock runs only while the conversation is Open: Pending pauses it and keeps the
+business time used, Resolved or Closed stops it, and opening it again goes on from what was used.
+Changing the priority adds or removes the resolution clock at once.
+
+The inbox shows a conversation due soon or overdue; filter them with Targets (Overdue, Due soon) and
+sort by Due first, and save that as a view (`filters.sla` and `sort: due` of `POST /api/v1/saved-views`, MCP
+`colliedesk_saved_view_create`). For AI agents and the API: `sla` on each conversation (`state` overdue, due_soon, ok,
+paused, stopped or met; `first_response` and `resolution` with `due_at`, `warn_at`, `met_at`,
+`breached_at`, `due_soon`, `overdue` and `business_minutes_left`), `GET /api/v1/conversations?sla=overdue,due_soon`
+and `sort=due`, and the same `sla` and `sort` of MCP `colliedesk_inbox_search`. A conversation changed in
+the last seconds may reach the filter a few seconds later; it always shows its own clocks right.

@@ -6314,7 +6314,7 @@ export interface components {
          * @default updated_desc
          * @enum {string}
          */
-        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest";
+        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest" | "due";
         /** @description The filters of `GET /api/v1/conversations` as one object; a list holds the values the query string separates with commas. An empty object is every conversation, most recently updated first. */
         ConversationFilters: {
             status?: components["schemas"]["ConversationStatus"][];
@@ -6345,6 +6345,8 @@ export interface components {
             updated_before?: string;
             sort?: components["schemas"]["ConversationSort"];
             search?: string;
+            /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target). */
+            sla?: ("overdue" | "due_soon")[];
         };
         /** @enum {string} */
         SavedViewScope: "personal" | "shared";
@@ -7349,6 +7351,42 @@ export interface components {
             /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
             suggestion: string | null;
         };
+        ConversationSLA: {
+            /**
+             * @description The most pressing of its clocks.
+             * @enum {string}
+             */
+            state: "overdue" | "due_soon" | "ok" | "paused" | "stopped" | "met";
+            /** @description Null when its priority has no first-response target. */
+            first_response: components["schemas"]["SLAClock"] | null;
+            /** @description Null when its priority has no resolution target. */
+            resolution: components["schemas"]["SLAClock"] | null;
+        };
+        SLAClock: {
+            /**
+             * @description running while it is open; paused while pending; stopped once resolved or closed; met by the first reply.
+             * @enum {string}
+             */
+            state: "running" | "paused" | "stopped" | "met";
+            /** Format: date-time */
+            due_at: string | null;
+            /**
+             * Format: date-time
+             * @description When it is due soon: warn_before_minutes of business time before due_at.
+             */
+            warn_at: string | null;
+            /** Format: date-time */
+            met_at: string | null;
+            /**
+             * Format: date-time
+             * @description due_at, once a running clock passed it.
+             */
+            breached_at: string | null;
+            due_soon: boolean;
+            overdue: boolean;
+            /** @description Business minutes to due_at at the time of the request; negative once late; null unless running. */
+            business_minutes_left: number | null;
+        };
         BusinessDay: {
             /** @enum {string} */
             day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -7423,6 +7461,8 @@ export interface components {
             number_series?: string;
             /** @description The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=. */
             display_ref?: string;
+            /** @description Its response clocks; null while the response targets are off or none applies to it (opened before they were on, on a channel they leave out, imported). */
+            sla?: components["schemas"]["ConversationSLA"] | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -11153,6 +11193,8 @@ export interface operations {
                 status?: string;
                 /** @description One priority or several, comma-separated: high,urgent. */
                 priority?: string;
+                /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target), or both comma-separated. While the response targets are off nothing matches. A conversation changed in the last seconds may be a round of the server behind. */
+                sla?: string;
                 /** @description Comma-separated. me (the caller), unassigned, anyone (assigned to somebody) or the id of a team member of this workspace. */
                 assignee?: string;
                 /** @description One tag id or several, comma-separated. */
@@ -11181,7 +11223,7 @@ export interface operations {
                 created_before?: string;
                 updated_after?: string;
                 updated_before?: string;
-                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update). */
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update). */
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;

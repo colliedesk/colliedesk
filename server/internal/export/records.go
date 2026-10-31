@@ -1006,6 +1006,9 @@ type ConversationHead struct {
 	DisplayRef   string `json:"display_ref"`
 	// NumberFormat is the format its code was made with.
 	NumberFormat string `json:"number_format"`
+	// SLAApplies says response targets apply to it; SLA is its clocks as last counted.
+	SLAApplies bool            `json:"sla_applies"`
+	SLA        json.RawMessage `json:"sla"`
 }
 
 // NumberSeries is a series conversations are numbered in.
