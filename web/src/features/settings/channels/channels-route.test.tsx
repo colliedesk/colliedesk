@@ -86,7 +86,8 @@ test('an empty workspace offers each type to connect, email first, and Live chat
   expect(links[0]).toHaveAttribute('href', '/settings/channels/new/email');
   expect(within(empty).getByRole('link', { name: /Add a web form/ })).toHaveAttribute('href', '/settings/channels/new/web_form');
   expect(within(empty).getByText('Live chat').closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
-  expect(screen.queryByText(/Zalo/)).toBeNull();
+  // A type this server does not list as available (here Zalo OA) is not offered.
+  expect(within(empty).queryByText(/Zalo/)).toBeNull();
 });
 
 test('the list says when it is loading and when it failed, with a way to try again', async () => {

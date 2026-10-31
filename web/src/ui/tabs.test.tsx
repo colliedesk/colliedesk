@@ -19,3 +19,23 @@ test('arrow keys move between tabs, Home and End go to the first and the last', 
   fireEvent.keyDown(screen.getByRole('tab', { name: 'A' }), { key: 'End' });
   expect(screen.getByRole('tab', { name: 'C' })).toHaveAttribute('aria-selected', 'true');
 });
+
+test('a strip wider than its place fades at the edge that hides tabs', () => {
+  const sizes = { scrollWidth: 300, clientWidth: 100 };
+  const restore = (['scrollWidth', 'clientWidth'] as const).map((key) => {
+    const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, key);
+    Object.defineProperty(HTMLElement.prototype, key, { configurable: true, get: () => sizes[key] });
+    return () => (before ? Object.defineProperty(HTMLElement.prototype, key, before) : undefined);
+  });
+  try {
+    render(<Three />);
+    const strip = screen.getByRole('tablist', { name: 'Pages' });
+    expect(strip).toHaveClass('fade-end');
+    strip.scrollLeft = 200;
+    fireEvent.scroll(strip);
+    expect(strip).toHaveClass('fade-start');
+    expect(strip).not.toHaveClass('fade-end');
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+});
