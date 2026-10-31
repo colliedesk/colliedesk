@@ -3512,7 +3512,9 @@ paths:
         Replace the response targets with this document. Turning them on measures the conversations opened
         from then on; turning them off hides every target and keeps what was measured. A wrong part answers
         400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes,
-        timezone, channel_ids.0).
+        timezone, channel_ids.0). Send updated_at as you read it to save only if nobody saved since: 409
+        changed_elsewhere otherwise, with the stored document as current, and nothing changes. Without it the
+        last save wins.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ResponseTargetsInput'}}}
@@ -3522,6 +3524,22 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/ResponseTargets'}}}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '400': {$ref: '#/components/responses/BadRequest'}
+        '409':
+          description: Someone saved the response targets after you read them (changed_elsewhere); nothing changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, current]
+                properties:
+                  error:
+                    type: object
+                    required: [code, message]
+                    properties:
+                      code: {type: string, enum: [changed_elsewhere]}
+                      message: {type: string}
+                      request_id: {type: string}
+                  current: {$ref: '#/components/schemas/ResponseTargets'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/workspace/slug:
@@ -10771,6 +10789,7 @@ components:
         warn_before_minutes: {type: integer, minimum: 0, maximum: 10080, description: 'Business minutes before a target a conversation is due soon (and its reminder goes).'}
         channel_ids: {type: [array, 'null'], items: {type: string, format: uuid}, description: 'The channels whose conversations have targets; null is every channel.'}
         alert_email: {type: boolean, description: 'Whether reminder and overdue emails go out (each teammate can turn theirs off).'}
+        updated_at: {type: [string, 'null'], format: date-time, description: 'As you read it: save only if nobody saved since (409 changed_elsewhere otherwise).'}
     ResponseTargets:
       allOf:
         - {$ref: '#/components/schemas/ResponseTargetsInput'}

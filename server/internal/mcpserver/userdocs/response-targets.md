@@ -18,6 +18,8 @@ imported conversations have none. Turning them off hides every target and keeps 
 For AI agents and the API: `GET /api/v1/response-targets` and `PUT /api/v1/response-targets` (one
 document; an agent token asks a person first), MCP `colliedesk_response_targets_get` and
 `colliedesk_response_targets_set_request`. A wrong part answers 400 with its path, such as `hours.2.to`.
+Send `updated_at` as you read it to save only if nobody saved since: two people saving from the same
+read, the second is told (409 `changed_elsewhere`, with what is stored) and changes nothing.
 
 ## On each conversation
 

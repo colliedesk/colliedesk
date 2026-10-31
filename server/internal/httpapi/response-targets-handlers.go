@@ -49,6 +49,13 @@ func (a *API) setResponseTargets(response http.ResponseWriter, request *http.Req
 	}
 	identity := principal(request)
 	targets, err := a.store.SetResponseTargets(request.Context(), identity.Workspace.ID, identity.Agent.ID, input)
+	var changed *store.ErrTargetsChanged
+	if errors.As(err, &changed) {
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "changed_elsewhere",
+			"message": "Someone saved the response targets after you read them. Nothing was changed; read them again, then make your change."}),
+			"current": changed.Current})
+		return
+	}
 	var wrong *store.ResponseTargetsError
 	if errors.As(err, &wrong) {
 		writeJSON(response, http.StatusBadRequest, map[string]any{"error": errorBody(response, map[string]any{"code": "invalid_request",
