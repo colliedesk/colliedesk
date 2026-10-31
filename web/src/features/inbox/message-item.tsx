@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import type { Attachment, Message, MessageOrigin } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
@@ -15,6 +16,9 @@ interface MessageItemProps {
   onRetryDelivery?: (messageId: string) => void;
   // approvedBy names the person who sent a reply an AI agent drafted (the message's author).
   approvedBy?: string;
+  // label says more about where the message came from (why a chat message is here); menu acts on it.
+  label?: ReactNode;
+  menu?: ReactNode;
 }
 
 export function MessageItem(props: MessageItemProps) {
@@ -40,7 +44,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -66,8 +70,10 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
           {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
             {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
+          {label}
         </div>
         <time dateTime={item.created_at} title={stampTitle(item.created_at, timezone)}>{formatDate(item.created_at, timezone)}{zoneSuffix(item.created_at, timezone)}</time>
+        {menu}
       </header>
       {item.email && <EmailEnvelope email={item.email} storedFiles={stored.length} />}
       {item.origin && <OriginLine origin={item.origin} />}

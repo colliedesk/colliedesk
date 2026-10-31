@@ -44,6 +44,8 @@ export const reviewMessages = {
     gate_closed: 'AI may not decide this yet',
   } satisfies Record<ReviewReason, string>,
   requeuedBy: (name: string) => `Put back by ${name}`,
+  takenBack: 'Taken back from a conversation',
+  takenBackBy: (name: string) => `Taken back from a conversation by ${name}`,
   credentialWarning: 'It contains a password or a one-time code, hidden from AI. Ask the customer to change it.',
   laneBlocked: 'An earlier card of the same customer here waits above. Deciding that one first keeps their messages in order.',
   decide: 'Decide',

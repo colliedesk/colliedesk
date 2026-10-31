@@ -9179,9 +9179,12 @@ components:
     Priority: {type: string, enum: [low, normal, high, urgent]}
     ConversationChannel:
       type: string
-      enum: [email, web_form, help_chat, imported, agent, problem_report]
+      pattern: '^[a-z_]{1,40}$'
       description: >-
-        How the conversation started. email: a customer's mail. web_form: the public web form.
+        How the conversation started: a channel type this server runs, or an origin that comes through no
+        channel. Values: email, web_form, help_chat, imported, agent, problem_report. A test build may run another type
+        (the loopback chat stand-in), so a client names a value it does not know by itself.
+        email: a customer's mail. web_form: the public web form.
         help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified).
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
@@ -10928,8 +10931,11 @@ components:
         connected_at: {type: string, format: date-time}
     ChannelType:
       type: string
-      enum: [email, web_form, help_chat]
-      description: A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
+      pattern: '^[a-z_]{1,40}$'
+      description: >-
+        A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat.
+        A test build may run another (the loopback chat stand-in), so a client shows a type it does not know
+        by its name. A new type adds its value to the shipped types here and its configuration to ChannelConfig.
     ChannelState:
       type: object
       required: [state, reason_code, message]

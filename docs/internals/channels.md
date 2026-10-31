@@ -29,10 +29,13 @@ fails when shared code names a type; `TestEveryRegisteredTypeIsWhole` when a reg
 
 1. A migration: one `channel_types` row, its own table if it has configuration (with `channel_id`,
    row-level security), fixture rows.
-2. `contracts/openapi.yaml`: the type in `ChannelType` and in `ConversationChannel`, `<Type>ChannelConfig`
-   in `ChannelConfig`, its input in `ChannelConfigInput`, its own routes. The web app's copy of
-   `ConversationChannel` (`channelSchema` in `web/src/api/schemas.ts`) gets the value too: it parses every
-   conversation, and a missing value fails the inbox list. `TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins`
+2. `contracts/openapi.yaml`: the type in the documented values of `ChannelType` ("Shipped types: …") and of
+   `ConversationChannel` ("Values: …"), `<Type>ChannelConfig` in `ChannelConfig`, its input in
+   `ChannelConfigInput`, its own routes. Both schemas take any type's name (`^[a-z_]{1,40}$`), so a type a
+   client does not know yet (the loopback chat stand-in of end-to-end builds, a new chat type before the web
+   app has its screens) is listed by its name instead of failing the inbox or Settings → Channels. The web
+   app's known values (`knownChannels` in `web/src/api/schemas.ts`) are what the Filter menu offers.
+   `TestEveryRegisteredTypeIsWhole`, `TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins`
    and `web/src/channels/registry.test.ts` fail until all three agree. The server's conversation filter,
    saved views and MCP tool schemas read the registry (`mcpserver/channel-values.go`).
 3. `server/internal/channels/<type>/`: the adapter, its own routes in `Definition.Routes` (mounted by the

@@ -4,7 +4,7 @@ import { channelsApi } from '../../api/channels';
 import type { ChannelList } from '../../api/channels';
 import { resultsApi } from '../../api/results';
 import type { Results } from '../../api/results';
-import { channelSchema } from '../../api/schemas';
+import { knownChannels } from '../../api/schemas';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, XIcon } from '../../ui/icons';
@@ -29,8 +29,9 @@ export interface FilterPartProps {
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
-// Every value of the contract's ConversationChannel (channelSchema), named by the registry or as an origin.
-const channels = channelSchema.options;
+// The known values of the contract's ConversationChannel, named by the registry or as an origin; a chat
+// channel is chosen by itself (channel_id).
+const channels = knownChannels;
 const dateFilters = [['created', 'created_after', 'created_before'], ['updated', 'updated_after', 'updated_before']] as const;
 
 // How a conversation started without a channel, offered in every workspace.

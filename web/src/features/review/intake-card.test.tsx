@@ -80,6 +80,14 @@ test('a card holding a password says so, and one behind another of its lane says
   expect(screen.getByText(/Deciding that one first keeps their messages in order/)).toBeInTheDocument();
 });
 
+test('a card of messages taken back from a conversation says so, and by whom when the server knows', () => {
+  const detached = { action: 'review' as const, rule: 'detached', basis: 'default' as const, target_conversation_id: null };
+  const { rerender } = render(<IntakeCard {...props({ item: gathering({ review_reason: 'requeued', rules: detached, requeued_by_agent_id: AGENT }) })} />);
+  expect(screen.getByText('Taken back from a conversation by Ann Agent')).toBeInTheDocument();
+  rerender(<IntakeCard {...props({ item: gathering({ review_reason: 'requeued', rules: detached }) })} />);
+  expect(screen.getByText('Taken back from a conversation')).toBeInTheDocument();
+});
+
 test('a card put back says by whom', () => {
   render(<IntakeCard {...props({ item: gathering({ review_reason: 'requeued', requeued_by_agent_id: AGENT, requeued_at: '2026-10-26T03:00:00Z' }) })} />);
   expect(screen.getByText('Put back by Ann Agent')).toBeInTheDocument();

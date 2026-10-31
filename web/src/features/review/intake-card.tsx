@@ -66,8 +66,11 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
   };
   const waiting = item.state === 'review';
   const where = [placeName(item), channelName(item.channel_id)].filter(Boolean).join(' · ');
-  const reason = item.review_reason === 'requeued' && item.requeued_by_agent_id ? m.requeuedBy(agentName(item.requeued_by_agent_id))
-    : item.review_reason ? m.reason[item.review_reason] : undefined;
+  // A card a person made by taking messages back out of a conversation (docs/user/inbox.md) says so.
+  const takenBack = item.rules.rule === 'detached';
+  const reason = takenBack ? (item.requeued_by_agent_id ? m.takenBackBy(agentName(item.requeued_by_agent_id)) : m.takenBack)
+    : item.review_reason === 'requeued' && item.requeued_by_agent_id ? m.requeuedBy(agentName(item.requeued_by_agent_id))
+      : item.review_reason ? m.reason[item.review_reason] : undefined;
   const settled = !waiting && item.state !== 'deciding';
   return (
     <article className="intake-card" aria-labelledby={headingId} data-state={item.state}>

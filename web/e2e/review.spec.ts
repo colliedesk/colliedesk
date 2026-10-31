@@ -19,6 +19,10 @@ test('review: the rail counts the cards, a person opens one as a conversation, s
   const account = `review-${suffix}`;
   const channel = await addLoopbackChannel(page.request, origin, account);
   await holdGroupsForReview(page.request, origin, channel);
+  // Settings → Channels lists a channel of a type the web app has no screens for by its name.
+  await page.goto(`${origin}/settings/channels`);
+  await expect(page.getByRole('link', { name: /^Configure/ })).toHaveCount(1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await sendLoopback(page.request, origin, account, [
     { id: `a1-${suffix}`, from: 'a', name: 'Minh', group: 'g1', text: 'The stock export fails' },
     { id: `b1-${suffix}`, from: 'b', name: 'Lan', group: 'g1', text: 'Meeting tomorrow at 9' },
@@ -56,10 +60,10 @@ test('review: the rail counts the cards, a person opens one as a conversation, s
   const opened = page.getByRole('article', { name: 'Minh' });
   await expect(opened).toContainText('Opened a conversation');
   await expect(opened).toContainText(admin);
-  // The inbox does not read conversations of the loopback stand-in type, so the link is checked, not followed.
-  const href = await opened.getByRole('link', { name: 'Open the conversation' }).getAttribute('href');
-  expect(href).toMatch(/^\/conversations\/[0-9a-f-]{36}$/);
-  expect(await (await page.request.get(`${origin}/api/v1${href}`)).json()).toMatchObject({ subject: 'The stock export fails' });
+  // The conversation is in the inbox, though the web app has no screens for the stand-in chat type.
+  await opened.getByRole('link', { name: 'Open the conversation' }).click();
+  await expect(page.getByRole('heading', { name: 'The stock export fails' })).toBeVisible();
+  await page.goBack();
   const setAside = page.getByRole('article', { name: 'Lan' });
   await expect(setAside).toContainText('Set aside: Answered in chat');
   await setAside.getByRole('button', { name: 'Put back in queue' }).click();

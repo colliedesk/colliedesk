@@ -9,7 +9,10 @@ const nullableDate = z.string().datetime().nullable();
 export const roleSchema = z.enum(['admin', 'agent']);
 export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
-export const channelSchema = z.enum(['email', 'web_form', 'help_chat', 'imported', 'agent', 'problem_report']);
+// How a conversation started: the values known today, which the filters offer, and any other channel type the
+// server's registry names (a chat type), which the inbox shows by its name instead of failing to load.
+export const knownChannels = ['email', 'web_form', 'help_chat', 'imported', 'agent', 'problem_report'] as const;
+export const channelSchema = z.string().regex(/^[a-z_]{1,40}$/);
 export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest']);
 
 export const workspaceSchema = z.object({

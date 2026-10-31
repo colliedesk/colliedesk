@@ -1,0 +1,9 @@
+/* A conversation to pick, as radio rows that read like the inbox's (Review, moving messages). */
+.candidate-list { display: grid; gap: 2px; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px; max-height: 18rem; overflow-y: auto; }
+.candidate-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2px var(--space-2); min-height: var(--touch, 44px); border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2); cursor: pointer; }
+.candidate-row:hover { background: color-mix(in srgb, var(--text-1) 5%, transparent); }
+.candidate-row:has(input:checked) { background: var(--accent-soft); }
+.candidate-row input { grid-row: span 2; margin: 0; }
+.candidate-subject { font-weight: 500; overflow-wrap: anywhere; }
+.candidate-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); color: var(--text-3); font-size: var(--fs-small); }

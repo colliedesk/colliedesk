@@ -262,6 +262,16 @@ A customer's message that landed in the wrong conversation can be moved, with it
 conversation, into a new conversation of its own (a split), or, for a message of a chat channel's group or
 chat, back to the [intake queue](channels.md#intake-queue) as a card to be decided again. Only customer
 messages move; the team's replies and notes stay where they are. Nothing is sent to the customer.
+
+In the timeline, the menu beside a customer message's time offers **Move to another conversation…**,
+**Split into a new conversation…** and, for a chat message, **Take back to Review**. Moving shows the
+customer's other conversations first, or finds one by subject, customer or text; tick the other customer
+messages to move with it. When every customer message goes, the move can close this conversation as no new
+request. A chat conversation nobody replied in or wrote a note in yet also offers **Not a new request?
+Move it…** above its messages (closing is still refused once a person assigned it). The moves out of and into a conversation are listed above its
+messages, newest first, with who moved what and where, and **Undo** while the move can be undone; a chat
+message says why it is in the conversation (a reply to a message here, a command, a person in
+[Review](review.md)). A message taken back waits in Review as a card that says who took it back.
 - A message taken back to the queue leaves the conversation (it is kept, not deleted). Until its card is
   decided it is in no timeline, search, AI suggestion or reply thread, and a customer's reply quoting it
   does not find that conversation. Deciding the card adds the message to the conversation chosen, or opens

@@ -1,4 +1,4 @@
-import { channelSchema, conversationSortSchema, prioritySchema, statusSchema } from '../api/schemas';
+import { conversationSortSchema, knownChannels, prioritySchema, statusSchema } from '../api/schemas';
 
 // The inbox filters live in the address, so a link opens the same list. They use the names and the
 // comma-separated lists of GET /api/v1/conversations, with one difference: no status is the Open
@@ -28,7 +28,7 @@ const isFlag = (key: string): key is FlagKey => (flagKeys as readonly string[]).
 // The values the API knows, so an old or mistyped link drops what it cannot use instead of breaking the
 // list with a 400. The server still checks everything.
 const words: Partial<Record<InboxQueryKey, readonly string[]>> = {
-  status: statusSchema.options, priority: prioritySchema.options, channel: channelSchema.options, sort: conversationSortSchema.options,
+  status: statusSchema.options, priority: prioritySchema.options, channel: knownChannels, sort: conversationSortSchema.options,
   awaiting: ['team', 'customer'], source: ['imported', 'native'], tag_match: ['any', 'all'],
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
