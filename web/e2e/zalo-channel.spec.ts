@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { ports } from './support/checkout';
+import { startFakeZalo } from './support/zalo';
 
 // docs/user/zalo.md: an admin connects a Zalo OA in Settings, adds its tokens, links a group that wrote to
 // it to an organization, adds a staff account and sets a command. Zalo itself is this test: it signs a
@@ -159,6 +161,9 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
 
 test('zalo channel: words for Resolved make the header say it tells, the quiet way resolves without a word, at phone width too', async ({ page }) => {
   test.setTimeout(90_000);
+  // Zalo is the stand-in the server is started against (COLLIEDESK_E2E_ZALO_URL): what the OA sends lands here.
+  const zalo = await startFakeZalo(ports.zalo);
+  try {
   const suffix = uniqueSuffix();
   const oa = `45${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const app = '1188200455';
@@ -169,6 +174,12 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   await page.getByRole('textbox', { name: 'App ID' }).fill(app);
   await page.getByLabel('OA secret key').fill(secret);
   await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
+  await page.getByRole('button', { name: 'Add tokens' }).click();
+  const tokens = page.getByRole('dialog', { name: 'Add the tokens of Zalo OA' });
+  await tokens.getByLabel('Access token').fill(`access-${suffix}`);
+  await tokens.getByLabel('Refresh token').fill(`refresh-${suffix}`);
+  await tokens.getByRole('button', { name: 'Save tokens' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Tokens saved.' })).toBeVisible();
 
   // Messages: the words for Resolved, and closing after 48 hours (said under the box before saving).
   await page.getByRole('tab', { name: 'Messages' }).click();
@@ -207,13 +218,19 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   await expect(quiet).toBeInViewport({ ratio: 1 });
   expect(await sideways()).toEqual([]);
 
-  // The quiet way resolves it and the channel sends nothing: no notice joins the timeline.
+  // The quiet way resolves it and the channel sends nothing.
   await quiet.click();
-  await expect(page.getByRole('button', { name: /^Reopen/ })).toBeVisible();
+  const reopen = page.getByRole('button', { name: /^Reopen/ });
+  await expect(reopen).toBeVisible();
   await page.waitForTimeout(6000); // longer than the notice worker's 5 s round
-  await page.reload();
-  await expect(page.locator('.plain-text-body', { hasText: 'Cần hỗ trợ đổi mật khẩu' })).toBeVisible();
-  await expect(page.getByText(/đã được xử lý/)).toHaveCount(0);
+  expect(zalo.sent().filter((item) => item.text?.includes('đã được xử lý'))).toEqual([]);
+
+  // Reopened and resolved with one press, the OA tells the customer, one to one, with the conversation's code.
+  await reopen.click();
+  await page.getByRole('button', { name: /^Resolve and tell the customer on / }).click();
+  await expect(page.getByRole('button', { name: /^Reopen/ })).toBeVisible();
+  await expect.poll(() => zalo.sent().filter((item) => item.text?.includes('đã được xử lý')), { timeout: 20_000 })
+    .toEqual([expect.objectContaining({ path: '/v3.0/oa/message/cs', recipient: { user_id: '7700002031' }, text: expect.stringMatching(/^Yêu cầu #\d+ đã được xử lý\.$/) })]);
 
   // The bulk bar and the Messages tab fit a phone too, Tell customers on the first line of the bar.
   // Measured without the hidden tooltips (data-tip), which every icon control has in the layout.
@@ -229,4 +246,7 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   await page.getByRole('tab', { name: 'Messages' }).click();
   await expect(page.getByLabel('When set to Resolved')).toBeVisible();
   expect(await fits('#status-notices')).toEqual([]);
+  } finally {
+    await zalo.stop();
+  }
 });
