@@ -101,3 +101,17 @@ rolling the whole install back.
   revoke again what they revoked since. The one-workspace restore revokes them all instead.
 - Local runs on an ARM Mac pull the amd64 release image and run it under emulation; it is slower
   but behaves the same.
+
+## A migration in several steps
+
+A backfill of a large table is its own migration, between the one that adds what it fills and the one
+that makes it required (conversation numbers: `20261031150000` adds nullable columns and the trigger,
+`20261031150100` fills the existing rows under row locks only, `20261031150200` adds NOT NULL and the
+unique key). Each file is one transaction (`database.applyMigration`), so only the short steps take the
+table's ACCESS EXCLUSIVE lock; at a million conversations the fill took 18 to 70 s while reads went on.
+
+Between the steps a row can still be unfilled. Self-host keeps the old server running while
+`collie migrate` runs and starts the new one after it (docs/self-host/upgrade.md), and Colliedesk Cloud
+runs `collie migrate && exec collie serve` in one container, so no new server reads the table between the
+steps. The readers tolerate an unfilled row anyway (COALESCE; a code names only numbered conversations),
+held by `TestAConversationNotNumberedYetReadsListsAndExports`.

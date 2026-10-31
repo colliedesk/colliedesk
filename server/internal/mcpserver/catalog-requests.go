@@ -168,6 +168,28 @@ func emailSecretRotateRequestSpec() Spec {
 		[]string{"POST /api/v1/channels/email/secret", "POST /api/v1/channels/{id}/email/secret"}, emailChannelInput, emailSecretRotateRequest)
 }
 
+func numberSeriesListSpec() Spec {
+	return Spec{
+		Name: "colliedesk_number_series_list", Title: "List the conversation number series",
+		Description: `List the series the workspace's conversations are numbered in, the default one (#{n}) first: each with its code format, the number the next ` +
+			`conversation takes, and where this server took it over (start, start_year). A channel numbers what it opens in the series its settings name (number_series).` + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/conversation-number-series"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["series","format","next","start"],"properties":{"series":{"type":"string"},"format":{"type":"string"},"next":{"type":"integer"},"start":{"type":"integer"},"start_year":{"type":["integer","null"]},"updated_at":{"type":"string"}}}}}}`,
+		run:    numberSeriesList,
+	}
+}
+
+func numberSeriesSetRequestSpec() Spec {
+	return approvalSpec("colliedesk_number_series_set_request", "Ask to add or change a conversation number series",
+		`Ask to add a number series or change its format (letters, digits, # - _ / . with {n} once, {n:04} to pad, {yyyy} for the year), next number (it only counts on) or start.`,
+		[]string{"PUT /api/v1/conversation-number-series/{series}"},
+		`{"type":"object","additionalProperties":false,"required":["series"],"minProperties":2,"properties":{"series":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,19}$"},`+
+			`"format":{"type":"string","minLength":3,"maxLength":40},"next":{"type":"integer","minimum":1},"start":{"type":"integer","minimum":1},"start_year":{"type":"integer","minimum":1970,"maximum":9999}}}`,
+		numberSeriesSetRequest)
+}
+
 func workspaceSlugRequestSpec() Spec {
 	return approvalSpec("colliedesk_workspace_slug_change_request", "Ask to change the workspace address",
 		`Ask to change the workspace's address (slug), which also changes its hosted support email address and web form link.`,
