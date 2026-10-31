@@ -190,6 +190,19 @@ A workspace that already pays cannot start a second checkout. Change or cancel i
 If two checkouts ever run at once, the page warns that the workspace pays twice; cancel the extra
 subscription in the portal. The paid plan stays until the last one ends.
 
+## Ask us to move your Freshdesk data
+
+After you pay for Founding or Team 25, an admin can ask Colliedesk to move the Freshdesk data from
+**Plan and billing**. Send your Freshdesk address, like `yourcompany.freshdesk.com`, and optionally the times
+that suit you for a call, with a time zone.
+
+- Colliedesk emails your request to support@colliedesk.com, with your admin email as the reply address. We
+  reply by email within one working day.
+- **Plan and billing** shows when the request was sent. You can send it again, for example to correct the
+  address; a workspace can send 5 requests an hour.
+- Only an admin can ask. An AI agent can prepare the request, and an admin approves it.
+- If this server cannot send email, nothing is sent and Colliedesk says so.
+
 ## Change the card, get invoices or cancel
 
 Select **Manage billing**. This opens the provider's portal for your workspace. You can update the

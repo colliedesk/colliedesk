@@ -244,14 +244,22 @@ func workspaceExportRequest(c *call, arguments map[string]any) (any, error) {
 
 func billingRequest(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Action string `json:"action"`
-		Plan   string `json:"plan"`
+		Action           string `json:"action"`
+		Plan             string `json:"plan"`
+		FreshdeskAddress string `json:"freshdesk_address"`
+		Times            string `json:"times"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	if args.Action == "portal" {
+	switch args.Action {
+	case "portal":
 		return ask(c, http.MethodPost, "/api/v1/billing/portal", nil)
+	case "migration_request":
+		if strings.TrimSpace(args.FreshdeskAddress) == "" {
+			return nil, &toolError{"A migration request needs freshdesk_address, like yourcompany.freshdesk.com."}
+		}
+		return ask(c, http.MethodPost, "/api/v1/billing/migration-request", map[string]any{"freshdesk_address": args.FreshdeskAddress, "times": args.Times})
 	}
 	if args.Plan == "" {
 		return nil, &toolError{"A checkout needs a plan: solo_monthly, solo_yearly, small_monthly, small_yearly, team_monthly, team_yearly, team25_monthly, team25_yearly or founding."}
