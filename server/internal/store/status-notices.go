@@ -144,7 +144,7 @@ func (s *Store) statusNoticePreview(ctx context.Context, tx pgx.Tx, workspaceID 
 	if err != nil {
 		return nil, err
 	}
-	var previews []domain.StatusNoticePreview
+	previews := []domain.StatusNoticePreview{}
 	at := map[string]int{}
 	skip := map[string]bool{}
 	for _, item := range chats {

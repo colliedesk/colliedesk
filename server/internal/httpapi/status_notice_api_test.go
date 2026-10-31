@@ -160,6 +160,26 @@ func TestAStatusChangeThatTellsTheCustomerAsksADraftTokenFirst(t *testing.T) {
 	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "resolved", "notify": false}, admin, nil); response.Code != http.StatusOK {
 		t.Fatalf("resolve meanwhile: %d %s", response.Code, response.Body.String())
 	}
+	// Still waiting, it would tell nobody now: an empty list, in the request and in the list of requests.
+	var waitingNow struct {
+		Notices *[]struct{ Text string }
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/agent-requests/"+late.RequestID, nil, admin, nil), &waitingNow)
+	if waitingNow.Notices == nil || len(*waitingNow.Notices) != 0 {
+		t.Fatalf("a waiting request that would tell nobody = %+v", waitingNow.Notices)
+	}
+	var listed struct {
+		Items []struct {
+			ID      string
+			Notices *[]struct{ Text string }
+		}
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/agent-requests?status=pending&detail=full", nil, admin, nil), &listed)
+	for _, item := range listed.Items {
+		if item.ID == late.RequestID && (item.Notices == nil || len(*item.Notices) != 0) {
+			t.Fatalf("listed, it would tell %+v", item.Notices)
+		}
+	}
 	if response := request(t, api, http.MethodPost, "/api/v1/agent-requests/"+late.RequestID+"/approve", nil, admin, nil); response.Code != http.StatusOK {
 		t.Fatalf("approve late: %d %s", response.Code, response.Body.String())
 	}
