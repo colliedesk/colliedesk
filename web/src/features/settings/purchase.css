@@ -1,0 +1,171 @@
+/* Purchase surfaces: the plan picker, the payment wait, the welcome after paying, the paid billing rows and the
+   locked screen. The trial strip (.plan-banner) and the small marks (.spinner, .icon-warn) are in components.css,
+   because the app shell shows them on every page. Tokens only, no hex values. */
+
+/* Billing page: one column of blocks beside the settings nav. */
+.purchase-stack { display: grid; align-content: start; gap: var(--space-6); min-width: 0; max-width: 54rem; }
+/* The trial in one line: plan, end date, seats, storage. */
+.billing-trial-line { border-bottom: 1px solid var(--line); padding-bottom: var(--space-5); color: var(--text-2); font-size: var(--fs-small); }
+.billing-trial-line strong { color: var(--text-1); font-weight: 600; }
+.billing-trial-line > span:not(.sep) { white-space: nowrap; }
+.billing-trial-line .sep { padding: 0 var(--space-2); color: var(--text-3); }
+
+/* S2. Plan picker: the base of a card (a grid of its rows) ... */
+.plan-picker { display: grid; gap: var(--space-4); }
+.plan-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-3); }
+.plan-card { display: grid; grid-template-rows: auto auto auto 1fr; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
+.plan-card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.plan-price { display: grid; gap: 2px; }
+.plan-price p { display: flex; align-items: baseline; gap: var(--space-1); margin: 0; }
+.plan-price small { min-height: 2.6em; color: var(--text-3); font-size: var(--fs-label); }
+.plan-price strong { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-1); }
+.plan-price span { color: var(--text-2); font-size: var(--fs-small); }
+.plan-card ul { display: grid; align-content: start; gap: var(--space-2); margin: 0; padding: var(--space-3) 0 0; border-top: 1px solid var(--line); list-style: none; color: var(--text-2); font-size: var(--fs-small); }
+.plan-card li { display: flex; gap: var(--space-2); }
+.plan-card li::before { content: "✓"; flex: none; color: var(--accent-text); font-weight: 700; }
+.plan-pick, .plan-audience, .plan-fit { margin: 0; }
+
+/* ... then the plan picker as designed: two cards, one recommended by a word and a darker ring; the period switch only moves Team 25. */
+.plan-picker-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-6); }
+.plan-picker-head h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+.plan-interval .segmented:has(input:disabled) { opacity: 0.5; }
+@media (pointer: coarse), (max-width: 30rem) { .plan-interval .segmented label { min-height: var(--touch); } }
+.plan-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+/* Rows line up across the cards (subgrid): name, audience, price, fit line, button, what it includes. */
+.plan-card {
+  grid-row: span 6; grid-template-rows: subgrid; gap: 0; border: 0; border-radius: var(--radius-lg); background: var(--surface-1);
+  box-shadow: var(--shadow-1); padding: var(--space-5) var(--space-6) var(--space-6);
+}
+.plan-card-picked { border: 0; box-shadow: 0 0 0 1px var(--accent), var(--shadow-1); }
+.plan-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+.plan-card h3 { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+/* The pick is a word with a check, never a filled chip. */
+.plan-pick { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; border-radius: 0; background: none; padding: 0;
+  color: var(--text-1); font-size: var(--fs-label); font-weight: 600; white-space: nowrap; }
+.plan-pick .icon { width: 14px; height: 14px; }
+.plan-audience { margin-top: 2px; color: var(--text-2); font-size: var(--fs-small); }
+.plan-price { margin-top: var(--space-5); align-content: start; }
+.plan-price p { flex-wrap: wrap; gap: var(--space-2); }
+.plan-price strong { font-size: 32px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.plan-price span { font-size: var(--fs-ui); }
+.plan-price small { min-height: 0; margin-top: 2px; }
+/* Why this card fits or does not: sits right above its button. */
+.plan-fit { align-self: end; margin-top: var(--space-5); color: var(--text-2); font-size: var(--fs-small); }
+.plan-fit:empty { margin-top: 0; }
+.plan-card > button { width: 100%; margin-top: var(--space-3); }
+.plan-card ul { margin-top: var(--space-5); padding-top: var(--space-4); }
+.plan-card li::before { font-weight: 600; }
+/* A plan the team is too big for: quieter words, its reason in full ink, its button off. */
+.plan-card[data-fit="no"] h3 { color: var(--text-2); }
+.plan-card[data-fit="no"] .plan-price strong { color: var(--text-3); }
+.plan-card[data-fit="no"] ul, .plan-card[data-fit="no"] li::before { color: var(--text-3); }
+.plan-card[data-fit="no"] .plan-fit { color: var(--text-1); }
+/* Compact cards (locked screen): no list of what is included. */
+.plan-picker[data-compact] .plan-card { grid-row: span 5; }
+.plan-picker[data-compact] .plan-card ul { display: none; }
+.plan-notes { display: grid; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
+/* A busy primary keeps full strength: it says what is happening. */
+.primary-action[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
+/* Non-admin: who can buy, in one line. */
+.admin-only-note { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+.admin-only-note .icon { flex: none; margin-top: 2px; }
+.admin-only-note strong { color: var(--text-1); font-weight: 600; }
+@media (max-width: 56rem) { .plan-cards { grid-template-columns: minmax(0, 1fr); } }
+
+/* An alert line on a neutral card: the icon carries the colour, the words stay ink. */
+.inline-alert { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); border-radius: var(--radius-lg); background: var(--surface-1);
+  box-shadow: var(--shadow-1); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); color: var(--text-1); font-size: var(--fs-small); }
+.inline-alert > .icon { flex: none; }
+.inline-alert > span { flex: 1 1 16rem; min-width: 0; }
+@media (max-width: 44rem) { .inline-alert { padding: var(--space-3); } .inline-alert > button { --control: var(--touch); } }
+
+/* S3. Confirming the payment: one card, the wait named, the order kept in view. */
+.payment-confirming { display: grid; gap: var(--space-5); max-width: 40rem; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1);
+  padding: var(--space-5) var(--space-6) var(--space-6); }
+.payment-confirming > header { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: var(--space-2) var(--space-3); }
+.payment-confirming > header .spinner, .payment-confirming > header .icon { justify-self: center; color: var(--text-2); }
+.payment-confirming h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+.payment-confirming > header p { grid-column: 2; color: var(--text-2); }
+.payment-confirming > .button-row, .payment-confirming > .order-summary { margin-left: calc(20px + var(--space-3)); }
+.order-summary { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--space-2) var(--space-4); margin: 0; border-top: 1px solid var(--line);
+  padding-top: var(--space-4); font-size: var(--fs-small); }
+.order-summary dt { color: var(--text-3); }
+.order-summary dd { margin: 0; min-width: 0; color: var(--text-1); overflow-wrap: anywhere; }
+@media (max-width: 44rem) {
+  .payment-confirming { padding: var(--space-5) var(--space-4); }
+  .payment-confirming > .button-row, .payment-confirming > .order-summary { margin-left: 0; }
+  .payment-confirming > .button-row button { --control: var(--touch); }
+}
+
+/* S4. Welcome after paying: a modal on its ring, the receipt, then exactly one job. */
+.welcome-dialog { border: 0; box-shadow: var(--shadow-3); }
+/* In dark the ring is the hairline, so the modal keeps its edge on the dimmed page. */
+:root[data-theme="dark"] .welcome-dialog { box-shadow: 0 0 0 1px var(--line-control), var(--shadow-3); }
+.welcome-dialog { width: min(36rem, 100%); gap: var(--space-5); padding: var(--space-6); }
+.welcome-dialog > header { align-items: center; }
+.welcome-dialog > header h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.welcome-dialog > header .icon-button { margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0; }
+.welcome-dialog .form-dialog-body { gap: var(--space-5); }
+.receipt { display: grid; gap: 2px; border-bottom: 1px solid var(--line); padding-bottom: var(--space-5); }
+.welcome-dialog .form-dialog-body .receipt p { color: var(--text-2); font-size: var(--fs-small); }
+.welcome-dialog .form-dialog-body .receipt p:first-child { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; }
+.migration-step { display: grid; gap: var(--space-3); }
+.migration-step h3 { font-size: 15px; font-weight: 600; }
+.welcome-dialog .form-dialog-body .migration-step > p { margin-top: calc(-1 * var(--space-2)); font-size: var(--fs-ui); line-height: 1.5; }
+.welcome-dialog .form-dialog-footer { justify-content: flex-start; gap: var(--space-2) var(--space-5); }
+.welcome-dialog .form-dialog-footer > a, .welcome-dialog .form-dialog-footer > .link-button { font-size: var(--fs-small); font-weight: 500; }
+/* Later is the exit: quiet, at the far end. */
+.welcome-dialog .form-dialog-footer > .link-button { margin-left: auto; color: var(--text-2); }
+.form-alert { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-1); font-size: var(--fs-small); }
+.welcome-dialog .form-dialog-body .form-alert { color: var(--text-1); }
+.form-alert .icon { flex: none; margin-top: 2px; }
+.sent-note { display: flex; align-items: flex-start; gap: var(--space-2); }
+.welcome-dialog .form-dialog-body .sent-note p { color: var(--text-1); font-size: var(--fs-ui); }
+.sent-note .icon { flex: none; margin-top: 3px; }
+.welcome-dialog .order-summary { border-top: 0; padding-top: 0; }
+@media (max-width: 44rem) {
+  .dialog-backdrop { align-items: end; padding: var(--space-2); }
+  .welcome-dialog { padding: var(--space-5) var(--space-4); }
+  .welcome-dialog .form-dialog-footer > * { --control: var(--touch); min-height: var(--touch); }
+  .welcome-dialog .form-dialog-footer .primary-action { flex: 1 1 100%; }
+  .welcome-dialog .form-dialog-footer .link-button, .welcome-dialog .form-dialog-footer .link-action { min-width: var(--touch); padding-inline: var(--space-2); display: inline-flex; align-items: center; justify-content: center; }
+}
+
+/* S5. Paid billing: label, value and at most one small button per row; cancel is a quiet link under it. */
+.billing-rows { margin: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.billing-row { display: grid; grid-template-columns: 11rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2) var(--space-6); min-height: 60px;
+  padding: var(--space-3) var(--space-5); }
+.billing-row + .billing-row { border-top: 1px solid var(--line); }
+.billing-row dt { color: var(--text-3); font-size: var(--fs-small); }
+.billing-row dd { margin: 0; min-width: 0; }
+.billing-value { display: grid; gap: var(--space-1); color: var(--text-1); }
+.billing-value strong { font-weight: 600; }
+.billing-value small { color: var(--text-3); font-size: var(--fs-label); }
+.billing-value .muted { color: var(--text-2); }
+.billing-value .usage-bar { max-width: 16rem; margin-top: 2px; }
+.billing-action { justify-self: end; }
+.billing-action .icon { width: 14px; height: 14px; }
+.cancel-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); padding: 0 var(--space-5); color: var(--text-3); font-size: var(--fs-small); }
+.cancel-line .link-button { color: var(--text-2); }
+@media (max-width: 44rem) {
+  .billing-row { grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
+  .billing-action { justify-self: start; }
+  .billing-action > * { --control: var(--touch); }
+  .cancel-line { padding: 0; }
+  .cancel-line .link-button { min-height: var(--touch); }
+}
+
+/* S6. Trial ended: the frame stays, data is safe, three ways on. */
+.locked-screen > header { max-width: 54rem; }
+.locked-screen > header p { max-width: 44rem; }
+.locked-screen > .purchase-stack { max-width: 54rem; }
+.locked-paths { display: grid; gap: var(--space-4); border-top: 1px solid var(--line); padding-top: var(--space-5); }
+.locked-export { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.locked-export p, .locked-paths > p { color: var(--text-3); font-size: var(--fs-small); }
+@media (max-width: 44rem) {
+  .locked-export button, .locked-screen .button-row button { --control: var(--touch); }
+}
+@media (pointer: coarse), (max-width: 30rem) {
+  /* A link that is the only way to a path (more time, support) is a finger-sized target. */
+  .touch-link { display: inline-flex; align-items: center; min-height: var(--touch); }
+}

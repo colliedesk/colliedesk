@@ -15,8 +15,9 @@ test('while Founding is open the cards are Founding and Team 25, and Solo, Small
 test('Team 25 carries both its prices and Founding its one', () => {
   const [founding, team25] = planCardsFor(foundingOpen);
   expect(founding.prices.map((price) => price.plan)).toEqual(['founding']);
-  expect(team25.prices.map((price) => [price.plan, price.amount])).toEqual([['team25_monthly', '$149'], ['team25_yearly', '$124.17']]);
-  expect(team25.prices[1].billed).toBe('Billed $1,490 yearly');
+  expect(team25.prices.map((price) => [price.plan, price.amount, price.per, price.note])).toEqual([
+    ['team25_monthly', '$149', 'a month', undefined], ['team25_yearly', '$1,490', 'a year', '2 months free']]);
+  expect(founding.prices.map((price) => [price.amount, price.per, price.note])).toEqual([['$99', 'every 3 months', 'Price locked for life']]);
 });
 
 test('Team 25 is offered only when the server can sell it', () => {
@@ -48,7 +49,14 @@ test('a plan nobody sells is not put first', () => {
   expect(names(['team_monthly', 'team_yearly', 'founding'], [], 'team25')).toEqual(['Founding']);
 });
 
-test('the self-host aside belongs to the Founding offer, not to the ladder or a single other plan', () => {
+test('each plan says which teams it is for, and the plans of the Founding offer carry the promise of their import', () => {
+  const [founding, team25] = planCardsFor(foundingOpen);
+  expect([founding.audience, team25.audience]).toEqual(['For teams of 3 to 10 agents', 'For teams of 11 to 25 agents']);
+  expect(founding.includes).toEqual(['Up to 10 agents', '20 GiB attachment storage', 'Migration done for you', '30-day money-back guarantee']);
+  expect(team25.includes).toEqual(['Up to 25 agents', '250 GiB attachment storage', 'Import done with you']);
+});
+
+test('the Founding offer is the two cards, and the ladder is not', () => {
   expect(isFoundingOffer(planCardsFor(foundingOpen))).toBe(true);
   expect(isFoundingOffer(planCardsFor(['team_monthly', 'founding']))).toBe(true);
   expect(isFoundingOffer(planCardsFor(ladder))).toBe(false);

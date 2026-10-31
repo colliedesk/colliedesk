@@ -3,12 +3,13 @@
 Billing exists only on the hosted Colliedesk Cloud. A self-hosted instance has no billing page, no
 trial, no plan and no limits; nothing here applies to it.
 
-Only workspace admins see **Settings → Plan and billing**. Agents see how many days of the trial are left in
-the banner at the top, and nothing else about billing.
+Only workspace admins see **Settings → Plan and billing**. Agents see the day the trial ends in the banner at
+the top and nothing else about billing. If an agent on the trial opens the page, it names the admins who can
+choose a plan.
 
 If the server's operator turns billing off, nothing is charged or locked meanwhile and nothing can be bought.
 A workspace with a subscription still sees **Plan and billing** with a note saying so, and can change or
-cancel the subscription under **Manage billing**.
+cancel the subscription in the billing portal (**Open billing portal**).
 
 ## The free trial
 
@@ -32,7 +33,7 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
   the plain sign-in page later in the same tab (the website's **Log in**) is a normal sign-in again.
 - Coming from the website's Team 25 link (`/sign-in?intent=trial&plan=team25`), a visitor signs up for the
   trial as usual: no payment window opens. The browser remembers the plan they came for (for a day, in
-  that tab), so **Choose a plan** in the banner, **Plan and billing** and the locked page show the Team 25
+  that tab), so **Buy Team 25** in the banner, **Plan and billing** and the locked page show the Team 25
   card first, marked **Your pick**. Any other `plan` value is ignored. The sign-up form asks for the
   workspace name only here too.
 - Admins get an email three days before the trial ends and another on the day it ends, in the workspace's
@@ -88,21 +89,24 @@ than 25 agents at $349 per month billed yearly, is coming soon.
 
 Founding includes a free Freshdesk migration, done for you, and a 30-day money-back guarantee
 (see the [terms](https://colliedesk.com/terms#refunds)). Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer two plans:
-Founding ($99 every 3 months, $396 a year) and Team 25 ($149 a month or $1,490 a year, for up to 25 agents), with a link to
-self-host for free. A workspace that does not fit Founding (its 10-agent or 20 GiB cap) sees the Founding card greyed, with
-the reason, and can still choose Team 25. When all 10 are taken Founding is closed for good and the pages offer every plan.
+Founding ($99 every 3 months, $396 a year) and Team 25 ($149 a month or $1,490 a year, for up to 25 agents).
+Each card says who it is for and why it fits your team, and the one that fits leads and carries the only dark
+button. The page counts your team from the agents of the Freshdesk account you read in an import, when there is one,
+and otherwise from your agents plus pending invites: up to 10 leads with Founding, 11 to 25 with Team 25. If you came
+from the website's Team 25 link, Team 25 leads, marked **Your pick**. A workspace that does not fit Founding (its
+10-agent or 20 GiB cap) sees the Founding card greyed, with the reason, and can still choose Team 25. When all 10 are taken Founding is closed for good and the pages offer every plan.
 
 When all seats of a plan are taken, the refusal names the next plan up (Solo, then Small, then
-Team, then Team 25). Switch plans under **Manage billing**.
+Team, then Team 25). Switch plans in the billing portal.
 
 A plan your workspace does not fit cannot be chosen: its card says why. That happens when you have
 more agents and pending invites than the plan allows, or more stored attachments, imported files
 included, than its storage limit. Deactivate agents or revoke invites, then choose it.
 
-If you move to a smaller plan under **Manage billing** while you have more agents than it allows,
+If you move to a smaller plan in the billing portal while you have more agents than it allows,
 nobody is removed. Agents are paused before admins, the most recently added first: they can only
 sign out and see why. The first admin of the workspace is never paused, and a paused admin can still
-open **Manage billing**. An agent you reactivate keeps the place of when they were first added. Admins see a notice on every page. Deactivate agents
+open the billing portal. An agent you reactivate keeps the place of when they were first added. Admins see a notice on every page. Deactivate agents
 in **Settings → Team**, or upgrade again, and the paused agents can work again at once.
 
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
@@ -130,7 +134,7 @@ so **Plan and billing** shows the usage over the limit. What the limit stops is 
 upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
 start; see [Import from Freshdesk](import-freshdesk.md)). Each refusal names
 the limit. To raise the
-limit, switch to a larger plan under **Manage billing** (Solo to Small, Small or Founding to Team), contact us on Team or Team 25, or export your data. The trial is
+limit, switch to a larger plan in the billing portal (Solo to Small, Small or Founding to Team), contact us on Team or Team 25, or export your data. The trial is
 different: at its 2 GiB limit **all** incoming email is refused, because the size of the whole
 message counts, not only its attachments. There is no way to delete an attachment, so the way to
 keep receiving email is to upgrade. Files brought in by an import do not count on the trial. A file counts each time it is attached, so the same file on two messages counts twice.
@@ -140,9 +144,10 @@ keep receiving email is to upgrade. Files brought in by an import do not count o
 The workspace is **locked**. Nothing is deleted. Everyone who signs in sees a page that says the
 trial (or the subscription) has ended, instead of the inbox.
 
-- **Admins** can choose a plan (or open **Manage billing** when a subscription ended or failed), **Export all data**, or sign out. Choosing a plan and paying opens
-  the workspace again within a few moments of the provider confirming the payment.
-- **Agents** are told to ask a workspace admin to choose a plan, and can sign out.
+- **Admins** can choose a plan (or open **Manage billing** when a subscription ended or failed), select **Export all data**,
+  or write to support@colliedesk.com if they need more time. The page says nothing is deleted. Choosing a plan and
+  paying opens the workspace again within a few moments of the provider confirming the payment.
+- **Agents** are told to ask an admin to choose a plan, with the admins' names when the workspace is on its trial, and can sign out.
 - Customers who write to a locked workspace get a bounce. Nothing is stored, so nothing is lost
   that you did not already have.
 - In the app only paying, exporting and signing out work until the workspace has a plan.
@@ -151,32 +156,39 @@ trial (or the subscription) has ended, instead of the inbox.
 ## Upgrade
 
 1. Open **Settings → Plan and billing** (or select **Choose a plan** in the banner or on the locked page).
-2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with its
-   price per month (a yearly plan also shows what is billed once a year; Founding shows its price per
-   quarter), its agents and attachment storage. While Founding is open the cards are Founding and Team 25, and
+   The page opens with one line about the trial: the day it ends, the agents you use and your attachment storage.
+2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with the team it is
+   for, its price (a yearly plan also shows what is billed once a year; Founding shows its price every 3 months),
+   its agents and attachment storage. While Founding is open the cards are Founding and Team 25, and
    the Monthly or Yearly choice above them is for Team 25. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
+   The button reads **Opening checkout…** until the payment window is ready. If it does not open, the page says
+   so, that nothing was charged, and offers **Try again**.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.
-4. You return to **Plan and billing**. The plan updates within a few moments, once the provider confirms
-   the payment. Until then the page says it is confirming your plan and the **Choose** buttons stay off,
-   so a second click cannot start a second payment. Once the plan changes, the page says "Payment
-   confirmed. Welcome to" and the plan's name.
+4. You return to **Plan and billing**. The page shows **Confirming your payment** with your plan and price. This
+   usually takes under a minute, and you can keep using Colliedesk meanwhile. The plans are not offered
+   again, so a second click cannot start a second payment. The page never says the payment arrived before the
+   provider confirms it. If it takes longer than a minute, the page says it is still waiting, gives
+   support@colliedesk.com and offers **Check again**. When the plan changes, the page updates by itself.
 
 ## After you pay for Founding or Team 25
 
-A workspace on a paid Founding or Team 25 plan sees a card on **Plan and billing**: **Next: your Freshdesk
-migration**.
+When the plan changes, a window **Welcome to Founding** (or **Welcome to Team 25**) opens once. It shows
+your plan, its price and the date and amount of the next charge, and asks for the one thing left: your
+Freshdesk data.
 
-- Founding: "Your plan includes a Freshdesk migration done for you." Team 25: "We run the Freshdesk import
-  with you."
-- **Email us your Freshdesk address** opens an email to support@colliedesk.com with the subject
-  "Migration: " and your workspace's name, and a short text that asks for your Freshdesk address and two
-  times that suit you.
-- **Or import it yourself** opens [Import from Freshdesk](import-freshdesk.md).
-- Right after you pay, the card sits at the top of the page with the confirmation. On later visits it
-  sits below the current plan. It goes away once the workspace has a finished Freshdesk import (one that was
-  not undone).
+- Founding: "We move your tickets, replies, attachments and time entries for you, then send a report that
+  proves nothing was lost." Team 25: "We run the import with you on a short call."
+- Fill in your Freshdesk address, like `yourcompany.freshdesk.com`, and the times that suit you (optional), then
+  select **Send to Colliedesk**. The window then says "Sent. We reply by email within one working day."
+  If the request cannot be sent, the window keeps what you typed and offers **Try again**, with
+  support@colliedesk.com for a request by hand. See
+  [Ask us to move your Freshdesk data](#ask-us-to-move-your-freshdesk-data).
+- **Import it myself** opens [Import from Freshdesk](import-freshdesk.md). **Later** closes the window.
+- The window opens once for a workspace. After you close it, the same request is in the **Freshdesk migration**
+  row of **Plan and billing**: **Not requested** with **Send your Freshdesk address**, **Requested** with the
+  date, or **Done** once the workspace has a finished Freshdesk import (one that was not undone).
 
 If the window does not open within 3 seconds (for example a browser extension blocks it, or the
 payment provider refuses to show its page inside Colliedesk), Colliedesk says so and opens the same
@@ -198,15 +210,32 @@ that suit you for a call, with a time zone.
 
 - Colliedesk emails your request to support@colliedesk.com, with your admin email as the reply address. We
   reply by email within one working day.
-- **Plan and billing** shows when the request was sent. You can send it again, for example to correct the
+- **Plan and billing** shows when the request was sent in the **Freshdesk migration** row. You can send it again, for example to correct the
   address; a workspace can send 5 requests an hour.
 - Only an admin can ask. An AI agent can prepare the request, and an admin approves it.
 - If this server cannot send email, nothing is sent and Colliedesk says so.
 
+## What the page shows once you pay
+
+**Plan and billing** lists one row for each thing you come to read:
+
+| Row | What it says |
+|---|---|
+| Plan | The plan, and for Founding its price every 3 months |
+| Next charge | The amount and the date, or "None. Your plan ends …" after you cancel |
+| Agents | Agents used of the plan's limit, with pending invites, and **Invite people** |
+| Attachment storage | Used of the plan's limit, in GiB |
+| Freshdesk migration | Founding and Team 25 only: Not requested, Requested (date) or Done |
+| Payment and invoices | **Open billing portal** |
+
+A workspace with a complimentary plan (for example one HC Labs gave you) shows "Complimentary … plan · no
+charge" and the agents and storage rows. It has no charge, migration, portal or cancel.
+
 ## Change the card, get invoices or cancel
 
-Select **Manage billing**. This opens the provider's portal for your workspace. You can update the
-card, download invoices and cancel there. The button stays available after a subscription ends.
+Select **Open billing portal** in the **Payment and invoices** row. This opens the provider's portal for
+your workspace. You can update the card, download invoices and cancel there. **Cancel plan**, under the rows,
+opens the same portal and says until when you keep access. The button stays available after a subscription ends.
 
 ## What the status means
 
@@ -234,9 +263,9 @@ restored on request after the deletion date.
 
 ## What the Billing page shows
 
-The current plan and when the trial or subscription ends or renews, agents used (with pending
-invites), attachment storage against the 2 GiB trial limit, and replies sent in the last 24 hours
-during the trial.
+On the trial: the day it ends, the agents used (with pending invites) and the attachment storage against the
+2 GiB trial limit, then the plans. On a paid plan: the rows above. The banner at the top of the other
+pages carries the trial's end date; **Plan and billing** does not repeat it.
 
 ## Limits
 

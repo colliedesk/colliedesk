@@ -1,4 +1,4 @@
-import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from './format-date';
+import { dayGroup, formatDate, formatListTime, formatMonthDay, formatShortDate, stampTitle, zoneSuffix } from './format-date';
 import { expect, test } from 'vitest';
 
 test('formats UTC timestamps in the agent effective IANA timezone', () => {
@@ -68,4 +68,11 @@ test('a stamp names its timezone when the agent reads times in another zone than
   expect(stampTitle(at, 'UTC')).toBe('Oct 28, 2026, 5:42 AM UTC');
   expect(stampTitle(at, 'Asia/Ho_Chi_Minh')).toBe('Oct 28, 2026, 12:42 PM GMT+7');
   expect(stampTitle(at, 'America/New_York')).toBe('Oct 28, 2026, 1:42 AM EDT');
+});
+
+test('a month and day of a near date follow the timezone and carry the year only when it is not this one', () => {
+  const now = new Date('2026-10-31T10:00:00Z');
+  expect(formatMonthDay('2026-11-13T00:30:00Z', 'America/New_York', now)).toBe('Nov 12');
+  expect(formatMonthDay('2026-11-13T00:30:00Z', 'Asia/Ho_Chi_Minh', now)).toBe('Nov 13');
+  expect(formatMonthDay('2027-01-02T12:00:00Z', 'UTC', now)).toBe('Jan 2, 2027');
 });
