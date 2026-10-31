@@ -522,6 +522,24 @@ test('resolving quietly from the header sends notify false; a plain press sends 
   await waitFor(() => expect(api.updateConversation).toHaveBeenLastCalledWith(alpha.id, { status: 'resolved' }));
 });
 
+test('a listed chat conversation cannot be resolved from the header until the server says whether it tells', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo }], page: 1, page_size: 50 });
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  api.updateConversation.mockClear();
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const resolve = await screen.findByRole('button', { name: 'Resolve' });
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  fireEvent.click(resolve);
+  expect(api.updateConversation).not.toHaveBeenCalled();
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+});
+
 test('an email conversation in the list is not read again to open it', async () => {
   quietApis();
   api.conversations.mockReset();

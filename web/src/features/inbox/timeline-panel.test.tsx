@@ -240,6 +240,26 @@ test('a status line names who set it: a token, the customer, their Reopen comman
   expect(document.querySelector('.status-event')).toBeNull();
 });
 
+test('a chat conversation whose notices are still unknown cannot be resolved yet; if they never come, the quiet way is offered', () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve' });
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  expect(resolve).toHaveAttribute('aria-busy', 'true');
+  fireEvent.click(resolve);
+  expect(onSetStatus).not.toHaveBeenCalled();
+  rerender(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef }} items={[]} timezone="UTC" onSetStatus={onSetStatus} noticesFailed />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+  fireEvent.click(within(screen.getByRole('group', { name: 'More ways to resolve' })).getByRole('button', { name: 'Resolve without telling the customer' }));
+  expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
+});
+
+test('an email conversation the server says would tell (a chat message moved in) offers the quiet way too', () => {
+  render(<TimelinePanel conversation={{ ...thread, status_notices: ['resolved'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve and tell the customer on the channel' })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'More ways to resolve' })).toBeInTheDocument();
+});
+
 test('no conversation, no status button', () => {
   render(<TimelinePanel items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
   expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();

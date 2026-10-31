@@ -25,7 +25,7 @@ import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
 import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
-import { mayTellCustomers } from './bulk-action-bar';
+import { mayTellCustomers } from './status-tell';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -323,6 +323,7 @@ export function InboxRoute() {
     viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    noticesFailed={Boolean(selected && opened.isError && mayTellCustomers([selected]) && selected.status_notices === undefined)}
     onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}

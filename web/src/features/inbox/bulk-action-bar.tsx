@@ -4,6 +4,7 @@ import type { Conversation, TeamMember, Tag } from '../../api/schemas';
 import { messages } from '../../messages';
 import { CheckCircleIcon, CheckIcon, CircleDotIcon, MinusIcon, TagIcon, UserIcon, XIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
+import { mayTellCustomers } from './status-tell';
 import { StatusLabel } from './conversation-labels';
 
 interface BulkActionBarProps {
@@ -21,13 +22,6 @@ function tagState(selected: Conversation[], tagId: string): 'true' | 'mixed' | '
   const carrying = selected.filter((item) => item.tags.some((tag) => tag.id === tagId)).length;
   if (carrying === 0) return 'false';
   return carrying === selected.length ? 'true' : 'mixed';
-}
-
-// Chat channels can tell a customer their conversation's new status; email never does.
-const chatTypes = new Set(['zalo', 'help_chat']);
-/** Whether a status change of these rows may tell a customer (the server decides each one). */
-export function mayTellCustomers(rows: Conversation[]) {
-  return rows.some((item) => chatTypes.has(item.channel_ref?.type ?? ''));
 }
 
 export function BulkActionBar({ selected, agents, tags, currentAgentId, busy, onApply, onClear }: BulkActionBarProps) {

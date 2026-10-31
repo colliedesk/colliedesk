@@ -8,6 +8,7 @@ import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
 import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
+import { mayTell } from './status-tell';
 import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { ownRef } from './conversation-ref';
@@ -42,6 +43,8 @@ interface TimelinePanelProps {
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
   // notify false sets it without telling the customer (their chat channel's status notice).
   onSetStatus?: (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+  // A chat conversation's statuses that would tell could not be read: its quiet way is offered anyway.
+  noticesFailed?: boolean;
   // An admin may open the channel's settings from the timeline's line for a channel closing it by itself.
   canManageChannels?: boolean;
   // Returns to the list; the button shows only where the thread replaces the list (a phone).
@@ -58,26 +61,31 @@ interface TimelinePanelProps {
 // closed one offers the way back. A failure says so beside the button.
 type SetStatus = (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
 
-function StatusButton({ conversation, onSetStatus }: { conversation: Conversation; onSetStatus: SetStatus }) {
+function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversation: Conversation; onSetStatus: SetStatus; noticesFailed: boolean }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const done = conversation.status === 'resolved' || conversation.status === 'closed';
   const target = done ? 'open' : 'resolved';
   // The server says which statuses would tell the customer now; only then is there a quiet way to offer.
-  const channel = conversation.channel_ref?.name;
-  const tells = Boolean(channel) && (conversation.status_notices ?? []).includes(target);
+  // A chat conversation whose answer is still on its way cannot be pressed: the press might tell. If it never
+  // comes, the quiet way is offered beside the plain words.
+  const channel = conversation.channel_ref?.name ?? messages.theChannel;
+  const known = conversation.status_notices !== undefined;
+  const tells = known && conversation.status_notices!.includes(target);
+  const waiting = !known && mayTell(conversation) && !noticesFailed;
+  const quietOffered = tells || (!known && mayTell(conversation) && noticesFailed);
   const change = (quiet: boolean) => {
-    if (busy) return;
+    if (busy || waiting) return;
     setBusy(true);
     setFailed(false);
     (quiet ? onSetStatus(target, { notify: false }) : onSetStatus(target)).catch(() => setFailed(true)).finally(() => setBusy(false));
   };
   // aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place.
-  const button = <button type="button" className="status-button" aria-disabled={busy || undefined} onClick={() => change(false)}
-    aria-label={tells && channel ? (done ? messages.reopenAndTellName(channel) : messages.resolveAndTellName(channel)) : undefined}>
+  const button = <button type="button" className="status-button" aria-disabled={busy || waiting || undefined} aria-busy={waiting || undefined} onClick={() => change(false)}
+    aria-label={tells ? (done ? messages.reopenAndTellName(channel) : messages.resolveAndTellName(channel)) : undefined}>
     {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{tells ? (done ? messages.reopenAndTell : messages.resolveAndTell) : done ? messages.reopen : messages.resolve}</button>;
   return <>
-    {tells ? <span className="status-split">{button}
+    {quietOffered ? <span className="status-split">{button}
       <ActionMenu label={done ? messages.moreWaysToReopen : messages.moreWaysToResolve} icon={null} disabled={busy} onApply={() => change(true)}>
         {(apply) => <button type="button" onClick={() => apply(undefined)}>{done ? <>{messages.reopenQuietly}{' '}<small>{messages.reopenQuietlyUse}</small></> : messages.resolveQuietly}</button>}
       </ActionMenu></span> : button}
@@ -85,7 +93,7 @@ function StatusButton({ conversation, onSetStatus }: { conversation: Conversatio
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   const event = conversation ? <StatusEvent conversation={conversation} timezone={timezone} canManageChannels={canManageChannels} /> : null;
   // The line stands at its time, before a message of the same moment (the notice it caused).
@@ -110,7 +118,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && (onSetStatus || onToggleDetails) && <div className="timeline-actions">
-          {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} />}
+          {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}
           {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
             aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
             aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>

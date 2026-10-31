@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AgentRequest, Conversation, ConversationViewer, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
-import { BulkActionBar, mayTellCustomers } from './bulk-action-bar';
+import { BulkActionBar } from './bulk-action-bar';
+import { mayTellCustomers } from './status-tell';
 import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
 import { AITriageSlot } from './ai-triage-slot';
@@ -63,6 +64,8 @@ interface InboxPageProps {
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   // Changes one conversation's status and settles when the server answered: the thread header and Send and resolve.
   // notify false sets it without telling the customer in their chat.
+  // The open chat conversation's statuses that would tell could not be read.
+  noticesFailed?: boolean;
   onSetStatus?: (conversationId: string, status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;
@@ -135,7 +138,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -243,7 +246,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onTestMessage={onTestMessage} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel canManageChannels={canManage} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
+        <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManage} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
           afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
             currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           before={selected && <Part part={messageMovesPart} render={(part) => <part.MessageMovesLog key={selected.id} conversation={selected} timeline={timeline}

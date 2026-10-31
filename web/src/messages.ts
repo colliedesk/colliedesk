@@ -1,4 +1,6 @@
 // "A", "A and B", "A, B and C".
+// A sentence starts with a capital, a channel's name or "the channel" alike.
+const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
 const listWords = (words: string[]) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
 
 export const messages = {
@@ -131,8 +133,11 @@ export const messages = {
   // Details · Status on a chat that tells its customer.
   tellCustomer: 'Tell the customer',
   tellWhich: (channel: string, told: string[], quiet: string[]) =>
-    `${channel} tells ${listWords(told)}${quiet.length ? `; ${listWords(quiet)} ${quiet.length === 1 ? 'stays' : 'stay'} quiet` : ''}.`,
+    `${capital(channel)} tells ${listWords(told)}${quiet.length ? `; ${listWords(quiet)} ${quiet.length === 1 ? 'stays' : 'stay'} quiet` : ''}.`,
   tellUnticked: 'Unticked: the status you pick now is set quietly.',
+  tellUnknown: (channel: string) => `${capital(channel)} may tell the customer the status you pick.`,
+  tellNone: (channel: string) => `${capital(channel)} has no words for these statuses: they are set quietly.`,
+  theChannel: 'the channel',
   // A status as a change to it reads: open is reopening.
   statusChange: { open: 'Reopened', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
   // Telling customers in a chat when the team sets a status (a chat channel's status notices).

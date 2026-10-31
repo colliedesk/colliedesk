@@ -108,3 +108,17 @@ test('email keeps the Status select', () => {
   render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[]} onUpdate={vi.fn()} />);
   expect(screen.getByRole('combobox', { name: 'Status' })).toBeInTheDocument();
 });
+
+test('every chat conversation has the Status menu: notices unknown, none for the other statuses, or no channel known', () => {
+  const cases: [Partial<Conversation>, string][] = [
+    [{ channel_ref: zaloRef }, 'Hảo Đạt OA may tell the customer the status you pick.'],
+    [{ channel_ref: zaloRef, status_notices: [] }, 'Hảo Đạt OA has no words for these statuses: they are set quietly.'],
+    [{ status_notices: ['open'] }, 'The channel tells Reopened; Pending and Closed stay quiet.'],
+  ];
+  for (const [change, words] of cases) {
+    const { unmount } = render(<DetailsPanel conversation={{ ...conversation(null), ...change }} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+    expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Status' })).getByText(words)).toBeInTheDocument();
+    unmount();
+  }
+});
