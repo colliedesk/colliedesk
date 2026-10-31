@@ -1510,7 +1510,10 @@ paths:
         All or nothing: one transaction. A conversation id that is missing or belongs to another
         workspace answers 404 and changes nothing; the response does not say which id. Status,
         assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in
-        `remove_tag_ids` are removed, then tags in `add_tag_ids` are added.
+        `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each
+        customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50
+        conversations as for one; a conversation whose status changes again before then is told only the
+        later change.
       requestBody:
         required: true
         content:
@@ -1544,8 +1547,10 @@ paths:
         Changes a conversation. A status the team sets is told to the customer in the conversation's chat when
         its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`,
         `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first;
-        `notify: false` changes it quietly. A token that may not write to customers (below the send tier) asks a
-        person first (202) when the change would tell one; a quiet change does not ask.
+        `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A
+        removed channel tells nothing. A token that may not write to customers (below the send tier) asks a
+        person first (202) when the change would tell one, with a summary that quotes the notice; a quiet
+        change does not ask. The conversation's `status_notices` says beforehand which statuses would tell.
       requestBody:
         required: true
         content:
@@ -8150,6 +8155,20 @@ components:
         approvable_by: {type: string, enum: [agent, admin, owner], description: 'The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting. owner: the call changes the settings of the person who owns the token (a /me route), so only that person can approve it (403 owner_only for anyone else).'}
         summary: {type: string}
         conversation_id: {type: [string, 'null'], format: uuid}
+        notices:
+          type: array
+          description: >-
+            What approving a status change would tell customers now, one per chat channel: missing for other
+            calls, a quiet change and once decided, and in a list without detail=full.
+          items:
+            type: object
+            required: [channel_id, channel_name, example_ref, text, told]
+            properties:
+              channel_id: {type: string, format: uuid}
+              channel_name: {type: string}
+              example_ref: {type: string, description: 'The display_ref of one of its conversations, whose notice text is'}
+              text: {type: string, description: 'The notice as that conversation''s customer would read it, its placeholders filled'}
+              told: {type: integer, minimum: 1, description: 'How many of the conversations it tells on this channel'}
         saved_reply:
           description: >
             For a request that edits, deletes or restores a saved reply: the reply as it was when the
@@ -10828,6 +10847,16 @@ components:
       required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at, latest_reply_number]
       properties:
         latest_reply_number: {type: integer, minimum: 0, description: 'The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply.'}
+        last_status_change:
+          oneOf: [{$ref: '#/components/schemas/StatusChange'}, {type: 'null'}]
+          description: The newest change of its status and who made it; null when it never changed in Colliedesk or an import.
+        status_notices:
+          type: array
+          items: {$ref: '#/components/schemas/ConversationStatus'}
+          description: >-
+            The statuses that, set by the team now, would tell its customer: the ones its live chat channel has
+            a notice for, other than its status. Only on GET /conversations/{id};
+            missing in lists and for a conversation of no chat.
         number: {type: integer, minimum: 1, description: 'Its number in number_series, which counts on and never restarts.'}
         number_series: {type: string, description: 'The series it is numbered in: default, or the one its channel names (settings.number_series).'}
         display_ref: {type: string, description: 'The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=.'}
@@ -10855,6 +10884,24 @@ components:
             - {$ref: '#/components/schemas/ConversationOrigin'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    StatusChange:
+      type: object
+      required: [to, at, by]
+      properties:
+        to: {$ref: '#/components/schemas/ConversationStatus'}
+        at: {type: string, format: date-time}
+        by:
+          type: string
+          enum: [agent, token, customer, command, auto_close, import]
+          description: >-
+            agent: a team member; token: an AI agent's token (a request of it a person approved included);
+            customer: the customer writing again; command: the customer's reopen command; auto_close: the
+            channel closing it by itself (auto_close_hours); import: an import.
+        name:
+          type: string
+          description: >-
+            The team member's name, or the token's label; for a token's request approved by a person other
+            than its owner, "<label> · approved by <name>". Missing for the others.
     ConversationOrigin:
       type: object
       required: [system, external_id, type, source, due_at, first_response_due_at, cc, forwarded_to]
@@ -10918,6 +10965,7 @@ components:
       required: [updated]
       properties:
         updated: {type: integer, minimum: 1}
+        told: {type: integer, minimum: 0, description: 'How many customers its status change tells in their chats, a few seconds after it commits; 0 for a quiet change or no status.'}
     ConversationPage:
       type: object
       required: [items, page, page_size]
@@ -11050,7 +11098,7 @@ components:
       properties:
         channel_id: {type: [string, 'null'], format: uuid, description: The channel that carried the message; null for a note and for messages stored before channels were recorded.}
         other_contact_id: {type: [string, 'null'], format: uuid, description: 'A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.'}
-        notice_kind: {type: [string, 'null'], description: 'A reply the channel sent by itself (received, unmatched, ask_confirm, cancelled, ask_description, expired), which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. Null for a reply of the team.'}
+        notice_kind: {type: [string, 'null'], description: 'A reply the channel sent by itself, which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. received, unmatched, ask_confirm, cancelled, ask_description and expired come with chat intake; reopened, reopen_noted, reopen_not_found and reopen_legacy answer a reopen command (reopened also tells a status the team set to open); help answers the help command; status_pending, status_resolved and status_closed tell a status the team set (status_closed also when the channel closes it by itself). Null for a reply of the team.'}
         intake_reply_kind: {type: [string, 'null'], enum: [substantive, acknowledgement, null], description: 'What intake said a chat customer''s message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.'}
         external_id: {type: [string, 'null'], description: 'The message''s id on its channel, prefixed by the type ("email:<Message-ID>").'}
         channel_meta:
@@ -11650,7 +11698,7 @@ components:
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
         pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, status_pending, status_resolved, status_closed (what the team setting that status tells the customer; reopened for open), help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat),
         unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of
-        one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation that stayed resolved that long after its resolve and the customer's last message closes by itself, telling the customer with status_closed, quietly for one imported resolved and untouched since). Never a secret.
+        one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation resolved after it was turned on closes by itself that long after its resolve and the customer's last message, telling the customer with status_closed, quietly for one resolved quietly or imported resolved and untouched since; one resolved before it was turned on never closes by itself, and changing the hours keeps when it was turned on). Never a secret.
       additionalProperties: true
     ChannelCreate:
       type: object

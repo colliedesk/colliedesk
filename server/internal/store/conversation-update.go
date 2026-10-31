@@ -15,6 +15,8 @@ type ConversationUpdate struct {
 	TagIDs     *[]string
 	// ActorID is the agent making the change; it is recorded when the assignee changes.
 	ActorID string
+	// TokenID is the AI agent's token making the change on ActorID's behalf, if one is.
+	TokenID string
 	// Quiet changes the status without telling the customer (the channel's status notices).
 	Quiet bool
 }
@@ -69,7 +71,7 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 		}
 	}
 	if update.Status != nil {
-		if err := setStatusActor(ctx, tx, update.ActorID); err != nil {
+		if err := setStatusCause(ctx, tx, statusChange{ActorID: update.ActorID, TokenID: update.TokenID, Cause: tokenCause(update.TokenID), Quiet: update.Quiet}); err != nil {
 			return domain.Conversation{}, err
 		}
 	}

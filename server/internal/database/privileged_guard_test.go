@@ -65,6 +65,7 @@ var privilegedCallSites = []string{
 	"internal/store/server-secrets.go: PrivilegeServerSecret",
 	"internal/store/sla-alerts.go: PrivilegeSLAClaim",
 	"internal/store/sla.go: PrivilegeSLAClaim",
+	"internal/store/status-notices.go: PrivilegeStatusNoticeClaim",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
 	"internal/trialreminder/trialreminder.go: PrivilegeTrialReminder",
 }

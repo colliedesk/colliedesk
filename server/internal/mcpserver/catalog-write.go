@@ -74,7 +74,8 @@ func conversationsBulkUpdateSpec() Spec {
 			`"add_tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":100},"description":"Names of existing tags to put on every conversation."},` +
 			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off every conversation."},` +
 			`"notify":{"type":"boolean","description":"false sets the status without telling the customers. true by default."}}}`,
-		Output: `{"type":"object","required":["updated","conversation_ids"],"properties":{"updated":{"type":"integer","description":"How many conversations were changed."},` +
+		Output: `{"type":"object","required":["updated","told","conversation_ids"],"properties":{"updated":{"type":"integer","description":"How many conversations were changed."},` +
+			`"told":{"type":"integer","description":"How many customers the status change tells in their chats, a few seconds after it commits."},` +
 			`"conversation_ids":{"type":"array","items":{"type":"string"}}}}`,
 		run: conversationsBulkUpdate,
 	}

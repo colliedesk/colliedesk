@@ -224,12 +224,19 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   the customer wrote first one to one, and changes neither the status nor the response clocks. Empty texts
   (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
   MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
-  the team started) is told nothing. An AI agent's token below the send tier asks a person first when its
-  change would tell a customer.
-- `settings.auto_close_hours` (0 to 720, none by default) closes a conversation that stayed resolved that
-  long after its resolve and the customer's last message, and tells the customer with `status_closed`. One
-  imported resolved and untouched here since closes quietly (the system before had told them). A customer
-  writing again before then opens it, as always.
+  the team started) or of a removed channel is told nothing. A change of several conversations at once tells
+  each customer a few seconds after it is saved; a conversation whose status changes again before then is
+  told only that later change. An AI agent's token below the send tier asks a person first when its change
+  would tell a customer: the request says what each channel would send. A conversation shows its last status
+  change and who made it (a team member, an AI agent's token, the customer, their reopen command, the
+  channel closing it, an import), and which statuses would tell its customer.
+- `settings.auto_close_hours` (0 to 720, none by default) closes a conversation resolved after it was turned
+  on, that long after its resolve and the customer's last message, and tells the customer with
+  `status_closed`. A conversation resolved before it was turned on never closes by itself (close it by hand),
+  so turning it on never closes a backlog at once; changing the hours keeps when it was turned on, and
+  turning it off and on again starts again. One resolved quietly closes quietly, and one imported resolved
+  and untouched here since closes quietly (the system before had told them). A customer writing again
+  before then opens it, as always.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
   the inbox and in Results; a teammate who opened it before the notice is not told someone replied.

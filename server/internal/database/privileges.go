@@ -67,6 +67,9 @@ const (
 	// them by itself and whose time came, for the auto-close worker; each is then closed in its own
 	// workspace.
 	PrivilegeAutoCloseClaim Privilege = "auto-close-claim"
+	// PrivilegeStatusNoticeClaim lists the conversations of every workspace a bulk status change marked to
+	// tell their customers, for the status notice worker; each is then told in its own workspace.
+	PrivilegeStatusNoticeClaim Privilege = "status-notice-claim"
 	// PrivilegeIntakeDueClaim lists the gatherings of chat intake of every workspace past their time to
 	// be decided, for the rules' decision to apply; each is then applied in its own workspace.
 	PrivilegeIntakeDueClaim Privilege = "intake-due-claim"

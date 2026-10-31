@@ -213,7 +213,12 @@ func (s *Store) StartConversation(ctx context.Context, workspaceID string, in Ne
 
 func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
+		item, err := s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
+		if err != nil {
+			return item, err
+		}
+		// Which statuses would tell the customer is read for one conversation, not for a list.
+		return item, s.attachStatusNotices(ctx, tx, workspaceID, &item)
 	})
 }
 
@@ -228,6 +233,9 @@ func (s *Store) withChannelRef(ctx context.Context, tx pgx.Tx, workspaceID strin
 			return domain.Conversation{}, err
 		}
 		if err := s.attachSLA(ctx, tx, workspaceID, items); err != nil {
+			return domain.Conversation{}, err
+		}
+		if err := attachStatusChanges(ctx, tx, workspaceID, items); err != nil {
 			return domain.Conversation{}, err
 		}
 		return items[0], nil
@@ -260,6 +268,9 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 			return page, err
 		}
 		if err := s.attachChannelRefs(ctx, tx, workspaceID, page.Items); err != nil {
+			return page, err
+		}
+		if err := attachStatusChanges(ctx, tx, workspaceID, page.Items); err != nil {
 			return page, err
 		}
 		return page, s.attachSLA(ctx, tx, workspaceID, page.Items)

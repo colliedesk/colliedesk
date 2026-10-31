@@ -1,5 +1,6 @@
 // Package autoclose closes the conversations of a chat channel that stayed resolved past the channel's
-// auto_close_hours, telling their customers with the channel's closed notice.
+// auto_close_hours, telling their customers with the channel's closed notice, and tells the customers
+// of a bulk status change after it commits.
 package autoclose
 
 import (
@@ -44,6 +45,40 @@ func (w Worker) Run(ctx context.Context, interval time.Duration) {
 	for {
 		if _, err := w.RunOnce(ctx, time.Now().UTC()); err != nil && ctx.Err() == nil {
 			slog.Warn("auto-close round failed", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// Notices tells the customers of the conversations a bulk status change marked, in every workspace: the
+// change commits first and the notices follow within a round (store.SendDueStatusNotices).
+type Notices struct {
+	Store *store.Store
+}
+
+// RunOnce tells every marked conversation and returns how many marks it took.
+func (n Notices) RunOnce(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		taken, err := n.Store.SendDueStatusNotices(ctx, batch)
+		total += taken
+		if err != nil || taken < batch {
+			return total, err
+		}
+	}
+}
+
+// Run tells what is marked every interval until ctx ends.
+func (n Notices) Run(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		if _, err := n.RunOnce(ctx); err != nil && ctx.Err() == nil {
+			slog.Warn("status notice round failed", "error", err)
 		}
 		select {
 		case <-ctx.Done():

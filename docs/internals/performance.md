@@ -233,6 +233,8 @@ Measured on the dev host: 2 ms. Do not widen the 20 ms.
 1. The number of SQL statements for 50 ids must equal the number for 1 id. This gate is deterministic: the cost never grows with the ids, so the API never runs one statement per conversation.
 2. The best of five runs for 50 ids must take at most 100 ms. The best of five keeps one scheduling stall on a shared host from failing the gate.
 
+Every conversation of the gate is in a chat whose channel tells each status, so the gate covers the status notices too: the update only marks each conversation with the status to tell (`conversations.status_notice_due`, in the same `UPDATE`), and the status notice worker (`autoclose.Notices`, every 5 seconds) sends them after the commit, one transaction per conversation that takes the mark. Sending them inside the update cost 368 statements for 50 ids. A status change of the conversation by any other way clears its mark (trigger `conversations_status_notice_clear`), so a notice never tells a status the conversation left.
+
 If the gate fails, look for a statement inside a loop over the ids. Do not raise the 100 ms threshold.
 
 The bulk update locks the conversation rows first (`ORDER BY id`), then touches `conversation_tags`. The single-conversation tag endpoints use the same order, so the two never wait for each other. `TestBulkAndSingleTagAddsOnOneConversationDoNotDeadlock` pins this.

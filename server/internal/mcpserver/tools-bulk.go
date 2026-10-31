@@ -63,9 +63,10 @@ func conversationsBulkUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	var result struct {
 		Updated int `json:"updated"`
+		Told    int `json:"told"`
 	}
 	if err := c.send(http.MethodPatch, "/api/v1/conversations", map[string]any{"ids": args.ConversationIDs, "changes": changes}, &result); err != nil {
 		return nil, err
 	}
-	return map[string]any{"updated": result.Updated, "conversation_ids": args.ConversationIDs}, nil
+	return map[string]any{"updated": result.Updated, "told": result.Told, "conversation_ids": args.ConversationIDs}, nil
 }
