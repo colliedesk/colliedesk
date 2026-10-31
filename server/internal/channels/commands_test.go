@@ -99,3 +99,31 @@ func TestMatchCommandExactIsTheWholeMessage(t *testing.T) {
 		}
 	}
 }
+
+// rest is the customer's own text after the phrase, however the phrase is glued to it or what comes
+// before it: a colon with no space, a dash in front.
+func TestMatchCommandRestIsTheTextAfterThePhrase(t *testing.T) {
+	commands := map[string]channels.Command{"bug": {Match: channels.MatchWords, Phrases: []string{"Báo lỗi"}},
+		"fuzzy": {Phrases: []string{"Tính năng"}}}
+	for _, c := range []struct{ text, want, rest string }{
+		{"báo lỗi:mất hóa đơn", "bug", "mất hóa đơn"},
+		{"- báo lỗi mất hóa đơn", "bug", "mất hóa đơn"},
+		{"Báo lỗi – mất hóa đơn", "bug", "mất hóa đơn"},
+		{"tính năng,xuất Excel", "fuzzy", "xuất Excel"},
+	} {
+		name, _, rest, ok := channels.MatchCommand(c.text, commands)
+		if !ok || name != c.want || rest != c.rest {
+			t.Errorf("%q: %q rest=%q ok=%v, want %q rest=%q", c.text, name, rest, ok, c.want, c.rest)
+		}
+	}
+}
+
+// A sigil the phrase does not have is no part of the message's command: "huy" is "/huy" and "#huy".
+func TestMatchCommandTakesASigilBeforeAPhraseWithout(t *testing.T) {
+	commands := map[string]channels.Command{"cancel": {Action: channels.ActionCancel, Phrases: []string{"huy"}}}
+	for _, text := range []string{"/huy", "#huy", "huy"} {
+		if name, _, _, ok := channels.MatchCommand(text, commands); !ok || name != "cancel" {
+			t.Errorf("%q: %q ok=%v, want cancel", text, name, ok)
+		}
+	}
+}
