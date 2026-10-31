@@ -142,6 +142,8 @@ var requestTitles = map[string]string{
 	"PUT " + channelAIRoute:                                      "Set an AI level of a channel",
 	"PUT /api/v1/ai/source-consents/{class}":                     "Let AI intake send more data",
 	"PATCH /api/v1/ai/providers/{id}":                            "Loosen an AI provider's routing",
+	"POST " + intakeDecideRoute:                                  "Decide a card of the intake queue",
+	"POST /api/v1/intake/gatherings/{id}/requeue":                "Put a card back in the intake queue",
 	"DELETE /api/v1/ai/source-consents/{class}":                  "Stop AI intake sending some data",
 	"PATCH /api/v1/conversations/{id}":                           "Change a conversation",
 	"PUT /api/v1/conversations/{id}/tags/{tagId}":                "Tag a conversation",

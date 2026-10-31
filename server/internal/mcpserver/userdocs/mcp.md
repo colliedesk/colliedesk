@@ -208,6 +208,13 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channel_threads_list` | Lists a chat channel's one-to-one chats and groups | `read` |
 | `colliedesk_channel_thread_items` | Reads everything said in one chat place | `read` |
 | `colliedesk_channel_unresolved_items` | Lists chat messages nobody concluded on yet | `read` |
+| `colliedesk_intake_list` | Lists the cards of the intake queue of chat channels: waiting, being decided, set aside or decided | `read` |
+| `colliedesk_intake_get` | Reads an intake card with what its customer said and every decision made on it | `read` |
+| `colliedesk_intake_decide` | Opens a conversation from an intake card, adds it to one, or sets it aside | `draft` |
+| `colliedesk_intake_requeue` | Puts an intake card that was set aside back in the queue | `draft` |
+| `colliedesk_intake_summary` | Says how many intake cards wait for a person and for AI, and the chat channels they come from | `read` |
+| `colliedesk_intake_stats` | Counts a period of intake: by state, by who decided, and AI's decisions a person changed | `read` |
+| `colliedesk_conversation_intake_get` | Reads why each message from a channel is in a conversation | `read` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
 | `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |

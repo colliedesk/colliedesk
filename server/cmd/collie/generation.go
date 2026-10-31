@@ -25,6 +25,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
+	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -169,7 +170,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
-	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing}
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes}
 	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig), helpchat.Config{})).
 		WithSealKeys(googleConfig.Keys).WithPlanLimits(billingOn)
 	var sender emailoutbox.Sender
@@ -195,6 +196,9 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	journal := pipeline.New(channelStore, nil)
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
+	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
+	intakeSweep := intake.New(channelStore, journal, nil)
+	g.Go(func(ctx context.Context) { intakeSweep.Run(ctx, 15*time.Second) })
 	if emailConfig.ResendAPIKey != "" {
 		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
 		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}
@@ -261,7 +265,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
-		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv}
+		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
+		ExtraChannelTypes: e2eChannelTypes}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {

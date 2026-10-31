@@ -145,8 +145,13 @@ func writeHeld(response http.ResponseWriter, held *channels.HeldError) {
 	if held.Count == 1 {
 		noun = "message"
 	}
+	message := fmt.Sprintf("This channel holds %d %s that arrived while it was off. Open or discard them first.", held.Count, noun)
+	if held.Queued > 0 {
+		message = fmt.Sprintf("This channel holds %d %s, %d of them in cards of the intake queue: decide those cards in the queue, open or discard the rest, then remove it.",
+			held.Count, noun, held.Queued)
+	}
 	writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "channel_has_held", "held_count": held.Count,
-		"message": fmt.Sprintf("This channel holds %d %s that arrived while it was off. Open or discard them first.", held.Count, noun)})})
+		"queued_count": held.Queued, "message": message})})
 }
 
 // channelID reads the {id} of a channel route; anything but a UUID is no channel.

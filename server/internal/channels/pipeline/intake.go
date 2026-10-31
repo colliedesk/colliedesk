@@ -1,0 +1,59 @@
+package pipeline
+
+import (
+	"context"
+	"errors"
+
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/store"
+)
+
+// ErrNotAnOpenCommand means a decision named a command of the channel that does not open a request.
+var ErrNotAnOpenCommand = errors.New("not a command of the channel that opens a request")
+
+// ApplyGathering applies a decision of a gathering of intake that opens a message: its held events,
+// parsed again, are replayed as the one message the batch is, into a new conversation (apply.ForceNew)
+// or conversationID. It fails with store.ErrGatheringDecided when the gathering was decided meanwhile
+// or another worker holds its events.
+func (p *Pipeline) ApplyGathering(ctx context.Context, workspaceID, gatheringID, conversationID string, apply store.IntakeApply) (channels.IngestResult, error) {
+	channelID, events, err := p.store.GatheringEvents(ctx, workspaceID, gatheringID)
+	if err != nil {
+		return channels.IngestResult{}, err
+	}
+	if len(events) == 0 {
+		return channels.IngestResult{}, store.ErrGatheringDecided
+	}
+	channel, err := p.store.GetChannel(ctx, workspaceID, channelID)
+	if err != nil {
+		return channels.IngestResult{}, err
+	}
+	if !channel.Live() {
+		return channels.IngestResult{}, channels.ErrNotFound
+	}
+	items, err := p.parseEvents(ctx, channel, events)
+	if err != nil {
+		return channels.IngestResult{}, err
+	}
+	ids := make([]string, len(events))
+	for i, event := range events {
+		ids[i] = event.ID
+	}
+	apply.GatheringID = gatheringID
+	merged := merge(items)
+	if apply.Command != "" {
+		command, ok := channel.Settings.Commands[apply.Command]
+		if !ok || (command.Action != "" && command.Action != channels.ActionOpen) {
+			return channels.IngestResult{}, ErrNotAnOpenCommand
+		}
+		merged.Intent = channels.Intent{Kind: channels.IntentCommand, Command: apply.Command}
+	}
+	if apply.Subject != "" {
+		merged.Subject = apply.Subject
+	}
+	result, err := p.store.IngestInbound(ctx, store.IngestRequest{WorkspaceID: workspaceID, ChannelID: channelID, Inbound: merged, EventIDs: ids,
+		Now: p.now(), Replay: true, IntoConversation: conversationID, DecidedBy: apply.Actor.AgentID, Intake: &apply})
+	if err == nil && result.Status == store.ResultSkipped {
+		return result, store.ErrGatheringDecided
+	}
+	return result, err
+}

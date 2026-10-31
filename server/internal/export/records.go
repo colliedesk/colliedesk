@@ -74,6 +74,70 @@ type AISourceConsent struct {
 	ConsentedAt time.Time `json:"consented_at"`
 }
 
+// IntakeGathering is what a customer said in one go on a chat scope that collects messages, and how it
+// was decided: by the rules, AI or a person, or waiting in the queue.
+type IntakeGathering struct {
+	ID                string     `json:"id"`
+	ChannelID         string     `json:"channel_id"`
+	Scope             string     `json:"scope"`
+	LaneKey           string     `json:"lane_key"`
+	ThreadID          *string    `json:"thread_id"`
+	ContactID         *string    `json:"contact_id"`
+	State             string     `json:"state"`
+	ReviewReason      *string    `json:"review_reason"`
+	RulesAction       string     `json:"rules_action"`
+	RulesBasis        string     `json:"rules_basis"`
+	RulesRule         string     `json:"rules_rule"`
+	RulesTarget       *string    `json:"rules_target"`
+	ConversationID    *string    `json:"conversation_id"`
+	DecidedBy         *string    `json:"decided_by"`
+	DecidedAt         *time.Time `json:"decided_at"`
+	DecidedByAgentID  *string    `json:"decided_by_agent_id"`
+	DecidedByTokenID  *string    `json:"decided_by_token_id"`
+	Fallback          bool       `json:"fallback"`
+	IgnoreReason      *string    `json:"ignore_reason"`
+	OpenedAt          time.Time  `json:"opened_at"`
+	ClosedAt          time.Time  `json:"closed_at"`
+	DecideBy          *time.Time `json:"decide_by"`
+	RequeuedAt        *time.Time `json:"requeued_at"`
+	RequeuedByAgentID *string    `json:"requeued_by_agent_id"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+// IntakeDecision is one time AI or a person decided a gathering, as it was.
+type IntakeDecision struct {
+	ID                     string          `json:"id"`
+	GatheringID            string          `json:"gathering_id"`
+	Decider                string          `json:"decider"`
+	Basis                  string          `json:"basis"`
+	Action                 string          `json:"action"`
+	TargetConversationID   *string         `json:"target_conversation_id"`
+	RunnerUpConversationID *string         `json:"runner_up_conversation_id"`
+	RunnerUpConfidence     *float64        `json:"runner_up_confidence"`
+	Command                *string         `json:"command"`
+	Subject                *string         `json:"subject"`
+	ReplyKind              *string         `json:"reply_kind"`
+	RelatedConversationID  *string         `json:"related_conversation_id"`
+	Confidence             *float64        `json:"confidence"`
+	Reason                 *string         `json:"reason"`
+	Applied                bool            `json:"applied"`
+	IgnoreReason           *string         `json:"ignore_reason"`
+	NotAppliedReason       *string         `json:"not_applied_reason"`
+	ItemsSeen              []string        `json:"items_seen"`
+	Fallback               bool            `json:"fallback"`
+	CorrectsDecisionID     *string         `json:"corrects_decision_id"`
+	Manifest               json.RawMessage `json:"manifest"`
+	TaskID                 *string         `json:"task_id"`
+	Model                  *string         `json:"model"`
+	PromptVersion          *string         `json:"prompt_version"`
+	LatencyMS              *int            `json:"latency_ms"`
+	ErrorCode              *string         `json:"error_code"`
+	AgentID                *string         `json:"agent_id"`
+	TokenID                *string         `json:"token_id"`
+	CreatedAt              time.Time       `json:"created_at"`
+}
+
 // ChannelThread is a place of a chat channel: a one-to-one chat or a group.
 type ChannelThread struct {
 	ID                 string     `json:"id"`
@@ -153,13 +217,15 @@ type ChannelInboundEvent struct {
 	Error           *string         `json:"error"`
 	// DecisionBasis and DecisionRule are what the channel's rules decided (match, default, person, and
 	// the rule's name); null for what the frame handled before them or what is still being collected.
-	DecisionBasis *string              `json:"decision_basis"`
-	DecisionRule  *string              `json:"decision_rule"`
-	ReceivedAt    time.Time            `json:"received_at"`
-	ProcessedAt   *time.Time           `json:"processed_at"`
-	Files         []ChannelInboundFile `json:"files"`
-	RawKey        string               `json:"-"`
-	RawSize       int64                `json:"-"`
+	DecisionBasis *string `json:"decision_basis"`
+	DecisionRule  *string `json:"decision_rule"`
+	// GatheringID is the batch of intake it belongs to.
+	GatheringID *string              `json:"gathering_id"`
+	ReceivedAt  time.Time            `json:"received_at"`
+	ProcessedAt *time.Time           `json:"processed_at"`
+	Files       []ChannelInboundFile `json:"files"`
+	RawKey      string               `json:"-"`
+	RawSize     int64                `json:"-"`
 }
 
 // ChannelInboundFile is a file fetched for an event, or why it could not be.
@@ -841,10 +907,12 @@ type Message struct {
 	ChannelMeta json.RawMessage `json:"channel_meta"`
 	// DecisionBasis and DecisionRule say why a message from a channel is in this conversation: what the
 	// channel's rules decided (match, default, person; new_thread, thread_key…). Null for the others.
-	DecisionBasis *string      `json:"decision_basis"`
-	DecisionRule  *string      `json:"decision_rule"`
-	CreatedAt     time.Time    `json:"created_at"`
-	Attachments   []Attachment `json:"attachments"`
+	DecisionBasis *string `json:"decision_basis"`
+	DecisionRule  *string `json:"decision_rule"`
+	// GatheringID is the batch of a chat's intake it came from.
+	GatheringID *string      `json:"gathering_id"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Attachments []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -887,7 +955,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -930,6 +998,8 @@ type Sink interface {
 	ChannelThread(ChannelThread) error
 	ChannelThreadItem(ChannelThreadItem) error
 	ConversationThreadItem(ConversationThreadItem) error
+	IntakeGathering(IntakeGathering) error
+	IntakeDecision(IntakeDecision) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error

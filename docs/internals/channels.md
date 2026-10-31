@@ -70,6 +70,48 @@ since the frame handled them before the rules. An AI decider may only ever repla
    a reply to someone else never files the message in their request. Only a shared scope reads the
    sender, so email gains no query.
 
+## Intake
+
+A scope a type declares in `Definition.IntakeScopes` (a chat's groups) gives every batch the rules decide
+an `intake_gatherings` row (a card), written in the ingest transaction with what the rules decided
+(`rules_action`, `rules_rule`, `rules_target`); its journal events, chat items and AI tasks point at it.
+Email and web forms declare none, so their path gains no row and no query beyond reading the scope.
+
+1. **Shared scopes collect per sender.** The aggregate key of a shared scope ends with the sender, and a
+   place's thread key there continues only a conversation the sender wrote in (a journal row with their
+   `sender_key` and a message of it): a group's key is everyone's, so it is no evidence of whose request a
+   message is.
+2. **Auto holds only a default.** At intake level `auto`, what the rules decide by `default` (a new
+   request, a review hold, a commands-only scope's chatter) is held with `hold_reason='intake'` through
+   `holdInbound`, so it is stored and counted exactly as a channel-off hold, and the contact is found only
+   when it is stored: a held batch creates nothing. A match is applied at once, never held.
+3. **Applying is a replay of the whole batch.** `pipeline.ApplyGathering` parses the held events again
+   and replays them merged as one message (`IngestRequest.Intake`): `ForceNew` skips the thread lookup,
+   so a new request never joins a conversation opened since the hold; the store locks the gathering and
+   applies only while it is `deciding` or `review` and holds exactly those events (`items_seen` of IN3's
+   decisions), so a person and the sweep never apply twice (the losing one gets `ErrGatheringDecided`,
+   also when SKIP LOCKED skips its events). A person's and AI's decisions are `intake_decisions` rows;
+   the rules' decisions stay in the journal only.
+4. **The sweep is the fallback.** `intake.Service.Sweep` (every 15 s in `collie serve`, claimed across
+   workspaces under `PrivilegeIntakeDueClaim`) applies the rules' decision to what is past `decide_by`
+   (two minutes): `create` is replayed through the rules as they stand then, without `ForceNew` (a
+   sender's batch held while an earlier one waited too continues the conversation that one opened, as
+   without AI; the journal names the rule that applied), `review` goes to the queue (`no_command`), and a
+   commands-only scope's chatter goes to the queue too (`ai_unavailable`): an admin turned AI on so it
+   would be looked at. `fallback=true` says so.
+5. **Lanes.** A gathering's lane is its place and sender (`lane_key`). At `auto`, a batch behind a card
+   of its lane in review waits in review (`lane_blocked`); deciding that card gives the next blocked one
+   back to `deciding` while it is younger than two hours.
+6. **Held readers.** `HeldEvents` and the held replay leave out a gathering's events while it is
+   deciding, in review or set aside; `DiscardHeld` may throw away what was set aside, and a gathering
+   whose events are all discarded is `cancelled`. Removing a channel still counts every held event, and
+   its refusal says how many are cards still to be decided (`queued_count`).
+7. **Candidates are safe for the reply.** A card offers to join only what a reply would reach the same
+   people through: a group's open or pending conversations active in 72 hours, a one-to-one customer's on
+   the same channel, then resolved ones within `reopen_window_days`; never a closed one. They are built
+   when the card is read, so they include what the card before it just opened. A person may still attach
+   anywhere in the workspace through the API.
+
 ## Chat threads
 
 A chat type gives each message a place (`Inbound.Place`: a one-to-one chat or a group, with whether a
