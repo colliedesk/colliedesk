@@ -449,7 +449,7 @@ func (w *writer) conversation(ctx context.Context, c Conversation) error {
 		}
 	}
 	for _, change := range c.StatusChanges {
-		if _, err := w.tx.Exec(ctx, `INSERT INTO conversation_status_changes(workspace_id,conversation_id,from_status,to_status,changed_at,source) VALUES($1,$2,$3,$4,$5,'import')`,
+		if _, err := w.tx.Exec(ctx, `INSERT INTO conversation_status_changes(workspace_id,conversation_id,from_status,to_status,changed_at,source,cause) VALUES($1,$2,$3,$4,$5,'import','import')`,
 			w.workspaceID, id, change.From, change.To, change.At.UTC()); err != nil {
 			return fmt.Errorf("status change: %w", err)
 		}
