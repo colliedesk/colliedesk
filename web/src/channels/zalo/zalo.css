@@ -42,3 +42,5 @@
   .zl-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .zl-dl dd + dt { margin-top: var(--space-2); }
 }
+/* A pick's radios keep their own size: the dialog stretches a field's inputs to its width. */
+.form-dialog .zl-pick input[type="radio"] { flex: none; width: auto; }
