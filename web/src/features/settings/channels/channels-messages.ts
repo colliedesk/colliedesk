@@ -185,7 +185,7 @@ const reasons: Record<string, string> = {
   ai_chat_off: 'Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.',
   zalo_secret_missing: 'Zalo’s events cannot be checked yet: add the OA secret key on the Connection tab.',
   zalo_signature_failed: 'An event from Zalo did not match the OA secret key and was refused. Check the OA secret key and the app ID on the Connection tab.',
-  zalo_token_missing: 'Messages arrive, but replies cannot be sent: add the tokens and the app secret on the Connection tab.',
+  zalo_token_missing: 'Messages arrive, but replies cannot be sent yet: the Connection tab shows which secret is not set.',
 };
 
 const aiFeature: Record<string, string> = { triage: 'triage', draft: 'drafting', intake: 'intake' };

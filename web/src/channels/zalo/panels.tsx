@@ -133,6 +133,7 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
       <div className="zl-actions">{canManage && <button type="button" onClick={() => { setDone(undefined); setEditing(name); }}>{set ? m.replace : m.add}</button>}</div></div>;
   };
   return <div className="settings-body">
+    {!tokensAny && <p className="notice notice-plain" role="status"><span>{m.firstSteps}</span></p>}
     <section className="zl-block" aria-labelledby={`${channel.id}-webhook`}><h3 id={`${channel.id}-webhook`}>{m.webhook}</h3>
       <p className="lead">{m.webhookLead}</p>
       <div className="zl-url"><code>{url}</code><CopyButton value={url} copiedText={m.urlCopied}>{m.copyURL}</CopyButton></div>

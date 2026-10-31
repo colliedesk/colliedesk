@@ -105,6 +105,7 @@ test('connection shows the webhook, the ids and which secrets are set, never a v
   expect(screen.getByText('4318002291772207')).toBeInTheDocument();
   expect(screen.getByText(/Set · ••••a1f9/)).toBeInTheDocument();
   expect(screen.getByText('Not set: messages arrive, replies are not sent')).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Paste this webhook URL in your Zalo app, then add the tokens.');
   expect(screen.getByRole('button', { name: 'Add tokens' })).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: 'Replace' })).toHaveLength(2);
 });
@@ -245,4 +246,9 @@ test('an agent reads the channel and changes nothing', async () => {
   staff.unmount();
   view(<Tabs.messages channel={channel(config)} canManage={false} timezone="UTC" />);
   expect(screen.queryByRole('button', { name: 'Save messages' })).toBeNull();
+});
+
+test('once the tokens are set, Connection no longer says what to do first', () => {
+  view(<Tabs.connection channel={channel({ credentials: credentials({ app_secret: 'a1f9', oa_secret_key: '7c20', access_token: 'aaaa', refresh_token: 'rrrr' }) })} canManage timezone="UTC" />);
+  expect(screen.queryByText(/Paste this webhook URL/)).toBeNull();
 });

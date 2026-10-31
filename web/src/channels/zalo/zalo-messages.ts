@@ -18,6 +18,7 @@ export const zaloMessages = {
   connect: 'Connect Zalo OA',
   accountTaken: 'This OA is connected elsewhere.',
   // Connection
+  firstSteps: 'Paste this webhook URL in your Zalo app, then add the tokens.',
   webhook: 'Webhook URL',
   webhookLead: 'In Zalo for Developers → your app → Webhook, paste this address. Events of other OAs on the same app are acknowledged and ignored.',
   copyURL: 'Copy URL',
