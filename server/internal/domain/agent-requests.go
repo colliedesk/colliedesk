@@ -71,16 +71,31 @@ type AgentRequest struct {
 	ConversationID *string `json:"conversation_id"`
 	// SavedReply is the saved reply the request edits, deletes or restores, before and now; filled
 	// only with the full detail.
-	SavedReply   *AgentRequestSavedReply `json:"saved_reply"`
-	RequestedBy  AgentRequester          `json:"requested_by"`
-	DecidedBy    *AgentDecider           `json:"decided_by"`
-	DecidedAt    *time.Time              `json:"decided_at"`
-	Reason       *string                 `json:"reason"`
-	ResultStatus *int                    `json:"result_status"`
-	Result       json.RawMessage         `json:"result"`
-	ResultNote   *string                 `json:"result_note"`
-	CreatedAt    time.Time               `json:"created_at"`
-	ExpiresAt    time.Time               `json:"expires_at"`
+	SavedReply *AgentRequestSavedReply `json:"saved_reply"`
+	// Notices are what a status change tells customers, one per chat channel: while it waits, what
+	// approving it would tell now; once approved, what it told (empty when nothing). Nil for other calls.
+	// Filled only with the full detail.
+	Notices      []StatusNoticePreview `json:"notices"`
+	RequestedBy  AgentRequester        `json:"requested_by"`
+	DecidedBy    *AgentDecider         `json:"decided_by"`
+	DecidedAt    *time.Time            `json:"decided_at"`
+	Reason       *string               `json:"reason"`
+	ResultStatus *int                  `json:"result_status"`
+	Result       json.RawMessage       `json:"result"`
+	ResultNote   *string               `json:"result_note"`
+	CreatedAt    time.Time             `json:"created_at"`
+	ExpiresAt    time.Time             `json:"expires_at"`
+}
+
+// StatusNoticePreview is what a status change would tell the customers of one chat channel: the
+// channel, the notice as one of its conversations (ExampleRef) reads it, its placeholders filled, and how
+// many of the conversations it tells.
+type StatusNoticePreview struct {
+	ChannelID   string `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
+	ExampleRef  string `json:"example_ref"`
+	Text        string `json:"text"`
+	Told        int    `json:"told"`
 }
 
 // AgentRequestSavedReply is the saved reply a request acts on: as the token saw it when asking, and as
