@@ -401,12 +401,12 @@ function drafts(effective: Record<string, unknown>): Record<CommandAction, Draft
 // nextSettings is the whole of what the channel stores (a change replaces it): its stored rules, with the
 // commands, notices and one-to-one answer of the page over them. A scope or command is written whole,
 // from the one in force, since a stored one replaces its default entirely.
-interface Confirm { on: boolean; quiet: string; wait: string; expire: string }
+interface Confirm { on: boolean; quiet: string; wait: string }
 const confirmLimit = 3600;
 const expireLimit = 1440;
 const seconds = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
 
-function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; answer?: boolean; confirm?: Confirm }) {
+function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
   const stored = record(channel.settings);
   const effective = record(channel.effective_settings);
   const commands = { ...(record(effective.commands) as Record<string, Command>) };
@@ -426,10 +426,21 @@ function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandA
     if (edits.confirm) {
       const gather = record(direct.gather);
       direct.gather = edits.confirm.on
-        ? { ...gather, quiet_seconds: seconds(edits.confirm.quiet), confirm_seconds: seconds(edits.confirm.wait), expire_seconds: seconds(edits.confirm.expire) * 60 }
+        ? { ...gather, quiet_seconds: seconds(edits.confirm.quiet), confirm_seconds: seconds(edits.confirm.wait) }
         : { ...gather, confirm_seconds: 0 };
     }
     next.scopes = { ...record(stored.scopes), direct };
+  }
+  // How long a request waits for its description is one wait for every scope the rules have (a command
+  // asks for it in a chat and in a group alike); each scope and its gathering are copied whole, since a
+  // stored one replaces its default, and a scope the rules do not have is not made.
+  if (edits.expireSeconds !== undefined) {
+    const scopes: Record<string, unknown> = { ...record(stored.scopes), ...record(next.scopes) };
+    for (const [key, value] of Object.entries(record(effective.scopes))) {
+      const scope = { ...record(value), ...record(scopes[key]) };
+      scopes[key] = { ...scope, gather: { ...record(scope.gather), expire_seconds: edits.expireSeconds } };
+    }
+    next.scopes = scopes;
   }
   return next;
 }
@@ -446,15 +457,21 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const [askConfirm, setAskConfirm] = useState(text(notices.ask_confirm));
   const [cancelled, setCancelled] = useState(text(notices.cancelled));
   const gather = record(direct.gather);
-  const [confirm, setConfirm] = useState<Confirm>(() => ({ on: Number(gather.confirm_seconds) > 0, quiet: String(Number(gather.quiet_seconds) || 0), wait: String(Number(gather.confirm_seconds) || 0),
-    expire: String(Math.round((Number(gather.expire_seconds) || 0) / 60)) }));
+  const [confirm, setConfirm] = useState<Confirm>(() => ({ on: Number(gather.confirm_seconds) > 0, quiet: String(Number(gather.quiet_seconds) || 0), wait: String(Number(gather.confirm_seconds) || 0) }));
+  // The description's wait: the one-to-one scope's, in minutes; written only once the field is changed.
+  const directExpire = Number(gather.expire_seconds) || 0;
+  const otherExpires = Object.entries(record(effective.scopes)).filter(([key]) => key !== 'direct').map(([, value]) => Number(record(record(value).gather).expire_seconds) || 0);
+  const groupExpire = otherExpires.find((value) => value !== directExpire);
+  const [expire, setExpire] = useState(String(Math.round(directExpire / 60)));
+  const [expireTouched, setExpireTouched] = useState(false);
   const [expired, setExpired] = useState(text(notices.expired));
   const [confirmTouched, setConfirmTouched] = useState(false);
   const [checked, setChecked] = useState(false);
   const reload = useReload(channel.id);
   const save = useMutation({
     mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired,
-      answer: onCommands && answer !== (direct.unmatched === 'notice') ? answer : undefined, confirm: confirmTouched ? confirm : undefined }) }),
+      answer: onCommands && answer !== (direct.unmatched === 'notice') ? answer : undefined, confirm: confirmTouched ? confirm : undefined,
+      expireSeconds: expireTouched ? seconds(expire) * 60 : undefined }) }),
     onSuccess: () => reload(),
   });
   const feedback = useSaveFeedback(saveState(save));
@@ -462,15 +479,16 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const server = fieldErrors(save.error);
   const quietBad = confirm.on && !(seconds(confirm.quiet) >= 0);
   const waitBad = confirm.on && !(seconds(confirm.wait) >= 1 && seconds(confirm.wait) <= confirmLimit);
-  // 0 never expires; otherwise the question must outlive the wait that opens the request anyway.
-  const expireBad = confirm.on && !(seconds(confirm.expire) === 0 || (seconds(confirm.expire) <= expireLimit && seconds(confirm.expire) * 60 > seconds(confirm.wait)));
+  const expireBad = expireTouched && !(seconds(expire) >= 0 && seconds(expire) <= expireLimit);
+  // The server asks nothing without the question's words.
+  const questionBad = confirm.on && !askConfirm.trim();
   const changeConfirm = (change: Partial<Confirm>) => {
     feedback.touch();
     setConfirmTouched(true);
     setConfirm((now) => {
       const next = { ...now, ...change };
       // Turned on with no wait yet: ten seconds of quiet, then a minute for OK, as most teams start.
-      if (change.on && !now.on) return { ...next, quiet: seconds(now.quiet) > 0 ? now.quiet : '10', wait: seconds(now.wait) > 0 ? now.wait : '60', expire: seconds(now.expire) > 0 ? now.expire : '30' };
+      if (change.on && !now.on) return { ...next, quiet: seconds(now.quiet) > 0 ? now.quiet : '10', wait: seconds(now.wait) > 0 ? now.wait : '60' };
       return next;
     });
   };
@@ -491,7 +509,7 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </div>;
   }
   const edit = (action: CommandAction, change: Partial<Draft>) => { feedback.touch(); setCommands((all) => ({ ...all, [action]: { ...all[action], ...change } })); };
-  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad) save.mutate(); }}>
+  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad) save.mutate(); }}>
     <section className="zl-block" aria-labelledby={`${id}-cmd`}><h3 id={`${id}-cmd`}>{m.commands}</h3>
       <p className="lead">{m.commandsLead}</p>
       <div className="zl-rows">
@@ -500,6 +518,11 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
       <p className="muted-copy">{m.matchHelp}</p>
       <Field id={`${id}-desc`} label={m.askDescription} error={commandError(commands.open)} help={`${m.askDescriptionHint} ${m.count(commands.open.askDescription.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={commands.open.askDescription} onChange={(event) => edit('open', { askDescription: event.target.value })} />}</Field>
+      <Field id={`${id}-x`} label={m.expiresAfter} error={(checked && expireBad ? m.expireRange : undefined) ?? Object.entries(server).find(([field]) => field.endsWith('.gather.expire_seconds'))?.[1]}
+        help={[m.minutesUnit, !expireTouched && directExpire % 60 !== 0 ? m.secondsNow(directExpire) : '', !expireTouched && groupExpire !== undefined ? m.groupsUse(groupExpire) : ''].filter(Boolean).join(' ')}>
+        {(props) => <input {...props} type="number" min={0} max={expireLimit} step={1} inputMode="numeric" value={expire} onChange={(event) => { feedback.touch(); setExpireTouched(true); setExpire(event.target.value); }} />}</Field>
+      <Field id={`${id}-exp`} label={m.expiredNotice} error={server['settings.notices.expired']} help={`${m.unmatchedHint} ${m.count(expired.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={expired} onChange={(event) => { feedback.touch(); setExpired(event.target.value); }} />}</Field>
     </section>
     <section className="zl-block" aria-labelledby={`${id}-ntc`}><h3 id={`${id}-ntc`}>{m.notices}</h3>
       <p className="lead">{m.noticesLead}</p>
@@ -521,13 +544,9 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
           {(props) => <input {...props} type="number" min={0} step={1} inputMode="numeric" value={confirm.quiet} onChange={(event) => changeConfirm({ quiet: event.target.value })} />}</Field>
         <Field id={`${id}-w`} label={m.openAnyway} error={(checked && waitBad ? m.waitRange : undefined) ?? server[`settings.scopes.direct.gather.confirm_seconds`]} help={m.secondsUnit}>
           {(props) => <input {...props} type="number" min={1} max={confirmLimit} step={1} inputMode="numeric" value={confirm.wait} onChange={(event) => changeConfirm({ wait: event.target.value })} />}</Field>
-        <Field id={`${id}-x`} label={m.expiresAfter} error={(checked && expireBad ? m.expireRange(seconds(confirm.wait)) : undefined) ?? server['settings.scopes.direct.gather.expire_seconds']} help={m.minutesUnit}>
-          {(props) => <input {...props} type="number" min={0} max={expireLimit} step={1} inputMode="numeric" value={confirm.expire} onChange={(event) => changeConfirm({ expire: event.target.value })} />}</Field>
       </div>}
-      <Field id={`${id}-ask`} label={m.question} error={server['settings.notices.ask_confirm']} help={`${m.questionHint} ${m.count(askConfirm.length, noticeMax)}`}>
+      <Field id={`${id}-ask`} label={m.question} error={(checked && questionBad ? m.questionRequired : undefined) ?? server['settings.notices.ask_confirm']} help={`${m.questionHint} ${m.count(askConfirm.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={askConfirm} onChange={(event) => { feedback.touch(); setAskConfirm(event.target.value); }} />}</Field>
-      <Field id={`${id}-exp`} label={m.expiredNotice} error={server['settings.notices.expired']} help={`${m.unmatchedHint} ${m.count(expired.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={expired} onChange={(event) => { feedback.touch(); setExpired(event.target.value); }} />}</Field>
     </section>
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveMessages)}</button>{feedback.status}</span>
   </form>;

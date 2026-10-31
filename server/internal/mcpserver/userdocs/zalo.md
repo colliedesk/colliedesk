@@ -41,11 +41,12 @@ The channel's page then has four tabs of its own, before AI and History:
    reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")
    stops writing for **Ask after** seconds, the OA sends the **Question**; the Confirm command (say "OK",
    best matched exactly) opens the conversation at once, and so does silence for **Open anyway after**
-   seconds; Cancel throws the request away and sends **When a request is cancelled**. A question nobody
-   answers within **Question expires after** minutes (0: never) throws the request away and sends **When
-   a question expires**. Off, nothing is asked. **When a customer sends only the command** asks what the
-   request is about when "Open a request" comes with nothing before it. **Save messages** saves the whole
-   tab.
+   seconds; Cancel throws the request away and sends **When a request is cancelled**. On, the
+   **Question** must be written: without it the OA asks nothing. Off, nothing is asked. **When a customer
+   sends only the command** asks what the request is about when "Open a request" comes with nothing
+   before it; a request still waiting for its description after **Forget a request still waiting for its
+   description after** minutes (0: never; one-to-one chats and groups alike) is thrown away with **When a
+   request waiting for its description is forgotten**. **Save messages** saves the whole tab.
 
 Agents see the same tabs and change nothing.
 

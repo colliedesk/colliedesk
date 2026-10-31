@@ -240,21 +240,18 @@ test('asking before a one-to-one request opens sets the wait, the question and t
   fireEvent.click(screen.getByRole('switch', { name: 'Ask the customer to confirm' }));
   expect(screen.getByLabelText('Ask after')).toHaveValue(10);
   expect(screen.getByLabelText('Open anyway after')).toHaveValue(60);
-  expect(screen.getByLabelText('Question expires after')).toHaveValue(30);
   fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '0' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
   expect(screen.getByLabelText('Open anyway after')).toHaveAccessibleDescription(/1 to 3600/);
   expect(channelsApi.update).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '90' } });
   expect(screen.getByText(/stops writing for 10 seconds.*90 seconds of silence/)).toBeInTheDocument();
+  // The server asks nothing without the question's words.
+  expect(screen.getByLabelText('Question')).toHaveAccessibleDescription(/Write the question the OA asks, or turn this off\./);
+  expect(channelsApi.update).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Nhắn OK để tạo phiếu, hoặc Hủy.' } });
   fireEvent.change(screen.getByLabelText('When a request is cancelled'), { target: { value: 'Đã hủy.' } });
-  fireEvent.change(screen.getByLabelText('When a question expires'), { target: { value: 'Yêu cầu đã hết hạn.' } });
   fireEvent.change(screen.getByLabelText('When a customer sends only the command'), { target: { value: 'Anh/chị mô tả giúp vấn đề nhé.' } });
-  fireEvent.change(screen.getByLabelText('Question expires after'), { target: { value: '1' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
-  expect(screen.getByLabelText('Question expires after')).toHaveAccessibleDescription(/longer than “Open anyway after” \(90 s\)/);
-  fireEvent.change(screen.getByLabelText('Question expires after'), { target: { value: '30' } });
   const confirm = screen.getByRole('group', { name: 'Phrases for Confirm' });
   fireEvent.click(within(confirm).getByRole('button', { name: 'Add a phrase' }));
   fireEvent.change(within(confirm).getByLabelText('New phrase for Confirm'), { target: { value: 'ok' } });
@@ -263,10 +260,42 @@ test('asking before a one-to-one request opens sets the wait, the question and t
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   const sent = channelsApi.update.mock.calls[0][1].settings;
-  expect(sent.scopes.direct).toEqual({ mode: 'commands', unmatched: 'notice', gather: { quiet_seconds: 10, max_seconds: 1800, confirm_seconds: 90, expire_seconds: 1800 } });
+  // Confirm sets nothing about how long a request waits for its description.
+  expect(sent.scopes.direct).toEqual({ mode: 'commands', unmatched: 'notice', gather: { quiet_seconds: 10, max_seconds: 1800, confirm_seconds: 90 } });
+  expect(sent.scopes.group).toBeUndefined();
   expect(sent.commands.confirm).toEqual({ action: 'confirm', match: 'exact', phrases: ['ok'] });
-  expect(sent.notices).toMatchObject({ ask_confirm: 'Nhắn OK để tạo phiếu, hoặc Hủy.', cancelled: 'Đã hủy.', expired: 'Yêu cầu đã hết hạn.' });
+  expect(sent.notices).toMatchObject({ ask_confirm: 'Nhắn OK để tạo phiếu, hoặc Hủy.', cancelled: 'Đã hủy.' });
   expect(sent.commands.open).toEqual({ action: 'open', match: 'exact', phrases: ['tạo phiếu'], ask_description: 'Anh/chị mô tả giúp vấn đề nhé.' });
+});
+
+test('a request waiting for its description is forgotten after the same minutes in every scope, written only when changed', async () => {
+  const rules = {
+    commands: { open: { action: 'open', phrases: ['tạo phiếu'], ask_description: 'Mô tả giúp?' } },
+    scopes: { direct: { mode: 'commands', gather: { quiet_seconds: 10, expire_seconds: 1800 } }, group: { mode: 'commands', gather: { quiet_seconds: 300, max_seconds: 1200, expire_seconds: 20 } } },
+  };
+  view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
+  const field = screen.getByLabelText('Forget a request still waiting for its description after');
+  expect(field).toHaveValue(30);
+  expect(field).toHaveAccessibleDescription(/Groups use 20 seconds; saving sets both\./);
+  // Saving something else leaves both as they are.
+  fireEvent.change(screen.getByLabelText('When a request waiting for its description is forgotten'), { target: { value: 'Đã quá hạn.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update.mock.calls[0][1].settings.scopes).toBeUndefined();
+  expect(channelsApi.update.mock.calls[0][1].settings.notices.expired).toBe('Đã quá hạn.');
+  fireEvent.change(field, { target: { value: '45' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(2));
+  expect(channelsApi.update.mock.calls[1][1].settings.scopes).toEqual({
+    direct: { mode: 'commands', gather: { quiet_seconds: 10, expire_seconds: 2700 } },
+    group: { mode: 'commands', gather: { quiet_seconds: 300, max_seconds: 1200, expire_seconds: 2700 } },
+  });
+});
+
+test('a wait in seconds that is not whole minutes is shown as it is', () => {
+  const rules = { scopes: { direct: { mode: 'commands', gather: { expire_seconds: 90 } }, group: { mode: 'commands', gather: { expire_seconds: 90 } } } };
+  view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
+  expect(screen.getByLabelText('Forget a request still waiting for its description after')).toHaveAccessibleDescription(/90 seconds now/);
 });
 
 test('turning the question off keeps the gathering and sets its wait to 0', async () => {
