@@ -23,6 +23,15 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink (ceilings in the test).
    `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
    `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
+7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
+   A person finishes the task in the fewest steps and screens, and every screen says the next step.
+   An AI agent finishes the same task in the fewest MCP calls: a tool's name and description say
+   when to use it, answers carry names and not only ids, and a refused or invalid call says how to
+   fix it. A PR that adds or changes a feature states both counts (person steps, agent calls),
+   before and after. Gates: `TestEveryToolHasADocSentence`, `TestLookupToolsReturnNamesNotJustIDs`,
+   `TestToolArgumentsAreValidatedAgainstTheSchema`,
+   `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
+   the onboarding journeys below; agent journeys with call budgets are tracked in #374.
 
 ## Glossary
 
