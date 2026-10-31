@@ -261,3 +261,48 @@ func sameSet(got, want string) bool {
 	}
 	return true
 }
+
+// The recipients shrink after some got the email (one turned theirs off before a retry): the threshold is
+// done with those who got it, not listed again every round.
+func TestAThresholdIsDoneWhenFewerAreLeftToTell(t *testing.T) {
+	e := newEnv(t, "UTC")
+	e.exec(t, `INSERT INTO agents(workspace_id,email,role) VALUES($1,'two@alert.example.com','admin') RETURNING id::text`, e.workspace)
+	e.mailer.fail = func(to string) error {
+		if to == "two@alert.example.com" {
+			return errors.New("the relay is busy")
+		}
+		return nil
+	}
+	e.opened(t, "Nobody's", 55*time.Minute, 55*time.Minute, false)
+	if got := e.run(t); got != "admin@alert.example.com Reply due soon: #1 Nobody's" {
+		t.Fatalf("first round = %s", got)
+	}
+	e.exec(t, `UPDATE agents SET sla_alert_email=false WHERE email='two@alert.example.com' RETURNING id::text`)
+	for range 2 {
+		if got := e.run(t); got != "" {
+			t.Fatalf("again = %s", got)
+		}
+	}
+	if due, err := e.st.DueSLAAlerts(e.ctx, e.now, 10); err != nil || len(due) != 0 {
+		t.Fatalf("still due = %+v %v", due, err)
+	}
+}
+
+// Each recipient is claimed just before their email goes: a slow relay never leaves the next ones' claims
+// old enough for another server to take them again.
+func TestEachRecipientIsClaimedJustBeforeTheirEmail(t *testing.T) {
+	e := newEnv(t, "UTC")
+	for _, extra := range []string{"two@alert.example.com", "three@alert.example.com"} {
+		e.exec(t, `INSERT INTO agents(workspace_id,email,role) VALUES($1,$2,'admin') RETURNING id::text`, e.workspace, extra)
+	}
+	var claims []string
+	e.mailer.fail = func(string) error {
+		claims = append(claims, e.exec(t, `SELECT count(*)::text FROM conversation_sla_alerts WHERE status='sending'`))
+		return nil
+	}
+	e.opened(t, "Nobody's", 55*time.Minute, 55*time.Minute, false)
+	e.run(t)
+	if strings.Join(claims, ",") != "1,1,1" {
+		t.Fatalf("claims held at each send = %v, want only the one being sent", claims)
+	}
+}

@@ -47,11 +47,19 @@ func (a Alerts) RunOnce(ctx context.Context) (int, error) {
 	}
 	sent := 0
 	for _, item := range due {
-		alert, err := a.Store.ClaimSLAAlert(ctx, item, AbandonedAfter)
+		alert, err := a.Store.PrepareSLAAlert(ctx, item)
 		if err != nil {
 			return sent, err
 		}
-		for _, to := range alert.To {
+		for _, to := range alert.All {
+			// Claimed right before it goes: a slow relay never ages the next ones' claims.
+			claimed, err := a.Store.ClaimSLARecipient(ctx, alert, to, AbandonedAfter)
+			if err != nil {
+				return sent, err
+			}
+			if !claimed {
+				continue
+			}
 			status := a.send(ctx, alert, to, now, logger)
 			if status == "sent" {
 				sent++
