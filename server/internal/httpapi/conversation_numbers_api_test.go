@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -300,5 +301,39 @@ func TestImportedNumbersAndFormatChangesKeepEveryCodeOne(t *testing.T) {
 		if got := find(ref); got != want {
 			t.Fatalf("?ref=%s = %q, want %q", ref, got, want)
 		}
+	}
+}
+
+// Between the numbering migrations (20261031150000 to 20261031150200) a conversation there was before has
+// no number yet: reading, listing and exporting it work, and a code names only numbered ones.
+func TestAConversationNotNumberedYetReadsListsAndExports(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Unnumbered", "admin@unnumbered.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@unnumbered.example.com"})
+	numberedID := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Numbered"})
+	ctx := context.Background()
+	down, err := os.ReadFile("../../migrations/20261031150200-conversation-numbers-required.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{string(down), `ALTER TABLE conversations DISABLE TRIGGER conversations_number`,
+		`INSERT INTO conversations(workspace_id,contact_id,subject,channel) SELECT workspace_id,id,'From before','agent' FROM contacts WHERE id='` + contact + `'`,
+		`ALTER TABLE conversations ENABLE TRIGGER conversations_number`} {
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	before := queryString(t, pool, `SELECT id::text FROM conversations WHERE subject='From before'`)
+	for _, path := range []string{"/api/v1/conversations/" + before, "/api/v1/conversations", "/api/v1/conversations?ref=%231", "/api/v1/conversations?search=%231", "/api/v1/export"} {
+		if response := request(t, api, http.MethodGet, path, nil, admin, nil); response.Code != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", path, response.Code, response.Body.String())
+		}
+	}
+	var page struct {
+		Items []numbered `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations?ref=%231", nil, admin, nil), &page)
+	if len(page.Items) != 1 || page.Items[0].ID != numberedID {
+		t.Fatalf("?ref=#1 = %+v, want only the numbered one", page.Items)
 	}
 }
