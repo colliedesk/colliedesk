@@ -396,7 +396,7 @@ type conversationPage struct {
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.merged_into_id::text,c.origin,c.created_at,c.updated_at,
-		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id)
+		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id),c.number_series,COALESCE(c.number,0),COALESCE(c.number_year,0),COALESCE(c.display_ref,''),COALESCE(c.number_format,'')
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
 	if err != nil {
 		return page, fmt.Errorf("export conversations: %w", err)
@@ -406,7 +406,8 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
+			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages,
+			&head.NumberSeries, &head.Number, &head.NumberYear, &head.DisplayRef, &head.NumberFormat); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
 		}
@@ -1196,6 +1197,21 @@ func exportChatThreads(ctx context.Context, tx pgx.Tx, workspaceID string, sink 
 	if err := rowsError("export chat items", items); err != nil {
 		return err
 	}
+	series, err := tx.Query(ctx, `SELECT s.series,s.format,s.next,s.start,s.start_year,
+		COALESCE((SELECT array_agg(f.format ORDER BY f.created_at,f.format) FROM conversation_number_formats f WHERE f.workspace_id=s.workspace_id AND f.series=s.series),'{}'),
+		s.created_at,s.updated_at FROM conversation_number_series s WHERE s.workspace_id=$1 ORDER BY s.series`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export number series: %w", err)
+	}
+	numberSeries, err := pgx.CollectRows(series, func(row pgx.CollectableRow) (export.NumberSeries, error) {
+		var r export.NumberSeries
+		err := row.Scan(&r.Series, &r.Format, &r.Next, &r.Start, &r.StartYear, &r.Formats, &r.CreatedAt, &r.UpdatedAt)
+		r.CreatedAt, r.UpdatedAt = domain.UTC(r.CreatedAt), domain.UTC(r.UpdatedAt)
+		return r, err
+	})
+	if err != nil {
+		return fmt.Errorf("export number series: %w", err)
+	}
 	senders, err := tx.Query(ctx, `SELECT channel_id::text,sender_kind,sender_value,name,role,last_at,thread_id::text FROM channel_senders
 		WHERE workspace_id=$1 ORDER BY channel_id,last_at,sender_value`, workspaceID)
 	if err != nil {
@@ -1215,6 +1231,11 @@ func exportChatThreads(ctx context.Context, tx pgx.Tx, workspaceID string, sink 
 	}
 	if err := rowsError("export chat senders", senders); err != nil {
 		return err
+	}
+	for _, record := range numberSeries {
+		if err := sink.NumberSeries(record); err != nil {
+			return err
+		}
 	}
 	links, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,item_id::text,reason,decision_id::text,linked_by_agent_id::text,linked_at,unlinked_at,
 			unlinked_by_agent_id::text FROM conversation_thread_items WHERE workspace_id=$1 ORDER BY linked_at,id`, workspaceID)

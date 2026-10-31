@@ -114,6 +114,7 @@ export const conversationSchema = z.object({
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   latest_reply_number: z.number().int().nonnegative(),
+  number: z.number().int().positive().optional(), number_series: z.string().optional(), display_ref: z.string().optional(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
     // A server from before chat channels sends no type: its replies always left by email.
     replies_via: z.object({ id: z.string(), type: z.string().catch('email'), name: z.string(), enabled: z.boolean(),

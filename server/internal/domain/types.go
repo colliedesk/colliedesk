@@ -154,6 +154,10 @@ type Conversation struct {
 	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
 	// older seen_reply_number is refused with ReplyConflictError.
 	LatestReplyNumber int `json:"latest_reply_number"`
+	// Number is its number in NumberSeries; DisplayRef the code customers see and type back ("#12").
+	Number       int64  `json:"number"`
+	NumberSeries string `json:"number_series"`
+	DisplayRef   string `json:"display_ref"`
 }
 
 // ChannelRef names a conversation's channel and the one its replies leave through.

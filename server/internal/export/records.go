@@ -999,6 +999,26 @@ type ConversationHead struct {
 	TagIDs       []string                   `json:"tag_ids"`
 	CreatedAt    time.Time                  `json:"created_at"`
 	UpdatedAt    time.Time                  `json:"updated_at"`
+	// NumberSeries, Number and NumberYear number it; DisplayRef is the code its customer saw.
+	NumberSeries string `json:"number_series"`
+	Number       int64  `json:"number"`
+	NumberYear   int    `json:"number_year"`
+	DisplayRef   string `json:"display_ref"`
+	// NumberFormat is the format its code was made with.
+	NumberFormat string `json:"number_format"`
+}
+
+// NumberSeries is a series conversations are numbered in.
+type NumberSeries struct {
+	Series    string `json:"series"`
+	Format    string `json:"format"`
+	Next      int64  `json:"next"`
+	Start     int64  `json:"start"`
+	StartYear *int   `json:"start_year"`
+	// Formats are every format the series has had, which read the codes it gave.
+	Formats   []string  `json:"formats"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // StatusChange is one change of a conversation's status (conversation_status_changes). Source is
@@ -1021,7 +1041,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -1064,6 +1084,7 @@ type Sink interface {
 	ChannelThread(ChannelThread) error
 	ChannelThreadItem(ChannelThreadItem) error
 	ChannelSender(ChannelSender) error
+	NumberSeries(NumberSeries) error
 	ConversationThreadItem(ConversationThreadItem) error
 	IntakeGathering(IntakeGathering) error
 	IntakeDecision(IntakeDecision) error
