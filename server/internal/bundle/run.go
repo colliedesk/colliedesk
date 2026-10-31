@@ -513,6 +513,10 @@ func (w *writer) chatItem(ctx context.Context, c Conversation, thread string, me
 		if id := w.agents[strings.ToLower(message.AuthorEmail)]; message.AuthorEmail != "" && id != "" {
 			agent = id
 		}
+		if s := message.Sender; s != nil {
+			// A team member writing in the chat on the channel's own app: it came in, it is the team's.
+			direction, identity, sender = "in", Identity{Kind: s.Kind, Value: s.Value}, s.Name
+		}
 	}
 	var id string
 	// Named apart from the channel's own message ids (and another bundle's): bundle:<source>:<id>.

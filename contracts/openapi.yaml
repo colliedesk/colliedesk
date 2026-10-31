@@ -8422,7 +8422,7 @@ components:
         occurred_at: {type: string, format: date-time}
         files:
           type: array
-          description: 'The files of an item that came in, as they were fetched; the conversation message it became has them as attachments.'
+          description: 'The files of an item that came in, as they were fetched (an imported item: the attachments of its message); the conversation message it became has them as attachments.'
           items:
             type: object
             required: [name, content_type, status, size, error]

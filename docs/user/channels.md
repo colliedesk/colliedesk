@@ -208,8 +208,12 @@ ones whole, so send them all.
   the message to nothing and is answered with `settings.notices.reopen_not_found` (`{ref}`: the code
   typed), the same words whatever the reason. A code of the system the channel's series was taken over
   from (below its `start`, in its `start_year` or an earlier year; see
-  [conversation numbers](inbox.md#conversation-numbers)) opens a new conversation tagged `legacy-ref`,
-  answered with `settings.notices.reopen_legacy` (`{old_ref}`, `{ref}`) instead of the received notice.
+  [conversation numbers](inbox.md#conversation-numbers)) and no conversation of the channel's series has
+  opens a new conversation tagged `legacy-ref`, answered with `settings.notices.reopen_legacy` (`{old_ref}`,
+  `{ref}`) instead of the received notice; one the workspace has (imported with its old code) is found as
+  any other. A reopen command is answered as it comes, even where messages are collected: it is no part
+  of the request being written, asks nothing and waits for nothing, and two of them are two. Without a code
+  after it, it is an ordinary message.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
   the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
