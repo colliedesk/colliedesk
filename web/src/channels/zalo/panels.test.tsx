@@ -473,3 +473,13 @@ test('how often the help and the unmatched reply go to one chat is set in second
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ help_every_seconds: 0, unmatched_every_seconds: 600 });
 });
+
+test('a notice box shows every line of what it says, and each "at most every" sits under the notice it paces', () => {
+  const help = ['Hướng dẫn:', '1. tạo phiếu', '2. hủy', '3. mở lại CHD-…', '4. xác nhận', '5. trợ giúp', 'Cảm ơn quý khách.'].join('\n');
+  view(<Tabs.messages channel={channel({}, { effective_settings: { notices: { help, unmatched: 'Gõ “tạo phiếu”.' } } })} canManage timezone="UTC" />);
+  expect(screen.getByLabelText('When a customer asks for help')).toHaveAttribute('rows', '7');
+  expect(screen.getByLabelText('Reply to a one-to-one message that is not a request')).toHaveAttribute('rows', '2');
+  const order = (label: string) => screen.getAllByRole('textbox').concat(screen.getAllByRole('spinbutton')).sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)).indexOf(screen.getByLabelText(label));
+  expect(order('Send the unmatched reply in one chat at most every')).toBe(order('Reply to a one-to-one message that is not a request') + 1);
+  expect(order('Answer help in one chat at most every')).toBe(order('When a customer asks for help') + 1);
+});

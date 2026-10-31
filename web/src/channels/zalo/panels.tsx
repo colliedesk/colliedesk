@@ -443,6 +443,11 @@ const expireLimit = 1440;
 const everyLimit = 86_400;
 const seconds = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
 
+/** A notice box shows every line it holds, up to a dozen; longer ones scroll. */
+function rowsFor(text: string) {
+  return Math.min(12, Math.max(2, text.split('\n').length));
+}
+
 function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; reopenNotFound: string; reopenLegacy: string; reopened: string; reopenNoted: string; help: string; helpEvery: number; unmatchedEvery: number; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
   const stored = record(channel.settings);
   const effective = record(channel.effective_settings);
@@ -573,37 +578,37 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
       </div>
       <p className="muted-copy">{m.matchHelp}</p>
       <Field id={`${id}-desc`} label={m.askDescription} error={commandError(commands.open)} help={`${m.askDescriptionHint} ${m.count(commands.open.askDescription.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={commands.open.askDescription} onChange={(event) => edit('open', { askDescription: event.target.value })} />}</Field>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(commands.open.askDescription)} maxLength={noticeMax} value={commands.open.askDescription} onChange={(event) => edit('open', { askDescription: event.target.value })} />}</Field>
       <Field id={`${id}-x`} label={m.expiresAfter} error={(checked && expireBad ? m.expireRange : undefined) ?? Object.entries(server).find(([field]) => field.endsWith('.gather.expire_seconds'))?.[1]}
         help={[m.minutesUnit, !expireTouched && directExpire % 60 !== 0 ? m.secondsNow(directExpire) : '', !expireTouched && groupExpire !== undefined ? m.groupsUse(groupExpire) : ''].filter(Boolean).join(' ')}>
         {(props) => <input {...props} type="number" min={0} max={expireLimit} step={1} inputMode="numeric" value={expire} onChange={(event) => { feedback.touch(); setExpireTouched(true); setExpire(event.target.value); }} />}</Field>
       <Field id={`${id}-exp`} label={m.expiredNotice} error={server['settings.notices.expired']} help={`${m.unmatchedHint} ${m.count(expired.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={expired} onChange={(event) => { feedback.touch(); setExpired(event.target.value); }} />}</Field>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(expired)} maxLength={noticeMax} value={expired} onChange={(event) => { feedback.touch(); setExpired(event.target.value); }} />}</Field>
     </section>
     <section className="zl-block" aria-labelledby={`${id}-ntc`}><h3 id={`${id}-ntc`}>{m.notices}</h3>
       <p className="lead">{m.noticesLead}</p>
       <Field id={`${id}-rcv`} label={m.received} error={server['settings.notices.received']} help={`${m.receivedHint} ${m.unmatchedHint} ${m.count(received.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={received} onChange={(event) => { feedback.touch(); setReceived(event.target.value); }} />}</Field>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(received)} maxLength={noticeMax} value={received} onChange={(event) => { feedback.touch(); setReceived(event.target.value); }} />}</Field>
       <Field id={`${id}-unm`} label={m.unmatched} error={server['settings.notices.unmatched'] ?? server['settings.scopes.direct.unmatched']}
         help={`${onCommands ? m.unmatchedHint : m.unmatchedAllOpen} ${m.count(unmatched.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</Field>
-      <Field id={`${id}-hlp`} label={m.helpNotice} error={server['settings.notices.help']} help={`${m.helpNoticeHint} ${m.count(help.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={help} onChange={(event) => { feedback.touch(); setHelp(event.target.value); }} />}</Field>
-      <Field id={`${id}-hev`} label={m.helpEvery} error={(checked && everyBad(helpEvery) ? m.everyRange : undefined) ?? server['settings.notices.help_every_seconds']} help={m.everyHint}>
-        {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={helpEvery} onChange={(event) => { feedback.touch(); setHelpEvery(event.target.value); }} />}</Field>
-      <Field id={`${id}-rop`} label={m.reopened} error={server['settings.notices.reopened']} help={`${m.reopenedHint} ${m.unmatchedHint} ${m.count(reopened.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopened} onChange={(event) => { feedback.touch(); setReopened(event.target.value); }} />}</Field>
-      <Field id={`${id}-rnt`} label={m.reopenNoted} error={server['settings.notices.reopen_noted']} help={`${m.reopenNotedHint} ${m.unmatchedHint} ${m.count(reopenNoted.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenNoted} onChange={(event) => { feedback.touch(); setReopenNoted(event.target.value); }} />}</Field>
-      <Field id={`${id}-rnf`} label={m.reopenNotFound} error={server['settings.notices.reopen_not_found']} help={`${m.reopenNotFoundHint} ${m.unmatchedHint} ${m.count(reopenNotFound.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenNotFound} onChange={(event) => { feedback.touch(); setReopenNotFound(event.target.value); }} />}</Field>
-      <Field id={`${id}-rlg`} label={m.reopenLegacy} error={server['settings.notices.reopen_legacy']} help={`${m.reopenLegacyHint} ${m.count(reopenLegacy.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenLegacy} onChange={(event) => { feedback.touch(); setReopenLegacy(event.target.value); }} />}</Field>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(unmatched)} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</Field>
       <Field id={`${id}-uev`} label={m.unmatchedEvery} error={(checked && everyBad(unmatchedEvery) ? m.everyRange : undefined) ?? server['settings.notices.unmatched_every_seconds']} help={m.everyHint}>
         {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={unmatchedEvery} onChange={(event) => { feedback.touch(); setUnmatchedEvery(event.target.value); }} />}</Field>
       {onCommands && <label className="field-inline"><input type="checkbox" checked={answer} onChange={(event) => { feedback.touch(); setAnswer(event.target.checked); }} /><span>{m.unmatchedOn}</span></label>}
+      <Field id={`${id}-hlp`} label={m.helpNotice} error={server['settings.notices.help']} help={`${m.helpNoticeHint} ${m.count(help.length, noticeMax)}`}>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(help)} maxLength={noticeMax} value={help} onChange={(event) => { feedback.touch(); setHelp(event.target.value); }} />}</Field>
+      <Field id={`${id}-hev`} label={m.helpEvery} error={(checked && everyBad(helpEvery) ? m.everyRange : undefined) ?? server['settings.notices.help_every_seconds']} help={m.everyHint}>
+        {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={helpEvery} onChange={(event) => { feedback.touch(); setHelpEvery(event.target.value); }} />}</Field>
+      <Field id={`${id}-rop`} label={m.reopened} error={server['settings.notices.reopened']} help={`${m.reopenedHint} ${m.unmatchedHint} ${m.count(reopened.length, noticeMax)}`}>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopened)} maxLength={noticeMax} value={reopened} onChange={(event) => { feedback.touch(); setReopened(event.target.value); }} />}</Field>
+      <Field id={`${id}-rnt`} label={m.reopenNoted} error={server['settings.notices.reopen_noted']} help={`${m.reopenNotedHint} ${m.unmatchedHint} ${m.count(reopenNoted.length, noticeMax)}`}>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopenNoted)} maxLength={noticeMax} value={reopenNoted} onChange={(event) => { feedback.touch(); setReopenNoted(event.target.value); }} />}</Field>
+      <Field id={`${id}-rnf`} label={m.reopenNotFound} error={server['settings.notices.reopen_not_found']} help={`${m.reopenNotFoundHint} ${m.unmatchedHint} ${m.count(reopenNotFound.length, noticeMax)}`}>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopenNotFound)} maxLength={noticeMax} value={reopenNotFound} onChange={(event) => { feedback.touch(); setReopenNotFound(event.target.value); }} />}</Field>
+      <Field id={`${id}-rlg`} label={m.reopenLegacy} error={server['settings.notices.reopen_legacy']} help={`${m.reopenLegacyHint} ${m.count(reopenLegacy.length, noticeMax)}`}>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopenLegacy)} maxLength={noticeMax} value={reopenLegacy} onChange={(event) => { feedback.touch(); setReopenLegacy(event.target.value); }} />}</Field>
       <Field id={`${id}-cnl`} label={m.cancelled} error={server['settings.notices.cancelled']} help={`${m.unmatchedHint} ${m.count(cancelled.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(cancelled)} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>
     </section>
     <section className="zl-block" aria-labelledby={`${id}-ok`}><h3 id={`${id}-ok`}>{m.confirmHeading}</h3>
       <label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={confirm.on} aria-describedby={`${id}-ok-d`}
@@ -616,7 +621,7 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
           {(props) => <input {...props} type="number" min={1} max={confirmLimit} step={1} inputMode="numeric" value={confirm.wait} onChange={(event) => changeConfirm({ wait: event.target.value })} />}</Field>}
       </div>}
       <Field id={`${id}-ask`} label={m.question} error={(checked && questionBad ? m.questionRequired : undefined) ?? server['settings.notices.ask_confirm']} help={`${m.questionHint} ${m.count(askConfirm.length, noticeMax)}`}>
-        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={askConfirm} onChange={(event) => { feedback.touch(); setAskConfirm(event.target.value); }} />}</Field>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(askConfirm)} maxLength={noticeMax} value={askConfirm} onChange={(event) => { feedback.touch(); setAskConfirm(event.target.value); }} />}</Field>
     </section>
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveMessages)}</button>{feedback.status}</span>
   </form>;

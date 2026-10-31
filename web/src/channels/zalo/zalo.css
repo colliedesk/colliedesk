@@ -30,6 +30,8 @@
 .zl-phrase { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 2px 0 8px; font-size: var(--fs-small); line-height: 24px; }
 .zl-phrase button { --control: 22px; min-height: 22px; width: 22px; padding: 0; border: 0; box-shadow: none; background: transparent; color: var(--text-3); }
 .zl-phrase-new input { width: 10rem; }
+/* A notice box grows with what it says (field-sizing where supported, rows elsewhere), then scrolls. */
+.zl-notice { field-sizing: content; min-height: calc(2lh + 2 * var(--space-2)); max-height: calc(12lh + 2 * var(--space-2)); overflow-y: auto; resize: vertical; }
 .zl-pick { display: grid; gap: var(--space-1); border: 0; padding: 0; margin: 0; max-height: 16rem; overflow-y: auto; }
 @media (pointer: coarse) {
   .zl-block .link-action, .zl-phrases .link-action { display: inline-flex; align-items: center; min-height: var(--touch); }
