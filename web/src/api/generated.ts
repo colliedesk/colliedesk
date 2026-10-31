@@ -1414,6 +1414,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/senders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The people who wrote in a chat channel's places (customers and the team, never the channel itself), each once with the place and time they last wrote, most recent first, at most 200: every member of a group, not only its last writer. Empty for a channel type without places. */
+        get: operations["listChannelSenders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/threads/{threadId}/items": {
         parameters: {
             query?: never;
@@ -4915,6 +4934,29 @@ export interface components {
             /** Format: date-time */
             last_item_at: string | null;
             last_item: components["schemas"]["ChatItem"] | null;
+        };
+        ChatSenderList: {
+            items: {
+                /** @description How the channel names them (zalo_user). */
+                kind: string;
+                /** @description Their id on the channel (a Zalo user id). */
+                value: string;
+                /** @description The name the channel last gave them; null while it gave none. */
+                name: string | null;
+                /**
+                 * @description What their last message was taken as: a team member of the channel, or a customer.
+                 * @enum {string}
+                 */
+                role: "customer" | "staff";
+                /** Format: date-time */
+                last_at: string;
+                /**
+                 * Format: uuid
+                 * @description The place they last wrote in.
+                 */
+                thread_id: string;
+                thread_name: string | null;
+            }[];
         };
         ChatThreadPage: {
             items: components["schemas"]["ChatThread"][];
@@ -12237,6 +12279,32 @@ export interface operations {
             };
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listChannelSenders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The people who wrote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSenderList"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

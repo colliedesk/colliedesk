@@ -34,7 +34,7 @@ var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.n
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson",
 	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-source-consents.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson",
 	"autofix-installations.ndjson", "autofix-repos.ndjson", "autofix-connectors.ndjson", "fixes.ndjson", "fix-events.ndjson",
-	"channels.ndjson", "channel-events.ndjson", "channel-ai-levels.ndjson", "channel-inbound-events.ndjson", "channel-threads.ndjson", "channel-thread-items.ndjson", "conversation-thread-items.ndjson", "intake-gatherings.ndjson", "intake-decisions.ndjson", "intake-eval-runs.ndjson", "message-moves.ndjson", "conversations.ndjson"}
+	"channels.ndjson", "channel-events.ndjson", "channel-ai-levels.ndjson", "channel-inbound-events.ndjson", "channel-threads.ndjson", "channel-thread-items.ndjson", "channel-senders.ndjson", "conversation-thread-items.ndjson", "intake-gatherings.ndjson", "intake-decisions.ndjson", "intake-eval-runs.ndjson", "message-moves.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
@@ -42,7 +42,7 @@ var countKeys = map[string]string{
 	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people",
 	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-source-consents.ndjson": "ai_source_consents", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines",
 	"autofix-installations.ndjson": "autofix_installations", "autofix-repos.ndjson": "autofix_repos", "autofix-connectors.ndjson": "autofix_connectors", "fixes.ndjson": "fixes", "fix-events.ndjson": "fix_events",
-	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-ai-levels.ndjson": "channel_ai_levels", "channel-inbound-events.ndjson": "channel_inbound_events", "channel-threads.ndjson": "channel_threads", "channel-thread-items.ndjson": "channel_thread_items", "conversation-thread-items.ndjson": "conversation_thread_items", "intake-gatherings.ndjson": "intake_gatherings", "intake-decisions.ndjson": "intake_decisions", "intake-eval-runs.ndjson": "intake_eval_runs", "message-moves.ndjson": "message_moves",
+	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-ai-levels.ndjson": "channel_ai_levels", "channel-inbound-events.ndjson": "channel_inbound_events", "channel-threads.ndjson": "channel_threads", "channel-thread-items.ndjson": "channel_thread_items", "channel-senders.ndjson": "channel_senders", "conversation-thread-items.ndjson": "conversation_thread_items", "intake-gatherings.ndjson": "intake_gatherings", "intake-decisions.ndjson": "intake_decisions", "intake-eval-runs.ndjson": "intake_eval_runs", "message-moves.ndjson": "message_moves",
 	"conversations.ndjson": "conversations",
 }
 
@@ -225,6 +225,10 @@ func (w *Writer) ChannelThread(record ChannelThread) error {
 
 func (w *Writer) ChannelThreadItem(record ChannelThreadItem) error {
 	return w.record("channel-thread-items.ndjson", record)
+}
+
+func (w *Writer) ChannelSender(record ChannelSender) error {
+	return w.record("channel-senders.ndjson", record)
 }
 
 func (w *Writer) ConversationThreadItem(record ConversationThreadItem) error {

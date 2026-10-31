@@ -215,6 +215,17 @@ type ChannelThreadItem struct {
 	AlertedAt         *time.Time `json:"alerted_at"`
 }
 
+// ChannelSender is someone who wrote in a channel's chat places: where and when they last wrote.
+type ChannelSender struct {
+	ChannelID   string    `json:"channel_id"`
+	SenderKind  string    `json:"sender_kind"`
+	SenderValue string    `json:"sender_value"`
+	Name        *string   `json:"name"`
+	Role        string    `json:"role"`
+	LastAt      time.Time `json:"last_at"`
+	ThreadID    string    `json:"thread_id"`
+}
+
 // ConversationThreadItem says an item is, or was, part of a conversation, and how it came to it.
 type ConversationThreadItem struct {
 	ID                string     `json:"id"`
@@ -1010,7 +1021,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -1052,6 +1063,7 @@ type Sink interface {
 	ChannelInboundEvent(ChannelInboundEvent) error
 	ChannelThread(ChannelThread) error
 	ChannelThreadItem(ChannelThreadItem) error
+	ChannelSender(ChannelSender) error
 	ConversationThreadItem(ConversationThreadItem) error
 	IntakeGathering(IntakeGathering) error
 	IntakeDecision(IntakeDecision) error

@@ -231,6 +231,7 @@ func (s idleSink) ChannelInboundEvent(export.ChannelInboundEvent) error         
 func (s idleSink) ChannelAILevel(export.ChannelAILevel) error                      { return nil }
 func (s idleSink) ChannelThread(export.ChannelThread) error                        { return nil }
 func (s idleSink) ChannelThreadItem(export.ChannelThreadItem) error                { return nil }
+func (s idleSink) ChannelSender(export.ChannelSender) error                        { return nil }
 func (s idleSink) ConversationThreadItem(export.ConversationThreadItem) error      { return nil }
 func (s idleSink) IntakeGathering(export.IntakeGathering) error                    { return nil }
 func (s idleSink) IntakeDecision(export.IntakeDecision) error                      { return nil }
