@@ -12,6 +12,7 @@ func conversationsBulkUpdate(c *call, arguments map[string]any) (any, error) {
 		Assignee        string   `json:"assignee"`
 		AddTags         []string `json:"add_tags"`
 		RemoveTags      []string `json:"remove_tags"`
+		Notify          *bool    `json:"notify"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -23,6 +24,9 @@ func conversationsBulkUpdate(c *call, arguments map[string]any) (any, error) {
 	changes := map[string]any{}
 	if args.Status != "" {
 		changes["status"] = args.Status
+		if args.Notify != nil {
+			changes["notify"] = *args.Notify
+		}
 	}
 	if args.Assignee != "" {
 		assignee, err := c.resolveAssignee(args.Assignee)
@@ -59,9 +63,10 @@ func conversationsBulkUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	var result struct {
 		Updated int `json:"updated"`
+		Told    int `json:"told"`
 	}
 	if err := c.send(http.MethodPatch, "/api/v1/conversations", map[string]any{"ids": args.ConversationIDs, "changes": changes}, &result); err != nil {
 		return nil, err
 	}
-	return map[string]any{"updated": result.Updated, "conversation_ids": args.ConversationIDs}, nil
+	return map[string]any{"updated": result.Updated, "told": result.Told, "conversation_ids": args.ConversationIDs}, nil
 }

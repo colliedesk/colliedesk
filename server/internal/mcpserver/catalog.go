@@ -106,5 +106,7 @@ var conversationRowSchema = `{"type":"object","required":["id","status","priorit
 	`"channel":{"type":"string","enum":` + conversationChannelEnum + `,"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +
 	`"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
 	`"contact_id":{"type":"string"},` +
+	`"last_status_change":{"type":"object","description":"The newest change of its status: to, at, by (agent, token, customer, command, auto_close or import) and the name of the team member or token; left out when it never changed."},` +
+	`"may_tell_customer":{"type":"boolean","description":"true: a status set now may tell its customer in their chat (colliedesk_conversation_update notify); left out when it would not."},` +
 	`"untrusted_customer_content":{"type":"object","required":["subject","contact"],"properties":{"subject":{"type":"string"},` +
 	`"contact":{"type":["object","null"],"properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}}}`
