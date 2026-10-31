@@ -395,6 +395,30 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	return nil
 }
 
+// retryNotice queues a failed channel's own message again on its chat channel, while that channel can send.
+func (s *Store) retryNotice(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, channelID string) (domain.Message, error) {
+	channel, err := s.channelByID(ctx, tx, workspaceID, channelID)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	switch {
+	case !channel.Live():
+		return domain.Message{}, fmt.Errorf("%w: %s was removed.", ErrOutboundNotReady, channel.Name)
+	case !channel.Enabled:
+		return domain.Message{}, fmt.Errorf("%w: %s is off. Turn it on, then retry.", ErrOutboundNotReady, channel.Name)
+	}
+	result, err := tx.Exec(ctx, `UPDATE channel_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
+		claim_token=NULL,last_error=NULL,last_error_code=NULL,updated_at=now(),created_at=$3
+		WHERE workspace_id=$1 AND message_id=$2 AND status='failed' AND channel_id=$4`, workspaceID, messageID, s.now(), channel.ID)
+	if err != nil {
+		return domain.Message{}, fmt.Errorf("retry notice: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	return getMessage(ctx, tx, workspaceID, messageID)
+}
+
 // enqueueNotice queues a channel's own message on that chat channel, for the place the conversation's
 // newest item of it is in (the sender reads it there). The conversation's reply channel is neither used
 // nor pinned: a status notice of a chat moved into an email conversation is never emailed.
@@ -457,6 +481,11 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if !message.Delivery.Retryable {
 		return domain.Message{}, ErrDeliveryFinal
+	}
+	// A channel's own message (a status notice) is retried on the chat channel it was queued on, never on
+	// the conversation's reply channel, which it does not pin either.
+	if message.NoticeKind != nil && message.ChannelID != nil {
+		return s.retryNotice(ctx, tx, workspaceID, conversationID, messageID, *message.ChannelID)
 	}
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {

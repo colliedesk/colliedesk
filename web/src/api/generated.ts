@@ -4692,7 +4692,7 @@ export interface components {
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
-            /** @description What a status change tells customers, one per chat channel, always through that chat's channel: while it waits, what approving it would tell now; once approved, what it told as it ran (an empty list when it told nobody: each conversation had that status already, or its approval failed); once rejected or expired, what it would have told when the token asked. Kept with the call and cleared with it after the retention. Null for other calls and a quiet change, and in a list without detail=full. */
+            /** @description What a status change tells customers, one per chat channel, always through that chat's channel: while it waits, what approving it would tell now; once approved, what it was to tell as it ran, read just before (an empty list when it told nobody: each conversation had that status already, or its approval failed; a change of several tells a few seconds later, and not one whose status changes again before then); once rejected or expired, what it would have told when the token asked. Kept with the call and cleared with it after the retention. Null for other calls and a quiet change, and in a list without detail=full. */
             notices?: {
                 /** Format: uuid */
                 channel_id: string;

@@ -73,7 +73,9 @@ type AgentRequest struct {
 	// only with the full detail.
 	SavedReply *AgentRequestSavedReply `json:"saved_reply"`
 	// Notices are what a status change tells customers, one per chat channel: while it waits, what
-	// approving it would tell now; once approved, what it told (empty when nothing). Nil for other calls.
+	// approving it would tell now; once approved, what it was to tell, read just before it ran (empty when
+	// nothing; a bulk change tells after it commits, and not a conversation changed again before). Nil for
+	// other calls.
 	// Filled only with the full detail.
 	Notices      []StatusNoticePreview `json:"notices"`
 	RequestedBy  AgentRequester        `json:"requested_by"`

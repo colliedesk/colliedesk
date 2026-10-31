@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -175,13 +176,14 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 		return
 	}
 	// What a status change tells is read as it is about to run: a conversation set to that status since the
-	// token asked tells nothing.
+	// token asked tells nothing. The request is claimed already, so nothing here stops its call or its
+	// result: a read that fails keeps what the token was shown.
 	var told []domain.StatusNoticePreview
 	ids, statusTo, telling := requestedStatusChange(claimed)
 	if telling {
 		if told, err = a.store.StatusNoticePreview(ctx, workspaceID, ids, statusTo); err != nil {
-			writeInternalError(response, err)
-			return
+			slog.Warn("read what an approved status change tells", "request", id, "error", err)
+			telling = false
 		}
 	}
 	// The call checks the number again under the conversation's lock; a reply in between fails the call (409).
@@ -191,8 +193,7 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 			told = nil
 		}
 		if err := a.store.SetAgentRequestNotices(ctx, workspaceID, id, told); err != nil {
-			writeInternalError(response, err)
-			return
+			slog.Warn("record what an approved status change told", "request", id, "error", err)
 		}
 	}
 	stored, note := json.RawMessage(nil), (*string)(nil)

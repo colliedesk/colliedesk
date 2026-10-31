@@ -193,3 +193,50 @@ func TestAStatusChangeThatTellsTheCustomerAsksADraftTokenFirst(t *testing.T) {
 		t.Fatalf("another workspace: %d", response.Code)
 	}
 }
+
+// A status notice the chat refused is retried in that chat, through its channel, never by the
+// conversation's email, and the conversation's replies stay where they were.
+func TestARetriedStatusNoticeStaysInItsChat(t *testing.T) {
+	loop := channeltest.NewLoopback(statusChat, channels.Async)
+	pool := testPool(t)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO channel_types(type,connectable) VALUES($1,true)`, string(statusChat)); err != nil {
+		t.Fatal(err)
+	}
+	api, service, _, _ := testAPIOnPool(t, pool, func(config *httpapi.Config) { config.ExtraChannelTypes = []channels.Adapter{loop} })
+	admin := createSession(t, api, service, "Retry Desk", "admin@retry.example.com")
+	response := request(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": string(statusChat), "config": map[string]any{"account": "retry-a"},
+		"settings": map[string]any{"notices": map[string]any{"status_resolved": "{ref}: fixed."}}}, admin, nil)
+	var channel struct{ ID string }
+	decode(t, response, &channel)
+	if mail := request(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": "email", "config": map[string]any{"support_address": "help@retry.example.com"}}, admin, nil); mail.Code != http.StatusCreated {
+		t.Fatalf("email channel: %d %s", mail.Code, mail.Body.String())
+	}
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@retry.example.com"})
+	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer"})
+	if _, err := pool.Exec(context.Background(), `WITH thread AS (
+			INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id) SELECT workspace_id,$2::uuid,'direct','user:ada' FROM conversations WHERE id=$1 RETURNING workspace_id,id),
+		item AS (INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,body,disposition,occurred_at)
+			SELECT workspace_id,$2::uuid,id,'in','customer','it jams','conversation',now() FROM thread RETURNING workspace_id,id)
+		INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason) SELECT workspace_id,$1::uuid,id,'opened' FROM item`, conversation, channel.ID); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/conversations/" + conversation
+	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "resolved"}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("resolve: %d %s", response.Code, response.Body.String())
+	}
+	message := queryString(t, pool, `SELECT id::text FROM messages WHERE conversation_id=$1 AND notice_kind='status_resolved'`, conversation)
+	pinned := queryString(t, pool, `SELECT COALESCE(reply_channel_id::text,'none') FROM conversations WHERE id=$1`, conversation)
+	// The chat refuses it, as Zalo can: a failure a person may retry.
+	if _, err := pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed',last_error='refused',last_error_code='refused',final=false WHERE message_id=$1`, message); err != nil {
+		t.Fatal(err)
+	}
+	if response := request(t, api, http.MethodPost, path+"/messages/"+message+"/retry", nil, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("retry: %d %s", response.Code, response.Body.String())
+	}
+	if got := queryString(t, pool, `SELECT o.channel_id::text||'/'||o.status||'/'||m.channel_id::text FROM channel_outbox o JOIN messages m ON m.id=o.message_id WHERE o.message_id=$1`, message); got != channel.ID+"/queued/"+channel.ID {
+		t.Fatalf("after retry = %s, want the chat's channel %s", got, channel.ID)
+	}
+	if got := queryString(t, pool, `SELECT COALESCE(reply_channel_id::text,'none') FROM conversations WHERE id=$1`, conversation); got != pinned {
+		t.Fatalf("the retry moved the conversation's replies: %s, was %s", got, pinned)
+	}
+}
