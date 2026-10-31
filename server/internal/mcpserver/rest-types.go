@@ -1,6 +1,9 @@
 package mcpserver
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // The shapes below are the parts of the REST answers (contracts/openapi.yaml) that tools read.
 
@@ -57,6 +60,8 @@ type restConversation struct {
 	LatestReplyNumber int `json:"latest_reply_number"`
 	// DisplayRef is the code customers see and type back.
 	DisplayRef string `json:"display_ref"`
+	// SLA is its response clocks, as the API shows them.
+	SLA json.RawMessage `json:"sla"`
 }
 
 type restDelivery struct {

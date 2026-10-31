@@ -2085,6 +2085,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/me/sla-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turn your own reminder and overdue emails of response targets on or off (my_alert_email of GET /api/v1/response-targets). */
+        patch: operations["setMySLAAlerts"];
+        trace?: never;
+    };
+    "/api/v1/response-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's response targets: business hours in a timezone, holidays, first-response and resolution targets by priority in business minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out. Never set, they are off with no hours and no targets. */
+        get: operations["getResponseTargets"];
+        /** @description Replace the response targets with this document. Turning them on measures the conversations opened from then on; turning them off hides every target and keeps what was measured. A wrong part answers 400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes, timezone, channel_ids.0). */
+        put: operations["setResponseTargets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspace/slug": {
         parameters: {
             query?: never;
@@ -6296,7 +6331,7 @@ export interface components {
          * @default updated_desc
          * @enum {string}
          */
-        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest";
+        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest" | "due";
         /** @description The filters of `GET /api/v1/conversations` as one object; a list holds the values the query string separates with commas. An empty object is every conversation, most recently updated first. */
         ConversationFilters: {
             status?: components["schemas"]["ConversationStatus"][];
@@ -7331,6 +7366,109 @@ export interface components {
             /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
             suggestion: string | null;
         };
+        ConversationSLA: {
+            /**
+             * @description The most pressing of its clocks.
+             * @enum {string}
+             */
+            state: "overdue" | "due_soon" | "ok" | "paused" | "stopped" | "met";
+            /** @description Null when its priority has no first-response target. */
+            first_response: components["schemas"]["SLAClock"] | null;
+            /** @description Null when its priority has no resolution target. */
+            resolution: components["schemas"]["SLAClock"] | null;
+            /** @description The reminder and overdue emails its clocks sent, oldest first. */
+            alerts?: {
+                /** @enum {string} */
+                clock: "first_response" | "resolution";
+                /** @enum {string} */
+                threshold: "reminder" | "overdue";
+                /** Format: date-time */
+                due_at: string;
+                /**
+                 * @description nobody: no recipient gets these emails.
+                 * @enum {string}
+                 */
+                status: "sending" | "sent" | "rejected" | "nobody";
+                recipients: number;
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        SLAClock: {
+            /**
+             * @description running while it is open; paused while pending; stopped once resolved or closed; met by the first reply.
+             * @enum {string}
+             */
+            state: "running" | "paused" | "stopped" | "met";
+            /** Format: date-time */
+            due_at: string | null;
+            /**
+             * Format: date-time
+             * @description When it is due soon: warn_before_minutes of business time before due_at.
+             */
+            warn_at: string | null;
+            /** Format: date-time */
+            met_at: string | null;
+            /**
+             * Format: date-time
+             * @description due_at, once a running clock passed it.
+             */
+            breached_at: string | null;
+            due_soon: boolean;
+            overdue: boolean;
+            /** @description Business minutes to due_at at the time of the request; negative once late; null unless running. */
+            business_minutes_left: number | null;
+        };
+        BusinessDay: {
+            /** @enum {string} */
+            day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+            open: boolean;
+            /** @description Opening time, as 08:00, when open. */
+            from?: string;
+            /** @description Closing time, after from. */
+            to?: string;
+        };
+        TargetMinutes: {
+            /** @description Business minutes to the first reply; null is no target. */
+            first_response_minutes?: number | null;
+            /** @description Business minutes to resolve; null is no target. */
+            resolution_minutes?: number | null;
+        };
+        ResponseTargetsInput: {
+            enabled: boolean;
+            /** @description IANA timezone the hours are in; null is the workspace timezone. */
+            timezone?: string | null;
+            /** @description A weekday left out is closed. */
+            hours: components["schemas"]["BusinessDay"][];
+            holidays?: {
+                /** Format: date */
+                date: string;
+                name: string;
+            }[];
+            targets: {
+                urgent?: components["schemas"]["TargetMinutes"];
+                high?: components["schemas"]["TargetMinutes"];
+                normal?: components["schemas"]["TargetMinutes"];
+                low?: components["schemas"]["TargetMinutes"];
+            };
+            /** @description Business minutes before a target a conversation is due soon (and its reminder goes). */
+            warn_before_minutes?: number;
+            /** @description The channels whose conversations have targets; null is every channel. */
+            channel_ids?: string[] | null;
+            /** @description Whether reminder and overdue emails go out (each teammate can turn theirs off). */
+            alert_email?: boolean;
+        };
+        ResponseTargets: components["schemas"]["ResponseTargetsInput"] & {
+            /**
+             * Format: date-time
+             * @description When they were last turned on: conversations opened before have no target.
+             */
+            enabled_at: string | null;
+            /** @description Whether you get the reminder and overdue emails (PATCH /api/v1/agents/me/sla-alerts). */
+            my_alert_email?: boolean;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
         ConversationNumberSeries: {
             series: string;
             /** @example #{n} */
@@ -7357,6 +7495,8 @@ export interface components {
             number_series?: string;
             /** @description The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=. */
             display_ref?: string;
+            /** @description Its response clocks; null while the response targets are off or none applies to it (opened before they were on, on a channel they leave out, imported). */
+            sla?: components["schemas"]["ConversationSLA"] | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -11087,6 +11227,8 @@ export interface operations {
                 status?: string;
                 /** @description One priority or several, comma-separated: high,urgent. */
                 priority?: string;
+                /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target), or both comma-separated. While the response targets are off nothing matches. A conversation changed in the last seconds may be a round of the server behind. */
+                sla?: string;
                 /** @description Comma-separated. me (the caller), unassigned, anyone (assigned to somebody) or the id of a team member of this workspace. */
                 assignee?: string;
                 /** @description One tag id or several, comma-separated. */
@@ -11115,7 +11257,7 @@ export interface operations {
                 created_before?: string;
                 updated_after?: string;
                 updated_before?: string;
-                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update). */
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update). */
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
@@ -13631,6 +13773,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationNumberSeries"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setMySLAAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Your setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        email: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getResponseTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The response targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseTargets"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setResponseTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResponseTargetsInput"];
+            };
+        };
+        responses: {
+            /** @description The response targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseTargets"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

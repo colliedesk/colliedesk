@@ -17,13 +17,13 @@ import (
 // conversationFilterKeys are the query parameters of GET /conversations that narrow or order the list;
 // a saved view holds exactly these (ConversationFilters in the contract).
 var conversationFilterKeys = []string{"status", "priority", "assignee", "tag", "tag_match", "contact", "organization", "awaiting",
-	"has_pending_draft", "delivery_failed", "source", "channel", "created_after", "created_before", "updated_after", "updated_before", "sort", "search"}
+	"has_pending_draft", "delivery_failed", "source", "channel", "created_after", "created_before", "updated_after", "updated_before", "sort", "search", "sla"}
 
 var (
 	conversationStatuses   = []string{"open", "pending", "resolved", "closed"}
 	conversationPriorities = []string{"low", "normal", "high", "urgent"}
 	conversationSorts      = []string{store.ConversationSortUpdatedDesc, store.ConversationSortUpdatedAsc, store.ConversationSortCreatedDesc,
-		store.ConversationSortCreatedAsc, store.ConversationSortPriority, store.ConversationSortWaitingLongest}
+		store.ConversationSortCreatedAsc, store.ConversationSortPriority, store.ConversationSortWaitingLongest, store.ConversationSortDue}
 )
 
 const (
@@ -67,6 +67,7 @@ func conversationFilterFromQuery(query url.Values, channels []string) (store.Con
 	filter.Statuses = list("status", conversationStatuses)
 	filter.Priorities = list("priority", conversationPriorities)
 	filter.Channels = list("channel", channels)
+	filter.SLA = list("sla", []string{"overdue", "due_soon"})
 	if err == nil && query.Get("assignee") != "" {
 		filter.Assignees, err = commaList("assignee", strings.ToLower(query.Get("assignee")), func(value string) bool {
 			return value == "me" || value == "unassigned" || value == "anyone" || contactIDPattern.MatchString(value)

@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ type conversationContent struct {
 type conversationOut struct {
 	ID                       string              `json:"id"`
 	DisplayRef               string              `json:"display_ref,omitempty"`
+	SLA                      json.RawMessage     `json:"sla,omitempty"`
 	Status                   string              `json:"status"`
 	Priority                 string              `json:"priority"`
 	Assignee                 *personOut          `json:"assignee"`
@@ -87,7 +89,7 @@ func state(conversation restConversation, agents map[string]restAgent) stateOut 
 }
 
 func conversationRow(conversation restConversation, contact *restContact, agents map[string]restAgent, full bool) conversationOut {
-	row := conversationOut{ID: conversation.ID, DisplayRef: conversation.DisplayRef, Status: conversation.Status, Priority: conversation.Priority,
+	row := conversationOut{ID: conversation.ID, DisplayRef: conversation.DisplayRef, SLA: slaOf(conversation.SLA), Status: conversation.Status, Priority: conversation.Priority,
 		Assignee: person(agents, conversation.AssigneeID), Tags: tagNames(conversation.Tags), Channel: conversation.Channel, UpdatedAt: utc(conversation.UpdatedAt),
 		UntrustedCustomerContent: conversationContent{Subject: conversation.Subject}}
 	if contact != nil {
@@ -111,4 +113,12 @@ func cut(text string, limit int, remedy string) (string, bool) {
 	}
 	runes := []rune(text)
 	return string(runes[:limit]) + "\n[cut: " + strconv.Itoa(len(runes)-limit) + " more characters. " + remedy + "]", true
+}
+
+// slaOf keeps a conversation's response clocks, leaving them out when it has none.
+func slaOf(sla json.RawMessage) json.RawMessage {
+	if len(sla) == 0 || string(sla) == "null" {
+		return nil
+	}
+	return sla
 }
