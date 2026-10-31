@@ -96,8 +96,8 @@ while empty:
 2. **When a customer asks for help**: the answer to Help, in a chat or a group; it opens nothing. A chat
    gets it at most once in the time set in **Answer help in one chat at most every** (300 seconds unless
    you change it; 0 answers every time).
-3. **When Reopen reopens a resolved or closed conversation**, and **When Reopen names a conversation
-   still open** (the message joins it): `{ref}` is its code.
+3. **When a resolved or closed conversation is reopened** (by the customer's Reopen command, or by your
+   team), and **When Reopen names a conversation still open** (the message joins it): `{ref}` is its code.
 4. **When Reopen names a code that is not found**: `{ref}` is the code typed. A code of another chat or
    group reads the same, since a code reopens only a conversation of its own group or of the customer's
    own one-to-one chat.
@@ -109,6 +109,27 @@ while empty:
    change it).
 7. **When a request is cancelled**: after the Cancel command.
 8. **When a request waiting for its description is forgotten**: see Commands above.
+
+### When a conversation's status changes
+
+The OA tells the customer when someone on your team, an AI agent or the closing rule below sets a
+conversation's status, as a reply to the customer's first message in that chat. `{ref}` is the
+conversation's code and `{subject}` its subject; an empty box sets that status quietly:
+
+1. **When set to Pending**.
+2. **When set to Resolved**: also sent by **Send and resolve**.
+3. **When set to Closed**: also sent when a conversation closes by itself.
+
+Reopening is told with **When a resolved or closed conversation is reopened** above. To change a status
+without telling the customer, see [Telling the customer](inbox.md#telling-the-customer).
+
+**Close resolved conversations after** a number of hours (empty or 0: never; at most 720, 30 days) closes
+a conversation that stayed resolved that long, counted in clock hours (not business hours) from the
+resolve or the customer's last message, whichever is later. It applies to conversations resolved from
+the time you turn it on: earlier ones never close by themselves. A new number while it is on also applies
+to those resolved since; a smaller one closes those already past it within minutes of saving. The
+sentence under the box says what it will do, and whether the customer is told (only when **When set to
+Closed** has words). A conversation that closed by itself opens again with **Reopen**.
 
 ### Ask before opening (one-to-one)
 
