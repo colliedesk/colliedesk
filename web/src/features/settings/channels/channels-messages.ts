@@ -199,4 +199,6 @@ const eventWords: Record<ChannelEvent['kind'], (name: string, what?: string, cou
   held_replayed: (name, _what, count) => `opened ${messagesOf(count)} that arrived while ${name} was off`,
   held_discarded: (name, _what, count) => `discarded ${messagesOf(count)} that arrived while ${name} was off`,
   ai_changed: (name, what) => (what ? `changed what AI ${aiFeature[what] ?? what} does by itself on ${name}` : `changed the AI levels of ${name}`),
+  paused: (name) => `paused processing on ${name}`,
+  resumed: (name) => `resumed processing on ${name}`,
 };

@@ -39,6 +39,9 @@ type Channel struct {
 	DeletedAt       *time.Time
 	// IsDefault marks the channel of its type that answers what names no channel.
 	IsDefault bool
+	// ProcessingPausedAt is set while the channel's processing is paused: what arrives waits in its
+	// journal, nothing is decided or sent.
+	ProcessingPausedAt *time.Time
 }
 
 // Live is whether the channel was not removed.

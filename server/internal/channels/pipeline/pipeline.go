@@ -98,13 +98,23 @@ func (p *Pipeline) Receive(ctx context.Context, channel channels.Channel, raws [
 // ProcessDue processes the journal events that are due once: received and failed events, and
 // collected groups whose time came. It returns how many sets it processed.
 func (p *Pipeline) ProcessDue(ctx context.Context) (int, error) {
+	var errs []error
+	// A paused channel decides nothing, but the files of what it keeps are fetched while their links last.
+	paused, err := p.store.PausedInbound(ctx, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	for _, item := range paused {
+		if err := p.fetchOnly(ctx, item); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	work, err := p.store.DueInbound(ctx, p.now(), batchSize, maxAttempts)
 	if err != nil {
 		return 0, err
 	}
-	var errs []error
 	for _, item := range work {
-		if err := p.process(ctx, item); err != nil {
+		if err := p.Process(ctx, item); err != nil {
 			errs = append(errs, err)
 			if markErr := p.store.MarkInboundFailed(ctx, item.WorkspaceID, item.EventIDs, err.Error()); markErr != nil {
 				errs = append(errs, markErr)
@@ -130,7 +140,31 @@ func (p *Pipeline) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (p *Pipeline) process(ctx context.Context, work store.InboundWork) error {
+// fetchOnly fetches the files of events of a paused channel and marks them fetched.
+func (p *Pipeline) fetchOnly(ctx context.Context, work store.InboundWork) error {
+	channel, err := p.store.GetChannel(ctx, work.WorkspaceID, work.ChannelID)
+	if err != nil {
+		return err
+	}
+	events, err := p.store.InboundEvents(ctx, work.WorkspaceID, work.ChannelID, work.EventIDs)
+	if err != nil {
+		return err
+	}
+	adapter, err := p.adapter(channel.Type)
+	if err != nil {
+		return err
+	}
+	for _, event := range events {
+		if err := p.fetchFiles(ctx, adapter, channel, event); err != nil {
+			return err
+		}
+	}
+	return p.store.MarkFilesFetched(ctx, work.WorkspaceID, work.EventIDs)
+}
+
+// Process processes one item DueInbound listed; an item another worker took meanwhile, or one no longer
+// due, is left alone.
+func (p *Pipeline) Process(ctx context.Context, work store.InboundWork) error {
 	channel, err := p.store.GetChannel(ctx, work.WorkspaceID, work.ChannelID)
 	if err != nil {
 		return err
