@@ -33,6 +33,8 @@ type ResponseTargets struct {
 	AlertEmail        bool                     `json:"alert_email"`
 	EnabledAt         *time.Time               `json:"enabled_at"`
 	UpdatedAt         *time.Time               `json:"updated_at"`
+	// MyAlertEmail says whether the reader gets the reminder and overdue emails (their own setting).
+	MyAlertEmail *bool `json:"my_alert_email,omitempty"`
 }
 
 // ResponseTargetsError says which part of the document is wrong.
@@ -197,11 +199,15 @@ func (s *Store) SetResponseTargets(ctx context.Context, workspaceID, agentID str
 		hours, _ := json.Marshal(input.Hours)
 		holidays, _ := json.Marshal(input.Holidays)
 		byPriority, _ := json.Marshal(targets)
-		if _, err := tx.Exec(ctx, `INSERT INTO response_targets(workspace_id,enabled,timezone,hours,holidays,targets,warn_before_minutes,channel_ids,alert_email,enabled_at,updated_at,updated_by_agent_id)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8::uuid[],$9,CASE WHEN $2 THEN now() END,now(),NULLIF($10,'')::uuid)
+		// alerts_since: emails turned (back) on send nothing for what was reached while they were off.
+		if _, err := tx.Exec(ctx, `INSERT INTO response_targets(workspace_id,enabled,timezone,hours,holidays,targets,warn_before_minutes,channel_ids,alert_email,enabled_at,updated_at,updated_by_agent_id,
+				alerts_since)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8::uuid[],$9,CASE WHEN $2 THEN now() END,now(),NULLIF($10,'')::uuid,CASE WHEN $2 AND $9 THEN now() END)
 			ON CONFLICT (workspace_id) DO UPDATE SET enabled=EXCLUDED.enabled,timezone=EXCLUDED.timezone,hours=EXCLUDED.hours,holidays=EXCLUDED.holidays,
 				targets=EXCLUDED.targets,warn_before_minutes=EXCLUDED.warn_before_minutes,channel_ids=EXCLUDED.channel_ids,alert_email=EXCLUDED.alert_email,
 				enabled_at=CASE WHEN EXCLUDED.enabled AND NOT response_targets.enabled THEN now() WHEN EXCLUDED.enabled THEN response_targets.enabled_at END,
+				alerts_since=CASE WHEN EXCLUDED.enabled AND EXCLUDED.alert_email AND NOT (response_targets.enabled AND response_targets.alert_email) THEN now()
+					ELSE response_targets.alerts_since END,
 				updated_at=now(),updated_by_agent_id=EXCLUDED.updated_by_agent_id`,
 			workspaceID, input.Enabled, input.Timezone, hours, holidays, byPriority, input.WarnBeforeMinutes, input.ChannelIDs, input.AlertEmail, agentID); err != nil {
 			return ResponseTargets{}, fmt.Errorf("save response targets: %w", err)

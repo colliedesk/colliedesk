@@ -3460,6 +3460,35 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/agents/me/sla-alerts:
+    patch:
+      operationId: setMySLAAlerts
+      x-permission: authenticated
+      description: Turn your own reminder and overdue emails of response targets on or off (my_alert_email of GET /api/v1/response-targets).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: {type: boolean}
+      responses:
+        '200':
+          description: Your setting
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email]
+                properties:
+                  email: {type: boolean}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/response-targets:
     get:
       operationId: getResponseTargets
@@ -10677,6 +10706,19 @@ components:
         state: {type: string, enum: [overdue, due_soon, ok, paused, stopped, met], description: 'The most pressing of its clocks.'}
         first_response: {oneOf: [{$ref: '#/components/schemas/SLAClock'}, {type: 'null'}], description: 'Null when its priority has no first-response target.'}
         resolution: {oneOf: [{$ref: '#/components/schemas/SLAClock'}, {type: 'null'}], description: 'Null when its priority has no resolution target.'}
+        alerts:
+          type: array
+          description: The reminder and overdue emails its clocks sent, oldest first.
+          items:
+            type: object
+            required: [clock, threshold, due_at, status, recipients, at]
+            properties:
+              clock: {type: string, enum: [first_response, resolution]}
+              threshold: {type: string, enum: [reminder, overdue]}
+              due_at: {type: string, format: date-time}
+              status: {type: string, enum: [sending, sent, rejected, nobody], description: 'nobody: no recipient gets these emails.'}
+              recipients: {type: integer, minimum: 0}
+              at: {type: string, format: date-time}
     SLAClock:
       type: object
       required: [state, due_at, warn_at, met_at, breached_at, due_soon, overdue, business_minutes_left]
@@ -10736,6 +10778,7 @@ components:
           required: [timezone, holidays, warn_before_minutes, channel_ids, alert_email, enabled_at, updated_at]
           properties:
             enabled_at: {type: [string, 'null'], format: date-time, description: 'When they were last turned on: conversations opened before have no target.'}
+            my_alert_email: {type: boolean, description: 'Whether you get the reminder and overdue emails (PATCH /api/v1/agents/me/sla-alerts).'}
             updated_at: {type: [string, 'null'], format: date-time}
     ConversationNumberSeries:
       type: object

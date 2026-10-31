@@ -563,6 +563,7 @@ func Routes() []Route {
 		{http.MethodPut, "/api/v1/response-targets", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/name", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
+		{http.MethodPatch, "/api/v1/agents/me/sla-alerts", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/me/display-name", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/tags", auth.PermissionConversationsRead},

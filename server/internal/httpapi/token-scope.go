@@ -268,6 +268,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/{id}/email/test-message":   grant(auth.PermConversationsUpdate),
 	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
 	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),
+	"PATCH /api/v1/agents/me/sla-alerts":              grant(auth.PermProfileUpdate),
 	"PATCH /api/v1/agents/me/display-name":            grant(auth.PermProfileUpdate),
 	"GET /api/v1/billing":                             grant(auth.PermBillingRead),
 	"PATCH /api/v1/workspace/timezone":                grant(auth.PermWorkspaceUpdate),

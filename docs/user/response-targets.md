@@ -34,3 +34,16 @@ paused, stopped or met; `first_response` and `resolution` with `due_at`, `warn_a
 `breached_at`, `due_soon`, `overdue` and `business_minutes_left`), `GET /api/v1/conversations?sla=overdue,due_soon`
 and `sort=due`, and the same `sla` and `sort` of MCP `colliedesk_inbox_search`. A conversation changed in
 the last seconds may reach the filter a few seconds later; it always shows its own clocks right.
+
+## Reminder and overdue emails
+
+When a running clock is due soon, and again when it is overdue, Colliedesk emails the person the
+conversation is assigned to, or the admins while nobody is: each email once for each person, even with
+several servers and even after the conversation was Pending and opened again (which moves its due time).
+Turn yours off under Settings → Response targets (`PATCH /api/v1/agents/me/sla-alerts`, MCP
+`colliedesk_my_sla_alerts_set`); an admin turns them off for everyone (`alert_email`). A conversation shows
+the emails its clocks sent (`sla.alerts`). They go from the platform address of a server that sends mail
+(SMTP and `MAIL_FROM_DOMAIN`, docs/self-host); without one nothing is emailed, and the inbox still shows
+what is due. A conversation that came in already past a threshold (an import) is not emailed for it, nor
+is a threshold reached while the emails or the targets were off: turning them back on sends nothing late,
+and the inbox still shows it overdue.
