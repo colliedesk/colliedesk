@@ -713,6 +713,10 @@ func Routes() []Route {
 		{http.MethodPut, channelAIRoute, auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/conversations/{id}/chat", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/channels/{id}/threads", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/channels/{id}/threads/{threadId}/items", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/channel-thread-items", auth.PermissionConversationsRead},
 		// One email channel or web form of several; the routes above without an id act on the default one.
 		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionAccessWrite},

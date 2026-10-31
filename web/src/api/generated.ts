@@ -1097,6 +1097,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channel-thread-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What customers said on chat channels, in places that open conversations, that nobody concluded on yet (it arrived while the channel was off), oldest first. older_than keeps those older than so many seconds. */
+        get: operations["listUnresolvedChatItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description What was said in the chat places a conversation's messages came from, newest first: the customers' messages (another customer of a group is marked is_other_customer), the team's replies and the channel's notices, with which items are part of this conversation (linked) and how they came to it. linked=only keeps the conversation's own. Empty for a conversation that came from no chat. */
+        get: operations["getConversationChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/ai": {
         parameters: {
             query?: never;
@@ -1129,6 +1165,45 @@ export interface paths {
         get?: never;
         /** @description Sets what one AI feature does by itself on a scope of the channel (`level`: off, suggest, auto, or null to follow the channel and the workspace). Drafts go up to suggest (AI never sends); intake exists only on a chat type's intake scopes (422 `intake_not_supported` with `available_slots` otherwise) and takes `options`. A level decides only the AI's own work; people can ask by hand while the workspace has the feature on. An agent token lowers a level with `ai_settings:update`; a change that lets AI do more by itself (a higher level of any scope it reaches, a lower threshold, a source turned on, other instructions) is an agent request a person approves, whatever the token holds. Only admins change a level (403 for another role). Every change is in the AI history and in the channel's. */
         put: operations["setChannelAI"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The places of a chat channel (one-to-one chats and groups), most recently active first, each with its newest item. Empty for a channel type without places (email, a web form). No public route reads a thread: a customer never sees another customer's message. */
+        get: operations["listChannelThreads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/threads/{threadId}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Everything said in one place of a chat channel, newest first: what became a conversation's, what waits for review, what was kept as chatter or set aside as not a request, and what the team and the channel sent. */
+        get: operations["listChannelThreadItems"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -4519,6 +4594,85 @@ export interface components {
                     options: components["schemas"]["IntakeOptions"] | null;
                 }[];
             }[];
+        };
+        ChatItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            thread_id: string;
+            /** @enum {string} */
+            direction: "in" | "out";
+            /**
+             * @description bot: the channel's own message (a notice).
+             * @enum {string}
+             */
+            role: "customer" | "staff" | "bot";
+            sender: {
+                kind: string | null;
+                value: string | null;
+                name: string | null;
+            };
+            /** Format: uuid */
+            contact_id: string | null;
+            /** Format: uuid */
+            agent_id: string | null;
+            /** @description On a conversation's chat: a customer who is not the conversation's. */
+            is_other_customer: boolean;
+            body: string;
+            /** @description Its id on the channel. */
+            external_id: string | null;
+            /** @description The id on the channel of the message it answers. */
+            quote_external_id: string | null;
+            /**
+             * Format: uuid
+             * @description The conversation message it became.
+             */
+            message_id: string | null;
+            /** @enum {string} */
+            disposition: "unresolved" | "gathering" | "conversation" | "pending_review" | "not_request" | "staff" | "bot" | "archived";
+            disposition_reason: string | null;
+            /** Format: date-time */
+            occurred_at: string;
+            /** @description The files of an item that came in, as they were fetched; the conversation message it became has them as attachments. */
+            files: {
+                name: string;
+                content_type: string;
+                status: string;
+                size: number | null;
+                error: string | null;
+            }[];
+            /** @description On a conversation's chat: the item is part of this conversation. */
+            linked: boolean;
+            /** @enum {string|null} */
+            link_reason: "opened" | "gathered" | "command" | "ai" | "agent" | "reopen" | "reply" | "import" | null;
+        };
+        ChatPage: {
+            items: components["schemas"]["ChatItem"][];
+            /** @description The cursor of the next page; null on the last. */
+            next_cursor: string | null;
+        };
+        ChatThread: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            /** @enum {string} */
+            kind: "direct" | "group";
+            external_id: string;
+            name: string | null;
+            /**
+             * Format: uuid
+             * @description A one-to-one chat's customer.
+             */
+            contact_id: string | null;
+            opens_conversations: boolean;
+            /** Format: date-time */
+            last_item_at: string | null;
+            last_item: components["schemas"]["ChatItem"] | null;
+        };
+        ChatThreadPage: {
+            items: components["schemas"]["ChatThread"][];
+            next_cursor: string | null;
         };
         ChannelAIInput: {
             /** @description '' for the whole channel, or one of its type's scopes. */
@@ -10768,6 +10922,65 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listUnresolvedChatItems: {
+        parameters: {
+            query?: {
+                older_than?: number;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getConversationChat: {
+        parameters: {
+            query?: {
+                linked?: "only";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getChannelAI: {
         parameters: {
             query?: never;
@@ -10825,6 +11038,68 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["AILevelNotAllowed"];
+        };
+    };
+    listChannelThreads: {
+        parameters: {
+            query?: {
+                kind?: "direct" | "group";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of places */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatThreadPage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listChannelThreadItems: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getEmailChannelByID: {

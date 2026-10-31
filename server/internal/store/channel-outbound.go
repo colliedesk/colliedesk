@@ -656,6 +656,16 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 				return 0, fmt.Errorf("record sent ids: %w", err)
 			}
 		}
+		if result.Outcome == channels.OutcomeSent {
+			// A chat thread shows what the team and the channel said in it too.
+			first := ""
+			if len(ids) > 0 {
+				first = ids[0]
+			}
+			if err := recordSentItem(ctx, tx, claim, first, now); err != nil {
+				return 0, err
+			}
+		}
 		return 1, nil
 	})
 	if err != nil {

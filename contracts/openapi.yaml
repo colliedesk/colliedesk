@@ -1932,6 +1932,49 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channel-thread-items:
+    get:
+      operationId: listUnresolvedChatItems
+      x-permission: conversations:read
+      description: >
+        What customers said on chat channels, in places that open conversations, that nobody concluded on
+        yet (it arrived while the channel was off), oldest first. older_than keeps those older than so
+        many seconds.
+      parameters:
+        - {name: older_than, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 2592000}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 200}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 100}}
+      responses:
+        '200':
+          description: A page of items
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChatPage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/conversations/{id}/chat:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getConversationChat
+      x-permission: conversations:read
+      description: >
+        What was said in the chat places a conversation's messages came from, newest first: the customers'
+        messages (another customer of a group is marked is_other_customer), the team's replies and the
+        channel's notices, with which items are part of this conversation (linked) and how they came to it.
+        linked=only keeps the conversation's own. Empty for a conversation that came from no chat.
+      parameters:
+        - {name: linked, in: query, required: false, schema: {type: string, enum: [only]}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 200}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 100}}
+      responses:
+        '200':
+          description: A page of items
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChatPage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/channels/{id}/ai:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -1981,6 +2024,51 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/AILevelNotAllowed'}
+  /api/v1/channels/{id}/threads:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listChannelThreads
+      x-permission: conversations:read
+      description: >
+        The places of a chat channel (one-to-one chats and groups), most recently active first, each with
+        its newest item. Empty for a channel type without places (email, a web form). No public route
+        reads a thread: a customer never sees another customer's message.
+      parameters:
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [direct, group]}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 200}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 100}}
+      responses:
+        '200':
+          description: A page of places
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChatThreadPage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/threads/{threadId}/items:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: threadId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listChannelThreadItems
+      x-permission: conversations:read
+      description: >
+        Everything said in one place of a chat channel, newest first: what became a conversation's, what
+        waits for review, what was kept as chatter or set aside as not a request, and what the team and the
+        channel sent.
+      parameters:
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 200}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 100}}
+      responses:
+        '200':
+          description: A page of items
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChatPage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/channels/{id}/email:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -7803,6 +7891,70 @@ components:
                     source: {type: string, enum: [scope, channel, workspace], description: Where the level that runs is set.}
                     off_reason: {type: [string, 'null'], enum: [workspace_off, null]}
                     options: {anyOf: [{$ref: '#/components/schemas/IntakeOptions'}, {type: 'null'}], description: 'Intake only, with the defaults filled in.'}
+    ChatItem:
+      type: object
+      required: [id, thread_id, direction, role, sender, contact_id, agent_id, is_other_customer, body, external_id, quote_external_id, message_id, disposition, disposition_reason, occurred_at, files, linked, link_reason]
+      properties:
+        id: {type: string, format: uuid}
+        thread_id: {type: string, format: uuid}
+        direction: {type: string, enum: [in, out]}
+        role: {type: string, enum: [customer, staff, bot], description: 'bot: the channel''s own message (a notice).'}
+        sender:
+          type: object
+          required: [kind, value, name]
+          properties:
+            kind: {type: [string, 'null']}
+            value: {type: [string, 'null']}
+            name: {type: [string, 'null']}
+        contact_id: {type: [string, 'null'], format: uuid}
+        agent_id: {type: [string, 'null'], format: uuid}
+        is_other_customer: {type: boolean, description: 'On a conversation''s chat: a customer who is not the conversation''s.'}
+        body: {type: string}
+        external_id: {type: [string, 'null'], description: Its id on the channel.}
+        quote_external_id: {type: [string, 'null'], description: The id on the channel of the message it answers.}
+        message_id: {type: [string, 'null'], format: uuid, description: The conversation message it became.}
+        disposition: {type: string, enum: [unresolved, gathering, conversation, pending_review, not_request, staff, bot, archived]}
+        disposition_reason: {type: [string, 'null']}
+        occurred_at: {type: string, format: date-time}
+        files:
+          type: array
+          description: 'The files of an item that came in, as they were fetched; the conversation message it became has them as attachments.'
+          items:
+            type: object
+            required: [name, content_type, status, size, error]
+            properties:
+              name: {type: string}
+              content_type: {type: string}
+              status: {type: string}
+              size: {type: [integer, 'null']}
+              error: {type: [string, 'null']}
+        linked: {type: boolean, description: 'On a conversation''s chat: the item is part of this conversation.'}
+        link_reason: {type: [string, 'null'], enum: [opened, gathered, command, ai, agent, reopen, reply, import, null]}
+    ChatPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ChatItem'}}
+        next_cursor: {type: [string, 'null'], description: The cursor of the next page; null on the last.}
+    ChatThread:
+      type: object
+      required: [id, channel_id, kind, external_id, name, contact_id, opens_conversations, last_item_at, last_item]
+      properties:
+        id: {type: string, format: uuid}
+        channel_id: {type: string, format: uuid}
+        kind: {type: string, enum: [direct, group]}
+        external_id: {type: string}
+        name: {type: [string, 'null']}
+        contact_id: {type: [string, 'null'], format: uuid, description: A one-to-one chat's customer.}
+        opens_conversations: {type: boolean}
+        last_item_at: {type: [string, 'null'], format: date-time}
+        last_item: {anyOf: [{$ref: '#/components/schemas/ChatItem'}, {type: 'null'}]}
+    ChatThreadPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ChatThread'}}
+        next_cursor: {type: [string, 'null']}
     ChannelAIInput:
       type: object
       additionalProperties: false
