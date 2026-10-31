@@ -121,7 +121,8 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 			Message: "Check the channel settings."}
 	}
 	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
-		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired} {
+		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired,
+		channels.NoticeReopenNotFound: merged.Notices.ReopenNotFound, channels.NoticeReopenLegacy: merged.Notices.ReopenLegacy} {
 		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
 				Message: "Check the channel settings."}
