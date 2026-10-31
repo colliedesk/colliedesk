@@ -63,10 +63,17 @@ type Config struct {
 	OAuthBase   string
 	HTTP        *http.Client
 	Now         func() time.Time
+	// Background runs what follows a delivery after it was answered (reading its sender's name); a test
+	// runs it at once.
+	Background func(func())
 }
 
 // Adapter is the Zalo channel type.
-type Adapter struct{ config Config }
+type Adapter struct {
+	config Config
+	// lookups bounds the name lookups running at once (maxLookups).
+	lookups chan struct{}
+}
 
 // New returns the Zalo channel type.
 func New(config Config) *Adapter {
@@ -82,12 +89,15 @@ func New(config Config) *Adapter {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Adapter{config: config}
+	if config.Background == nil {
+		config.Background = func(f func()) { go f() }
+	}
+	return &Adapter{config: config, lookups: make(chan struct{}, maxLookups)}
 }
 
 func (a *Adapter) Definition() channels.Definition {
 	return channels.Definition{Type: Type, Identified: true, Name: "Zalo OA", Guide: "zalo.md",
-		Capabilities: []string{"threads", "attachments_in"}, ReplyTo: IdentityUser, WhenOff: channels.OffHold,
+		Capabilities: []string{"threads", "attachments_in", "attachments_out"}, ReplyTo: IdentityUser, WhenOff: channels.OffHold,
 		Scopes: []string{ScopeDirect, ScopeGroup}, IntakeScopes: []string{ScopeGroup}, SharedScopes: []string{ScopeGroup},
 		FileLimits: channels.FileLimits{PerFile: 25 << 20, PerEvent: 50 << 20},
 		Defaults: channels.Settings{JoinPolicy: channels.JoinPolicy{Kind: channels.JoinWithinDays, Days: 7},
@@ -359,6 +369,10 @@ func (config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (
 }
 
 func (config) Remove(ctx context.Context, tx pgx.Tx, channel channels.Channel) error {
+	// The names Zalo gave its customers go with it; their contacts keep theirs.
+	if _, err := tx.Exec(ctx, `DELETE FROM zalo_users WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID); err != nil {
+		return err
+	}
 	_, err := tx.Exec(ctx, `DELETE FROM zalo_channels WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID)
 	return err
 }
@@ -367,6 +381,8 @@ func (config) Remove(ctx context.Context, tx pgx.Tx, channel channels.Channel) e
 type snapshot struct {
 	staff  map[string]bool
 	groups map[string]string
+	// names are the customers' names Zalo gave (zalo_users).
+	names map[string]string
 }
 
 func (config) Snapshot(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
@@ -378,5 +394,18 @@ func (config) Snapshot(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 	for _, id := range s.Staff {
 		staff[id] = true
 	}
-	return snapshot{staff: staff, groups: s.Groups}, nil
+	rows, err := tx.Query(ctx, `SELECT user_id,name FROM zalo_users WHERE workspace_id=$1 AND channel_id=$2 AND name IS NOT NULL`, channel.WorkspaceID, channel.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	names := map[string]string{}
+	for rows.Next() {
+		var user, name string
+		if err := rows.Scan(&user, &name); err != nil {
+			return nil, err
+		}
+		names[user] = name
+	}
+	return snapshot{staff: staff, groups: s.Groups, names: names}, rows.Err()
 }

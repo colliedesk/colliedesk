@@ -149,7 +149,7 @@ func (inbound) Parse(_ context.Context, channel channels.Channel, snap any, raw 
 		customer = e.Recipient.ID
 	}
 	in := channels.Inbound{ExternalID: e.id(), SentAt: e.sentAt(), Scope: ScopeDirect,
-		Sender: channels.Sender{Identity: channels.Identity{Kind: IdentityUser, Value: customer}}}
+		Sender: channels.Sender{Identity: channels.Identity{Kind: IdentityUser, Value: customer}, Name: s.names[customer]}}
 	key := "user:" + customer
 	in.Place = &channels.Place{Kind: channels.PlaceDirect, ExternalID: key, OpensConversations: true}
 	if e.inGroup() {
@@ -167,7 +167,7 @@ func (inbound) Parse(_ context.Context, channel channels.Channel, snap any, raw 
 	switch {
 	case e.fromOA():
 		in.Role = channels.RoleStaff
-		in.Sender.Identity = channels.Identity{Kind: "zalo_oa", Value: e.oa()}
+		in.Sender.Identity, in.Sender.Name = channels.Identity{Kind: "zalo_oa", Value: e.oa()}, ""
 	case s.staff[e.Sender.ID]:
 		in.Role = channels.RoleStaff
 	}
@@ -191,6 +191,23 @@ func (inbound) Parse(_ context.Context, channel channels.Channel, snap any, raw 
 	if len(failed) > 0 {
 		meta["files_failed"] = failed
 		in.Text = strings.TrimSpace(in.Text + "\n[file not received: " + strings.Join(failed, ", ") + "]")
+	}
+	if in.Text == "" {
+		// A picture or a file sent without words says what it is.
+		var words []string
+		for _, item := range e.Message.Attachments {
+			switch {
+			case item.Type == "image":
+				words = append(words, "[picture]")
+			case item.Type == "video":
+				words = append(words, "[video]")
+			case item.Type == "file" && item.Payload.Name != "":
+				words = append(words, "[file: "+item.Payload.Name+"]")
+			case item.Type == "file":
+				words = append(words, "[file]")
+			}
+		}
+		in.Text = strings.Join(words, " ")
 	}
 	if in.Text == "" {
 		in.Text = "(no text)"

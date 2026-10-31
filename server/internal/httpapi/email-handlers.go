@@ -378,6 +378,10 @@ func (a *API) retryMessageDelivery(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusConflict, "not_failed", "Only a failed delivery can be retried.")
 		return
 	}
+	if errors.Is(err, store.ErrDeliveryFinal) {
+		writeError(response, http.StatusConflict, "delivery_final", "This reply would fail the same way again: write it again without what its channel cannot carry.")
+		return
+	}
 	if errors.Is(err, store.ErrOutboundNotReady) {
 		writeError(response, http.StatusConflict, "outbound_not_ready", strings.TrimPrefix(err.Error(), store.ErrOutboundNotReady.Error()+": "))
 		return

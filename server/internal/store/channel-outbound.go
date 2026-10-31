@@ -400,6 +400,9 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 	})
 }
 
+// ErrDeliveryFinal refuses to retry a delivery that would fail the same way (MessageDelivery.Retryable).
+var ErrDeliveryFinal = errors.New("this delivery would fail the same way again")
+
 func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
 	message, err := getMessage(ctx, tx, workspaceID, messageID)
 	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
@@ -407,6 +410,9 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if message.Delivery.Status != "failed" {
 		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	if !message.Delivery.Retryable {
+		return domain.Message{}, ErrDeliveryFinal
 	}
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {
@@ -572,11 +578,12 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 		var meta []byte
 		var cc []string
 		var origin string
-		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,c.id::text,c.subject,c.channel,o.meta
+		var notice *string
+		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,m.notice_kind,c.id::text,c.subject,c.channel,o.meta
 			FROM channel_outbox o JOIN messages m ON m.workspace_id=o.workspace_id AND m.id=o.message_id
 			JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 			WHERE o.workspace_id=$1 AND o.id=$2`, claim.WorkspaceID, claim.OutboxID).
-			Scan(&out.Message.ID, &out.Message.Body, &cc, &out.Message.CreatedAt, &out.Conversation.ID, &out.Conversation.Subject, &origin, &meta)
+			Scan(&out.Message.ID, &out.Message.Body, &cc, &out.Message.CreatedAt, &notice, &out.Conversation.ID, &out.Conversation.Subject, &origin, &meta)
 		if err != nil {
 			return out, fmt.Errorf("load delivery %s: %w", claim.OutboxID, err)
 		}
@@ -613,7 +620,8 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 				return out, fmt.Errorf("scan thread reference: %w", err)
 			}
 			out.References = append(out.References, id)
-			if kind == "incoming" {
+			// The received notice answers the message that opened the conversation, whatever came since.
+			if kind == "incoming" && (notice == nil || out.LastIncoming == "") {
 				out.LastIncoming = id
 			}
 		}
@@ -653,7 +661,7 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 	case result.Retryable:
 		set, args = `next_attempt_at=$4,last_error=$5,last_error_code=NULLIF($6,'')`, []any{next, result.Reason, result.Code}
 	default:
-		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,'')`, []any{result.Reason, result.Code}
+		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,''),final=$6`, []any{result.Reason, result.Code, result.Final}
 	}
 	var meta []byte
 	if len(result.Meta) > 0 {

@@ -235,7 +235,15 @@ and the new access token is stored before the new refresh token is. A reply's pl
 conversation's newest item of the channel (`Outbound.Place`, the query `recordSentItem` uses), so a
 group reply goes to its group. Every `oa_send_*` is the team's; a copy of what we sent is known by
 `channel_sent_ids` when Zalo answered its `message_id`, else it is kept as the team's item, never a
-customer's message.
+customer's message. A sender's name is read right after a delivery is answered (`Config.Background`):
+it goes to `zalo_users`, which the snapshot gives Parse, so a message parsed later carries it, and to
+what was stored before it was known (and a contact made while it was being read takes it from the next
+message: `contactForIdentity` names a contact still called by its identity); `looked_up_at` keeps Zalo
+from being asked more than once an hour for someone it has no name for (a refused token, the network or
+a 5xx gives the claim back), a group's member list (`group:<id>`) is read once for all its members, and
+at most four lookups run at once. The lookup never refreshes the token: only a send does, under the
+refresh token's lock. A picture of a reply is uploaded (`/v2.0/oa/upload/image`) and sent as a
+media template message of its own; that a group takes the same template is not confirmed live yet.
 
 ## Decisions
 

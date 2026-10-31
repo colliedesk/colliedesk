@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"io"
 	"log/slog"
 	"net"
@@ -147,6 +148,8 @@ type Config struct {
 	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
 	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
 	ExtraChannelTypes []channels.Adapter
+	// Zalo is where the Zalo type reaches Zalo; a test points it at a stand-in.
+	Zalo zalo.Config
 	// SwitchedOff are the features an operator switched off (serverconfig features.<name> = false). Their
 	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
 	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
@@ -320,7 +323,7 @@ func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Co
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat})
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: config.Zalo})
 	if len(config.ExtraChannelTypes) == 0 {
 		return registered
 	}
