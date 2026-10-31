@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -47,6 +48,9 @@ type Harness struct {
 	Sender channels.OutboundPart
 	// Secret is a value the type keeps sealed, to check it never shows; empty skips the check.
 	Secret string
+	// FetchClient fetches the files a type serves by link (a stand-in server of the test); nil keeps
+	// the pipeline's own.
+	FetchClient *http.Client
 }
 
 // Run runs the contract against the harness: what every channel type must do the same way.
@@ -58,7 +62,11 @@ func Run(t *testing.T, h Harness) {
 		t.Fatalf("the store's registry has no %s type", h.Type)
 	}
 	definition := adapter.Definition()
-	c := &contract{h: h, definition: definition, pipeline: pipeline.New(h.Store, nil), async: adapter.Inbound().Mode() == channels.Async}
+	journal := pipeline.New(h.Store, nil)
+	if h.FetchClient != nil {
+		journal = journal.WithFetchClient(h.FetchClient)
+	}
+	c := &contract{h: h, definition: definition, pipeline: journal, async: adapter.Inbound().Mode() == channels.Async}
 
 	t.Run("a new message opens one conversation with its contact and files", c.newMessage)
 	if definition.Identified {

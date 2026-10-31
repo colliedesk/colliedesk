@@ -841,9 +841,9 @@ test('following a workspace default that applies by itself asks first, as pickin
 
 test('a channel of a type the web app has no screens for still opens: its name and state, AI and History, and Remove', async () => {
   const CHAT = '66666666-6666-4666-8666-666666666666';
-  channelsApi.get.mockResolvedValue({ ...channel('email', { id: CHAT, type: 'zalo', name: 'Zalo HC Labs', summary: '', capabilities: [] }), config: { account: 'hclabs' } });
+  channelsApi.get.mockResolvedValue({ ...channel('email', { id: CHAT, type: 'line_oa', name: 'Line Shop', summary: '', capabilities: [] }), config: { account: 'shop' } });
   show(CHAT, {});
-  expect(await screen.findByRole('heading', { name: 'Zalo HC Labs' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Line Shop' })).toBeInTheDocument();
   expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['AI', 'History']);
   expect(screen.getByRole('tab', { name: 'AI' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('button', { name: 'Remove channel' })).toBeInTheDocument();

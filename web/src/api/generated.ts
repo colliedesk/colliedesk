@@ -6212,7 +6212,7 @@ export interface components {
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
-        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
+        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
         ConversationChannel: string;
         /**
          * @default updated_desc
@@ -7779,7 +7779,7 @@ export interface components {
             /** Format: date-time */
             connected_at: string;
         };
-        /** @description A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat. A test build may run another (the loopback chat stand-in), so a client shows a type it does not know by its name. A new type adds its value to the shipped types here and its configuration to ChannelConfig. */
+        /** @description A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat, zalo. A test build may run another (the loopback chat stand-in), so a client shows a type it does not know by its name. A new type adds its value to the shipped types here and its configuration to ChannelConfig. */
         ChannelType: string;
         ChannelState: {
             /**
@@ -7836,8 +7836,31 @@ export interface components {
             /** @description Exact origins (scheme://host[:port]) whose pages may embed the chat. */
             widget_origins: string[];
         };
+        /** @description A Zalo Official Account channel (docs/user/zalo.md). Its secrets (app_secret, oa_secret_key, access_token, refresh_token) go through PUT /api/v1/channels/{id}/credentials and are never shown. */
+        ZaloChannelConfig: {
+            /** @description The Official Account's id; one OA is one channel on the whole server. */
+            oa_id: string;
+            /** @description The Zalo app the OA is reached through. */
+            app_id: string;
+            /** @description The team's Zalo user ids: what they write in a group is the team's, never a customer's request. */
+            staff_user_ids: string[];
+            /** @description Group id to the organization its members are customers of. */
+            groups: {
+                [key: string]: string;
+            };
+            /** @description The app's one webhook, below the server's address, for the Zalo app's settings (/api/v1/channels/zalo/webhook). */
+            webhook_path: string;
+            /** @description The four secrets in order (app_secret, oa_secret_key, access_token, refresh_token): whether each is set, its last four characters and when it was last written (a token refresh too). Never a value. */
+            credentials: {
+                /** @enum {string} */
+                name: "app_secret" | "oa_secret_key" | "access_token" | "refresh_token";
+                hint: string | null;
+                /** Format: date-time */
+                set_at: string | null;
+            }[];
+        };
         /** @description A channel's configuration, by its type. A type this document does not describe yet (a test build's loopback chat stand-in, a chat type before its schema is written here) answers its own object, which a client shows nothing of. */
-        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"] | {
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"] | components["schemas"]["ZaloChannelConfig"] | {
             [key: string]: unknown;
         };
         ChannelDetail: components["schemas"]["Channel"] & {
@@ -7882,8 +7905,17 @@ export interface components {
             instructions?: string;
             widget_origins?: string[];
         };
+        /** @description oa_id and app_id are needed to add the channel; a field left out is kept. */
+        ZaloChannelConfigInput: {
+            oa_id?: string;
+            app_id?: string;
+            staff_user_ids?: string[];
+            groups?: {
+                [key: string]: string;
+            };
+        };
         /** @description A channel's configuration as its type takes it. */
-        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
+        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
         /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;

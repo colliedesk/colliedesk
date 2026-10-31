@@ -9417,10 +9417,11 @@ components:
       pattern: '^[a-z_]{1,40}$'
       description: >-
         How the conversation started: a channel type this server runs, or an origin that comes through no
-        channel. Values: email, web_form, help_chat, imported, agent, problem_report. A test build may run another type
+        channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type
         (the loopback chat stand-in), so a client names a value it does not know by itself.
         email: a customer's mail. web_form: the public web form.
         help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified).
+        zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in.
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
         also writes agent. problem_report: an agent's Report a problem.
@@ -11170,7 +11171,7 @@ components:
       type: string
       pattern: '^[a-z_]{1,40}$'
       description: >-
-        A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat.
+        A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat, zalo.
         A test build may run another (the loopback chat stand-in), so a client shows a type it does not know
         by its name. A new type adds its value to the shipped types here and its configuration to ChannelConfig.
     ChannelState:
@@ -11231,6 +11232,28 @@ components:
         suggestions: {type: array, maxItems: 4, items: {type: string, maxLength: 120}}
         instructions: {type: string, maxLength: 2000, description: 'Added to the AI''s instructions. The AI still answers only from published articles; instructions cannot add facts.'}
         widget_origins: {type: array, maxItems: 20, items: {type: string}, description: 'Exact origins (scheme://host[:port]) whose pages may embed the chat.'}
+    ZaloChannelConfig:
+      type: object
+      required: [oa_id, app_id, staff_user_ids, groups, webhook_path, credentials]
+      description: >-
+        A Zalo Official Account channel (docs/user/zalo.md). Its secrets (app_secret, oa_secret_key,
+        access_token, refresh_token) go through PUT /api/v1/channels/{id}/credentials and are never shown.
+      properties:
+        oa_id: {type: string, description: 'The Official Account''s id; one OA is one channel on the whole server.'}
+        app_id: {type: string, description: The Zalo app the OA is reached through.}
+        staff_user_ids: {type: array, items: {type: string}, description: 'The team''s Zalo user ids: what they write in a group is the team''s, never a customer''s request.'}
+        groups: {type: object, additionalProperties: {type: string}, description: Group id to the organization its members are customers of.}
+        webhook_path: {type: string, description: 'The app''s one webhook, below the server''s address, for the Zalo app''s settings (/api/v1/channels/zalo/webhook).'}
+        credentials:
+          type: array
+          description: 'The four secrets in order (app_secret, oa_secret_key, access_token, refresh_token): whether each is set, its last four characters and when it was last written (a token refresh too). Never a value.'
+          items:
+            type: object
+            required: [name, hint, set_at]
+            properties:
+              name: {type: string, enum: [app_secret, oa_secret_key, access_token, refresh_token]}
+              hint: {type: [string, 'null']}
+              set_at: {type: [string, 'null'], format: date-time}
     ChannelConfig:
       description: >-
         A channel's configuration, by its type. A type this document does not describe yet (a test build's
@@ -11240,6 +11263,7 @@ components:
         - {$ref: '#/components/schemas/EmailChannelConfig'}
         - {$ref: '#/components/schemas/WebFormChannelConfig'}
         - {$ref: '#/components/schemas/HelpChatChannelConfig'}
+        - {$ref: '#/components/schemas/ZaloChannelConfig'}
         - {type: object, additionalProperties: true}
     ChannelDetail:
       allOf:
@@ -11292,11 +11316,22 @@ components:
         suggestions: {type: array, maxItems: 4, items: {type: string, maxLength: 120}}
         instructions: {type: string, maxLength: 2000}
         widget_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
+    ZaloChannelConfigInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: oa_id and app_id are needed to add the channel; a field left out is kept.
+      properties:
+        oa_id: {type: string, pattern: '^[0-9]{1,40}$'}
+        app_id: {type: string, pattern: '^[0-9]{1,40}$'}
+        staff_user_ids: {type: array, maxItems: 200, items: {type: string, pattern: '^[0-9]{1,40}$'}}
+        groups: {type: object, maxProperties: 500, additionalProperties: {type: string, maxLength: 200}}
     ChannelConfigInput:
       description: A channel's configuration as its type takes it.
       oneOf:
         - {$ref: '#/components/schemas/EmailChannelConfigInput'}
         - {$ref: '#/components/schemas/WebFormChannelConfigInput'}
+        - {$ref: '#/components/schemas/ZaloChannelConfigInput'}
         - {$ref: '#/components/schemas/HelpChatChannelConfigInput'}
     ChannelSettings:
       type: object

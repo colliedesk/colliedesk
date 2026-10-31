@@ -221,6 +221,22 @@ itself in a conversation (the received notice) carries `messages.notice_kind`, a
 whether the team replied (`last_public_kind`, Results, the setup step, usage counts, the reply conflict,
 an automatic draft) skips it.
 
+## Zalo
+
+A Zalo app has one webhook for every OA that authorized it, so the route finds the channel by the
+delivery's OA (`oa_id`, else the sender of an `oa_send_*`, else the recipient) and only then checks the
+signature with that channel's `oa_secret_key` and `app_id` (`RouteKit.Credential`); an OA no channel is
+answers 200 and is dropped, as Zalo sends the app's events of every OA here. A delivery whose signature
+does not match answers the same 200 (no probe tells which OAs are here); one of the channel's own app is
+noted in `zalo_channels.signature_failed_at` at most once a minute (`RouteKit.InWorkspace`), so the
+channel's state shows it, and a delivery signed right clears it: Zalo does not deliver a refused one again. Nothing calls Zalo but a send: the access token is refreshed only when
+Zalo refuses it, under the lock of the refresh token (`RefreshCredential`, a refresh token is used once),
+and the new access token is stored before the new refresh token is. A reply's place is the place of the
+conversation's newest item of the channel (`Outbound.Place`, the query `recordSentItem` uses), so a
+group reply goes to its group. Every `oa_send_*` is the team's; a copy of what we sent is known by
+`channel_sent_ids` when Zalo answered its `message_id`, else it is kept as the team's item, never a
+customer's message.
+
 ## Decisions
 
 - **Journal timing.** An Async type (a chat webhook that must answer within seconds) commits the raw

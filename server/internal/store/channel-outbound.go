@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -582,6 +583,20 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 		out.Message.CC, out.Conversation.Origin, out.Prepared = cc, channels.Type(origin), meta
 		if out.Recipient, err = replyRecipient(ctx, tx, claim.WorkspaceID, out.Conversation.ID, channel.ID); err != nil {
 			return out, err
+		}
+		// A chat reply goes to the place the conversation's newest item of this channel is in, the place
+		// recordSentItem writes it in once sent.
+		var place channels.Place
+		err = tx.QueryRow(ctx, `SELECT t.kind,t.external_id,COALESCE(t.name,'') FROM conversation_thread_items l
+			JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id AND i.channel_id=$3
+			JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
+			WHERE l.workspace_id=$1 AND l.conversation_id=$2 AND l.unlinked_at IS NULL ORDER BY l.linked_at DESC,l.id DESC LIMIT 1`,
+			claim.WorkspaceID, out.Conversation.ID, channel.ID).Scan(&place.Kind, &place.ExternalID, &place.Name)
+		switch {
+		case err == nil:
+			out.Place = &place
+		case !errors.Is(err, pgx.ErrNoRows):
+			return out, fmt.Errorf("load reply place: %w", err)
 		}
 		prefix := string(channel.Type) + ":"
 		// A message moved in from another customer's conversation, or taken back to the queue, is not this

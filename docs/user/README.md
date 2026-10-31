@@ -17,6 +17,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Email channel](email-channel.md)
 - [Web form](web-form.md)
 - [Help chat](help-chat.md)
+- [Zalo OA](zalo.md)
 - [Review: chat messages that wait for a person](review.md)
 - [Plan and billing](billing.md) (hosted cloud only)
 - [Tags](tags.md)

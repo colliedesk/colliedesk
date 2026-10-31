@@ -12,7 +12,7 @@ import (
 )
 
 // shippedTypes are the types this server registers; the frame must not name any of them.
-var shippedTypes = []string{"email", "web_form", "help_chat"}
+var shippedTypes = []string{"email", "web_form", "help_chat", "zalo"}
 
 // frameFiles are the shared code every type goes through. A type's name in them means the frame
 // treats that type apart, which is what adding a type must never need (docs/internals/channels.md).

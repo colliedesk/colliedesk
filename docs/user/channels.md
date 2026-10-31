@@ -1,8 +1,8 @@
 # Channels
 
 A channel is one way customers reach your workspace: your [support email](email-channel.md), your
-website's [web form](web-form.md), or the [help chat](help-chat.md) where an AI answers from your
-help articles and a customer can hand the chat to your team. In **Settings**, **Channels** has a
+website's [web form](web-form.md), the [help chat](help-chat.md) where an AI answers from your
+help articles and a customer can hand the chat to your team, or a [Zalo OA](zalo.md). In **Settings**, **Channels** has a
 page per type under it:
 
 - **Email** (`/settings/channels/type/email`): the setup of your support address, then the table of

@@ -533,6 +533,21 @@ func (k channelRouteKit) WriteError(w http.ResponseWriter, status int, code, mes
 	writeError(w, status, code, message)
 }
 
+func (k channelRouteKit) Credential(ctx context.Context, channel channels.Channel, name string) (string, bool, error) {
+	if channel.Type != k.kind {
+		return "", false, channels.ErrNotFound
+	}
+	value, _, found, err := k.api.store.OpenChannelCredential(ctx, channel.WorkspaceID, channel.ID, name)
+	return value, found, err
+}
+
+func (k channelRouteKit) InWorkspace(ctx context.Context, channel channels.Channel, fn func(pgx.Tx) error) error {
+	if channel.Type != k.kind {
+		return channels.ErrNotFound
+	}
+	return k.api.store.InWorkspace(ctx, channel.WorkspaceID, fn)
+}
+
 func (k channelRouteKit) Channel(ctx context.Context, workspaceID, id string) (channels.Channel, bool, error) {
 	if id == "" {
 		channel, found, err := k.api.store.DefaultChannelOfType(ctx, workspaceID, k.kind)

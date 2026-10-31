@@ -339,6 +339,12 @@ type RouteKit interface {
 	FindChannel(ctx context.Context, externalAccount string) (Channel, bool, error)
 	// WriteError writes the API's error body.
 	WriteError(w http.ResponseWriter, status int, code, message string)
+	// Credential opens a secret of a channel of the route's type (a webhook's signing key); found is
+	// false when none is stored.
+	Credential(ctx context.Context, channel Channel, name string) (value string, found bool, err error)
+	// InWorkspace runs fn in a transaction of a channel's workspace (the type records what it saw of a
+	// delivery in its own table).
+	InWorkspace(ctx context.Context, channel Channel, fn func(pgx.Tx) error) error
 }
 
 // HelpCenterRoute is one route of a type on the help center: Path is below the help center's root
