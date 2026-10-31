@@ -37,6 +37,14 @@ type ResponseTargets struct {
 	MyAlertEmail *bool `json:"my_alert_email,omitempty"`
 }
 
+// ErrTargetsChanged refuses a change made from a read someone saved over since (UpdatedAt given and not
+// the stored one): nothing changes. Current is what is stored.
+type ErrTargetsChanged struct{ Current ResponseTargets }
+
+func (e *ErrTargetsChanged) Error() string {
+	return "the response targets were changed since they were read"
+}
+
 // ResponseTargetsError says which part of the document is wrong.
 type ResponseTargetsError struct{ Field, Message string }
 
@@ -170,6 +178,19 @@ func (s *Store) SetResponseTargets(ctx context.Context, workspaceID, agentID str
 		return ResponseTargets{}, &ResponseTargetsError{Field: "warn_before_minutes", Message: "Use 0 to 10080 minutes."}
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ResponseTargets, error) {
+		// Saved from a read: only if nobody saved since (no updated_at keeps the last write winning).
+		if input.UpdatedAt != nil {
+			if _, err := tx.Exec(ctx, `SELECT 1 FROM response_targets WHERE workspace_id=$1 FOR UPDATE`, workspaceID); err != nil {
+				return ResponseTargets{}, err
+			}
+			current, err := readResponseTargets(ctx, tx, workspaceID)
+			if err != nil {
+				return ResponseTargets{}, err
+			}
+			if current.UpdatedAt != nil && !current.UpdatedAt.Truncate(time.Microsecond).Equal(input.UpdatedAt.Truncate(time.Microsecond)) {
+				return ResponseTargets{}, &ErrTargetsChanged{Current: current}
+			}
+		}
 		policy, err := targetsPolicy(ctx, tx, workspaceID, input)
 		if err != nil {
 			return ResponseTargets{}, err
