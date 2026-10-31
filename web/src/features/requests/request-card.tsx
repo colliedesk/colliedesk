@@ -75,6 +75,8 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
   const approve = () => void run(async () => { setOutcome(await onApprove(item.id)); track('agent_request_decided', { decision: 'approved' }); });
   // Turning a coding agent on is approved in its detail, after the person ticks the data consent there.
   const consent = current.method === 'PUT' && /connectors\/\{kind\}$/.test(current.route);
+  // A status change whose notices are empty tells no customer, whatever its title (written when the token asked) says.
+  const tellsNobody = current.notices?.length === 0;
   const reply = current.kind === 'reply_draft' ? replyCall(current.body) : undefined;
   const edited = current.kind === 'reply_draft' ? replyCall(current.edited_body) : undefined;
   return (
@@ -83,6 +85,8 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
         <h3 id={headingId}>{current.summary}</h3>
         <span className={`badge badge-request-${current.status}`}>{requestsMessages.requestStatus[current.status]}</span>
       </header>
+      {/* The title is what the token asked; when its change tells nobody after all, that is said right under it. */}
+      {tellsNobody && <p className="warning-note" role="note">{current.status === 'pending' ? requestsMessages.noticeNoneNow : current.status === 'approved' ? requestsMessages.noticeNoneSent : requestsMessages.noticeNoneWould}</p>}
       <p className="muted-copy">{requestsMessages.requestedBy(person, current.requested_by.token_label, current.requested_by.token_scope)}</p>
       {/* A custom token's own list, as it was when it asked: what the person approving extends. */}
       {current.requested_by.token_scope === 'custom' && current.requested_by.token_permissions.length > 0 && <details className="token-permissions">
@@ -99,7 +103,7 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
         : isSavedReplyRequest(current) ? <SavedReplyProposal item={current} />
           : autofixRoute(current.route) ? <Part part={autofixPart} failed={<PartUnavailable />} render={(autofix) => <autofix.AutofixRequestDetail item={current} result={outcome?.result}
             onApprove={consent && canApprove && current.status === 'pending' && !current.requested_by.token_revoked ? approve : undefined} busy={busy} />} />
-            : current.notices && current.notices.length === 0 && current.status !== 'pending' ? <p className="muted-copy">{requestsMessages.noticeNoneSent}</p>
+            : tellsNobody ? null
             : current.notices?.length ? <StatusNotices notices={current.notices} single={current.route === '/api/v1/conversations/{id}'}
                 when={current.status === 'pending' ? 'now' : current.status === 'approved' ? 'done' : 'never'} />
               : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}

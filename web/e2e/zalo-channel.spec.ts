@@ -11,6 +11,25 @@ import { startFakeZalo } from './support/zalo';
 // channel's webhook. Nothing goes to Zalo: the OA's replies are not part of this journey.
 const baseURL = servers.main;
 
+// tipFits hovers a control and says whether its tooltip (data-tip, drawn by ::after) is inside every box that
+// clips it sideways: the tip is not an element, so its box is worked out from its computed style.
+async function tipFits(page: import('@playwright/test').Page, selector: string) {
+  await page.locator(selector).hover();
+  return page.evaluate((sel) => {
+    const control = document.querySelector(sel) as HTMLElement;
+    const style = getComputedStyle(control, '::after');
+    const width = parseFloat(style.width);
+    const box = control.getBoundingClientRect();
+    const [left, right] = style.right === '0px' ? [box.right - width, box.right] : [box.left + box.width / 2 - width / 2, box.left + box.width / 2 + width / 2];
+    for (let node = control.parentElement; node; node = node.parentElement) {
+      if (getComputedStyle(node).overflowX === 'visible') continue;
+      const clip = node.getBoundingClientRect();
+      if (left < clip.left - 0.5 || right > clip.right + 0.5) return `${node.className}: ${Math.round(left)}–${Math.round(right)} outside ${Math.round(clip.left)}–${Math.round(clip.right)}`;
+    }
+    return style.display === 'none' ? 'hidden' : 'fits';
+  }, selector);
+}
+
 test('zalo channel: an admin connects an OA, adds its tokens, links a group that wrote to an organization, adds staff and a command', async ({ page }) => {
   const suffix = uniqueSuffix();
   // One OA is one channel on the whole server: every run gets its own.
@@ -208,6 +227,9 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   }).toPass({ timeout: 20_000 });
   const resolve = page.getByRole('button', { name: /^Resolve and tell the customer on / });
   await expect(resolve).toHaveText('Resolve and tell');
+  // Its arrow's tip is read whole: the thread pane clips sideways.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  expect(await tipFits(page, 'summary[aria-label="More ways to resolve"]')).toBe('fits');
 
   // At 390 px nothing scrolls sideways, the quiet menu open or closed.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -244,9 +266,11 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   await page.locator('.row-check input').first().check();
   await expect(page.getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
   expect(await fits('.bulk-bar')).toEqual([]);
+  expect(await tipFits(page, '.bulk-actions > button:last-child')).toBe('fits');
   for (const width of [768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     expect(await fits('.bulk-bar')).toEqual([]);
+    expect(await tipFits(page, '.bulk-actions > button:last-child')).toBe('fits');
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${baseURL}/settings/channels`);

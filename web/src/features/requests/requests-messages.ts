@@ -34,6 +34,8 @@ export const requestsMessages = {
     return told === 1 ? `${channel} ${verb} 1 customer${after}:` : `${channel} ${verb} ${told} customers${after}, each with their own code. For example, ${ref}:`;
   },
   noticeNoneSent: 'No customer was told: the status was already set, or the change did not go through.',
+  noticeNoneNow: 'Approving it now tells no customer: the status is set already.',
+  noticeNoneWould: 'It would have told no customer.',
   noticeMoreChannels: (count: number) => `And ${count} more ${count === 1 ? 'channel' : 'channels'}.`,
   onlyAdminApproves: 'Only an admin can approve this.',
   onlyOwnerApproves: 'Only the person who owns this token can approve it: it changes their own settings.',

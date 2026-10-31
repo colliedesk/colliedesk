@@ -257,3 +257,15 @@ test('an approved bulk change says how many it was to tell, a few seconds after,
   expect(screen.getByText('OA one was to tell 8 customers a few seconds after approval (not one whose status changed again before then), each with their own code. For example, CHD-1:')).toBeInTheDocument();
   expect(screen.queryByText(/ told 8/)).not.toBeInTheDocument();
 });
+
+test('a status change that tells nobody says so right under its title, waiting or approved, and shows no call body', () => {
+  const { unmount } = render(<RequestCard item={agentRequest({ summary: 'Set CHD-2026-0142 to Pending and tell the customer on Hảo Đạt OA: Đang chờ.', notices: [] })} timezone="UTC" {...actions()} />);
+  const note = screen.getByRole('note');
+  expect(note).toHaveTextContent('Approving it now tells no customer: the status is set already.');
+  expect(screen.getByRole('heading', { level: 3 }).closest('header')?.nextElementSibling).toBe(note);
+  expect(screen.queryByText(/"status"/)).not.toBeInTheDocument();
+  unmount();
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices: [] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByRole('note')).toHaveTextContent(/No customer was told/);
+});

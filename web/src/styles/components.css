@@ -658,6 +658,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 /* A closed menu's choices take no room: never wider than the bar or the header that holds them. */
 .action-menu:not([open]) > .action-popover { display: none; }
+/* A tip of a control at the right edge of the list or the thread hangs from its right edge, so the pane that
+   clips sideways never cuts it: the last bulk action (Clear selection) and the header's quiet arrow. */
+.bulk-actions > [data-tip]:last-child::after, .status-split .action-menu > summary[data-tip]::after { left: auto; right: 0; translate: 0 0; }
 /* Nor does a hidden tip in the bulk bar or the header's actions: it shows (at once) on hover or focus only. */
 .bulk-bar [data-tip]:not(:hover, :focus-visible)::after, .timeline-actions [data-tip]:not(:hover, :focus-visible)::after { display: none; }
 .action-popover button { justify-content: flex-start; gap: var(--space-2); min-height: 30px; border-color: transparent; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2); font-weight: 400; }
