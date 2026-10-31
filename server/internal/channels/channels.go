@@ -156,7 +156,7 @@ const DefaultUnmatchedEverySeconds = 300
 
 // NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
 // sends the notice. A placeholder of no list is refused when the settings are saved.
-var NoticePlaceholders = map[string][]string{NoticeReceived: {}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
+var NoticePlaceholders = map[string][]string{NoticeReceived: {"ref"}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
 	NoticeAskDescription: {}, NoticeExpired: {}}
 
 // noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
