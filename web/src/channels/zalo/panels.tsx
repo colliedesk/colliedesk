@@ -37,6 +37,10 @@ function useReload(channelID: string) {
 
 // ---------- Connect ----------
 
+// What the connect form could not store on the new channel, read by its Connection tab.
+interface ConnectFailure { name: 'app_secret' | 'oa_secret_key'; reason: string }
+const connectFailedKey = (channelID: string) => ['zalo-connect-failed', channelID];
+
 // Connect adds the OA with its ids and the two secrets that check what Zalo sends; the tokens come after,
 // on the Connection tab (the channel takes deliveries without them and sends nothing).
 function Connect({ canManage, create }: ConnectProps) {
@@ -47,12 +51,22 @@ function Connect({ canManage, create }: ConnectProps) {
   const [oaSecret, setOASecret] = useState('');
   const [checked, setChecked] = useState(false);
   const id = useId();
+  const client = useQueryClient();
   const save = useMutation({
     mutationFn: () => create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: { oa_id: oaID.trim(), app_id: appID.trim() } },
       async (created) => {
+        // Each secret on its own: one refused (a server without MAILBOX_TOKEN_KEYS) keeps neither the
+        // channel nor the other secret from being stored, and Connection says what was not.
+        const failed: ConnectFailure[] = [];
         for (const [secret, value] of [['app_secret', appSecret], ['oa_secret_key', oaSecret]] as const) {
-          if (value.trim()) await channelsApi.setCredential(created.id, secret, value.trim());
+          if (!value.trim()) continue;
+          try {
+            await channelsApi.setCredential(created.id, secret, value.trim());
+          } catch (error) {
+            failed.push({ name: secret, reason: refusal(error) });
+          }
         }
+        if (failed.length > 0) client.setQueryData(connectFailedKey(created.id), failed);
       }),
   });
   const feedback = useSaveFeedback(saveState(save));
@@ -93,6 +107,10 @@ const configOf = (channel: ChannelDetail) => channel.config as ZaloConfig;
 
 function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
   const config = configOf(channel);
+  const client = useQueryClient();
+  // A secret the connect form could not store, until one is set.
+  const failed = (client.getQueryData<ConnectFailure[]>(connectFailedKey(channel.id)) ?? [])
+    .filter((item) => !config.credentials.find((credential) => credential.name === item.name)?.set_at);
   const url = `${window.location.origin}${config.webhook_path}`;
   const credential = (name: SecretName) => config.credentials.find((item) => item.name === name);
   const [editing, setEditing] = useState<'app_secret' | 'oa_secret_key' | 'tokens'>();
@@ -125,6 +143,7 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
     </section>
     <section className="zl-block" aria-labelledby={`${channel.id}-secrets`}><h3 id={`${channel.id}-secrets`}>{m.secrets}</h3>
       <p className="lead">{m.secretsLead}</p>
+      {failed.length > 0 && <p className="notice" role="alert"><span>{failed.map((item) => m.connectFailed(channel.name, m.secretInline[item.name], item.reason)).join(' ')}</span></p>}
       <div className="zl-rows">
         {secretRow('oa_secret_key')}
         {secretRow('app_secret')}
@@ -286,6 +305,7 @@ function Staff({ channel, canManage, timezone }: ChannelPanelProps) {
   const direct = useThreads(channel.id, 'direct');
   const groups = useThreads(channel.id, 'group');
   const known = [...people(direct.data?.pages), ...people(groups.data?.pages)];
+  const nameKnown = (id: string) => Boolean(known.find((person) => person.id === id)?.name);
   const nameOf = (id: string) => known.find((person) => person.id === id)?.name ?? m.uid(id);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string>();
@@ -302,7 +322,7 @@ function Staff({ channel, canManage, timezone }: ChannelPanelProps) {
       ? <p className="notice notice-plain" role="status"><span>{m.noStaff}</span>{addButton && <span className="notice-actions">{addButton}</span>}</p>
       : <>
           <div className="zl-rows" role="list" aria-label={m.staffLabel}>
-            {staff.map((id) => <div className="zl-row zl-row-two" role="listitem" key={id}><div><strong>{nameOf(id)}</strong><small className="mono">{m.uid(id)}</small></div>
+            {staff.map((id) => <div className="zl-row zl-row-two" role="listitem" key={id}><div>{nameKnown(id) ? <><strong>{nameOf(id)}</strong><small className="mono">{m.uid(id)}</small></> : <strong className="mono">{m.uid(id)}</strong>}</div>
               <div className="zl-actions">{canManage && <button type="button" aria-label={m.removeStaff(nameOf(id))} onClick={() => { setDone(undefined); setRemoving(id); }}>{m.removeShort}</button>}</div></div>)}
           </div>
           {addButton && <span className="button-row">{addButton}</span>}
@@ -343,7 +363,7 @@ function StaffDialog({ channel, people: candidates, timezone, onClose, onAdded }
     {candidates.length > 0 && <fieldset className="field zl-pick"><legend className="field-label">{m.recent}</legend>
       {candidates.slice(0, 8).map((person) => <label className="check-row" key={person.id}>
         <input type="radio" name={`${id}-uid`} checked={!pasted.trim() && picked === person.id} onChange={() => { change.reset(); setPasted(''); setPicked(person.id); }} />
-        <span>{m.wrote(person.name ?? m.uid(person.id), person.id, person.at ? formatDate(person.at, timezone) : m.none)}</span></label>)}
+        <span>{m.wrote(person.name, person.id, person.at ? formatDate(person.at, timezone) : m.none)}</span></label>)}
     </fieldset>}
     <Field id={id} label={m.orPaste} error={error} help={m.pasteHint}>{(props) => <input {...props} className="zl-mono-input" inputMode="numeric" autoComplete="off" value={pasted}
       onChange={(event) => { change.reset(); setPasted(event.target.value); }} />}</Field>
