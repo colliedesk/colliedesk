@@ -236,16 +236,18 @@ const reviewRoute = createRoute({
   path: '/review',
   validateSearch: (search: Record<string, unknown>): ReviewSearch => ({
     ...(search.tab === 'dismissed' || search.tab === 'decided' ? { tab: search.tab } : {}),
-    ...(typeof search.channel === 'string' && typeof search.scope === 'string' ? { channel: search.channel, scope: search.scope } : {}),
+    // A channel alone filters by the channel; its scope narrows it further.
+    ...(typeof search.channel === 'string' && search.channel !== '' ? { channel: search.channel } : {}),
+    ...(typeof search.channel === 'string' && typeof search.scope === 'string' && search.scope !== '' ? { scope: search.scope } : {}),
   }),
   component: function Review() {
     const { tab, channel, scope } = reviewRoute.useSearch();
     const navigate = useNavigate();
     return <Part part={reviewRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ReviewRoute }) => <ReviewRoute tab={tab ?? 'waiting'}
-      filter={channel && scope ? `${channel}:${scope}` : ''}
+      filter={channel ? `${channel}:${scope ?? ''}` : ''}
       onChange={(next, filter) => {
         const [nextChannel, nextScope] = filter.split(':');
-        void navigate({ to: '/review', search: { ...(next === 'waiting' ? {} : { tab: next }), ...(filter ? { channel: nextChannel, scope: nextScope } : {}) }, replace: true });
+        void navigate({ to: '/review', search: { ...(next === 'waiting' ? {} : { tab: next }), ...(filter ? { channel: nextChannel, ...(nextScope ? { scope: nextScope } : {}) } : {}) }, replace: true });
       }} />} />;
   },
 });

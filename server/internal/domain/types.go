@@ -168,7 +168,10 @@ type ChannelRef struct {
 
 // ChannelRepliesVia is the channel replies leave through.
 type ChannelRepliesVia struct {
-	ID      string `json:"id"`
+	ID string `json:"id"`
+	// Type is the channel's type: what a client reads to know how the replies leave (email settings only
+	// for an email channel).
+	Type    string `json:"type"`
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
 	// InsteadOf is the channel the replies would leave from, removed, when the default stands in for it.

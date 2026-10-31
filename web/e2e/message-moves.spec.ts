@@ -29,10 +29,14 @@ test('message moves: the rules add a reply, an agent splits it out, undo puts it
   await sendLoopback(page.request, origin, account, [{ id: `a2-${suffix}`, from: 'a', name: 'Minh', group: 'g1', text: 'Also the invoice total is wrong', reference: `a1-${suffix}` }]);
   await expect.poll(async () => ((await (await page.request.get(`${origin}/api/v1/conversations/${conversation}/messages`)).json()) as { items: unknown[] }).items.length, { timeout: 30_000 }).toBe(2);
 
+  // A chat channel has no email settings; the conversation never asks for them.
+  const refused: string[] = [];
+  page.on('response', (response) => { if (response.status() >= 400 && /\/api\/v1\/channels\/[^/]+\/email$/.test(response.url())) refused.push(response.url()); });
   await page.goto(`${origin}/conversations/${conversation}`);
   const timeline = page.getByRole('region', { name: 'Timeline' });
   const reply = timeline.getByRole('article').filter({ hasText: 'Also the invoice total is wrong' });
   await expect(reply).toContainText('Added: a reply to a message here');
+  expect(refused).toEqual([]);
 
   // Split the reply into a conversation of its own.
   await reply.getByLabel('Move this message', { exact: true }).first().click();

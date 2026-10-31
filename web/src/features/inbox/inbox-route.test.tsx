@@ -966,7 +966,7 @@ test('with two mailboxes the composer names the one a reply leaves from', async 
 // The composer speaks of the mailbox the conversation's replies leave from, not of the default one.
 test('the composer warns about the mailbox a reply leaves from, and leads to that mailbox', async () => {
   const navigate = vi.spyOn(testRouter, 'navigate');
-  const sales = { id: '55555555-5555-4555-8555-555555555555', name: 'Sales', enabled: true };
+  const sales = { id: '55555555-5555-4555-8555-555555555555', type: 'email', name: 'Sales', enabled: true };
   const ref = { id: sales.id, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { ...sales, instead_of: null } };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
   const settings = (address: string, gmail: 'connected' | 'failed') => ({ channel: { support_address: address, domain_verified_at: null }, inbound_url: 'https://desk.example.com/x',
@@ -1135,4 +1135,24 @@ test('a hidden guide shows nothing, even though its data left with the session',
   await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
+});
+
+// A chat conversation's replies leave through its chat channel: no email settings are asked for it.
+test('a conversation whose replies leave through a chat channel asks for no email settings', async () => {
+  const chat = { id: '88888888-8888-4888-8888-888888888888', type: 'zalo', name: 'Zalo HC Labs', enabled: true };
+  const ref = { id: chat.id, type: 'zalo', name: chat.name, enabled: true, deleted: false, replies_via: { ...chat, instead_of: null } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'zalo', channel_ref: ref };
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.emailChannelOf.mockClear();
+  testRouter.params = { conversationId: alpha.id };
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  await waitFor(() => expect(api.messages).toHaveBeenCalled());
+  // A chat channel has no email settings: asking for them would be refused (404).
+  expect(api.emailChannelOf).not.toHaveBeenCalled();
 });

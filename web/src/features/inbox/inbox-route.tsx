@@ -178,10 +178,12 @@ export function InboxRoute() {
   // Fetched once and shared with Settings, so the picker opens from memory.
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
   // How replies leave is read for the mailbox the open conversation's replies leave from; the default
-  // one for a conversation no channel carries yet.
-  const senderID = selected?.channel_ref?.replies_via?.id;
+  // one for a conversation no channel carries yet. Replies that leave through another type (a chat
+  // channel) have no mailbox to read.
+  const repliesVia = selected?.channel_ref?.replies_via;
+  const senderID = repliesVia?.id;
   const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
-    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()) });
+    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()), enabled: !repliesVia || repliesVia.type === 'email' });
   const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types;
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
   // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose

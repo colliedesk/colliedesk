@@ -89,3 +89,8 @@ test('more cards load on request', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
   expect(onMore).toHaveBeenCalled();
 });
+
+test('one conversation reads in the singular', () => {
+  render(<ReviewPage {...props({ stats: { days: 7, gatherings: 1, by_state: { created: 1 }, decided_by: {}, fallback: 0, ai_decisions: 0, ai_corrected: 0 } })} />);
+  expect(screen.getByText('Last 7 days: 1 card, 1 became a conversation')).toBeInTheDocument();
+});

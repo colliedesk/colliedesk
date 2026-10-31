@@ -233,7 +233,9 @@ feature is on.
 
 Email and web forms have no intake: every message or form sent is a conversation, as the channel's
 rules always made it, and triage and drafts run after it is created. Intake is for chat channels,
-where many short messages arrive and some are not requests.
+where many short messages arrive and some are not requests. **Chat intake** has its row in Built-in AI
+only once the workspace has a chat channel, and its default for channels is Off or Suggest: Auto is set
+on each chat channel's scope, where its readiness is known.
 
 When a feature moves to another provider, or is turned on again, its consent is new: every channel
 that ran it by itself goes a step down (Auto to Suggest; drafts written by themselves to drafts asked
@@ -251,6 +253,15 @@ the default. The same is `PUT /api/v1/channels/{id}/ai/{slot}` and the MCP tools
 the channel's history. An AI agent lowers a level with an admin token; raising one (or loosening intake's
 settings) always becomes a [request a person approves](agent-requests.md).
 
+On a chat channel, the AI tab has an **Intake** row for each scope that collects messages, and under the
+table, for each scope where intake does more than the rules, its **Intake settings**: how sure AI must be
+to open, add or set aside on its own (each with its default shown), never adding alone while the customer
+has two or more open conversations, how long a resolved conversation can be reopened, when a card is too
+old to decide alone, what AI reads besides the messages (a source that needs a consent says so, with a link
+to Built-in AI), the words and patterns to hide or mask (below) and the channel's own instructions. A
+**Last 7 days** line says how many cards came, how many AI decided by itself, how many of its decisions
+people changed and how many wait, with a link to them in [Review](review.md).
+
 Before intake's AI reads a chat, names become "Customer A" or "Team 1", passwords and codes are hidden,
 and phone numbers, email addresses, IBANs and the numbers after an English account or ID word ("account
 number", "passport") are masked. A channel in another language adds its own words in intake's settings:
@@ -262,8 +273,9 @@ of 200 characters; a pattern that can match no character at all (an empty string
 Taking a word or a pattern out masks less, so it needs the approval raising AI needs.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
-once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with
-`colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+once an admin agreed to each: in **Settings → Built-in AI** under Chat intake (**Images customers sent**,
+**The customer's profile**, each a switch that gives or takes back the consent), or with
+`colliedesk_ai_source_consent_request` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
 on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
 on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at
@@ -296,6 +308,17 @@ which needs the approval raising AI needs). Readiness is `GET /api/v1/channels/{
 a month costs) and the MCP tool `colliedesk_channel_ai_intake_readiness_get`; evaluations are
 `POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record_request`,
 which always waits for a person, and `colliedesk_channel_ai_intake_evaluations_list`).
+
+Raising intake to **Auto** on a scope opens a dialog first: each action with whether it is ready ("ready ·
+38 of 40 right") or stays a suggestion and why ("until 30 decisions are labelled (12 of 30)", "7 wrong of 40
+(needs 95 % right)"), an estimate of the AI calls and their cost over 30 days from the messages that came,
+and for an admin, **Let it … alone anyway** with the reason the history keeps. The level and the override
+are saved together. Lowering a level never asks.
+
+When intake moves to another model or provider, a scope at Auto goes back to Suggest and the AI tab says
+so ("Groups: Auto was lowered to Suggest on Oct 24, 2026: intake moved to another model, so what it was
+checked on no longer holds", or for a provider, "intake moved to another provider, which needs consent
+again") with **Turn Auto back on**, which asks with the same dialog.
 
 ## When intake's model fails
 

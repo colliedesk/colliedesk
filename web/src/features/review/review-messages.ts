@@ -23,7 +23,8 @@ export const reviewMessages = {
   emptyDismissed: 'AI set nothing aside in this list.',
   emptyDecided: 'No card was decided yet.',
   noChatChannels: 'Review is for chat channels that collect messages. Email and web forms open a conversation for every message, so they never wait here.',
-  stats: (cards: number, opened: number) => `Last 7 days: ${cards} ${cards === 1 ? 'card' : 'cards'}, ${opened} became conversations`,
+  stats: (cards: number, opened: number) => `Last 7 days: ${cards} ${cards === 1 ? 'card' : 'cards'}, ${opened} became ${opened === 1 ? 'a conversation' : 'conversations'}`,
+  movedOut: 'Its messages were moved out of this card.',
   // Every AI decision counts, a suggestion as much as one it applied; changed is what a person decided otherwise.
   statsCorrected: (corrected: number, decisions: number) => `People changed ${corrected} of ${decisions} AI ${decisions === 1 ? 'decision' : 'decisions'}`,
   statsNone: 'Last 7 days: no cards yet',

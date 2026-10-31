@@ -30,7 +30,8 @@ export function ReviewRoute({ tab, filter, onChange }: ReviewRouteProps) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const team = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const summary = useIntakeSummary();
-  const [channelID, scope] = filter ? filter.split(':') : [undefined, undefined];
+  const [channelID, scopeOf] = filter ? filter.split(':') : [undefined, undefined];
+  const scope = scopeOf || undefined;
   const list = useInfiniteQuery({
     queryKey: ['intake', tab, filter],
     queryFn: ({ pageParam }) => intakeApi.list({ ...listOf[tab], channel_id: channelID, scope, cursor: pageParam }),

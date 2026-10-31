@@ -64,6 +64,10 @@ export interface AIPageProps {
   initialTab?: AITab;
   // onSetChatCap sets the AI chat feature's own monthly spend limit (null removes it).
   onSetChatCap?: (cap: number | null) => Promise<unknown>;
+  // chatChannels: the workspace has a chat channel that collects messages, so intake has a row.
+  chatChannels?: boolean;
+  // Gives (true) or takes back (false) the consent that intake may send a kind of context.
+  onSourceConsent?: (source: string, on: boolean) => Promise<unknown>;
 }
 
 const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
@@ -193,7 +197,7 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
     <section className="panel ai-slots" aria-label={m.features}>
       <div className="ai-slot-head" aria-hidden="true"><span>{m.columnFeature}</span><span>{m.columnProvider}</span><span>{m.columnModel}</span><span>{m.columnAutomatic}</span><span>{m.columnOn}</span></div>
       {/* Intake runs only on chat channels; its row comes with them. */}
-      {settings.slots.filter((slot) => slot.slot !== 'intake').map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
+      {settings.slots.filter((slot) => slot.slot !== 'intake' || props.chatChannels).map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
     </section>
     <div className="panel ai-sends"><InfoIcon /><span><span className="ai-long">{m.sends} </span><b>{m.sendsStrong}</b></span></div>
   </div>;
@@ -212,7 +216,7 @@ function slotInput(slot: AISlot): AISlotInput {
 }
 
 
-function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
+function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto, onSourceConsent }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
   const serverModels = settings.server?.models[slot.slot] ?? [];
   const choices = [
@@ -257,8 +261,8 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
           {models.map((model) => <option key={model} value={model}>{model}</option>)}
         </select></label>
       <div className="ai-slot-limit"><span className="ai-cell-label">{m.columnAutomatic}</span>
-        {slot.slot === 'triage' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
-          : m.draftLimits(settings.automatic.draft_per_day)}</span>
+        {slot.slot === 'triage' || slot.slot === 'intake' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
+          : slot.slot === 'intake' ? m.intakeLimits(settings.automatic.intake_per_day) : m.draftLimits(settings.automatic.draft_per_day)}</span>
           {isAdmin && <button type="button" className="link-button" onClick={onOpenAutomatic} aria-label={m.changeAutomatic}>{m.change}</button>}</>
           : <span className="muted-copy">{slot.slot === 'chat' ? m.chatRuns : m.noAutomatic}</span>}
       </div>
@@ -271,8 +275,11 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
         onTurnOn={() => onConfirmAuto(slot)} onOff={() => onSetAuto('draft', { ...slotInput(slot), default_level: 'off' })} onRaise={onOpenAutomatic} />}
       {slot.slot === 'triage' && <AutoTriage slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
         onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetAuto('triage', { ...slotInput(slot), ...input })} />}
+      {slot.slot === 'intake' && <IntakeDefault slot={slot} locked={locked} hasProvider={choices.length > 0}
+        onSet={(level) => onSetAuto('intake', { ...slotInput(slot), default_level: level })} />}
+      {slot.slot === 'intake' && <IntakeSources settings={settings} isAdmin={isAdmin} onSourceConsent={onSourceConsent} />}
       {/* The help center's chat has no level per channel. */}
-      {slot.slot !== 'intake' && slot.slot !== 'chat' && <ChannelsThatDiffer slot={slot} settings={settings} />}
+      {slot.slot !== 'chat' && <ChannelsThatDiffer slot={slot} settings={settings} />}
     </div>
   );
 }
@@ -314,6 +321,58 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
       </div>
     </div>
   );
+}
+
+// IntakeDefault is what intake does where no chat channel says otherwise: the channel's rules alone, or
+// the rules with AI's suggestion in Review. Deciding by itself (Auto) is set on each channel, where its
+// readiness is known.
+function IntakeDefault({ slot, locked, hasProvider, onSet }: { slot: AISlot; locked: boolean; hasProvider: boolean; onSet: (level: AILevel) => void }) {
+  const level: AILevel = slot.enabled && slot.default_level !== 'auto' ? slot.default_level : 'off';
+  const id = useId();
+  const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.intakeNeedsFeature : undefined;
+  return (
+    <div className="ai-auto">
+      <div className="ai-auto-lead"><strong id={id}>{m.levelHeading}</strong></div>
+      {why ? <p className="ai-auto-desc muted-copy" id={`${id}-why`}>{why}</p> : <p className="ai-auto-desc">{levelMeaning.intake[level]}.</p>}
+      <p className="ai-auto-note muted-copy">{m.intakeChatOnly}</p>
+      <div className="ai-auto-switch">
+        <Choice legend={m.levelLegend(featureName.intake)} hideLegend items={levelItems('intake').filter((item) => item.value !== 'auto')} value={level}
+          disabled={locked || !slot.enabled} describedBy={why ? `${id}-why` : id} onChange={onSet} />
+      </div>
+    </div>
+  );
+}
+
+const intakeSources = ['images', 'contact_profile'] as const;
+
+// IntakeSources is the consent that chat intake may send more than the conversation's text: the pictures
+// customers sent and the customer's profile, each given and taken back here (docs/user/ai.md). A channel
+// then turns each on for its scopes.
+function IntakeSources({ settings, isAdmin, onSourceConsent }: { settings: AISettings; isAdmin: boolean; onSourceConsent?: (source: string, on: boolean) => Promise<unknown> }) {
+  const given = new Set(settings.source_consents.map((consent) => consent.source_class));
+  const [busy, setBusy] = useState<string>();
+  const [problem, setProblem] = useState<string>();
+  const toggle = async (source: string, on: boolean) => {
+    if (!onSourceConsent) return;
+    setBusy(source);
+    setProblem(undefined);
+    try {
+      await onSourceConsent(source, on);
+    } catch {
+      setProblem(m.actionFailed);
+    } finally {
+      setBusy(undefined);
+    }
+  };
+  return <fieldset className="ai-sources-consent">
+    <legend>{m.intakeSourcesLegend}</legend>
+    <p className="muted-copy">{m.intakeSourcesHelp}</p>
+    {intakeSources.map((source) => <label key={source} className="ai-pick">
+      <span className="switch"><input type="checkbox" role="switch" aria-label={m.intakeSource[source]} checked={given.has(source)} disabled={!isAdmin || busy !== undefined}
+        onChange={(event) => void toggle(source, event.target.checked)} /></span>
+      <span>{m.intakeSource[source]}</span></label>)}
+    {problem && <p role="alert" className="error-copy">{problem}</p>}
+  </fieldset>;
 }
 
 // AutoDraft is what reply drafts do by themselves where no channel says otherwise: only when asked, or a

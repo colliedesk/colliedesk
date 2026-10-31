@@ -203,10 +203,10 @@ export function MoveDialog({ mode, conversation, timeline, picked, closeSource =
       </label>)}
     </fieldset>
     {mode === 'split' && <Field id={`${formID}-subject`} label={m.subject}>
-      {(field) => <input {...field} value={subject} maxLength={200} onChange={(event) => setSubject(event.target.value)} />}</Field>}
+      {(field) => <input {...field} autoFocus value={subject} maxLength={200} onChange={(event) => setSubject(event.target.value)} />}</Field>}
     {mode === 'move' && <>
       <Field id={`${formID}-search`} label={m.search} help={m.searchHelp}>
-        {(field) => <input {...field} type="search" value={typed} onChange={(event) => setTyped(event.target.value)} />}</Field>
+        {(field) => <input {...field} type="search" autoFocus value={typed} onChange={(event) => setTyped(event.target.value)} />}</Field>
       {targets.isPending && <p role="status" className="muted-copy">{m.searching}</p>}
       {targets.isError && <p role="alert" className="error-copy">{m.searchFailed}</p>}
       {targets.data && options.length === 0 && <p className="muted-copy">{m.noTargets}</p>}

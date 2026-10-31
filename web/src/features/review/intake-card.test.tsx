@@ -188,3 +188,10 @@ test('a decided card shows no suggestion', () => {
     decided_at: '2026-10-26T02:03:00Z', suggestion: suggestion() }) })} />);
   expect(screen.queryByRole('group', { name: 'Suggested by AI' })).not.toBeInTheDocument();
 });
+
+test('a decided card whose messages were all moved out says so instead of an empty preview', () => {
+  render(<IntakeCard {...props({ item: gathering({ state: 'attached', review_reason: null, decided_by: 'rules', conversation_id: CONVERSATION, item_count: 0, preview: '',
+    sender: { kind: null, value: null, name: null }, decided_at: '2026-10-26T02:03:00Z' }) })} />);
+  expect(screen.getByText('Its messages were moved out of this card.')).toBeInTheDocument();
+  expect(screen.queryByText('0 messages')).not.toBeInTheDocument();
+});

@@ -11230,11 +11230,15 @@ components:
         instructions: {type: string, maxLength: 2000, description: 'Added to the AI''s instructions. The AI still answers only from published articles; instructions cannot add facts.'}
         widget_origins: {type: array, maxItems: 20, items: {type: string}, description: 'Exact origins (scheme://host[:port]) whose pages may embed the chat.'}
     ChannelConfig:
-      description: A channel's configuration, by its type.
-      oneOf:
+      description: >-
+        A channel's configuration, by its type. A type this document does not describe yet (a test build's
+        loopback chat stand-in, a chat type before its schema is written here) answers its own object, which a
+        client shows nothing of.
+      anyOf:
         - {$ref: '#/components/schemas/EmailChannelConfig'}
         - {$ref: '#/components/schemas/WebFormChannelConfig'}
         - {$ref: '#/components/schemas/HelpChatChannelConfig'}
+        - {type: object, additionalProperties: true}
     ChannelDetail:
       allOf:
         - {$ref: '#/components/schemas/Channel'}
@@ -11410,9 +11414,10 @@ components:
           oneOf:
             - {type: 'null'}
             - type: object
-              required: [id, name, enabled]
+              required: [id, type, name, enabled]
               properties:
                 id: {type: string, format: uuid}
+                type: {type: string, description: 'The type of the channel the replies leave through (email for a web form''s).'}
                 name: {type: string}
                 enabled: {type: boolean}
                 instead_of:

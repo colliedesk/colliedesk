@@ -18,13 +18,14 @@ export const channelSchema = z.object({
   last_inbound_at: nullableDate, is_default: z.boolean().optional(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   deleted_at: z.string().datetime().optional(),
 }) satisfies z.ZodType<Generated<'Channel'>>;
-// The configuration is the type's own schema; the type's panels read it, the shared pages never do.
+// The configuration is the type's own schema; the type's panels read it, the shared pages never do. A type
+// with no screens here answers its own object, which nothing reads.
 export const helpChatConfigSchema = z.object({
   channel_id: z.string().uuid(), enabled: z.boolean(), greeting: z.string(), suggestions: z.array(z.string()), instructions: z.string(),
   widget_origins: z.array(z.string()),
 }) satisfies z.ZodType<Generated<'HelpChatChannelConfig'>>;
 export type HelpChatConfig = z.infer<typeof helpChatConfigSchema>;
-const channelConfigSchema = z.union([emailChannelSchema, webFormSettingsSchema, helpChatConfigSchema]) satisfies z.ZodType<Generated<'ChannelConfig'>>;
+const channelConfigSchema = z.union([emailChannelSchema, webFormSettingsSchema, helpChatConfigSchema, z.record(z.string(), z.unknown())]) satisfies z.ZodType<Generated<'ChannelConfig'>>;
 export const channelDetailSchema = channelSchema.extend({ config: channelConfigSchema }) satisfies z.ZodType<Generated<'ChannelDetail'>>;
 const channelTypeInfoSchema = z.object({
   type: channelTypeSchema, available: z.boolean(), count: z.number().int().nonnegative(), default_channel_id: z.string().uuid().nullable(),
