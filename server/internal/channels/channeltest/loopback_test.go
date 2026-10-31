@@ -1,9 +1,12 @@
 package channeltest_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
+	"github.com/colliedesk/colliedesk/server/internal/export"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -378,4 +382,127 @@ func TestAConversationKeepsTheScopeItStartedIn(t *testing.T) {
 		JOIN messages m ON m.workspace_id=c.workspace_id AND m.conversation_id=c.id WHERE c.workspace_id=$1 AND m.kind='incoming'`); got != "in the group=group,one to one=user" {
 		t.Fatalf("scopes = %q", got)
 	}
+}
+
+// decisions lists each journal row as id:basis:rule ('-' for none), in id order.
+func (d loopDesk) decisions(t *testing.T, ids ...string) string {
+	t.Helper()
+	return d.one(t, `SELECT string_agg(external_event_id||':'||COALESCE(decision_basis,'-')||':'||COALESCE(decision_rule,'-'),',' ORDER BY external_event_id)
+		FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id=ANY($2)`, ids)
+}
+
+// The journal says what the channel's rules decided about every message they decided on, and on what
+// basis; what the frame handled before them (a duplicate, a channel off) and what is still being
+// collected carry no decision.
+func TestTheJournalSaysWhatTheRulesDecided(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "j-1", From: "u1", Text: "hello"},
+		channeltest.LoopbackEvent{ID: "j-2", From: "u1", Text: "again"},
+		channeltest.LoopbackEvent{ID: "j-3", From: "u2", Reference: "j-1", Text: "about that"},
+		channeltest.LoopbackEvent{ID: "j-4", From: "u3", Text: "report bug: the printer is down"},
+		channeltest.LoopbackEvent{ID: "j-5", From: "u4", Text: "never mind", Intent: channels.IntentCancel})
+	if got := d.decisions(t, "j-1", "j-2", "j-3", "j-4", "j-5"); got != "j-1:default:new_thread,j-2:match:thread_key,j-3:match:thread_reference,j-4:match:command_open,j-5:match:command_cancel" {
+		t.Fatalf("decisions = %s", got)
+	}
+	// A message whose join policy keeps it out of its old conversation opens another, by default.
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='resolved',updated_at=now()-interval '30 days' WHERE workspace_id=$1`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "j-6", From: "u1", Text: "back again"})
+	if got := d.decisions(t, "j-6"); got != "j-6:default:join_policy" {
+		t.Fatalf("decisions = %s", got)
+	}
+	settings := json.RawMessage(`{"scopes":{"group":{"mode":"commands"}}}`)
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: settings}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "g-1", From: "m1", Group: "g1", Text: "good morning"},
+		channeltest.LoopbackEvent{ID: "g-2", From: "m1", Group: "g1", Text: "report bug: the printer"},
+		channeltest.LoopbackEvent{ID: "g-3", From: "m2", Group: "g1", Text: "same here"},
+		channeltest.LoopbackEvent{ID: "j-1", From: "u1", Text: "hello"})
+	if got := d.decisions(t, "g-1", "g-2", "g-3"); got != "g-1:default:scope_archive,g-2:match:command_open,g-3:match:thread_key" {
+		t.Fatalf("decisions = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id='j-1'`); got != "1" {
+		t.Fatalf("the duplicate wrote a row: %s", got)
+	}
+	// Collected messages without a command, held for review, and what arrives while the channel is off.
+	review := json.RawMessage(`{"review":true}`)
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: review}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "r-1", From: "u9", Text: "is anyone there", Collect: true})
+	if got := d.decisions(t, "r-1"); got != "r-1:-:-" {
+		t.Fatalf("a message being collected = %s", got)
+	}
+	*d.clock = d.clock.Add(time.Minute)
+	if _, err := d.pipeline.ProcessDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.decisions(t, "r-1"); got != "r-1:default:review_hold" {
+		t.Fatalf("decisions = %s", got)
+	}
+	off := false
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Enabled: &off}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "o-1", From: "u1", Text: "while off"})
+	if got := d.decisions(t, "o-1"); got != "o-1:-:-" {
+		t.Fatalf("held while off = %s", got)
+	}
+}
+
+// Where several customers write in one place, a reply to another customer's message opens a request
+// of its own by default (AI may decide it later); a reply to one's own message still continues it.
+func TestAReplyToAnotherCustomerInASharedScopeIsNoMatch(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	loop.SharedScopes = []string{"group"}
+	d := newLoopDesk(t, loop)
+	d.send(t, channeltest.LoopbackEvent{ID: "s-1", From: "m1", Group: "g1", Text: "the printer is down"},
+		channeltest.LoopbackEvent{ID: "s-2", From: "m2", Group: "g1", Reference: "s-1", Text: "and mine is jammed"},
+		channeltest.LoopbackEvent{ID: "s-3", From: "m1", Group: "g1", Reference: "s-1", Text: "still down"})
+	if got := d.decisions(t, "s-1", "s-2", "s-3"); got != "s-1:default:new_thread,s-2:default:reference_other_customer,s-3:match:thread_reference" {
+		t.Fatalf("decisions = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); got != "2" {
+		t.Fatalf("conversations = %s", got)
+	}
+}
+
+// The export says, for each message a channel's rules placed, on what basis and by which rule.
+func TestTheExportSaysWhyEachMessageIsInItsConversation(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	d.send(t, channeltest.LoopbackEvent{ID: "x-1", From: "u1", Text: "hello"},
+		channeltest.LoopbackEvent{ID: "x-2", From: "u1", Text: "again"})
+	var archive bytes.Buffer
+	writer := export.NewWriter(&archive, d.store.Objects(), d.workspaceID, time.Now())
+	if err := d.store.ExportWorkspace(context.Background(), d.workspaceID, writer, store.ExportLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Finish(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range reader.File {
+		if file.Name != "conversations.ndjson" {
+			continue
+		}
+		body, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := io.ReadAll(body)
+		body.Close()
+		for _, want := range []string{`"decision_basis":"default","decision_rule":"new_thread"`, `"decision_basis":"match","decision_rule":"thread_key"`} {
+			if !strings.Contains(string(data), want) {
+				t.Errorf("conversations.ndjson lacks %s:\n%s", want, data)
+			}
+		}
+		return
+	}
+	t.Fatal("no conversations.ndjson")
 }
