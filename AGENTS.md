@@ -162,6 +162,10 @@ the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; foll
   from ROADMAP.md in the same PR (or move it under Now without the link). CI fails otherwise.
 - **Adding to the roadmap:** link the issue and label it to match the section:
   `gh issue edit N --add-label planned` for Next/Then, `accepted` for Later.
+- **Milestones are goals.** Each is titled `Goal: …` with a measurable "Done when". When one closes,
+  AGENTS.md records what it made true: each guarantee becomes a rule naming its gate, and text it
+  made stale is updated. `milestone-agents-md.yml` opens that issue, assigned to whoever closed the
+  milestone; the PR that updates AGENTS.md closes it.
 - **New ideas from users** belong in Discussions → Ideas, not Issues. When a maintainer accepts
   one, open an issue that links the discussion.
 - Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
