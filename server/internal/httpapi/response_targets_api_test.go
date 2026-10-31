@@ -86,6 +86,22 @@ func TestResponseTargetsAreOneDocumentAnAdminSets(t *testing.T) {
 	if response := request(t, api, http.MethodGet, "/api/v1/response-targets", nil, other, nil); !strings.Contains(response.Body.String(), `"my_alert_email":true`) {
 		t.Fatalf("another workspace's admin's: %s", response.Body.String())
 	}
+	// Two people saving from the same read: the second is told, and changes nothing.
+	var read struct {
+		UpdatedAt string `json:"updated_at"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/response-targets", nil, admin, nil), &read)
+	first := contractTargets()
+	first["updated_at"], first["warn_before_minutes"] = read.UpdatedAt, 30
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", first, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("first save: %d %s", response.Code, response.Body.String())
+	}
+	second := contractTargets()
+	second["updated_at"], second["warn_before_minutes"] = read.UpdatedAt, 45
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", second, admin, nil); response.Code != http.StatusConflict ||
+		!strings.Contains(response.Body.String(), `"changed_elsewhere"`) || !strings.Contains(response.Body.String(), `"warn_before_minutes":30`) {
+		t.Fatalf("second save from the same read: %d %s", response.Code, response.Body.String())
+	}
 	// Off again: kept as they were.
 	document := contractTargets()
 	document["enabled"] = false
