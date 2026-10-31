@@ -17,10 +17,10 @@ import (
 // list every open tab polls carries only what a row shows.
 func agentRequestSelect(full bool) string {
 	payload := `r.body,r.edited_body,r.result`
-	reply := `r.saved_reply_before,sr.title,sr.body,sr.updated_at,sr.deleted_at`
+	reply := `r.saved_reply_before,sr.title,sr.body,sr.updated_at,sr.deleted_at,r.notices`
 	if !full {
 		payload = `NULL::jsonb,NULL::jsonb,NULL::jsonb`
-		reply = `NULL::jsonb,NULL::text,NULL::text,NULL::timestamptz,NULL::timestamptz`
+		reply = `NULL::jsonb,NULL::text,NULL::text,NULL::timestamptz,NULL::timestamptz,NULL::jsonb`
 	}
 	return `SELECT r.id::text,r.kind,r.status,r.method,r.route,r.path,` + payload + `,r.summary,r.conversation_id::text,
 	r.token_id::text,r.token_label,r.token_scope,COALESCE(r.token_permissions,'{}'),(t.id IS NULL OR t.revoked_at IS NOT NULL),r.requested_by_agent_id::text,COALESCE(NULLIF(ra.display_name,''),ra.email),
@@ -39,7 +39,7 @@ func scanAgentRequest(row pgx.Row) (domain.AgentRequest, error) {
 	var body, edited, result []byte
 	var resultStatus *int32
 	var deciderID, deciderName *string
-	var replyBefore []byte
+	var replyBefore, notices []byte
 	var current struct {
 		title, body          *string
 		updatedAt, deletedAt *time.Time
@@ -48,9 +48,14 @@ func scanAgentRequest(row pgx.Row) (domain.AgentRequest, error) {
 		&item.RequestedBy.TokenID, &item.RequestedBy.TokenLabel, &item.RequestedBy.TokenScope, &item.RequestedBy.TokenPermissions, &item.RequestedBy.TokenRevoked,
 		&item.RequestedBy.AgentID, &item.RequestedBy.AgentName, &deciderID, &deciderName, &item.DecidedAt, &item.Reason,
 		&resultStatus, &item.ResultNote, &item.CreatedAt, &item.ExpiresAt,
-		&replyBefore, &current.title, &current.body, &current.updatedAt, &current.deletedAt)
+		&replyBefore, &current.title, &current.body, &current.updatedAt, &current.deletedAt, &notices)
 	if err != nil {
 		return domain.AgentRequest{}, err
+	}
+	if len(notices) > 0 {
+		if err := json.Unmarshal(notices, &item.Notices); err != nil {
+			return domain.AgentRequest{}, fmt.Errorf("read status notices: %w", err)
+		}
 	}
 	if len(replyBefore) > 0 {
 		var before SavedReplySnapshot
@@ -91,6 +96,8 @@ type NewAgentRequest struct {
 	SavedReply *SavedReplySnapshot
 	// TokenPermissions is what the token held when it asked, kept for the person deciding.
 	TokenPermissions []string
+	// Notices are what the status change would tell customers when the token asked.
+	Notices []domain.StatusNoticePreview
 }
 
 // SavedReplySnapshot is a saved reply as an agent request keeps it: what the person deciding compares
@@ -163,12 +170,20 @@ func (s *Store) CreateAgentRequest(ctx context.Context, workspaceID string, in N
 			}
 			replyID, before = in.SavedReply.ID, string(encoded)
 		}
+		var notices any
+		if len(in.Notices) > 0 {
+			encoded, err := json.Marshal(in.Notices)
+			if err != nil {
+				return domain.AgentRequest{}, fmt.Errorf("encode status notices: %w", err)
+			}
+			notices = string(encoded)
+		}
 		var id string
-		err := tx.QueryRow(ctx, `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,token_permissions,requested_by_agent_id,kind,method,route,path,body,summary,conversation_id,created_at,expires_at,saved_reply_id,saved_reply_before)
-			SELECT $1,s.id,s.label,s.scope,$15,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb FROM sessions s
+		err := tx.QueryRow(ctx, `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,token_permissions,requested_by_agent_id,kind,method,route,path,body,summary,conversation_id,created_at,expires_at,saved_reply_id,saved_reply_before,notices)
+			SELECT $1,s.id,s.label,s.scope,$15,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb,$16::jsonb FROM sessions s
 			WHERE s.workspace_id=$1 AND s.id=$2 AND s.scope IS NOT NULL
 			RETURNING id::text`, workspaceID, in.TokenID, in.AgentID, in.Kind, in.Method, in.Route, in.Path, body, in.Summary,
-			in.ConversationID, now, now.Add(domain.AgentRequestLifetime), replyID, before, in.TokenPermissions).Scan(&id)
+			in.ConversationID, now, now.Add(domain.AgentRequestLifetime), replyID, before, in.TokenPermissions, notices).Scan(&id)
 		if err != nil {
 			return domain.AgentRequest{}, fmt.Errorf("insert agent request: %w", err)
 		}
@@ -296,6 +311,26 @@ func (s *Store) FinishAgentRequest(ctx context.Context, workspaceID, id string, 
 	})
 }
 
+// SetAgentRequestNotices records what an approved status change told customers, read as it ran: an
+// empty list when it told nobody (each conversation already had that status, or no chat had words).
+func (s *Store) SetAgentRequestNotices(ctx context.Context, workspaceID, id string, notices []domain.StatusNoticePreview) error {
+	if notices == nil {
+		notices = []domain.StatusNoticePreview{}
+	}
+	encoded, err := json.Marshal(notices)
+	if err != nil {
+		return err
+	}
+	_, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		_, err := tx.Exec(ctx, `UPDATE agent_requests SET notices=$3::jsonb WHERE workspace_id=$1 AND id=$2`, workspaceID, id, string(encoded))
+		return true, err
+	})
+	if err != nil {
+		return fmt.Errorf("record what the request told: %w", err)
+	}
+	return nil
+}
+
 // RejectAgentRequest records that agentID refused the request; nothing runs.
 func (s *Store) RejectAgentRequest(ctx context.Context, workspaceID, id, agentID string, reason *string) (domain.AgentRequest, error) {
 	return s.decide(ctx, workspaceID, id, func(tx pgx.Tx, _ domain.AgentRequest) error {
@@ -329,8 +364,8 @@ func (s *Store) CancelAgentRequest(ctx context.Context, workspaceID, id, agentID
 func (s *Store) PruneAgentRequests(ctx context.Context) (int64, error) {
 	var pruned int64
 	err := s.db.Privileged(ctx, database.PrivilegeAgentRequestPrune, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE agent_requests SET body=NULL,edited_body=NULL,result=NULL,saved_reply_before=NULL
-			WHERE status<>'pending' AND decided_at<$1 AND (body IS NOT NULL OR edited_body IS NOT NULL OR result IS NOT NULL OR saved_reply_before IS NOT NULL)`,
+		tag, err := tx.Exec(ctx, `UPDATE agent_requests SET body=NULL,edited_body=NULL,result=NULL,saved_reply_before=NULL,notices=NULL
+			WHERE status<>'pending' AND decided_at<$1 AND (body IS NOT NULL OR edited_body IS NOT NULL OR result IS NOT NULL OR saved_reply_before IS NOT NULL OR notices IS NOT NULL)`,
 			s.now().Add(-domain.AgentRequestCallRetention))
 		if err != nil {
 			return fmt.Errorf("prune agent requests: %w", err)
