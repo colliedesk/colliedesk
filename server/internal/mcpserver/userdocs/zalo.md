@@ -45,8 +45,9 @@ The channel's page then has four tabs of its own, before AI and History:
    and the message joins it (`{ref}`), for a code it cannot find (`{ref}`: the code typed; a code of another
    chat or group reads the same, since a code reopens only a conversation of its own group or of the
    customer's own one-to-one chat) and for a code from before Colliedesk (`{old_ref}`, `{ref}`), and the reply to a one-to-one message
-   that is not a request (**Send the unmatched reply in one chat at most every** so many seconds) (sent only where one-to-one messages open a conversation on a command, and only
-   when **Answer such a message with this reply** is on). The OA's own messages are not your team's first
+   that is not a request, sent only where one-to-one messages open a conversation on a command and only
+   when **Answer such a message with this reply** is on, at most once in a chat every **Send the unmatched
+   reply in one chat at most every** seconds. The OA's own messages are not your team's first
    reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")
    stops writing for **Wait for the customer to stop writing** seconds, the OA sends the **Question**;
    the Confirm command (say "OK", best matched exactly), as the answer to the latest question, opens the
