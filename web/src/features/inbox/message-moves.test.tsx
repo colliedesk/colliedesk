@@ -164,6 +164,17 @@ test('a chat conversation nobody worked on offers to move all of it as no new re
   expect(screen.queryByRole('button', { name: 'Not a new request? Move it…' })).not.toBeInTheDocument();
 });
 
+test('the channel\'s own received notice is no work of a person: the conversation still offers to move all of it', async () => {
+  moves.intake.mockResolvedValue(intake('88888888-8888-4888-8888-888888888888', 'new_thread', 'default'));
+  const notice = { ...message(REPLY, 'Đã nhận yêu cầu', 'outgoing'), notice_kind: 'received' };
+  const { unmount } = view(<MessageMovesLog conversation={conversation({ channel: 'loopback' })} timeline={[...timeline.slice(0, 2), notice]} timezone="UTC" />);
+  expect(await screen.findByRole('button', { name: 'Not a new request? Move it…' })).toBeInTheDocument();
+  unmount();
+  view(<MessageMovesLog conversation={conversation({ channel: 'loopback' })} timeline={[...timeline.slice(0, 2), notice, message('99999999-9999-4999-8999-999999999999', 'On it', 'outgoing')]} timezone="UTC" />);
+  await waitFor(() => expect(moves.intake).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole('button', { name: 'Not a new request? Move it…' })).not.toBeInTheDocument();
+});
+
 test('a thank-you after a conversation was resolved says it kept it resolved, with Reopen', async () => {
   api.updateConversation.mockResolvedValue(conversation({ status: 'open' }));
   const thanks = { ...message(FIRST, 'cảm ơn em'), intake_reply_kind: 'acknowledgement' as const };

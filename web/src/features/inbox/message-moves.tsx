@@ -262,9 +262,9 @@ export function MessageMovesLog({ conversation, timeline, timezone, currentAgent
   };
   const incoming = timeline.filter((item) => item.kind === 'incoming');
   const chat = intake?.messages.some((entry) => entry.gathering_id) ?? false;
-  // Nobody replied or wrote a note; an assignee may be the channel's default, so whether a person assigned it
-  // is the server's to say (409 source_has_activity, shown in the dialog).
-  const untouched = conversation.status !== 'closed' && timeline.every((item) => item.kind === 'incoming');
+  // Nobody replied or wrote a note (the channel's own notice is no one's work); an assignee may be the channel's
+  // default, so whether a person assigned it is the server's to say (409 source_has_activity, shown in the dialog).
+  const untouched = conversation.status !== 'closed' && timeline.every((item) => item.kind === 'incoming' || Boolean(item.notice_kind));
   const link = (href: string, text: string) => <a href={href}>{text}</a>;
   if (moves.length === 0 && !(chat && untouched && incoming.length > 0)) return null;
   return <section className="message-moves" aria-label={m.log} aria-live="polite">
