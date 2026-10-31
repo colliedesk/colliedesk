@@ -172,7 +172,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
-	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes}
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
 	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig), helpchat.Config{})).
 		WithSealKeys(googleConfig.Keys).WithPlanLimits(billingOn)
 	var sender emailoutbox.Sender
@@ -282,7 +282,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
-		ExtraChannelTypes: e2eChannelTypes}
+		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {
