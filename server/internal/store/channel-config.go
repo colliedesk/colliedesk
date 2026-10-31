@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,6 +95,22 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	if err != nil {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings": err.Error()}, Message: "Check the channel settings."}
 	}
+	if every := merged.Notices.UnmatchedEverySeconds; every != nil && (*every < 0 || *every > 86400) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.unmatched_every_seconds": "Use 0 to 86400 seconds."},
+			Message: "Check the channel settings."}
+	}
+	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched} {
+		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
+				Message: "Check the channel settings."}
+		}
+	}
+	for key, command := range merged.Commands {
+		if command.Match != "" && command.Match != channels.MatchFuzzy && command.Match != channels.MatchWords && command.Match != channels.MatchExact {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".match": "Use fuzzy, words or exact, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+	}
 	for key, scope := range merged.Scopes {
 		known := false
 		for _, declared := range definition.Scopes {
@@ -107,8 +124,13 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".mode": "Use all or commands."},
 				Message: "Check the channel settings."}
 		}
-		if scope.Unmatched != "" && scope.Unmatched != channels.UnmatchedJoinOpen {
-			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "Use join_open, or leave it out."},
+		if scope.Unmatched != "" && scope.Unmatched != channels.UnmatchedJoinOpen && scope.Unmatched != channels.UnmatchedNotice {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "Use join_open or notice, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+		// Where several customers write (a group), a notice would answer everyone's chatter.
+		if scope.Unmatched == channels.UnmatchedNotice && slices.Contains(definition.SharedScopes, key) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "A notice answers one customer: use join_open here, or leave it out."},
 				Message: "Check the channel settings."}
 		}
 		if scope.Gather != nil && (scope.Gather.PreCommandSeconds < 0 || scope.Gather.PreCommandSeconds > 3600) {
@@ -486,8 +508,11 @@ func channelWriteError(err error) error {
 
 // ChannelPublic is a channel as the API shows it.
 type ChannelPublic struct {
-	Channel  channels.Channel
-	Config   any
+	Channel channels.Channel
+	Config  any
+	// Settings are the rules the channel stores over its type's defaults (what a change of settings
+	// replaces); nil for a removed channel. The channel's effective rules are Channel.Settings.
+	Settings json.RawMessage
 	Summary  string
 	Status   channels.Status
 	Held     int
@@ -508,6 +533,9 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		}
 		if public.Summary, err = adapter.Config().Summary(ctx, tx, channel); err != nil {
 			return public, err
+		}
+		if err := tx.QueryRow(ctx, `SELECT settings FROM channels WHERE workspace_id=$1 AND id=$2`, channel.WorkspaceID, channel.ID).Scan(&public.Settings); err != nil {
+			return public, fmt.Errorf("read channel settings: %w", err)
 		}
 	}
 	switch {

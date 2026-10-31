@@ -4886,6 +4886,11 @@ export interface components {
             linked: boolean;
             /** @enum {string|null} */
             link_reason: "opened" | "gathered" | "command" | "ai" | "agent" | "reopen" | "reply" | "import" | null;
+            /**
+             * @description A notice the channel sent in a chat where no conversation is (the unmatched notice): whether it went out. Null for every other item.
+             * @enum {string|null}
+             */
+            delivery_status?: "queued" | "sent" | "failed" | null;
         };
         ChatPage: {
             items: components["schemas"]["ChatItem"][];
@@ -7439,6 +7444,8 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
+            /** @description A reply the channel sent by itself (received: its received notice), which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. Null for a reply of the team. */
+            notice_kind?: string | null;
             /**
              * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
              * @enum {string|null}
@@ -7835,6 +7842,14 @@ export interface components {
         };
         ChannelDetail: components["schemas"]["Channel"] & {
             config: components["schemas"]["ChannelConfig"];
+            /** @description The rules the channel stores over its type's defaults (ChannelSettings), as a change of settings replaces them whole. Left out for a removed channel. */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description The rules in force: the type's defaults with the channel's settings over them (ChannelSettings). Left out for a removed channel. */
+            effective_settings?: {
+                [key: string]: unknown;
+            };
         };
         ChannelTypeInfo: {
             type: components["schemas"]["ChannelType"];
@@ -7869,7 +7884,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open}), `notices` {received}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };

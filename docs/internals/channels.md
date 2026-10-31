@@ -211,6 +211,16 @@ its conversation's items are in (`FinishOutbox`), so the copy the channel sends 
 was and adds none. One item per journal event (a unique index) and per channel id: a replay never doubles
 one. No public route reads a thread; agents read them with `messages:read`.
 
+A notice in a chat where no conversation is (`unmatched: notice`) is its thread item, written with the
+customer's in one transaction (`queueThreadNotice`, deduplicated by the item it quotes), and a
+`channel_outbox` row that names the item instead of a message (`thread_item_id`, one of the two):
+`LoadOutbound` gives the sender its text, `Outbound.Place` and the customer it quotes as the recipient,
+with an empty conversation; `FinishOutbox` gives the item the id the channel returned, which
+`channel_sent_ids` keeps for the item. `Prepare` is not called for it. A message the frame writes by
+itself in a conversation (the received notice) carries `messages.notice_kind`, and every place that asks
+whether the team replied (`last_public_kind`, Results, the setup step, usage counts, the reply conflict,
+an automatic draft) skips it.
+
 ## Decisions
 
 - **Journal timing.** An Async type (a chat webhook that must answer within seconds) commits the raw

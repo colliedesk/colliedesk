@@ -301,6 +301,9 @@ type Message struct {
 	// IntakeReplyKind is what intake said a chat customer's message added to the conversation it joined:
 	// an acknowledgement kept a resolved conversation resolved.
 	IntakeReplyKind *string `json:"intake_reply_kind,omitempty"`
+	// NoticeKind marks a reply the channel sent by itself (received: its received notice); nil for a
+	// reply of the team.
+	NoticeKind *string `json:"notice_kind"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the

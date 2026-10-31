@@ -51,6 +51,8 @@ type Outbound struct {
 	// earlier messages, oldest first; LastIncoming is the customer's newest of them.
 	References   []string
 	LastIncoming string
+	// Place is the chat place a notice goes to when no conversation is (Conversation is then empty).
+	Place *Place
 	// Prepared is what Prepare returned when the reply was queued.
 	Prepared json.RawMessage
 	Attempt  int

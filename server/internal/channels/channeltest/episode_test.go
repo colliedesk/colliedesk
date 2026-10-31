@@ -153,7 +153,8 @@ func TestAStaffMessageOpensNoBatchButAStaffCommandDoes(t *testing.T) {
 func TestChatRulesOutOfRangeAreRefused(t *testing.T) {
 	d := newLoopDesk(t, episodeLoop())
 	for _, settings := range []string{`{"scopes":{"user":{"unmatched":"join_any"}}}`,
-		`{"scopes":{"group":{"gather":{"quiet_seconds":300,"max_seconds":1200,"pre_command_seconds":-1}}}}`} {
+		`{"scopes":{"group":{"gather":{"quiet_seconds":300,"max_seconds":1200,"pre_command_seconds":-1}}}}`,
+		`{"commands":{"cancel":{"action":"cancel","match":"loose","phrases":["cancel"]}}}`} {
 		_, err := d.store.UpdateChannel(context.Background(), d.workspaceID, d.channel.ID, store.ChannelInput{Settings: []byte(settings)}, store.ChannelActor{AgentID: d.agentID})
 		var field *channels.FieldError
 		if !errors.As(err, &field) {

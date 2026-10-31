@@ -357,7 +357,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// rules use them, so chatter the scope keeps without a conversation never creates a contact.
 	facts := rules.Facts{Commanded: commanded, CommandAction: command.Action, IntoConversation: request.IntoConversation, Replay: request.Replay,
 		CommandsOnly: scope.Mode == channels.ModeCommands, Flushing: request.Flushing, Review: channel.Settings.Review,
-		JoinOpen: scope.Unmatched == channels.UnmatchedJoinOpen}
+		JoinOpen: scope.Unmatched == channels.UnmatchedJoinOpen, Notice: scope.Unmatched == channels.UnmatchedNotice}
 	// A batch of a chat's intake scope: AI may decide where the rules only have a default (auto).
 	level, err := intakeLevel(ctx, tx, channel, definition, in, request)
 	if err != nil {
@@ -385,11 +385,24 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, err
 		}
 		kept := itemOutcome{disposition: ItemArchived, reason: "chat"}
-		if decision.Rule == rules.UnmatchedKept {
+		switch decision.Rule {
+		case rules.UnmatchedKept:
 			kept = itemOutcome{disposition: ItemUnresolved, reason: "unmatched"}
+		case rules.UnmatchedNotice:
+			kept = itemOutcome{disposition: ItemArchived, reason: "unmatched"}
 		}
 		if err := recordThreadItems(ctx, tx, &journal, in, kept); err != nil {
 			return result, err
+		}
+		if decision.Rule == rules.UnmatchedNotice && channel.Settings.Notices.Unmatched != "" {
+			every := channels.DefaultUnmatchedEverySeconds
+			if channel.Settings.Notices.UnmatchedEverySeconds != nil {
+				every = *channel.Settings.Notices.UnmatchedEverySeconds
+			}
+			if err := queueThreadNotice(ctx, tx, &journal, channels.NoticeUnmatched, channels.RenderNotice(channel.Settings.Notices.Unmatched, nil),
+				time.Duration(every)*time.Second); err != nil {
+				return result, err
+			}
 		}
 		if level == intakeSuggest {
 			if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringApplied, decision: decision, decidedByRules: true}); err != nil {
@@ -598,7 +611,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
-		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
+		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{NoticeKind: channels.NoticeReceived}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
 			return result, fmt.Errorf("send received notice: %w", err)
 		}
 	}

@@ -504,7 +504,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		(SELECT e.decision_rule FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.decision_rule IS NOT NULL LIMIT 1),
 		(SELECT e.command FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.command IS NOT NULL ORDER BY e.received_at LIMIT 1),
 		(SELECT e.gathering_id::text FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.gathering_id IS NOT NULL LIMIT 1),
-		other_contact_id::text,detached_at,detached_by_agent_id::text,intake_reply_kind
+		other_contact_id::text,detached_at,detached_by_agent_id::text,intake_reply_kind,notice_kind
 		FROM messages m WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
 		return fmt.Errorf("export messages: %w", err)
@@ -516,7 +516,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		if err := rows.Scan(&record.ID, &record.ConversationID, &record.AuthorAgentID, &record.AuthorName, &record.Kind, &record.Body,
 			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt, &record.AgentRequestID, &record.AIDraftID,
 			&record.ChannelID, &record.ExternalID, &channelMeta, &record.DecisionBasis, &record.DecisionRule, &record.Command, &record.GatheringID,
-			&record.OtherContactID, &record.DetachedAt, &record.DetachedByAgentID, &record.IntakeReplyKind); err != nil {
+			&record.OtherContactID, &record.DetachedAt, &record.DetachedByAgentID, &record.IntakeReplyKind, &record.NoticeKind); err != nil {
 			return fmt.Errorf("export messages: %w", err)
 		}
 		record.CreatedAt, record.DetachedAt = domain.UTC(record.CreatedAt), domain.UTCOptional(record.DetachedAt)

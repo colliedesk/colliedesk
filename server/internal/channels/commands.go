@@ -39,13 +39,14 @@ func FoldText(text string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// MatchCommand finds the command a message starts with: a phrase of a command matches the first
-// words of the text when folded the same (FoldText), or, for a phrase of five letters or more, when
-// one letter is wrong, missing, added or two are swapped. The longest phrase wins. rest is the text
-// after the phrase.
+// MatchCommand finds the command a message starts with, as each command's Match says: a phrase matches
+// the first words of the text when folded the same (FoldText, keeping a # or / that starts a word of the
+// phrase), or with MatchFuzzy, for a phrase of five letters or more, when one letter is wrong, missing,
+// added or two are swapped. With MatchExact a phrase is the whole message. The longest phrase wins. rest
+// is the customer's own text after the phrase, without the punctuation that joins them.
 func MatchCommand(text string, commands map[string]Command) (name string, command Command, rest string, ok bool) {
-	words := strings.Fields(FoldText(text))
-	original := strings.Fields(text)
+	words := commandWords(text)
+	whole := norm.NFC.String(strings.TrimSpace(text))
 	names := make([]string, 0, len(commands))
 	for candidate := range commands {
 		names = append(names, candidate)
@@ -53,28 +54,126 @@ func MatchCommand(text string, commands map[string]Command) (name string, comman
 	sort.Strings(names)
 	best := 0
 	for _, candidate := range names {
+		match := commands[candidate].Match
 		for _, phrase := range commands[candidate].Phrases {
-			wanted := strings.Fields(FoldText(phrase))
-			if len(wanted) == 0 || len(wanted) > len(words) {
-				continue
-			}
-			got := strings.Join(words[:len(wanted)], " ")
-			joined := strings.Join(wanted, " ")
-			if got != joined && (len([]rune(joined)) < 5 || damerau(got, joined) > 1) {
-				continue
-			}
-			if len(joined) > best {
-				best, name, command, ok = len(joined), candidate, commands[candidate], true
-				if len(wanted) <= len(original) {
-					rest = strings.Join(original[len(wanted):], " ")
+			if match == MatchExact {
+				phrase = norm.NFC.String(strings.TrimSpace(phrase))
+				if phrase != "" && strings.EqualFold(whole, phrase) && len(phrase) > best {
+					best, name, command, rest, ok = len(phrase), candidate, commands[candidate], "", true
 				}
+				continue
 			}
+			wanted := commandWords(phrase)
+			joined := strings.Join(texts(wanted), " ")
+			used := phraseWords(texts(words), texts(wanted), match)
+			if used == 0 || len(joined) <= best {
+				continue
+			}
+			best, name, command, ok = len(joined), candidate, commands[candidate], true
+			rest = strings.TrimLeft(text[words[used-1].end:], restSeparators)
 		}
 	}
 	if ok && command.Action == "" {
 		command.Action = ActionOpen
 	}
 	return name, command, rest, ok
+}
+
+// restSeparators are what people type between a command and what they say with it.
+const restSeparators = " \t\r\n:,.;-–—"
+
+// phraseWords is how many of the text's first words the phrase takes, 0 when it does not match. A # or
+// / before the text's first word counts only when the phrase has it.
+func phraseWords(words, wanted []string, match string) int {
+	if len(wanted) == 0 || len(words) == 0 {
+		return 0
+	}
+	if !hasSigil(wanted[0]) && hasSigil(words[0]) {
+		words = append([]string{words[0][1:]}, words[1:]...)
+	}
+	if match == MatchWords {
+		// The words of the phrase, its spaces aside: "báolỗi" is "báo lỗi", "báo lỗix" is not.
+		target := strings.Join(wanted, "")
+		got := ""
+		for used, word := range words {
+			got += word
+			switch {
+			case got == target:
+				return used + 1
+			case len(got) >= len(target) || !strings.HasPrefix(target, got):
+				return 0
+			}
+		}
+		return 0
+	}
+	if len(wanted) > len(words) {
+		return 0
+	}
+	got := strings.Join(words[:len(wanted)], " ")
+	joined := strings.Join(wanted, " ")
+	if got != joined && (len([]rune(joined)) < 5 || damerau(got, joined) > 1) {
+		return 0
+	}
+	return len(wanted)
+}
+
+func hasSigil(word string) bool { return strings.HasPrefix(word, "#") || strings.HasPrefix(word, "/") }
+
+// word is a folded word of a text and where it ends in the text (in bytes).
+type word struct {
+	text string
+	end  int
+}
+
+func texts(words []word) []string {
+	out := make([]string, len(words))
+	for i, w := range words {
+		out[i] = w.text
+	}
+	return out
+}
+
+// commandWords is text folded (FoldText) into words, each a run of letters and digits; a word keeps the #
+// or / it starts with after a space, so a command named "/loi" is that token, not the word it spells.
+func commandWords(text string) []word {
+	var words []word
+	runStart := -1
+	sigil := ""
+	flush := func(at int) {
+		if runStart >= 0 {
+			if folded := FoldText(text[runStart:at]); folded != "" {
+				words = append(words, word{text: sigil + folded, end: at})
+			}
+		}
+		runStart, sigil = -1, ""
+	}
+	previous := ' '
+	for at, r := range text {
+		inWord := unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.Is(unicode.Mn, r)
+		switch {
+		case inWord && runStart < 0:
+			runStart = at
+			if previous == '#' || previous == '/' {
+				sigil = string(previous)
+			}
+		case !inWord && runStart >= 0:
+			flush(at)
+		}
+		if !inWord && (r == '#' || r == '/') && (at == 0 || unicode.IsSpace(previous)) {
+			previous = r
+			continue
+		}
+		if !inWord {
+			previous = ' '
+			if !unicode.IsSpace(r) {
+				previous = 'x'
+			}
+		} else {
+			previous = r
+		}
+	}
+	flush(len(text))
+	return words
 }
 
 // damerau is the optimal string alignment distance of two strings, in runes.

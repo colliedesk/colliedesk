@@ -365,7 +365,7 @@ func (s *Service) runDraft(ctx context.Context, run *Run) error {
 		// while it was written is not wanted (one still being written may yet be stopped by a limit): it is set aside unseen (its call is spent and metered).
 		var overtaken bool
 		if err := tx.QueryRow(ctx, `SELECT d.automatic AND (EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id=d.workspace_id AND m.conversation_id=d.conversation_id
-				AND m.kind='outgoing' AND m.created_at>=COALESCE((SELECT a.created_at FROM messages a WHERE a.workspace_id=d.workspace_id AND a.id=d.answers_message_id),d.created_at))
+				AND m.kind='outgoing' AND m.notice_kind IS NULL AND m.created_at>=COALESCE((SELECT a.created_at FROM messages a WHERE a.workspace_id=d.workspace_id AND a.id=d.answers_message_id),d.created_at))
 				OR EXISTS (SELECT 1 FROM ai_drafts n WHERE n.workspace_id=d.workspace_id AND n.conversation_id=d.conversation_id AND n.automatic AND n.id<>d.id
 					AND (n.created_at,n.id)>(d.created_at,d.id) AND n.status='ready' AND n.outcome IS NULL))
 			FROM ai_drafts d WHERE d.workspace_id=$1 AND d.id=$2`, run.Task.WorkspaceID, c.draftID).Scan(&overtaken); err != nil {

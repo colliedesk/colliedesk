@@ -133,7 +133,10 @@ a page a customer sees. Email and web forms have no places. For AI agents and th
 ## Chat rules
 
 A chat channel's scopes (its one-to-one chats, its groups) can each set how a customer's messages become
-requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change):
+requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change). `GET
+/api/v1/channels/{id}` answers `settings`, what the channel stores over its type's defaults, and
+`effective_settings`, the rules in force; `PATCH /api/v1/channels/{id}` with `settings` replaces the stored
+ones whole, so send them all.
 - `gather` collects what a customer says close together into one batch: `quiet_seconds` of silence
   closes it, `max_seconds` after its first message at the latest. With `pre_command_seconds`, what the
   customer said that long before a command (a screenshot sent just before "report a bug") is part of
@@ -144,11 +147,29 @@ requests, in the channel's settings (`settings.scopes.<scope>`, an admin's chang
   one request).
 - A cancel command (such as "Hủy") cancels only a batch of its sender that named a command; with none
   being collected it is an ordinary message.
+- How a command's phrases match (`settings.commands.<name>.match`): `fuzzy` (the default) compares the
+  message's first words without accents or case and forgives one wrong, missing, added or swapped letter
+  in a phrase of five letters or more; `words` compares them the same way but forgives no wrong letter,
+  only a missing or doubled space between the phrase's words ("báolỗi" is "Báo lỗi", "báo lỗix" is not);
+  `exact` is the whole message, accents kept, in any case ("Hủy" matches "hủy", never "huy" or "Hủy đi").
+  A phrase that starts with `#` or `/` keeps it: `/loi` matches "/loi …", not a message starting "lỗi".
 - `unmatched: join_open`, on a scope that opens conversations only on a command (`mode: commands`): a
   message that names no command joins the customer's open or pending conversation on the channel when
   they have exactly one. With none or several it is kept, unresolved, in the chat place: it shows in the
-  place and among the messages nobody concluded on, and joins nothing. The channel does not yet answer
-  such a message with a hint of its own.
+  place and among the messages nobody concluded on, and joins nothing.
+- `unmatched: notice`, on a scope that opens conversations only on a command: a message that names no
+  command opens and joins nothing, is kept in its chat place, and is answered there with the channel's
+  `settings.notices.unmatched` (say which command opens a request). One chat gets it at most once in
+  `settings.notices.unmatched_every_seconds` (300 by default, counted from the last one queued; 0 answers
+  every message), so a customer writing on, or a bot answering the notice, is not answered each time; a
+  second delivery of the same message never is. Only a scope where one customer writes (a one-to-one chat)
+  takes it: a group would answer everyone's chatter. The notice is in the place as the channel's own message,
+  with whether it went out (`delivery_status`: queued, sent or failed). Without that text nothing is sent.
+- A notice's text (`settings.notices.received`, `settings.notices.unmatched`) may only name placeholders
+  the channel fills; it fills none yet, so `{ref}` and the like are refused when the settings are saved.
+- The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
+  its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
+  the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
 - A team member writing in a group on the chat app itself is part of the place, never a customer's
   request: it opens and joins nothing, unless they name a command that opens one.
 

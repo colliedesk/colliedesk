@@ -52,6 +52,19 @@ type channelBody struct {
 type channelDetailBody struct {
 	channelBody
 	Config any `json:"config"`
+	// Settings are what the channel stores over its type's defaults, EffectiveSettings the rules in
+	// force; both are left out for a removed channel.
+	Settings          json.RawMessage    `json:"settings,omitempty"`
+	EffectiveSettings *channels.Settings `json:"effective_settings,omitempty"`
+}
+
+func detailBody(a *API, public store.ChannelPublic) channelDetailBody {
+	body := channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config, Settings: public.Settings}
+	if public.Settings != nil {
+		effective := public.Channel.Settings
+		body.EffectiveSettings = &effective
+	}
+	return body
 }
 
 func optionalText(value string) *string {
@@ -74,7 +87,7 @@ func (a *API) channelJSON(public store.ChannelPublic) channelBody {
 }
 
 func (a *API) writeChannelDetail(response http.ResponseWriter, status int, public store.ChannelPublic) {
-	writeJSON(response, status, channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config})
+	writeJSON(response, status, detailBody(a, public))
 }
 
 // writeChannelConflict answers a value another channel of the workspace has: 409 with the field and
@@ -268,7 +281,7 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 			return nil, errAnswered
 		}
 		a.recordActivation(workspaceID, nil, public)
-		return channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config}, nil
+		return detailBody(a, public), nil
 	})
 }
 

@@ -26,7 +26,7 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 			WHERE i.workspace_id=m.workspace_id AND i.message_id=m.id AND i.role='customer' ORDER BY i.occurred_at,i.id LIMIT 1) END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
-	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind
+	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind,m.notice_kind
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
@@ -49,7 +49,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
 		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome,
-		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID, &message.IntakeReplyKind); err != nil {
+		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID, &message.IntakeReplyKind, &message.NoticeKind); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
@@ -132,6 +132,8 @@ type Actor struct {
 	RequestID string
 	// AIDraftID is the AI draft a reply was written from; empty otherwise.
 	AIDraftID string
+	// NoticeKind marks a reply the channel sends by itself (its received notice): no reply of the team.
+	NoticeKind string
 }
 
 // CreateMessage stores a reply or note with files already written to attachment storage (only
@@ -289,9 +291,9 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if err != nil {
 		return domain.Message{}, err
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc,ai_draft_id)
-		SELECT $1,c.id,NULLIF($3::text,'')::uuid,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
-		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID, actor.AIDraftID).Scan(&messageID)
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc,ai_draft_id,notice_kind)
+		SELECT $1,c.id,NULLIF($3::text,'')::uuid,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid,NULLIF($10,'') FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID, actor.AIDraftID, actor.NoticeKind).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)
 	}
@@ -387,7 +389,7 @@ func checkReplySeen(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 	if seen == nil || latest <= *seen {
 		return nil
 	}
-	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='outgoing' AND m.reply_number>$3
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='outgoing' AND m.notice_kind IS NULL AND m.reply_number>$3
 		ORDER BY m.created_at,m.id`, workspaceID, conversationID, *seen)
 	if err != nil {
 		return fmt.Errorf("list newer replies: %w", err)
@@ -403,6 +405,10 @@ func checkReplySeen(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("list newer replies: %w", err)
+	}
+	// Only the channel's own notices came since: nobody of the team replied.
+	if len(newer) == 0 {
+		return nil
 	}
 	return &domain.ReplyConflictError{Latest: latest, Newer: newer}
 }

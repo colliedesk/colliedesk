@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"time"
 
@@ -90,19 +91,72 @@ const (
 	ActionReopen = "reopen"
 )
 
+// Command matches.
+const (
+	// MatchFuzzy compares a message's first words folded (FoldText) and forgives one wrong letter of a
+	// phrase of five letters or more (the default).
+	MatchFuzzy = "fuzzy"
+	// MatchWords compares them folded and forgives no wrong letter, only a missing or doubled space
+	// between the words of the phrase.
+	MatchWords = "words"
+	// MatchExact compares the whole message, with its accents, in any case.
+	MatchExact = "exact"
+)
+
 // Command is a command customers type at the start of a message, as a workspace sets it up: its
 // phrases come only from the channel's settings, never from a list built into the server.
 type Command struct {
-	Action   string   `json:"action,omitempty"`
+	Action string `json:"action,omitempty"`
+	// Match is how its phrases are compared with a message (MatchFuzzy when empty).
+	Match    string   `json:"match,omitempty"`
 	Phrases  []string `json:"phrases,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Priority string   `json:"priority,omitempty"`
 }
 
+// Notice kinds, as their messages are marked (notice_kind).
+const (
+	NoticeReceived  = "received"
+	NoticeUnmatched = "unmatched"
+)
+
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
 type Notices struct {
 	// Received answers the first message of a new conversation.
 	Received string `json:"received,omitempty"`
+	// Unmatched answers, in its chat, a message a scope with unmatched notice opens nothing for.
+	Unmatched string `json:"unmatched,omitempty"`
+	// UnmatchedEverySeconds is the least time between two unmatched notices of one chat (one customer
+	// writing on, or a bot answering the notice); 0 answers every message. Merge fills in the default.
+	UnmatchedEverySeconds *int `json:"unmatched_every_seconds,omitempty"`
+}
+
+// DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
+// sets nothing.
+const DefaultUnmatchedEverySeconds = 300
+
+// NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
+// sends the notice. A placeholder of no list is refused when the settings are saved.
+var NoticePlaceholders = map[string][]string{NoticeReceived: {}, NoticeUnmatched: {}}
+
+// noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
+var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)
+
+// UnknownPlaceholder is the first placeholder of text that a notice of kind may not use, "" when none.
+func UnknownPlaceholder(kind, text string) string {
+	for _, match := range noticePlaceholder.FindAllStringSubmatch(text, -1) {
+		if !slices.Contains(NoticePlaceholders[kind], match[1]) {
+			return match[0]
+		}
+	}
+	return ""
+}
+
+// RenderNotice fills the placeholders of a notice's text with values; one without a value is left out.
+func RenderNotice(text string, values map[string]string) string {
+	return noticePlaceholder.ReplaceAllStringFunc(text, func(placeholder string) string {
+		return values[placeholder[1:len(placeholder)-1]]
+	})
 }
 
 // Settings are a channel's rules for what arrives and what leaves. They never hold a secret.
@@ -145,6 +199,9 @@ const (
 	// UnmatchedJoinOpen joins a message that names no command to its sender's open or pending
 	// conversation on the channel when there is exactly one; otherwise the message is kept unresolved.
 	UnmatchedJoinOpen = "join_open"
+	// UnmatchedNotice keeps a message that names no command in its chat and answers it there with the
+	// channel's unmatched notice.
+	UnmatchedNotice = "notice"
 )
 
 // Scope is the rules of one scope; a field left out keeps the channel's.
@@ -186,17 +243,20 @@ func (s Settings) ForScope(scope string) (Settings, Scope) {
 
 // Merge returns s with every field override sets replacing it; override is JSON a channel stores.
 func (s Settings) Merge(override json.RawMessage) (Settings, error) {
-	if len(override) == 0 {
-		return s, nil
-	}
 	// s is a type's defaults, shared by every channel of the type: decoding writes into the maps and the
 	// slice it finds, so it decodes into copies of them.
 	merged := s
 	merged.DefaultTags = slices.Clone(s.DefaultTags)
 	merged.Commands = maps.Clone(s.Commands)
 	merged.Scopes = maps.Clone(s.Scopes)
-	if err := json.Unmarshal(override, &merged); err != nil {
-		return Settings{}, err
+	if len(override) > 0 {
+		if err := json.Unmarshal(override, &merged); err != nil {
+			return Settings{}, err
+		}
+	}
+	if merged.Notices.UnmatchedEverySeconds == nil {
+		every := DefaultUnmatchedEverySeconds
+		merged.Notices.UnmatchedEverySeconds = &every
 	}
 	return merged, nil
 }

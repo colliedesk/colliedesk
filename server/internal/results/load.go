@@ -20,7 +20,7 @@ const customerStarted = `
 		WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind<>'note' AND m.created_at<=$2
 		ORDER BY m.created_at,m.id LIMIT 1) f ON f.kind='incoming'
 	LEFT JOIN LATERAL (SELECT m.created_at FROM messages m
-		WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' AND m.created_at>=f.created_at AND m.created_at<=$2
+		WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' AND m.notice_kind IS NULL AND m.created_at>=f.created_at AND m.created_at<=$2
 		ORDER BY m.created_at LIMIT 1) r ON true`
 
 // LoadLive reads the Colliedesk side measured at m: customer-started conversations not created by an

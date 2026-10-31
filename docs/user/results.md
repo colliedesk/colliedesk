@@ -43,7 +43,7 @@ apart.
 side now, the baseline when its import finished. A reply that came later does not count.
 
 **First response time.** Time from the customer's first message to the first reply your team sent
-after it. Notes, automatic replies and forwards are not replies. The page shows the median (half
+after it. Notes, automatic replies (a channel's own received notice among them) and forwards are not replies. The page shows the median (half
 got a reply faster) and the 90th percentile (90% got one within that time), with how many were
 answered and how many still wait for a first reply. Time is calendar time, nights and weekends
 included.

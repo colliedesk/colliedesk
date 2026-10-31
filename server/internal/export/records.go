@@ -959,9 +959,11 @@ type Message struct {
 	DetachedByAgentID *string    `json:"detached_by_agent_id"`
 	// IntakeReplyKind is what intake said a chat message added to its conversation (acknowledgement:
 	// it kept a resolved conversation resolved).
-	IntakeReplyKind *string      `json:"intake_reply_kind"`
-	CreatedAt       time.Time    `json:"created_at"`
-	Attachments     []Attachment `json:"attachments"`
+	IntakeReplyKind *string `json:"intake_reply_kind"`
+	// NoticeKind marks a reply the channel sent by itself (received), not one of the team.
+	NoticeKind  *string      `json:"notice_kind"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Attachments []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
