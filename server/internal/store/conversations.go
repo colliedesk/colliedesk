@@ -43,6 +43,10 @@ type ConversationFilter struct {
 	Ref string
 	// refIDs are the conversations Ref (or Search) names, found before the list is read.
 	refIDs []string
+	// SLA keeps the conversations a running response target makes "overdue" or "due_soon".
+	SLA []string
+	// slaOn says the workspace's response targets are on (read before the list).
+	slaOn bool
 	// Sort is one of the ConversationSort* values; empty is ConversationSortUpdatedDesc.
 	Sort   string
 	Search string
@@ -63,6 +67,7 @@ const (
 	ConversationSortCreatedAsc     = "created_asc"
 	ConversationSortPriority       = "priority"
 	ConversationSortWaitingLongest = "waiting_longest"
+	ConversationSortDue            = "due"
 )
 
 var conversationOrders = map[string]string{
@@ -73,6 +78,8 @@ var conversationOrders = map[string]string{
 	ConversationSortPriority:    `CASE c.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,c.updated_at DESC,c.id DESC`,
 	// Conversations awaiting the team, the oldest customer message first, then the rest by last update.
 	ConversationSortWaitingLongest: `CASE WHEN c.last_public_kind='incoming' THEN c.last_public_at END ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
+	// The earliest running response target first, then the rest as the inbox shows them.
+	ConversationSortDue: `c.sla_due_at ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
 }
 
 type ConversationPage struct {
@@ -220,6 +227,9 @@ func (s *Store) withChannelRef(ctx context.Context, tx pgx.Tx, workspaceID strin
 		if err := s.attachChannelRefs(ctx, tx, workspaceID, items); err != nil {
 			return domain.Conversation{}, err
 		}
+		if err := s.attachSLA(ctx, tx, workspaceID, items); err != nil {
+			return domain.Conversation{}, err
+		}
 		return items[0], nil
 	}
 }
@@ -249,7 +259,10 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 		if err != nil {
 			return page, err
 		}
-		return page, s.attachChannelRefs(ctx, tx, workspaceID, page.Items)
+		if err := s.attachChannelRefs(ctx, tx, workspaceID, page.Items); err != nil {
+			return page, err
+		}
+		return page, s.attachSLA(ctx, tx, workspaceID, page.Items)
 	})
 }
 
@@ -308,6 +321,22 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	}
 	if filter.ContactID != "" {
 		q.and("c.contact_id=" + q.arg(filter.ContactID) + "::uuid")
+	}
+	if len(filter.SLA) > 0 {
+		// Off, no conversation has targets; a stale row is a round of the worker behind.
+		anyOf := []string{"false"}
+		if filter.slaOn {
+			at := q.arg(now)
+			for _, state := range filter.SLA {
+				switch state {
+				case "overdue":
+					anyOf = append(anyOf, "c.sla_due_at<="+at)
+				case "due_soon":
+					anyOf = append(anyOf, "(c.sla_warn_at<="+at+" AND c.sla_due_at>"+at+")")
+				}
+			}
+		}
+		q.and("c.sla_applies AND (" + strings.Join(anyOf, " OR ") + ")")
 	}
 	if filter.Ref != "" {
 		q.and("c.id=ANY(" + q.arg(filter.refIDs) + "::uuid[])")
@@ -420,6 +449,14 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		}
 		if !kept {
 			return ConversationPage{}, domain.ErrResultsRefreshed
+		}
+	}
+	if len(filter.SLA) > 0 || filter.Sort == ConversationSortDue {
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled FROM response_targets WHERE workspace_id=$1),false)`, workspaceID).Scan(&filter.slaOn); err != nil {
+			return ConversationPage{}, fmt.Errorf("read response targets: %w", err)
+		}
+		if !filter.slaOn && filter.Sort == ConversationSortDue {
+			filter.Sort = ConversationSortUpdatedDesc
 		}
 	}
 	if filter.Ref != "" || filter.Search != "" {
