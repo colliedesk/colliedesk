@@ -3488,6 +3488,51 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/billing/migration-request:
+    post:
+      operationId: createMigrationRequest
+      x-permission: billing:manage
+      description: >
+        Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you
+        on a call). Hosted cloud only, where billing is configured. The server emails the request to the
+        Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the
+        admin's email as Reply-To, and stores it with its time: `migration_requested_at` of
+        `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. Only an
+        admin may ask (an agent token's call waits for a person's approval). `freshdesk_address` is a
+        `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries
+        the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`.
+        A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server
+        cannot send mail; nothing is stored then.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [freshdesk_address]
+              additionalProperties: false
+              properties:
+                freshdesk_address: {type: string, minLength: 1, maxLength: 253, description: 'For example yourcompany.freshdesk.com'}
+                times: {type: string, maxLength: 500, description: 'Times that suit the admin for a call, with a time zone; free text. Optional.'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The request was emailed to Colliedesk and stored
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MigrationRequest'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {description: '`validation_failed`, with `fields.freshdesk_address` or `fields.times`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429':
+          description: '`rate_limited`: the workspace asked 5 times in the last hour.'
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {description: '`mail_unavailable`: this server cannot send mail; nothing was stored.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /api/v1/billing/portal:
     post:
       operationId: createBillingPortal
@@ -8296,9 +8341,16 @@ components:
       required: [status]
       properties:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
+    MigrationRequest:
+      type: object
+      required: [freshdesk_address, times, requested_at]
+      properties:
+        freshdesk_address: {type: string, description: 'The Freshdesk host name as stored, for example yourcompany.freshdesk.com'}
+        times: {type: string, description: 'The times the admin gave; empty when none'}
+        requested_at: {type: string, format: date-time}
     Billing:
       type: object
-      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans, checkout_refusals, storage_upgrade_plan]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans, checkout_refusals, storage_upgrade_plan, migration_requested_at]
       properties:
         plan:
           type: string
@@ -8340,6 +8392,7 @@ components:
             properties:
               plan: {$ref: '#/components/schemas/CheckoutPlan'}
               reason: {type: string}
+        migration_requested_at: {type: [string, 'null'], format: date-time, description: 'When an admin last asked Colliedesk to move the workspace''s Freshdesk data (POST /api/v1/billing/migration-request); null when none did.'}
         storage_upgrade_plan:
           type: [string, 'null']
           enum: [solo, small, team, team25, founding, null]
@@ -8631,6 +8684,7 @@ components:
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
+                admins: {type: array, items: {type: string}, description: 'The display names of the workspace''s admins, so a person who is not an admin knows whom to ask for a plan. Sent only to a non-admin, only while the plan is trial or none; left out otherwise.'}
     TokenPreset:
       type: string
       enum: [read, draft, send, admin]

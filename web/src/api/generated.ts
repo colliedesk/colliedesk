@@ -1998,6 +1998,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/migration-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. Only an admin may ask (an agent token's call waits for a person's approval). `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. */
+        post: operations["createMigrationRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/portal": {
         parameters: {
             query?: never;
@@ -5138,6 +5155,14 @@ export interface components {
             /** @enum {string} */
             status: "applied" | "duplicate" | "stale" | "ignored";
         };
+        MigrationRequest: {
+            /** @description The Freshdesk host name as stored, for example yourcompany.freshdesk.com */
+            freshdesk_address: string;
+            /** @description The times the admin gave; empty when none */
+            times: string;
+            /** Format: date-time */
+            requested_at: string;
+        };
         Billing: {
             /**
              * @description The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
@@ -5173,6 +5198,11 @@ export interface components {
                 plan: components["schemas"]["CheckoutPlan"];
                 reason: string;
             }[];
+            /**
+             * Format: date-time
+             * @description When an admin last asked Colliedesk to move the workspace's Freshdesk data (POST /api/v1/billing/migration-request); null when none did.
+             */
+            migration_requested_at: string | null;
             /**
              * @description The plan this server sells with more storage and as many agents as the plan in effect, for the storage notice; null on the trial and when none is on sale.
              * @enum {string|null}
@@ -5430,6 +5460,8 @@ export interface components {
                 locked: boolean;
                 /** @description True when a Freshdesk import already extended the trial. */
                 trial_extended: boolean;
+                /** @description The display names of the workspace's admins, so a person who is not an admin knows whom to ask for a plan. Sent only to a non-admin, only while the plan is trial or none; left out otherwise. */
+                admins?: string[];
             };
         };
         /**
@@ -12496,6 +12528,69 @@ export interface operations {
             };
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadGateway"];
+        };
+    };
+    createMigrationRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description For example yourcompany.freshdesk.com */
+                    freshdesk_address: string;
+                    /** @description Times that suit the admin for a call, with a time zone; free text. Optional. */
+                    times?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The request was emailed to Colliedesk and stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigrationRequest"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `validation_failed`, with `fields.freshdesk_address` or `fields.times`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `rate_limited`: the workspace asked 5 times in the last hour. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            /** @description `mail_unavailable`: this server cannot send mail; nothing was stored. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createBillingPortal: {
