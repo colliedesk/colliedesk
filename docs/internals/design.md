@@ -60,7 +60,9 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   (the most common bulk change, one press), **Set status**, **Assign to**, **Tags**, **Clear selection**.
   With a chat conversation in the selection, a **Tell customers** checkbox stands between the count and
   the icons (DOM order = reading order), ticked for each new selection; unticked, Resolve and Set status
-  are named "… quietly" and send `notify: false`. Below 44 rem the icons move to a second line.
+  are named "… quietly" and send `notify: false`. The list column has no room for all three, so the icons
+  then take a second line, right-aligned. A closed menu's choices and a hidden tip take no room (`display:
+  none`), so neither the bar nor the thread header is wider than its box.
   The title and filters stay visible. **Tags** is one menu, as in Linear: a check mark when every selected
   row has the tag, a dash when some do (`aria-pressed` true/mixed); a checked tag comes off, any other goes
   on. Each choice is a button in a `<details>` menu, never a `<select>`: a select fires on every arrow key

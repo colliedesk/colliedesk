@@ -540,6 +540,20 @@ test('a listed chat conversation cannot be resolved from the header until the se
   expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
 });
 
+test('the first row shown with nothing picked is read for its notices too, so its Resolve is not stuck', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo, may_tell_customer: true }], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue({ ...alpha, channel_ref: zalo, may_tell_customer: true, status_notices: ['resolved'] });
+  renderRoute();
+  const resolve = await screen.findByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' });
+  expect(resolve).not.toHaveAttribute('aria-disabled');
+  expect(api.conversation).toHaveBeenCalledWith(alpha.id);
+});
+
 test('an email conversation in the list is not read again to open it', async () => {
   quietApis();
   api.conversations.mockReset();

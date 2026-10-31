@@ -141,17 +141,19 @@ export function InboxRoute() {
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
   const isAdmin = me.data?.agent?.role === 'admin';
   const activeID = selectedId ?? params.conversationId;
-  const listed = conversations.data?.items.find((item) => item.id === activeID);
+  // With no conversation picked, the first row is the one on screen.
+  const shownID = activeID ?? conversations.data?.items[0]?.id;
+  const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
   // A chat conversation is read too when listed: only the conversation itself says which statuses would tell
   // its customer (status_notices), which the header and the details offer a quiet way for.
-  const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
-    enabled: Boolean(activeID && (!listed || (mayTell(listed) && listed.status_notices === undefined))) });
+  const opened = useQuery({ queryKey: ['conversations', 'one', shownID], queryFn: () => api.conversation(shownID!),
+    enabled: Boolean(shownID && (!listed || (mayTell(listed) && listed.status_notices === undefined))) });
   // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
   // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
   // row of the list, whose composer would send a reply to the wrong customer.
-  const detail = opened.data?.id === activeID ? opened.data : undefined;
+  const detail = opened.data?.id === shownID ? opened.data : undefined;
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
   const selected = withNotices ?? detail ?? (activeID ? undefined : conversations.data?.items[0]);

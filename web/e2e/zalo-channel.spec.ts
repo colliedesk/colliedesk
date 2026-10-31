@@ -211,9 +211,12 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
 
   // At 390 px nothing scrolls sideways, the quiet menu open or closed.
   await page.setViewportSize({ width: 390, height: 844 });
-  const sideways = () => page.evaluate(() => [document.documentElement, ...Array.from(document.querySelectorAll('.timeline-actions, .details-panel'))]
+  const sideways = () => page.evaluate(() => [document.documentElement, ...Array.from(document.querySelectorAll('.timeline-actions, .status-split, .details-panel'))]
     .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName));
   expect(await sideways()).toEqual([]);
+  await page.setViewportSize({ width: 768, height: 1024 });
+  expect(await sideways()).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('summary[aria-label="More ways to resolve"]').click();
   const quiet = page.getByRole('button', { name: 'Resolve without telling the customer' });
   await expect(quiet).toBeInViewport({ ratio: 1 });
@@ -234,14 +237,18 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
     .toEqual([expect.objectContaining({ path: '/v3.0/oa/message/cs', recipient: { user_id: '7700002031' }, text: expect.stringMatching(/^Yêu cầu #\d+ đã được xử lý\.$/) })]);
 
   // The bulk bar and the Messages tab fit a phone too, Tell customers on the first line of the bar.
-  // Measured without the hidden tooltips (data-tip), which every icon control has in the layout.
-  const fits = async (selector: string) => (await page.addStyleTag({ content: '[data-tip]::after { display: none !important; }' }), page.evaluate((sel) => [document.documentElement, ...Array.from(document.querySelectorAll(sel))]
+  const fits = async (selector: string) => (page.evaluate((sel) => [document.documentElement, ...Array.from(document.querySelectorAll(sel))]
     .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName), selector));
   await page.goto(`${baseURL}/`);
   await page.getByRole('radio', { name: 'Resolved' }).check();
   await page.locator('.row-check input').first().check();
   await expect(page.getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
   expect(await fits('.bulk-bar')).toEqual([]);
+  for (const width of [768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await fits('.bulk-bar')).toEqual([]);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${baseURL}/settings/channels`);
   await page.getByRole('link', { name: /Zalo OA/ }).first().click();
   await page.getByRole('tab', { name: 'Messages' }).click();
