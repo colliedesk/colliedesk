@@ -131,6 +131,16 @@ const (
 	NoticeCancelled      = "cancelled"
 	NoticeAskDescription = "ask_description"
 	NoticeExpired        = "expired"
+	// NoticeReopenNotFound answers a reopen command whose code names no conversation of the customer's
+	// (mistyped, someone else's, another group's): the same words whatever the reason.
+	NoticeReopenNotFound = "reopen_not_found"
+	// NoticeReopenLegacy answers a reopen command naming a code of the system before (below where the
+	// channel's series was taken over), with the new conversation it opened instead.
+	NoticeReopenLegacy = "reopen_legacy"
+	// NoticeReopened and NoticeReopenNoted answer a reopen command that found its conversation: resolved or
+	// closed, it opened again; still open or pending, it took the message.
+	NoticeReopened    = "reopened"
+	NoticeReopenNoted = "reopen_noted"
 )
 
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
@@ -148,6 +158,11 @@ type Notices struct {
 	Cancelled string `json:"cancelled,omitempty"`
 	// Expired tells a customer their request waiting for a description expired (Gather.ExpireSeconds).
 	Expired string `json:"expired,omitempty"`
+	// ReopenNotFound and ReopenLegacy answer a reopen command (NoticeReopenNotFound, NoticeReopenLegacy).
+	ReopenNotFound string `json:"reopen_not_found,omitempty"`
+	ReopenLegacy   string `json:"reopen_legacy,omitempty"`
+	Reopened       string `json:"reopened,omitempty"`
+	ReopenNoted    string `json:"reopen_noted,omitempty"`
 }
 
 // DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
@@ -157,7 +172,8 @@ const DefaultUnmatchedEverySeconds = 300
 // NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
 // sends the notice. A placeholder of no list is refused when the settings are saved.
 var NoticePlaceholders = map[string][]string{NoticeReceived: {"ref"}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
-	NoticeAskDescription: {}, NoticeExpired: {}}
+	NoticeAskDescription: {}, NoticeExpired: {}, NoticeReopenNotFound: {"ref"}, NoticeReopenLegacy: {"ref", "old_ref"},
+	NoticeReopened: {"ref"}, NoticeReopenNoted: {"ref"}}
 
 // noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
 var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)
