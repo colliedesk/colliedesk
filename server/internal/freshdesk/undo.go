@@ -204,6 +204,11 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 		// A bundle's chat items go with their messages, and the chats it created with their last item.
 		{new(int), `DELETE FROM channel_thread_items x USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='chat_item'
 			AND x.workspace_id=i.workspace_id AND x.id=i.target_id AND x.message_id IS NULL`, []any{workspaceID, source}},
+		// The senders only its items named go with them.
+		{new(int), `DELETE FROM channel_senders s WHERE s.workspace_id=$1
+			AND s.channel_id IN (SELECT split_part(i.source_id,':',1)::uuid FROM import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='chat')
+			AND NOT EXISTS (SELECT 1 FROM channel_thread_items n WHERE n.workspace_id=s.workspace_id AND n.channel_id=s.channel_id AND n.sender_kind=s.sender_kind AND n.sender_value=s.sender_value)`,
+			[]any{workspaceID, source}},
 		{new(int), `DELETE FROM channel_threads x USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='chat'
 			AND (i.meta->>'created')::boolean AND x.workspace_id=i.workspace_id AND x.id=i.target_id
 			AND NOT EXISTS (SELECT 1 FROM channel_thread_items n WHERE n.workspace_id=x.workspace_id AND n.thread_id=x.id)`, []any{workspaceID, source}},

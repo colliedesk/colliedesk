@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -502,24 +503,53 @@ func (w *writer) chatItem(ctx context.Context, c Conversation, thread string, me
 		return nil
 	}
 	direction, role, contact, agent, sender := "in", "customer", any(w.contacts[c.Contact]), any(nil), contactName(w.archive.Bundle, c.Contact)
+	identity := contactIdentity(w.archive.Bundle, c.Contact, c.ChannelID)
 	if message.Kind == "outgoing" {
-		direction, role, contact, sender = "out", "staff", nil, message.AuthorName
+		direction, role, contact, sender, identity = "out", "staff", nil, message.AuthorName, Identity{}
 		if id := w.agents[strings.ToLower(message.AuthorEmail)]; message.AuthorEmail != "" && id != "" {
 			agent = id
 		}
 	}
 	var id string
-	if err := w.tx.QueryRow(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_name,contact_id,agent_id,external_id,body,message_id,
-			disposition,occurred_at,created_at)
-		VALUES($1,$2::uuid,$3::uuid,$4,$5,NULLIF(left($6,200),''),$7::uuid,$8::uuid,left($9,1000),left($10,20000),$11::uuid,'conversation',$12,$12) RETURNING id::text`,
-		w.workspaceID, c.ChannelID, thread, direction, role, sender, contact, agent, message.ID, message.Body, messageID, message.CreatedAt.UTC()).Scan(&id); err != nil {
+	// Named apart from the channel's own message ids (and another bundle's): bundle:<source>:<id>.
+	if err := w.tx.QueryRow(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,sender_name,contact_id,agent_id,
+			external_id,body,message_id,disposition,occurred_at,created_at)
+		VALUES($1,$2::uuid,$3::uuid,$4,$5,NULLIF(left($13,40),''),NULLIF(left($14,200),''),NULLIF(left($6,200),''),$7::uuid,$8::uuid,left($9,1000),left($10,20000),$11::uuid,
+			'conversation',$12,$12) RETURNING id::text`,
+		w.workspaceID, c.ChannelID, thread, direction, role, sender, contact, agent, "bundle:"+w.archive.Bundle.Source+":"+message.ID, message.Body, messageID,
+		message.CreatedAt.UTC(), identity.Kind, identity.Value).Scan(&id); err != nil {
 		return err
+	}
+	// The conversation is in this chat: its replies go there.
+	if _, err := w.tx.Exec(ctx, `INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason,linked_at) SELECT $1,m.conversation_id,$2::uuid,'import',$3
+		FROM messages m WHERE m.workspace_id=$1 AND m.id=$4::uuid`, w.workspaceID, id, message.CreatedAt.UTC(), messageID); err != nil {
+		return err
+	}
+	if identity.Value != "" {
+		if err := store.RecordImportedSender(ctx, w.tx, w.workspaceID, c.ChannelID, thread, role,
+			channels.Sender{Identity: channels.Identity{Kind: identity.Kind, Value: identity.Value}, Name: sender}, message.CreatedAt.UTC()); err != nil {
+			return err
+		}
 	}
 	if _, err := w.tx.Exec(ctx, `UPDATE channel_threads SET last_item_at=GREATEST(COALESCE(last_item_at,$3),$3) WHERE workspace_id=$1 AND id=$2::uuid`,
 		w.workspaceID, thread, message.CreatedAt.UTC()); err != nil {
 		return err
 	}
 	return w.mark(ctx, "chat_item", message.ID, c.ID, id, true)
+}
+
+// contactIdentity is how the channel knows the conversation's customer, empty when the bundle gives none.
+func contactIdentity(b Bundle, id, channelID string) Identity {
+	for _, contact := range b.Contacts {
+		if contact.ID == id {
+			for _, identity := range contact.Identities {
+				if identity.ChannelID == channelID {
+					return identity
+				}
+			}
+		}
+	}
+	return Identity{}
 }
 
 func contactName(b Bundle, id string) string {

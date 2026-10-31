@@ -75,9 +75,10 @@ conversation points at; they take space, nothing else.
    that names no command may join a conversation still open there, by the channel's join policy, as it
    would join one opened in Colliedesk.
 4. `place` is the chat of that channel the conversation was opened in: `kind` `direct` (one to one) or
-   `group`, `external_id` as the channel names it (`user:<id>`, `group:<id>` for a Zalo OA), and a `name`.
-   Its customer's messages and the team's replies show in that chat (notes do not), and a customer
-   reopens it by its code from that chat only, as one opened in Colliedesk.
+   `group`, `external_id` as the channel names it (`user:<id>` for a direct chat, `group:<id>` for a
+   group), and a `name`. Its customer's messages and the team's replies show in that chat (notes do not),
+   its customer is one of the channel's senders, a reply to it goes to that chat (a group's to the group),
+   and a customer reopens it by its code from that chat only, as one opened in Colliedesk.
 5. `number_series` (the series' key, in any case: `REF` is `ref`), `number` and `number_year` keep the
    code the customer has; without them the conversation takes the next number of its series. A number of this year or later in a series whose
    code shows the year (or any number in one whose code does not) moves the series' next number past it.

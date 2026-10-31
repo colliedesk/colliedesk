@@ -129,6 +129,8 @@ func pack(t *testing.T, b bundle.Bundle, files map[string][]byte, extra ...strin
 func TestABundleImportsAsItWasAndReconciles(t *testing.T) {
 	d := newDesk(t)
 	ctx := context.Background()
+	// The known customer's chat is there already: the import writes in it, the undo leaves it.
+	d.one(t, `INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id,opens_conversations) VALUES($1,$2,'direct','user:100',true) RETURNING id::text`, d.workspace, d.channel)
 	b, files := sample(d.channel)
 	report, err := bundle.Run(ctx, d.pool, pack(t, b, files), bundle.Options{WorkspaceSlug: d.slug, Storage: d.storage})
 	if err != nil || report.Status != bundle.StatusOK {
@@ -171,8 +173,11 @@ func TestABundleImportsAsItWasAndReconciles(t *testing.T) {
 		t.Fatalf("identities after undo = %s (the known one and the kept conversation's)", got)
 	}
 	if got := d.one(t, `SELECT COALESCE(string_agg(t.external_id||':'||(SELECT count(*) FROM channel_thread_items i WHERE i.workspace_id=t.workspace_id AND i.thread_id=t.id),',' ORDER BY t.external_id),'')
-		FROM channel_threads t WHERE t.workspace_id=$1`, d.workspace); got != "user:200:1" {
-		t.Fatalf("chats after undo = %s (the kept conversation's, with its message)", got)
+		FROM channel_threads t WHERE t.workspace_id=$1`, d.workspace); got != "user:100:0,user:200:1" {
+		t.Fatalf("chats after undo = %s (the one there before, emptied; the kept conversation's, with its message)", got)
+	}
+	if got := d.one(t, `SELECT COALESCE(string_agg(sender_value,',' ORDER BY sender_value),'') FROM channel_senders WHERE workspace_id=$1`, d.workspace); got != "200" {
+		t.Fatalf("senders after undo = %s (the kept conversation's customer)", got)
 	}
 }
 
@@ -419,5 +424,39 @@ func TestABundleOriginIsKeptAndTheImportTraceIsApart(t *testing.T) {
 	_ = w.Close()
 	if _, err := bundle.Read(bytes.NewReader(buffer.Bytes()), int64(buffer.Len())); err == nil || !strings.Contains(err.Error(), "conversations.0.origin.import") {
 		t.Fatalf("origin.import = %v", err)
+	}
+}
+
+// Two bundles may carry the same message ids: each is its own in the chats. A place names its kind's chat.
+func TestBundlesOfTwoSourcesShareMessageIDsAndAPlaceNamesItsKind(t *testing.T) {
+	d := newDesk(t)
+	ctx := context.Background()
+	b, files := sample(d.channel)
+	if report, err := bundle.Run(ctx, d.pool, pack(t, b, files), bundle.Options{WorkspaceSlug: d.slug, Storage: d.storage}); err != nil || report.Status != bundle.StatusOK {
+		t.Fatalf("first = %+v %v", report, err)
+	}
+	b.Source = "second"
+	for index := range b.Conversations {
+		b.Conversations[index].Number, b.Conversations[index].NumberYear = 0, 0
+	}
+	if report, err := bundle.Run(ctx, d.pool, pack(t, b, files), bundle.Options{WorkspaceSlug: d.slug, Storage: d.storage}); err != nil || report.Status != bundle.StatusOK {
+		t.Fatalf("second with the same message ids = %+v %v", report, err)
+	}
+	for _, place := range []bundle.Place{{Kind: "direct", ExternalID: "group:g1"}, {Kind: "group", ExternalID: "user:100"}, {Kind: "direct", ExternalID: "100"}} {
+		wrong, _ := sample(d.channel)
+		wrong.Conversations[0].Place = &place
+		var buffer bytes.Buffer
+		w := zip.NewWriter(&buffer)
+		manifest, _ := json.Marshal(wrong)
+		f, _ := w.Create("bundle.json")
+		_, _ = f.Write(manifest)
+		for name, data := range files {
+			f, _ := w.Create(name)
+			_, _ = f.Write(data)
+		}
+		_ = w.Close()
+		if _, err := bundle.Read(bytes.NewReader(buffer.Bytes()), int64(buffer.Len())); err == nil || !strings.Contains(err.Error(), "conversations.0.place") {
+			t.Fatalf("place %+v: %v", place, err)
+		}
 	}
 }

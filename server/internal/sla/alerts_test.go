@@ -91,6 +91,8 @@ func newEnv(t *testing.T, timezone string) *env {
 		Targets: map[string]store.TargetMinutes{"normal": {FirstResponse: &hour}}}); err != nil {
 		t.Fatal(err)
 	}
+	// The emails have been on since yesterday: the conversations below are dated back within that.
+	e.exec(t, `UPDATE response_targets SET alerts_since=now()-interval '1 day' WHERE workspace_id=$1 RETURNING 'ok'`, e.workspace)
 	e.contact = e.exec(t, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@alert.example.com') RETURNING id::text`, e.workspace)
 	return e
 }
@@ -304,5 +306,73 @@ func TestEachRecipientIsClaimedJustBeforeTheirEmail(t *testing.T) {
 	e.run(t)
 	if strings.Join(claims, ",") != "1,1,1" {
 		t.Fatalf("claims held at each send = %v, want only the one being sent", claims)
+	}
+}
+
+// A threshold is emailed once per conversation, clock and recipient: pausing the clock (Pending) and
+// opening the conversation again moves its due time, and the reminder is not sent again; the overdue
+// email still goes once when the moved time comes.
+func TestAPausedClockDoesNotRemindAgain(t *testing.T) {
+	e := newEnv(t, "UTC")
+	id := e.opened(t, "Paused", 55*time.Minute, 55*time.Minute, true)
+	if got := e.run(t); got != "ann@alert.example.com Reply due soon: #1 Paused" {
+		t.Fatalf("reminder = %q", got)
+	}
+	// Pending for twenty minutes, open again: twenty minutes more before it is due.
+	e.exec(t, `INSERT INTO conversation_status_changes(workspace_id,conversation_id,from_status,to_status,changed_at,source) VALUES
+		($1,$2,'open','pending',now()-interval '30 minutes','colliedesk'),($1,$2,'pending','open',now()-interval '10 minutes','colliedesk') RETURNING 'ok'`, e.workspace, id)
+	e.exec(t, `UPDATE conversations SET sla_stale=true WHERE id=$1 RETURNING id::text`, id)
+	if _, err := (sla.Worker{Store: e.st}).RunOnce(e.ctx); err != nil {
+		t.Fatal(err)
+	}
+	e.now = e.now.Add(16 * time.Minute)
+	if got := e.run(t); got != "" {
+		t.Fatalf("reminded again after the pause: %q", got)
+	}
+	e.now = e.now.Add(10 * time.Minute)
+	if got := e.run(t); got != "ann@alert.example.com Reply overdue: #1 Paused" {
+		t.Fatalf("overdue = %q", got)
+	}
+}
+
+// Emails turned back on (or the targets) send nothing for a threshold reached while they were off: the
+// inbox still shows it overdue.
+func TestTurningEmailsBackOnSendsNothingLate(t *testing.T) {
+	e := newEnv(t, "UTC")
+	targets, _ := e.st.GetResponseTargets(e.ctx, e.workspace)
+	targets.AlertEmail = false
+	if _, err := e.st.SetResponseTargets(e.ctx, e.workspace, "", targets); err != nil {
+		t.Fatal(err)
+	}
+	e.opened(t, "Missed", 70*time.Minute, 70*time.Minute, true)
+	if got := e.run(t); got != "" {
+		t.Fatalf("sent with emails off: %q", got)
+	}
+	targets, _ = e.st.GetResponseTargets(e.ctx, e.workspace)
+	targets.AlertEmail = true
+	if _, err := e.st.SetResponseTargets(e.ctx, e.workspace, "", targets); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.run(t); got != "" {
+		t.Fatalf("sent late once emails were back on: %q", got)
+	}
+	// Off and on again: still nothing late; a threshold reached afterwards is emailed.
+	targets, _ = e.st.GetResponseTargets(e.ctx, e.workspace)
+	targets.Enabled = false
+	if _, err := e.st.SetResponseTargets(e.ctx, e.workspace, "", targets); err != nil {
+		t.Fatal(err)
+	}
+	targets, _ = e.st.GetResponseTargets(e.ctx, e.workspace)
+	targets.Enabled = true
+	if _, err := e.st.SetResponseTargets(e.ctx, e.workspace, "", targets); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.run(t); got != "" {
+		t.Fatalf("sent late once targets were back on: %q", got)
+	}
+	e.opened(t, "Afterwards", 45*time.Minute, 0, true)
+	e.now = e.now.Add(6 * time.Minute)
+	if got := e.run(t); got != "ann@alert.example.com Reply due soon: #2 Afterwards" {
+		t.Fatalf("a threshold reached afterwards = %q", got)
 	}
 }

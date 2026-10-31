@@ -336,6 +336,9 @@ func (a Archive) check() error {
 				return refuse("%s.place.kind: direct or group", at)
 			case p.ExternalID == "" || len([]rune(p.ExternalID)) > 200 || len([]rune(p.Name)) > 200:
 				return refuse("%s.place: an external_id, and a name, of at most 200 characters", at)
+			case !strings.HasPrefix(p.ExternalID, map[string]string{"direct": "user:", "group": "group:"}[p.Kind]) ||
+				len(p.ExternalID) == len(map[string]string{"direct": "user:", "group": "group:"}[p.Kind]):
+				return refuse("%s.place.external_id: a direct chat is user:<id>, a group group:<id>", at)
 			}
 		}
 		conversations[c.ID] = true

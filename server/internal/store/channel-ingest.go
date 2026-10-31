@@ -658,12 +658,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			if err != nil {
 				return result, err
 			}
-			// The place a conversation was opened in is its first message's.
+			// The place a conversation was opened in is its first message's, a note left out: a note is never
+			// in a chat.
 			err = tx.QueryRow(ctx, `SELECT c.id::text FROM conversations c WHERE c.workspace_id=$1 AND (c.id::text=$2 OR c.id=ANY($6::uuid[]))
 				AND ($7 OR c.contact_id=$3)
 				AND ($4='' AND c.contact_id=$3 OR EXISTS(SELECT 1 FROM channel_thread_items i JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
 					WHERE i.workspace_id=c.workspace_id AND t.channel_id=$5 AND t.external_id=$4
-						AND i.message_id=(SELECT m.id FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id ORDER BY m.created_at,m.id LIMIT 1)))
+						AND i.message_id=(SELECT m.id FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind<>'note' ORDER BY m.created_at,m.id LIMIT 1)))
 				ORDER BY c.created_at DESC LIMIT 1`, workspaceID, typed, contactID, place, channel.ID, named, group).Scan(&facts.RefConversation)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
