@@ -120,6 +120,10 @@ func TestAStatusChangeThatTellsTheCustomerAsksADraftTokenFirst(t *testing.T) {
 	if response := request(t, api, http.MethodPost, "/api/v1/agent-requests/"+filed.RequestID+"/approve", nil, admin, nil); response.Code != http.StatusOK || statusOf() != "resolved" || notices() != "1" {
 		t.Fatalf("approve: %d %s status=%s notices=%s", response.Code, response.Body.String(), statusOf(), notices())
 	}
+	// The conversation came by no chat; its chat is told through the chat's channel, never by email.
+	if got := queryString(t, pool, `SELECT COALESCE(o.channel_id::text,'none') FROM messages m LEFT JOIN channel_outbox o ON o.message_id=m.id WHERE m.conversation_id=$1 AND m.notice_kind='status_resolved'`, conversation); got != channel.ID {
+		t.Fatalf("the approved notice went through %s", got)
+	}
 	if got := lastChange(); got != "resolved by token: Claude draft · approved by Ada" {
 		t.Fatalf("approved change = %s", got)
 	}
@@ -140,6 +144,50 @@ func TestAStatusChangeThatTellsTheCustomerAsksADraftTokenFirst(t *testing.T) {
 	}
 	if got := lastChange(); got != "resolved by token: Claude send" {
 		t.Fatalf("token change = %s", got)
+	}
+	// Approved once the conversation had that status already, it told nobody, and says so.
+	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "open", "notify": false}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("reopen: %d %s", response.Code, response.Body.String())
+	}
+	response = request(t, api, http.MethodPatch, path, map[string]any{"status": "resolved"}, draft, nil)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("draft token again: %d %s", response.Code, response.Body.String())
+	}
+	var late struct {
+		RequestID string `json:"request_id"`
+	}
+	decode(t, response, &late)
+	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "resolved", "notify": false}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("resolve meanwhile: %d %s", response.Code, response.Body.String())
+	}
+	if response := request(t, api, http.MethodPost, "/api/v1/agent-requests/"+late.RequestID+"/approve", nil, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("approve late: %d %s", response.Code, response.Body.String())
+	}
+	var nothing struct {
+		Notices *[]struct{ Text string }
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/agent-requests/"+late.RequestID, nil, admin, nil), &nothing)
+	if nothing.Notices == nil || len(*nothing.Notices) != 0 || notices() != "2" {
+		t.Fatalf("a request that told nobody = %+v, notices sent = %s", nothing.Notices, notices())
+	}
+	// Several at once: the request counts the customers it tells, not the conversations.
+	chatToo := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Scanner"})
+	noChat := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Toner"})
+	if _, err := pool.Exec(context.Background(), `WITH thread AS (
+			INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id) SELECT workspace_id,$2::uuid,'direct','user:bo' FROM conversations WHERE id=$1 RETURNING workspace_id,id),
+		item AS (INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,body,disposition,occurred_at)
+			SELECT workspace_id,$2::uuid,id,'in','customer','it beeps','conversation',now() FROM thread RETURNING workspace_id,id)
+		INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason) SELECT workspace_id,$1::uuid,id,'opened' FROM item`, chatToo, channel.ID); err != nil {
+		t.Fatal(err)
+	}
+	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "open", "notify": false}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("reopen: %d", response.Code)
+	}
+	response = request(t, api, http.MethodPatch, "/api/v1/conversations", map[string]any{"ids": []string{conversation, chatToo, noChat}, "changes": map[string]any{"status": "resolved"}}, draft, nil)
+	var several struct{ Summary string }
+	decode(t, response, &several)
+	if want := "Set 3 conversations to Resolved and tell 2 of their customers on " + name; response.Code != http.StatusAccepted || several.Summary != want {
+		t.Fatalf("bulk request = %d %q, want %q", response.Code, several.Summary, want)
 	}
 	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "open"}, other, nil); response.Code != http.StatusNotFound {
 		t.Fatalf("another workspace: %d", response.Code)

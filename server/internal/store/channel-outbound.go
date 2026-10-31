@@ -395,6 +395,47 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	return nil
 }
 
+// enqueueNotice queues a channel's own message on that chat channel, for the place the conversation's
+// newest item of it is in (the sender reads it there). The conversation's reply channel is neither used
+// nor pinned: a status notice of a chat moved into an email conversation is never emailed.
+func (s *Store) enqueueNotice(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, channel channels.Channel) error {
+	adapter, ok := s.channels.Adapter(channel.Type)
+	if !ok {
+		return fmt.Errorf("queue notice: no channel type %s", channel.Type)
+	}
+	recipient, err := replyRecipient(ctx, tx, workspaceID, conversationID, channel.ID)
+	if err != nil {
+		return err
+	}
+	prepared, err := adapter.Outbound().Prepare(ctx, tx, channels.PrepareRequest{WorkspaceID: workspaceID, Channel: channel,
+		ConversationID: conversationID, MessageID: messageID, Recipient: recipient, Host: s})
+	if err != nil {
+		return err
+	}
+	external := ""
+	if prepared.ExternalID != "" {
+		external = string(channel.Type) + ":" + prepared.ExternalID
+	}
+	if _, err := tx.Exec(ctx, `UPDATE messages SET channel_id=$3,external_id=COALESCE(NULLIF($4,''),external_id) WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, messageID, channel.ID, external); err != nil {
+		return fmt.Errorf("assign notice channel: %w", err)
+	}
+	status := prepared.Status
+	if status == "" {
+		status = channels.DeliveryQueued
+	}
+	var meta []byte
+	if len(prepared.Meta) > 0 {
+		meta = prepared.Meta
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,status,last_error,last_error_code,created_at,recipients,transport,channel_type,channel_id,meta)
+		VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,1,NULLIF($7,''),$8,$9,$10)`,
+		workspaceID, messageID, status, prepared.Reason, prepared.Code, s.now(), prepared.Transport, string(channel.Type), channel.ID, meta); err != nil {
+		return fmt.Errorf("queue notice: %w", err)
+	}
+	return nil
+}
+
 // RetryDelivery requeues a failed delivery of a reply in this workspace and conversation, if its
 // channel can send now.
 func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, messageID string) (domain.Message, error) {

@@ -8156,12 +8156,13 @@ components:
         summary: {type: string}
         conversation_id: {type: [string, 'null'], format: uuid}
         notices:
-          type: array
+          type: [array, 'null']
           description: >-
-            What a status change tells customers, one per chat channel: while it waits, what approving it would
-            tell now; once decided, what it would tell when the token asked (kept with the call, and cleared
-            with it after the retention). Missing for other calls and a quiet change, and in a list without
-            detail=full.
+            What a status change tells customers, one per chat channel, always through that chat's channel: while
+            it waits, what approving it would tell now; once approved, what it told as it ran (an empty list when
+            it told nobody: each conversation had that status already, or its approval failed); once rejected or
+            expired, what it would have told when the token asked. Kept with the call and cleared with it after
+            the retention. Null for other calls and a quiet change, and in a list without detail=full.
           items:
             type: object
             required: [channel_id, channel_name, example_ref, text, told]

@@ -72,9 +72,10 @@ type AgentRequest struct {
 	// SavedReply is the saved reply the request edits, deletes or restores, before and now; filled
 	// only with the full detail.
 	SavedReply *AgentRequestSavedReply `json:"saved_reply"`
-	// Notices are what approving a status change would tell customers, one per chat channel, while it
-	// waits; filled only with the full detail.
-	Notices      []StatusNoticePreview `json:"notices,omitempty"`
+	// Notices are what a status change tells customers, one per chat channel: while it waits, what
+	// approving it would tell now; once approved, what it told (empty when nothing). Nil for other calls.
+	// Filled only with the full detail.
+	Notices      []StatusNoticePreview `json:"notices"`
 	RequestedBy  AgentRequester        `json:"requested_by"`
 	DecidedBy    *AgentDecider         `json:"decided_by"`
 	DecidedAt    *time.Time            `json:"decided_at"`

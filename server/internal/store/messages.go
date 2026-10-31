@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
@@ -142,6 +143,10 @@ type Actor struct {
 	AIDraftID string
 	// NoticeKind marks a reply the channel sends by itself (its received notice): no reply of the team.
 	NoticeKind string
+	// Via sends a notice through this chat channel, to the place the conversation's newest item of it is
+	// in, whatever channel carries the conversation's replies (a chat message moved into a conversation
+	// that came by email is told in its chat, never by email).
+	Via *channels.Channel
 }
 
 // CreateMessage stores a reply or note with files already written to attachment storage (only
@@ -316,7 +321,11 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if err := s.insertMessageFiles(ctx, tx, workspaceID, messageID, files); err != nil {
 		return domain.Message{}, err
 	}
-	if kind == "outgoing" {
+	if kind == "outgoing" && actor.Via != nil {
+		if err := s.enqueueNotice(ctx, tx, workspaceID, conversationID, messageID, *actor.Via); err != nil {
+			return domain.Message{}, err
+		}
+	} else if kind == "outgoing" {
 		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
 			return domain.Message{}, err
 		}

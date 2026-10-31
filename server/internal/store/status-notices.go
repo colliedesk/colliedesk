@@ -102,7 +102,7 @@ func (s *Store) sendStatusNotices(ctx context.Context, tx pgx.Tx, workspaceID st
 		if text == "" || !telling(channel) {
 			continue
 		}
-		if _, err := s.createMessage(ctx, tx, workspaceID, item.conversation, Actor{NoticeKind: kind}, "outgoing",
+		if _, err := s.createMessage(ctx, tx, workspaceID, item.conversation, Actor{NoticeKind: kind, Via: &channel}, "outgoing",
 			channels.RenderNotice(text, map[string]string{"ref": item.ref, "subject": item.subject}), nil, nil); err != nil {
 			return fmt.Errorf("send a status notice: %w", err)
 		}

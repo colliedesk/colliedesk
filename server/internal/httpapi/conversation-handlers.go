@@ -204,17 +204,22 @@ func (a *API) statusNeedsApproval(response http.ResponseWriter, request *http.Re
 
 // statusRequestSummary says what a status change that waits for a person does, as the approval card
 // reads it: "Set REF-1 to Resolved and tell the customer on Zalo: REF-1: fixed.", or for several
-// "Set 3 conversations to Resolved and tell their customers on Zalo, Web chat".
+// "Set 3 conversations to Resolved and tell their customers on Zalo, Web chat" ("tell 2 of their
+// customers" when one is not told).
 func statusRequestSummary(ids []string, status string, notices []domain.StatusNoticePreview) string {
 	label := strings.ToUpper(status[:1]) + status[1:]
 	if len(ids) == 1 {
 		return fmt.Sprintf("Set %s to %s and tell the customer on %s: %s", notices[0].ExampleRef, label, notices[0].ChannelName, notices[0].Text)
 	}
-	names := make([]string, len(notices))
+	names, told := make([]string, len(notices)), 0
 	for index, notice := range notices {
-		names[index] = notice.ChannelName
+		names[index], told = notice.ChannelName, told+notice.Told
 	}
-	return fmt.Sprintf("Set %d conversations to %s and tell their customers on %s", len(ids), label, strings.Join(names, ", "))
+	customers := "their customers"
+	if told < len(ids) {
+		customers = fmt.Sprintf("%d of their customers", told)
+	}
+	return fmt.Sprintf("Set %d conversations to %s and tell %s on %s", len(ids), label, customers, strings.Join(names, ", "))
 }
 
 // tokenOf is the id of the AI agent's token making a call, or "" for a person's own: a token's request a

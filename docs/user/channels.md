@@ -224,7 +224,9 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   the customer wrote first one to one, and changes neither the status nor the response clocks. Empty texts
   (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
   MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
-  the team started) or of a channel removed or turned off is told nothing; a channel whose processing is paused
+  the team started) or of a channel removed or turned off is told nothing; a chat message moved into a
+  conversation that came by email or the web form is told in its chat, through the chat's channel, never by
+  email; a channel whose processing is paused
   sends it once it resumes. A change of several conversations at once tells
   each customer a few seconds after it is saved; a conversation whose status changes again before then is
   told only that later change. An AI agent's token below the send tier asks a person first when its change

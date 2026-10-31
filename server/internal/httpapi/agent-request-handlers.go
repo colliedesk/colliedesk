@@ -174,8 +174,27 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 	if writeDecisionError(response, err) {
 		return
 	}
+	// What a status change tells is read as it is about to run: a conversation set to that status since the
+	// token asked tells nothing.
+	var told []domain.StatusNoticePreview
+	ids, statusTo, telling := requestedStatusChange(claimed)
+	if telling {
+		if told, err = a.store.StatusNoticePreview(ctx, workspaceID, ids, statusTo); err != nil {
+			writeInternalError(response, err)
+			return
+		}
+	}
 	// The call checks the number again under the conversation's lock; a reply in between fails the call (409).
 	status, answer, complete := a.replayApproved(ctx, who, claimed, input.SeenReplyNumber)
+	if telling {
+		if status < 200 || status > 299 {
+			told = nil
+		}
+		if err := a.store.SetAgentRequestNotices(ctx, workspaceID, id, told); err != nil {
+			writeInternalError(response, err)
+			return
+		}
+	}
 	stored, note := json.RawMessage(nil), (*string)(nil)
 	switch {
 	case !complete:

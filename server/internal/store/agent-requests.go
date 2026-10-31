@@ -311,6 +311,26 @@ func (s *Store) FinishAgentRequest(ctx context.Context, workspaceID, id string, 
 	})
 }
 
+// SetAgentRequestNotices records what an approved status change told customers, read as it ran: an
+// empty list when it told nobody (each conversation already had that status, or no chat had words).
+func (s *Store) SetAgentRequestNotices(ctx context.Context, workspaceID, id string, notices []domain.StatusNoticePreview) error {
+	if notices == nil {
+		notices = []domain.StatusNoticePreview{}
+	}
+	encoded, err := json.Marshal(notices)
+	if err != nil {
+		return err
+	}
+	_, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		_, err := tx.Exec(ctx, `UPDATE agent_requests SET notices=$3::jsonb WHERE workspace_id=$1 AND id=$2`, workspaceID, id, string(encoded))
+		return true, err
+	})
+	if err != nil {
+		return fmt.Errorf("record what the request told: %w", err)
+	}
+	return nil
+}
+
 // RejectAgentRequest records that agentID refused the request; nothing runs.
 func (s *Store) RejectAgentRequest(ctx context.Context, workspaceID, id, agentID string, reason *string) (domain.AgentRequest, error) {
 	return s.decide(ctx, workspaceID, id, func(tx pgx.Tx, _ domain.AgentRequest) error {

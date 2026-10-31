@@ -501,3 +501,71 @@ func TestAChannelTurnedOffTellsNothingAndAPausedOneLater(t *testing.T) {
 		t.Fatalf("after resuming sent %d, then %d", first, again)
 	}
 }
+
+// A chat message moved into a conversation that came by email tells its customer in that chat, through
+// the chat's channel, never by the conversation's email: one status at a time, several at once, and the
+// channel closing it by itself. The conversation's own replies still leave by email.
+func TestAChatMovedIntoAnEmailConversationIsToldInTheChat(t *testing.T) {
+	loop := statusLoop()
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	moved := func(event, from string) string {
+		t.Helper()
+		d.send(t, channeltest.LoopbackEvent{ID: event, From: from, Text: "the printer jams"})
+		chat := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id=$2`, "loopback:"+event)
+		contact := d.one(t, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Mail '||$2::text,$2::text||'@mail.example') RETURNING id::text`, event)
+		mail := d.one(t, `INSERT INTO conversations(workspace_id,contact_id,subject,channel) VALUES($1,$2,'By mail '||$3::text,'email') RETURNING id::text`, contact, event)
+		d.one(t, `UPDATE conversation_thread_items SET conversation_id=$3 WHERE workspace_id=$1 AND conversation_id=$2 RETURNING 'ok'`, chat, mail)
+		return mail
+	}
+	single, bulk := moved("e-1", "u1"), moved("e-2", "u2")
+	resolved := "resolved"
+	if _, err := d.store.UpdateConversation(ctx, d.workspaceID, single, store.ConversationUpdate{Status: &resolved, ActorID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.BulkUpdateConversations(ctx, d.workspaceID, []string{bulk}, store.BulkConversationUpdate{Status: &resolved, ActorID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (autoclose.Notices{Store: d.store}).RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Every notice is queued on the chat's channel.
+	if got := d.one(t, `SELECT string_agg(m.notice_kind||'@'||COALESCE(o.channel_id::text,'none')||'/'||COALESCE(m.channel_id::text,'none'),',' ORDER BY m.created_at,m.id)
+		FROM messages m LEFT JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
+		WHERE m.workspace_id=$1 AND m.notice_kind LIKE 'status_%'`); got != "status_resolved@"+d.channel.ID+"/"+d.channel.ID+",status_resolved@"+d.channel.ID+"/"+d.channel.ID {
+		t.Fatalf("notices = %s", got)
+	}
+	// Closing by itself follows the conversation's own channel: one that came by email does not close by
+	// the chat's rule. A conversation of the chat closes and is told there.
+	if _, err := (autoclose.Worker{Store: d.store}).RunOnce(ctx, time.Now().Add(48*time.Hour+time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT string_agg(status,',') FROM conversations WHERE workspace_id=$1 AND id IN ($2,$3)`, single, bulk); got != "resolved,resolved" {
+		t.Fatalf("email conversations = %s", got)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "e-3", From: "u3", Text: "the scanner is offline"})
+	own := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='loopback:e-3'`)
+	if _, err := d.store.UpdateConversation(ctx, d.workspaceID, own, store.ConversationUpdate{Status: &resolved, ActorID: d.agentID, Quiet: true}); err != nil {
+		t.Fatal(err)
+	}
+	d.one(t, `UPDATE conversation_status_changes SET quiet=false WHERE workspace_id=$1 AND conversation_id=$2 RETURNING 'ok'`, own)
+	if _, err := (autoclose.Worker{Store: d.store}).RunOnce(ctx, time.Now().Add(48*time.Hour+time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT COALESCE(o.channel_id::text,'none') FROM messages m LEFT JOIN channel_outbox o ON o.message_id=m.id WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.notice_kind='status_closed'`, own); got != d.channel.ID {
+		t.Fatalf("closed notice went through %s", got)
+	}
+	worker := outbox.New(d.store, outbox.Options{Now: func() time.Time { return time.Now().UTC().Add(49 * time.Hour) }})
+	if _, err := worker.ProcessDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	told := map[string]int{}
+	for _, sent := range loop.Endpoint.Sent() {
+		if strings.Contains(sent.Text, "fixed") || strings.Contains(sent.Text, "closed") {
+			told[sent.Place]++
+		}
+	}
+	if told["user:u1"] != 1 || told["user:u2"] != 1 || told["user:u3"] != 1 || len(told) != 3 {
+		t.Fatalf("told in the chats = %v", told)
+	}
+}
