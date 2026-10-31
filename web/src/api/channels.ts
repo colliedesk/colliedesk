@@ -3,6 +3,7 @@ import { request, requestNoContent } from './client';
 import type { RequestBody } from './client';
 import { consentLinkSchema, emailChannelSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema } from './schemas';
 import type { Generated } from './schemas';
+import { chatItemSchema } from './intake';
 
 // Channels load with their settings pages, a lazy part, so their schemas and calls are not in the first bundle.
 
@@ -25,8 +26,28 @@ export const helpChatConfigSchema = z.object({
   widget_origins: z.array(z.string()),
 }) satisfies z.ZodType<Generated<'HelpChatChannelConfig'>>;
 export type HelpChatConfig = z.infer<typeof helpChatConfigSchema>;
-const channelConfigSchema = z.union([emailChannelSchema, webFormSettingsSchema, helpChatConfigSchema, z.record(z.string(), z.unknown())]) satisfies z.ZodType<Generated<'ChannelConfig'>>;
-export const channelDetailSchema = channelSchema.extend({ config: channelConfigSchema }) satisfies z.ZodType<Generated<'ChannelDetail'>>;
+export const zaloConfigSchema = z.object({
+  oa_id: z.string(), app_id: z.string(), staff_user_ids: z.array(z.string()), groups: z.record(z.string(), z.string()), webhook_path: z.string(),
+  // The four secrets, in order: whether each is set, its last four characters, when it was last written.
+  credentials: z.array(z.object({ name: z.enum(['app_secret', 'oa_secret_key', 'access_token', 'refresh_token']), hint: z.string().nullable(), set_at: nullableDate })),
+}) satisfies z.ZodType<Generated<'ZaloChannelConfig'>>;
+export type ZaloConfig = z.infer<typeof zaloConfigSchema>;
+const channelConfigSchema = z.union([emailChannelSchema, webFormSettingsSchema, helpChatConfigSchema, zaloConfigSchema, z.record(z.string(), z.unknown())]) satisfies z.ZodType<Generated<'ChannelConfig'>>;
+// settings is what the channel stores over its type's defaults (a change replaces it whole); effective_settings the rules in force.
+const settingsSchema = z.record(z.string(), z.unknown());
+export const channelDetailSchema = channelSchema.extend({ config: channelConfigSchema, settings: settingsSchema.optional(), effective_settings: settingsSchema.optional() }) satisfies z.ZodType<Generated<'ChannelDetail'>>;
+const channelCredentialSchema = z.object({ name: z.string(), hint: z.string().nullable() }) satisfies z.ZodType<Generated<'ChannelCredential'>>;
+const chatThreadSchema = z.object({
+  id: z.string().uuid(), channel_id: z.string().uuid(), kind: z.enum(['direct', 'group']), external_id: z.string(), name: z.string().nullable(),
+  contact_id: z.string().uuid().nullable(), opens_conversations: z.boolean(), last_item_at: nullableDate, last_item: chatItemSchema.nullable(),
+}) satisfies z.ZodType<Generated<'ChatThread'>>;
+const chatThreadPageSchema = z.object({ items: z.array(chatThreadSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<Generated<'ChatThreadPage'>>;
+export type ChatThread = z.infer<typeof chatThreadSchema>;
+const chatSenderListSchema = z.object({ items: z.array(z.object({
+  kind: z.string(), value: z.string(), name: z.string().nullable(), role: z.enum(['customer', 'staff']), last_at: z.string().datetime(),
+  thread_id: z.string().uuid(), thread_name: z.string().nullable(),
+})) }) satisfies z.ZodType<Generated<'ChatSenderList'>>;
+export type ChatSender = z.infer<typeof chatSenderListSchema>['items'][number];
 const channelTypeInfoSchema = z.object({
   type: channelTypeSchema, available: z.boolean(), count: z.number().int().nonnegative(), default_channel_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'ChannelTypeInfo'>>;
@@ -76,6 +97,16 @@ export const channelsApi = {
   replayHeld: (id: string, conversationID?: string) => request(`/api/v1/channels/${id}/held/replay`, heldReplaySchema,
     { method: 'POST', body: json<'replayHeldChannelMessages'>(conversationID ? { conversation_id: conversationID } : {}) }),
   discardHeld: (id: string) => request(`/api/v1/channels/${id}/held/discard`, heldDiscardSchema, { method: 'POST', body: json<'discardHeldChannelMessages'>({}) }),
+  // A secret the type declares, one at a time; only its last four characters come back.
+  setCredential: (id: string, name: string, value: string) => request(`/api/v1/channels/${id}/credentials`, channelCredentialSchema,
+    { method: 'PUT', body: JSON.stringify({ name, value } satisfies RequestBody<'setChannelCredential'>) }),
+  // A chat channel's places (one-to-one chats, groups), most recently active first.
+  threads: (id: string, kind?: 'direct' | 'group', cursor?: string) => {
+    const query = new URLSearchParams({ ...(kind ? { kind } : {}), ...(cursor ? { cursor } : {}) }).toString();
+    return request(`/api/v1/channels/${id}/threads${query ? `?${query}` : ''}`, chatThreadPageSchema);
+  },
+  // Everyone who wrote in a chat channel's places, each once, most recent first.
+  senders: (id: string) => request(`/api/v1/channels/${id}/senders`, chatSenderListSchema),
   // One email channel of several: its settings and its own actions.
   email: (id: string) => request(`/api/v1/channels/${id}/email`, emailChannelSettingsSchema),
   emailSecret: (id: string) => request(`/api/v1/channels/${id}/email/secret`, inboundSecretSchema, { method: 'POST' }),

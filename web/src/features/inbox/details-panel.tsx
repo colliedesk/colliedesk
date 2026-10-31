@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { UpdateConversationRequest } from '../../api/client';
 import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { clockLine, slaOf } from '../../lib/sla';
 import { messages } from '../../messages';
+import { CheckIcon } from '../../ui/icons';
 import { AITriageSlot } from './ai-triage-slot';
 import { AutofixDetails } from '../autofix/autofix-slot';
 
@@ -63,6 +65,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           <option value="">{messages.unassigned}</option>
         </select></label>
       </section>
+      {conversation && slaOf(conversation) && <Targets sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
       <fieldset className="details-section" disabled={!conversation}><legend>{messages.tags}</legend>
         <div className="tag-choices">
           {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
@@ -97,4 +100,15 @@ function ConversationOriginBlock({ origin, timezone }: { origin: ConversationOri
       {origin.due_at && <span>{messages.dueAt} <time dateTime={origin.due_at}>{formatDate(origin.due_at, timezone)}</time></span>}
     </section>
   );
+}
+
+// Targets: each clock in full, read only. The server counts business hours; the details say what it counted.
+function Targets({ sla, timezone, canManage }: { sla: NonNullable<ReturnType<typeof slaOf>>; timezone: string; canManage: boolean }) {
+  const rows: [string, ReturnType<typeof clockLine>][] = [[messages.targetFirstReply, clockLine(sla.first_response, timezone)], [messages.targetResolve, clockLine(sla.resolution, timezone)]];
+  return <section className="details-section" aria-labelledby="details-targets">
+    <h2 id="details-targets">{messages.targets}</h2>
+    {rows.map(([label, line]) => <div className="target-row" key={label}><span>{label}</span>
+      <span className={`target-value${line.tone ? ` target-${line.tone}` : ''}`}><span>{line.tone === 'met' && <CheckIcon />}{line.text}</span>{line.detail && <small>{line.detail}</small>}</span></div>)}
+    <p className="targets-foot">{messages.targetsFoot}{canManage && <> <a href="/settings/targets">{messages.editTargets}</a></>}</p>
+  </section>;
 }

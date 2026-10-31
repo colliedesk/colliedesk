@@ -243,3 +243,31 @@ test('without an email channel the get-started guide offers no test message', ()
   render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} />);
   expect(screen.queryByRole('button', { name: 'Send yourself a test message' })).not.toBeInTheDocument();
 });
+
+test('a conversation numbered in a series of its own shows its code first; one of the default series shows none', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const zalo = { ...row('2026-10-15T09:05:00Z'), id: '33333333-3333-4333-8333-333333333333', number: 142, number_series: 'chd', display_ref: 'CHD-2026-0142' };
+  const email = { ...row('2026-10-15T09:00:00Z'), number: 12, number_series: 'default', display_ref: '#12' };
+  render(<ConversationList items={[zalo, email]} timezone="UTC" page={1} hasNextPage={false} />);
+  const code = screen.getByText('CHD-2026-0142');
+  expect(code).toHaveClass('conv-ref');
+  expect(code.parentElement?.firstElementChild).toBe(code);
+  expect(screen.queryByText('#12')).toBeNull();
+});
+
+test('a row draws a target only when it is due soon or late, with the clock and business hours in its name; its tags then count', () => {
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+  const tags = [{ id: '44444444-4444-4444-8444-444444444444', name: 'printer' }, { id: '55555555-5555-4555-8555-555555555555', name: 'warehouse' }];
+  const late = { ...row('2026-11-02T05:00:00Z'), id: '33333333-3333-4333-8333-333333333333', subject: 'Late one', tags,
+    sla: { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true }, resolution: null } };
+  const calm = { ...row('2026-11-02T04:00:00Z'), subject: 'Calm one', tags, sla: { state: 'ok', first_response: { ...clock, due_at: '2026-11-02T09:00:00Z' }, resolution: null } };
+  render(<ConversationList items={[late, calm] as unknown as Conversation[]} timezone="UTC" page={1} hasNextPage={false} />);
+  const mark = screen.getByText('Overdue');
+  expect(mark).toHaveClass('sla-mark', 'sla-late');
+  expect(mark).toHaveAccessibleName('First reply overdue since 4:10 AM, counted in business hours');
+  expect(screen.getByText('2 tags')).toHaveAttribute('data-tip', 'printer, warehouse');
+  const calmRow = screen.getByRole('button', { name: /Calm one/ });
+  expect(within(calmRow).queryByText(/Due|Overdue/)).toBeNull();
+  expect(within(calmRow).getByText('printer')).toBeInTheDocument();
+});

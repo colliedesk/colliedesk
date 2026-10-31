@@ -37,6 +37,8 @@ import { useInAppLinks } from './lib/in-app-links';
 const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
+const numbersRoutePart = lazyPart(() => import('./features/settings/numbers/numbers-route'));
+const targetsRoutePart = lazyPart(() => import('./features/settings/targets/targets-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
@@ -282,6 +284,22 @@ const importRoute = createRoute({
     return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
+// Settings → Conversation numbers: the workspace's number series.
+const numbersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/numbers',
+  component: function Numbers() {
+    return <Part part={numbersRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ NumbersRoute }) => <NumbersRoute />} />;
+  },
+});
+// Settings → Response targets: business hours and the targets of each priority.
+const targetsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/targets',
+  component: function Targets() {
+    return <Part part={targetsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ TargetsRoute }) => <TargetsRoute />} />;
+  },
+});
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
 const aiRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/ai/$',
@@ -369,7 +387,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

@@ -277,3 +277,23 @@ test('the chip of a channel names it, and says when it was removed', async () =>
   const chips = await screen.findByRole('list', { name: 'Active filters' });
   await waitFor(() => expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Channel: Sales', 'Channel: Careers (removed)']));
 });
+
+test('a link to a code shows it as a chip that removes it', async () => {
+  const onChange = vi.fn();
+  render(<Harness initial={{ status: 'all', ref: 'CHD-2026-0142' }} onChange={onChange} />);
+  const chips = await screen.findByRole('list', { name: 'Active filters' });
+  expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toContain('Reference: CHD-2026-0142');
+  fireEvent.click(within(chips).getByRole('button', { name: 'Remove filter Reference: CHD-2026-0142' }));
+  expect(onChange).toHaveBeenLastCalledWith({ status: 'all' });
+});
+
+test('Targets filters what is late or due soon, shows as chips, and is offered once a listed conversation has targets', async () => {
+  const onChange = vi.fn();
+  render(<Harness initial={{ sla: 'overdue' }} onChange={onChange} />);
+  const chips = await screen.findByRole('list', { name: 'Active filters' });
+  expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toContain('Targets: Overdue');
+  const menu = await openMenu();
+  const targets = within(menu).getByRole('group', { name: 'Targets' });
+  fireEvent.click(within(targets).getByRole('checkbox', { name: 'Due soon' }));
+  expect(onChange).toHaveBeenLastCalledWith({ sla: 'overdue,due_soon' });
+});

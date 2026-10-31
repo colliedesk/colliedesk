@@ -38,4 +38,5 @@ export const SparklesIcon = () => <Icon><path d="M12 3v4M12 17v4M3 12h4M17 12h4M
 export const PlusIcon = () => <Icon><path d="M12 5v14M5 12h14" /></Icon>;
 export const MailIcon = () => <Icon><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></Icon>;
 export const FormIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></Icon>;
+export const CopyIcon = () => <Icon><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></Icon>;
 export const ChatIcon = () => <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Icon>;

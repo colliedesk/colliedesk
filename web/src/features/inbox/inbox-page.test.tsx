@@ -3,6 +3,7 @@ import { beforeAll, expect, test, vi } from 'vitest';
 import { useState } from 'react';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { InboxPage } from './inbox-page';
+import { markdownPart } from './markdown-body';
 import { presenceViewPart } from './presence-part';
 
 const conversation = { latest_reply_number: 0,
@@ -25,6 +26,9 @@ const conversation = { latest_reply_number: 0,
 // start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
 // after the test environment is gone).
 beforeAll(async () => {
+  // Replies' Markdown renders from its own chunk; it is there before these tests start.
+  markdownPart.preload();
+  await import('./markdown-render');
   presenceViewPart.preload();
   await import('./presence-view');
 });
