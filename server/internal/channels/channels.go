@@ -126,7 +126,14 @@ type Notices struct {
 	Received string `json:"received,omitempty"`
 	// Unmatched answers, in its chat, a message a scope with unmatched notice opens nothing for.
 	Unmatched string `json:"unmatched,omitempty"`
+	// UnmatchedEverySeconds is the least time between two unmatched notices of one chat (one customer
+	// writing on, or a bot answering the notice); 0 answers every message. Merge fills in the default.
+	UnmatchedEverySeconds *int `json:"unmatched_every_seconds,omitempty"`
 }
+
+// DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
+// sets nothing.
+const DefaultUnmatchedEverySeconds = 300
 
 // NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
 // sends the notice. A placeholder of no list is refused when the settings are saved.
@@ -236,17 +243,20 @@ func (s Settings) ForScope(scope string) (Settings, Scope) {
 
 // Merge returns s with every field override sets replacing it; override is JSON a channel stores.
 func (s Settings) Merge(override json.RawMessage) (Settings, error) {
-	if len(override) == 0 {
-		return s, nil
-	}
 	// s is a type's defaults, shared by every channel of the type: decoding writes into the maps and the
 	// slice it finds, so it decodes into copies of them.
 	merged := s
 	merged.DefaultTags = slices.Clone(s.DefaultTags)
 	merged.Commands = maps.Clone(s.Commands)
 	merged.Scopes = maps.Clone(s.Scopes)
-	if err := json.Unmarshal(override, &merged); err != nil {
-		return Settings{}, err
+	if len(override) > 0 {
+		if err := json.Unmarshal(override, &merged); err != nil {
+			return Settings{}, err
+		}
+	}
+	if merged.Notices.UnmatchedEverySeconds == nil {
+		every := DefaultUnmatchedEverySeconds
+		merged.Notices.UnmatchedEverySeconds = &every
 	}
 	return merged, nil
 }

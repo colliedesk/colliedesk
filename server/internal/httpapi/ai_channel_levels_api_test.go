@@ -680,3 +680,31 @@ func TestIntakeOptionsAtTheLimitAreKeptOrRefusedPlainly(t *testing.T) {
 		t.Fatalf("the sweep missed the limit: kept %d, refused %d", kept, refused)
 	}
 }
+
+// A channel's detail reads back what its settings store (what a change of settings replaces whole) and
+// the rules in force with its type's defaults, for one workspace's channel only.
+func TestAChannelsDetailShowsItsSettingsAndTheRulesInForce(t *testing.T) {
+	d := newLevelDesk(t)
+	if response := request(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.chatA, map[string]any{"settings": json.RawMessage(
+		`{"commands":{"cancel":{"action":"cancel","match":"exact","phrases":["stop"]}}}`)}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("set chat A's settings: %d %s", response.Code, response.Body.String())
+	}
+	response := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA, nil, d.adminA, nil)
+	var detail struct {
+		Settings          map[string]json.RawMessage `json:"settings"`
+		EffectiveSettings struct {
+			Commands   map[string]map[string]any `json:"commands"`
+			RateLimits map[string]any            `json:"rate_limits"`
+		} `json:"effective_settings"`
+	}
+	decode(t, response, &detail)
+	if len(detail.Settings) != 1 || !strings.Contains(string(detail.Settings["commands"]), `"match":"exact"`) {
+		t.Fatalf("settings = %v", detail.Settings)
+	}
+	if detail.EffectiveSettings.Commands["cancel"]["match"] != "exact" || detail.EffectiveSettings.RateLimits == nil {
+		t.Fatalf("effective settings = %+v", detail.EffectiveSettings)
+	}
+	if other := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA, nil, d.adminB, nil); other.Code != http.StatusNotFound {
+		t.Fatalf("B reads A's channel: %d", other.Code)
+	}
+}

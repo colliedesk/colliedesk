@@ -395,7 +395,12 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, err
 		}
 		if decision.Rule == rules.UnmatchedNotice && channel.Settings.Notices.Unmatched != "" {
-			if err := queueThreadNotice(ctx, tx, &journal, channels.NoticeUnmatched, channels.RenderNotice(channel.Settings.Notices.Unmatched, nil)); err != nil {
+			every := channels.DefaultUnmatchedEverySeconds
+			if channel.Settings.Notices.UnmatchedEverySeconds != nil {
+				every = *channel.Settings.Notices.UnmatchedEverySeconds
+			}
+			if err := queueThreadNotice(ctx, tx, &journal, channels.NoticeUnmatched, channels.RenderNotice(channel.Settings.Notices.Unmatched, nil),
+				time.Duration(every)*time.Second); err != nil {
 				return result, err
 			}
 		}

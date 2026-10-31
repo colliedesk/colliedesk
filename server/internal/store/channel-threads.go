@@ -505,21 +505,35 @@ func (s *Store) UnresolvedItems(ctx context.Context, workspaceID string, olderTh
 // queueThreadNotice answers the customer's item of the journal's event, in its chat, with a notice the
 // channel sends by itself: its item (the channel's, quoting the customer's) and its delivery are written
 // now, in the transaction that keeps the customer's message. An item answered already is not answered
-// again (a second delivery, a replay).
-func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, kind, text string) error {
+// again (a second delivery, a replay), and a chat answered with this kind of notice less than every ago
+// (counted from when the last was queued) is not answered again yet: a lock of the chat keeps two
+// messages at once to one notice.
+func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, kind, text string, every time.Duration) error {
 	if journal.eventID == "" || text == "" {
 		return nil
 	}
 	channel := journal.channel
+	var threadID string
+	err := tx.QueryRow(ctx, `SELECT thread_id::text FROM channel_thread_items WHERE workspace_id=$1 AND inbound_event_id=$2::uuid AND direction='in' LIMIT 1`,
+		channel.WorkspaceID, journal.eventID).Scan(&threadID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find the chat of a notice: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "chat-notice:"+threadID+":"+kind); err != nil {
+		return fmt.Errorf("lock the chat of a notice: %w", err)
+	}
 	var itemID string
-	err := tx.QueryRow(ctx, `WITH customer AS (
+	err = tx.QueryRow(ctx, `WITH customer AS (
 			SELECT i.thread_id,i.external_id FROM channel_thread_items i WHERE i.workspace_id=$1 AND i.inbound_event_id=$2::uuid AND i.direction='in'
 				AND NOT EXISTS (SELECT 1 FROM channel_thread_items b WHERE b.workspace_id=i.workspace_id AND b.thread_id=i.thread_id AND b.role='bot'
-					AND b.disposition_reason=$5 AND b.quote_external_id=i.external_id)
+					AND b.disposition_reason=$5 AND (b.quote_external_id=i.external_id OR b.created_at>$6::timestamptz-make_interval(secs => $7)))
 			LIMIT 1)
-		INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,quote_external_id,body,disposition,disposition_reason,occurred_at)
-		SELECT $1,$3,thread_id,'out','bot',external_id,left($4,20000),'bot',$5,$6 FROM customer RETURNING id::text`,
-		channel.WorkspaceID, journal.eventID, channel.ID, text, kind, journal.now).Scan(&itemID)
+		INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,quote_external_id,body,disposition,disposition_reason,occurred_at,created_at)
+		SELECT $1,$3,thread_id,'out','bot',external_id,left($4,20000),'bot',$5,$6,$6 FROM customer RETURNING id::text`,
+		channel.WorkspaceID, journal.eventID, channel.ID, text, kind, journal.now, every.Seconds()).Scan(&itemID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

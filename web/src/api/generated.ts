@@ -7842,6 +7842,14 @@ export interface components {
         };
         ChannelDetail: components["schemas"]["Channel"] & {
             config: components["schemas"]["ChannelConfig"];
+            /** @description The rules the channel stores over its type's defaults (ChannelSettings), as a change of settings replaces them whole. Left out for a removed channel. */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description The rules in force: the type's defaults with the channel's settings over them (ChannelSettings). Left out for a removed channel. */
+            effective_settings?: {
+                [key: string]: unknown;
+            };
         };
         ChannelTypeInfo: {
             type: components["schemas"]["ChannelType"];
@@ -7876,7 +7884,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched; a placeholder the channel does not fill is refused}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };

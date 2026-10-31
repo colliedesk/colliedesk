@@ -11248,6 +11248,14 @@ components:
           required: [config]
           properties:
             config: {$ref: '#/components/schemas/ChannelConfig'}
+            settings:
+              type: object
+              additionalProperties: true
+              description: 'The rules the channel stores over its type''s defaults (ChannelSettings), as a change of settings replaces them whole. Left out for a removed channel.'
+            effective_settings:
+              type: object
+              additionalProperties: true
+              description: 'The rules in force: the type''s defaults with the channel''s settings over them (ChannelSettings). Left out for a removed channel.'
     ChannelTypeInfo:
       type: object
       required: [type, available, count, default_channel_id]
@@ -11298,8 +11306,9 @@ components:
         {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
         {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
-        pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched; a
-        placeholder the channel does not fill is refused}. Never a secret.
+        pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched,
+        unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of
+        one chat); a placeholder the channel does not fill is refused}. Never a secret.
       additionalProperties: true
     ChannelCreate:
       type: object

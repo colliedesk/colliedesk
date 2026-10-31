@@ -2,6 +2,8 @@ package channeltest_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,15 +20,18 @@ func noticeLoop() *channeltest.Loopback {
 	loop.Defaults.Commands = map[string]channels.Command{"bug": {Match: channels.MatchWords, Phrases: []string{"report bug"}}}
 	loop.Defaults.Notices.Unmatched = "Write report bug and what happened."
 	loop.Defaults.Scopes = map[string]channels.Scope{"user": {Mode: channels.ModeCommands, Unmatched: channels.UnmatchedNotice}}
+	loop.SharedScopes = []string{"group"}
 	return loop
 }
 
 // A one-to-one message that names no command opens nothing and is answered with the unmatched notice, in
 // its chat: the notice goes out through the outbox, says what it answers, and is in the chat with the id
-// the channel gave it. Every such message is answered; a command is not, and a second delivery of one
-// message is answered once.
+// the channel gave it. With no interval (unmatched_every_seconds 0) every such message is answered; a
+// command is not, and a second delivery of one message is answered once.
 func TestAMessageNamingNoCommandIsAnsweredWithTheUnmatchedNotice(t *testing.T) {
 	loop := noticeLoop()
+	every := 0
+	loop.Defaults.Notices.UnmatchedEverySeconds = &every
 	d := newLoopDesk(t, loop)
 	ctx := context.Background()
 	d.send(t, channeltest.LoopbackEvent{ID: "u-1", From: "u1", Text: "hello, are you there?"})
@@ -89,7 +94,7 @@ func TestTheUnmatchedNoticeNeedsItsTextAndKnownPlaceholders(t *testing.T) {
 		t.Fatalf("notices without a text = %s", got)
 	}
 	for _, settings := range []string{`{"notices":{"unmatched":"Your ticket {ref} is open"}}`, `{"notices":{"received":"Thanks {name}"}}`,
-		`{"scopes":{"user":{"mode":"commands","unmatched":"answer"}}}`} {
+		`{"scopes":{"user":{"mode":"commands","unmatched":"answer"}}}`, `{"scopes":{"group":{"mode":"commands","unmatched":"notice"}}}`} {
 		if _, err := d.updateSettings(settings); err == nil {
 			t.Errorf("%s was kept, want it refused", settings)
 		}
@@ -101,4 +106,60 @@ func TestTheUnmatchedNoticeNeedsItsTextAndKnownPlaceholders(t *testing.T) {
 
 func (d loopDesk) updateSettings(settings string) (channels.Channel, error) {
 	return d.store.UpdateChannel(context.Background(), d.workspaceID, d.channel.ID, store.ChannelInput{Settings: []byte(settings)}, store.ChannelActor{AgentID: d.agentID})
+}
+
+// What the team writes on the chat app, and the copy the channel sends back of its own messages, are
+// never answered: the channel never answers itself.
+func TestTheUnmatchedNoticeNeverAnswersTheTeamOrTheChannel(t *testing.T) {
+	d := newLoopDesk(t, noticeLoop())
+	d.send(t, channeltest.LoopbackEvent{ID: "s-1", From: "nv1", Text: "checking the printer", Staff: true})
+	d.send(t, channeltest.LoopbackEvent{ID: "e-1", From: "u1", Text: "Write report bug and what happened.", Echo: true})
+	if got := d.one(t, `SELECT count(*)::text FROM channel_outbox WHERE workspace_id=$1 AND thread_item_id IS NOT NULL`); got != "0" {
+		t.Fatalf("notices = %s, want none", got)
+	}
+}
+
+// A customer who keeps writing without a command, or a bot answering the notice, gets one notice in each
+// unmatched_every_seconds (300 by default): counted from the notice queued last, also while it waits to go.
+// Two messages at once get one.
+func TestTheUnmatchedNoticeWaitsItsIntervalPerChat(t *testing.T) {
+	d := newLoopDesk(t, noticeLoop())
+	notices := func() string {
+		return d.one(t, `SELECT count(*)::text FROM channel_outbox WHERE workspace_id=$1 AND thread_item_id IS NOT NULL`)
+	}
+	for i := 0; i < 30; i++ {
+		d.send(t, channeltest.LoopbackEvent{ID: fmt.Sprintf("b-%d", i), From: "bot", Text: "auto reply"})
+	}
+	if got := notices(); got != "1" {
+		t.Fatalf("notices after 30 messages = %s, want 1", got)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "other-1", From: "u2", Text: "hello"})
+	if got := notices(); got != "2" {
+		t.Fatalf("another customer's chat = %s notices, want its own", got)
+	}
+	*d.clock = d.clock.Add(301 * time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "b-late", From: "bot", Text: "auto reply"})
+	if got := notices(); got != "3" {
+		t.Fatalf("after the interval = %s, want one more", got)
+	}
+	// At once: two deliveries processed side by side.
+	var wait sync.WaitGroup
+	*d.clock = d.clock.Add(301 * time.Second)
+	for i := 0; i < 2; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			d.send(t, channeltest.LoopbackEvent{ID: fmt.Sprintf("race-%d", i), From: "bot", Text: "auto reply"})
+		}()
+	}
+	wait.Wait()
+	if got := notices(); got != "4" {
+		t.Fatalf("two messages at once = %s notices in all, want 4", got)
+	}
+	for _, settings := range []string{`{"notices":{"unmatched":"Write report bug","unmatched_every_seconds":-1}}`,
+		`{"notices":{"unmatched":"Write report bug","unmatched_every_seconds":86401}}`} {
+		if _, err := d.updateSettings(settings); err == nil {
+			t.Errorf("%s was kept", settings)
+		}
+	}
 }
