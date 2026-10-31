@@ -293,6 +293,8 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/workspace/slug":                    alwaysAsk(auth.PermWorkspaceUpdate),
 	"GET /api/v1/conversation-number-series":          grant(auth.PermConversationsRead),
 	"PUT /api/v1/conversation-number-series/{series}": alwaysAsk(auth.PermWorkspaceUpdate),
+	"GET /api/v1/response-targets":                    grant(auth.PermConversationsRead),
+	"PUT /api/v1/response-targets":                    alwaysAsk(auth.PermWorkspaceUpdate),
 	// Connecting Gmail grants Colliedesk a sending identity (and the consent address is for a person's
 	// browser); disconnecting changes the address customers get replies from.
 	"POST " + gmailPath:   alwaysAsk(auth.PermChannelsManageCredentials),

@@ -559,6 +559,8 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/conversation-number-series", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/conversation-number-series/{series}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/response-targets", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/response-targets", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/name", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/me/display-name", auth.PermissionAuthenticated},
