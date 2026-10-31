@@ -101,6 +101,7 @@ tokens; only one sender refreshes at a time, because a refresh token is used onc
 
 A reply carries pictures (JPEG or PNG, read from the file itself, 1 MB at most each; not GIF yet): each goes up to Zalo and is sent as a
 message of its own after the text. Another file, or a larger picture, fails the reply before anything is
-sent and says why (`zalo_no_files`, `zalo_file_too_large`): send the text again without it.
+sent and says why and what to send instead (`zalo_no_files`, `zalo_file_too_large`). Such a reply offers no
+Retry (`delivery.retryable` is false; a retry answers 409 `delivery_final`): write it again without the file.
 
 Not yet: other files in a reply, connecting an OA from Zalo's own consent page.

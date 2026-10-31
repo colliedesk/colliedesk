@@ -10887,6 +10887,13 @@ components:
       required: [status, attempts, last_error, sent_at]
       properties:
         status: {$ref: '#/components/schemas/DeliveryStatus'}
+        retryable:
+          type: boolean
+          description: >-
+            Whether a person's retry may succeed: true for a failed delivery that would not fail the same way
+            again. False while it is not failed, for channel_removed and no_recipient, and for a failure the
+            same reply meets every time (a file its channel cannot carry, such as zalo_no_files or
+            zalo_file_too_large); POST .../messages/{messageId}/retry answers 409 delivery_final then.
         reason_code:
           type: [string, 'null']
           description: >-

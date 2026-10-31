@@ -26,7 +26,8 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 			WHERE i.workspace_id=m.workspace_id AND i.message_id=m.id AND i.role='customer' ORDER BY i.occurred_at,i.id LIMIT 1) END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
-	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind,m.notice_kind
+	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind,m.notice_kind,
+	COALESCE(o.final,false)
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
@@ -46,10 +47,11 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var channelMeta []byte
 	var attempts *int32
 	var sentAt *time.Time
+	var final bool
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
 		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome,
-		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID, &message.IntakeReplyKind, &message.NoticeKind); err != nil {
+		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID, &message.IntakeReplyKind, &message.NoticeKind, &final); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
@@ -65,6 +67,12 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	}
 	if status != nil && attempts != nil {
 		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, ReasonCode: reasonCode, SentAt: domain.UTCOptional(sentAt)}
+		// A reply with no channel or no address to go to, or one that fails the same way each time, is no retry.
+		code := ""
+		if reasonCode != nil {
+			code = *reasonCode
+		}
+		message.Delivery.Retryable = *status == "failed" && !final && code != "channel_removed" && code != "no_recipient"
 	}
 	if meta != nil {
 		var envelope domain.IncomingEmail

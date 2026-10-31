@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -483,6 +485,21 @@ func TestAReplyCarriesItsPicturesAndRefusesOtherFiles(t *testing.T) {
 		}
 		if after := len(a.zalo.sends()); after != before {
 			t.Fatalf("%s: %d calls to Zalo, want none", c.name, after-before)
+		}
+		// The same reply fails the same way again: it says what to send instead, and is no retry.
+		list, err := a.store.ListMessages(context.Background(), a.workspaceID, conversation)
+		var message domain.Message
+		for _, m := range list {
+			if m.ID == id {
+				message = m
+			}
+		}
+		if err != nil || message.Delivery == nil || message.Delivery.Retryable || message.Delivery.LastError == nil ||
+			!strings.Contains(*message.Delivery.LastError, "JPEG or PNG") || strings.Contains(*message.Delivery.LastError, "no picture") {
+			t.Fatalf("%s: delivery = %+v %v", c.name, message.Delivery, err)
+		}
+		if _, err := a.store.RetryDelivery(context.Background(), a.workspaceID, conversation, id); !errors.Is(err, store.ErrDeliveryFinal) {
+			t.Fatalf("%s: retry = %v, want refused", c.name, err)
 		}
 	}
 }

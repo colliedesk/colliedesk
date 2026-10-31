@@ -7559,6 +7559,8 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
+            /** @description Whether a person's retry may succeed: true for a failed delivery that would not fail the same way again. False while it is not failed, for channel_removed and no_recipient, and for a failure the same reply meets every time (a file its channel cannot carry, such as zalo_no_files or zalo_file_too_large); POST .../messages/{messageId}/retry answers 409 delivery_final then. */
+            retryable?: boolean;
             /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched Gmail or Microsoft 365 off; it is sent once it is on again), mailbox_not_configured (a queued reply waits because the server lost a setting its connected provider needs; it is sent once the setting is back; on a server that runs no email outbox at all, no SMTP relay and no provider set up, the reply fails at once with this code and Retry sends it once the setting is back). Null for most email failures, whose words are in last_error. */
             reason_code?: string | null;
             attempts: number;

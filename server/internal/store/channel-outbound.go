@@ -400,6 +400,9 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 	})
 }
 
+// ErrDeliveryFinal refuses to retry a delivery that would fail the same way (MessageDelivery.Retryable).
+var ErrDeliveryFinal = errors.New("this delivery would fail the same way again")
+
 func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
 	message, err := getMessage(ctx, tx, workspaceID, messageID)
 	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
@@ -407,6 +410,9 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if message.Delivery.Status != "failed" {
 		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	if !message.Delivery.Retryable {
+		return domain.Message{}, ErrDeliveryFinal
 	}
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {
@@ -656,7 +662,7 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 	case result.Retryable:
 		set, args = `next_attempt_at=$4,last_error=$5,last_error_code=NULLIF($6,'')`, []any{next, result.Reason, result.Code}
 	default:
-		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,'')`, []any{result.Reason, result.Code}
+		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,''),final=$6`, []any{result.Reason, result.Code, result.Final}
 	}
 	var meta []byte
 	if len(result.Meta) > 0 {

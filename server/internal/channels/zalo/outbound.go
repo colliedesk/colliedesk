@@ -32,6 +32,14 @@ const (
 	CodeFileTooLarge = "zalo_file_too_large"
 )
 
+// notAPicture says why a file cannot go with a Zalo reply, and what to send instead.
+func notAPicture(name, kind string) string {
+	if strings.HasPrefix(strings.ToLower(kind), "image/gif") {
+		return name + ": GIF isn't supported yet. Send a JPEG or PNG picture instead."
+	}
+	return name + " isn't a JPEG or PNG picture, the only files a Zalo reply carries. Send it another way."
+}
+
 // MaxPicture is the largest picture a reply carries to Zalo.
 const MaxPicture = 1 << 20
 
@@ -67,11 +75,10 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 	for _, file := range out.Message.Files {
 		switch {
 		case !pictureTypes[strings.ToLower(file.ContentType)]:
-			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles,
-				Reason: file.Name + " is no picture: Zalo replies carry pictures only. Send it another way."}
+			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles, Final: true, Reason: notAPicture(file.Name, file.ContentType)}
 		case file.Size > MaxPicture:
-			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeFileTooLarge,
-				Reason: fmt.Sprintf("%s is over 1 MB, the largest picture a Zalo reply carries.", file.Name)}
+			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeFileTooLarge, Final: true,
+				Reason: fmt.Sprintf("%s is over 1 MB, the largest picture a Zalo reply carries: send a smaller JPEG or PNG, or the file another way.", file.Name)}
 		}
 		// What the bytes are, not what the file was called.
 		reader, err := kit.OpenFile(ctx, file.StorageKey)
@@ -82,8 +89,7 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 		n, _ := io.ReadFull(reader, head)
 		reader.Close()
 		if kind := http.DetectContentType(head[:n]); !pictureTypes[kind] {
-			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles,
-				Reason: file.Name + " is no JPEG or PNG picture (" + kind + "): Zalo replies carry those only. Send it another way."}
+			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles, Final: true, Reason: notAPicture(file.Name, kind)}
 		}
 	}
 	path, recipient := "/v3.0/oa/message/cs", map[string]string{}
