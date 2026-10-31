@@ -115,11 +115,11 @@ function StatePill({ channel }: { channel: Channel }) {
 
 // Processing is the Pause and Resume of a type that keeps what arrives (registry pausable): Pause asks
 // first; Resume does not (it loses nothing) and says what it did where the button was.
-function useProcessing(channel: Channel, onResumed: () => void) {
+function useProcessing(channel: Channel, onDone: (paused: boolean) => void) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (paused: boolean) => channelsApi.update(channel.id, { processing_paused: paused }),
-    onSuccess: (_data, paused) => { if (!paused) onResumed(); },
+    onSuccess: (_data, paused) => onDone(paused),
     onSettled: () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events'].includes(String(query.queryKey[0])) }),
   });
 }
@@ -362,11 +362,16 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   const ui = channel ? channelUI(channel.type) : undefined;
   const [pausing, setPausing] = useState(false);
   const [resumed, setResumed] = useState(false);
+  const [paused, setPaused] = useState(false);
   const resumedNote = useRef<HTMLParagraphElement>(null);
+  const pausedNote = useRef<HTMLParagraphElement>(null);
   // The Resume button goes once the channel reloads running; focus goes to what it did.
   const runningAgain = Boolean(detail.data && !detail.data.processing_paused_at);
   useEffect(() => { if (resumed && runningAgain) resumedNote.current?.focus(); }, [resumed, runningAgain]);
-  const processing = useProcessing(channel ?? ({ id } as Channel), () => setResumed(true));
+  // Pause swaps its button for Resume: focus goes to the notice of what it did, once the channel reads paused.
+  const pausedNow = Boolean(detail.data?.processing_paused_at);
+  useEffect(() => { if (paused && pausedNow) pausedNote.current?.focus(); }, [paused, pausedNow]);
+  const processing = useProcessing(channel ?? ({ id } as Channel), (done) => { setResumed(!done); setPaused(done); });
   // Removing the default hands it to the oldest other live channel of the type, as the server does.
   const channels = useChannels();
   const nextDefault = channel && channels.data?.items.filter((item) => item.type === channel.type && item.id !== channel.id)
@@ -396,10 +401,10 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
         <div className="ch-row-actions"><StatePill channel={channel} />
           {isAdmin && ui?.pausable && channel.enabled && (channel.processing_paused_at
             ? <button type="button" disabled={processing.isPending} onClick={() => processing.mutate(false)}>{m.resume}</button>
-            : <button type="button" disabled={processing.isPending} onClick={() => { setResumed(false); setPausing(true); }}>{m.pause}</button>)}
+            : <button type="button" disabled={processing.isPending} onClick={() => { setResumed(false); setPaused(false); setPausing(true); }}>{m.pause}</button>)}
           {isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
-      {channel.processing_paused_at && <p className="notice notice-plain" role="status"><span>{channel.enabled
+      {channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={pausedNote}><span>{channel.enabled
         ? <><strong>{m.pausedSince(formatDate(channel.processing_paused_at, timezone))}</strong> {m.pausedRunning(channel.paused_count)}</>
         : m.pausedOffLead(formatDate(channel.processing_paused_at, timezone), channel.paused_count)}</span></p>}
       {resumed && !channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={resumedNote}><span>{m.resumed}</span></p>}
