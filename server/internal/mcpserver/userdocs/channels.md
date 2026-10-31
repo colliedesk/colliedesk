@@ -264,3 +264,13 @@ changed there only, not in Settings yet. Removing a channel and discarding held 
 agent token, requests a person approves. Storing a channel's secret needs an admin token; a lower
 token is refused, so a secret never waits in a request. A channel's AI levels are `GET /api/v1/channels/{id}/ai` and
 `PUT /api/v1/channels/{id}/ai/{slot}` (`colliedesk_channel_ai_get`, `colliedesk_channel_ai_set`).
+
+## Pause processing
+
+Moving a channel over from another system, you can pause its processing (`PATCH /api/v1/channels/{id}`
+with `{"processing_paused": true}`; Zalo channels only, whose messages wait in a journal). While it is
+paused, every message that arrives is kept as it came and nothing is decided, opened, answered or sent;
+replies you write wait too. Resume it (`{"processing_paused": false}`) and what arrived is processed in
+order by the channel's rules, as if it had just come, and the waiting replies go out. The channel's
+history shows who paused and resumed it; `processing_paused_at` on the channel says it is paused and
+`paused_count` how many messages wait.

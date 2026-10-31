@@ -135,3 +135,35 @@ func TestChannelFileLinkToALocalAddressIsBlocked(t *testing.T) {
 		t.Fatal("the local server was reached")
 	}
 }
+
+// A paused channel still fetches the files of what arrives, before their links expire, and fetches them
+// once: resumed, the message opens with them.
+func TestAPausedChannelFetchesFilesBeforeTheirLinksExpire(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	server, hits := mediaServer(t)
+	d.pipeline = guardedPipeline(d, server)
+	pause := func(on bool) {
+		t.Helper()
+		if _, err := d.store.UpdateChannel(context.Background(), d.workspaceID, d.channel.ID, store.ChannelInput{ProcessingPaused: &on}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pause(true)
+	d.send(t, channeltest.LoopbackEvent{ID: "m1", From: "u1", Text: "see attached", Links: []channeltest.LoopbackLink{{URL: server.URL + "/ok.txt", Name: "ok.txt", Type: "text/plain"}}})
+	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT e.state||':'||string_agg(f.status,',') FROM channel_inbound_events e JOIN channel_inbound_files f ON f.event_id=e.id WHERE e.workspace_id=$1 GROUP BY e.state`); got != "received:stored" {
+		t.Fatalf("while paused = %s", got)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("fetched %d times", hits.Load())
+	}
+	pause(false)
+	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM attachments a JOIN messages m ON m.id=a.message_id WHERE m.workspace_id=$1`); got != "1" || hits.Load() != 1 {
+		t.Fatalf("attachments once resumed = %s, fetched %d times", got, hits.Load())
+	}
+}

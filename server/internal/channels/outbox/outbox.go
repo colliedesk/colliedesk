@@ -34,6 +34,9 @@ type Options struct {
 	// Skip leaves the replies of these types to another worker (a server that cannot send email
 	// leaves email to the servers that can).
 	Skip []channels.Type
+	// Wake starts a round at once, without waiting for the interval (the journal queued a reply or a
+	// notice: a question to a customer goes out when they are quiet, not up to an interval later).
+	Wake <-chan struct{}
 }
 
 // Worker drains the outbox.
@@ -111,6 +114,7 @@ func (w *Worker) Run(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		case <-w.options.Wake:
 		}
 	}
 }
