@@ -26,10 +26,12 @@ export const requestsMessages = {
   editedBy: (person: string) => `Edited by ${person} before sending`,
   // What approving a status change would tell customers, one block per chat channel.
   // when: the request still waits (now), was approved (done), or never ran (never).
-  noticeSends: (channel: string, when: NoticeWhen) => `${channel} ${when === 'now' ? 'will send' : when === 'done' ? 'sent' : 'would have sent'}`,
+  // Once approved it is what the change was to send as it ran: the server keeps no record of each message.
+  noticeSends: (channel: string, when: NoticeWhen) => `${channel} ${when === 'now' ? 'will send' : when === 'done' ? 'was to send' : 'would have sent'}`,
   noticeEach: (channel: string, told: number, ref: string, when: NoticeWhen) => {
-    const verb = when === 'now' ? 'tells' : when === 'done' ? 'told' : 'would have told';
-    return told === 1 ? `${channel} ${verb} 1 customer:` : `${channel} ${verb} ${told} customers, each with their own code. For example, ${ref}:`;
+    const verb = when === 'now' ? 'tells' : when === 'done' ? 'was to tell' : 'would have told';
+    const after = when === 'done' ? ' a few seconds after approval (not one whose status changed again before then)' : '';
+    return told === 1 ? `${channel} ${verb} 1 customer${after}:` : `${channel} ${verb} ${told} customers${after}, each with their own code. For example, ${ref}:`;
   },
   noticeNoneSent: 'No customer was told: the status was already set, or the change did not go through.',
   noticeMoreChannels: (count: number) => `And ${count} more ${count === 1 ? 'channel' : 'channels'}.`,

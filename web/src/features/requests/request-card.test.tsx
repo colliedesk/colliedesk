@@ -223,11 +223,11 @@ test('a status change that would tell a customer shows the words their channel w
   expect(screen.queryByText(/"status"/)).not.toBeInTheDocument();
 });
 
-test('once decided, the card keeps the words: sent when approved, would have sent when rejected', () => {
+test('once decided, the card keeps the words: what it was to send when approved, would have sent when rejected', () => {
   const notices = [notice('Hảo Đạt OA', 1, 'CHD-2026-0142', 'Đã xử lý CHD-2026-0142.')];
   const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
   const { unmount } = render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices })} timezone="UTC" {...actions()} />);
-  expect(screen.getByText('Hảo Đạt OA sent')).toBeInTheDocument();
+  expect(screen.getByText('Hảo Đạt OA was to send')).toBeInTheDocument();
   unmount();
   render(<RequestCard item={agentRequest({ ...decided, status: 'rejected', notices })} timezone="UTC" {...actions()} />);
   expect(screen.getByText('Hảo Đạt OA would have sent')).toBeInTheDocument();
@@ -249,4 +249,11 @@ test('an approved status change that told nobody says so; a call of another kind
   unmount();
   render(<RequestCard item={agentRequest({ notices: null })} timezone="UTC" {...actions()} />);
   expect(screen.getByText(/"status": "pending"/)).toBeInTheDocument();
+});
+
+test('an approved bulk change says how many it was to tell, a few seconds after, never that they were told', () => {
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, path: '/api/v1/conversations', route: '/api/v1/conversations', notices: [notice('OA one', 8, 'CHD-1', 'Đóng CHD-1.')] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('OA one was to tell 8 customers a few seconds after approval (not one whose status changed again before then), each with their own code. For example, CHD-1:')).toBeInTheDocument();
+  expect(screen.queryByText(/ told 8/)).not.toBeInTheDocument();
 });
