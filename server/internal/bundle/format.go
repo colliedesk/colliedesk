@@ -17,6 +17,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // Format is the only bundle format this server reads.
@@ -61,24 +63,35 @@ type Identity struct {
 
 // Conversation is one conversation with its messages, in the order they were written.
 type Conversation struct {
-	ID            string          `json:"id"`
-	Contact       string          `json:"contact"`
-	Subject       string          `json:"subject"`
-	Status        string          `json:"status"`
-	Priority      string          `json:"priority"`
-	AssigneeEmail string          `json:"assignee_email,omitempty"`
-	Tags          []string        `json:"tags,omitempty"`
-	ChannelID     string          `json:"channel_id,omitempty"`
-	NumberSeries  string          `json:"number_series,omitempty"`
-	Number        int64           `json:"number,omitempty"`
-	NumberYear    int             `json:"number_year,omitempty"`
-	SLAApplies    bool            `json:"sla_applies,omitempty"`
-	ThreadKeys    []string        `json:"thread_keys,omitempty"`
+	ID            string   `json:"id"`
+	Contact       string   `json:"contact"`
+	Subject       string   `json:"subject"`
+	Status        string   `json:"status"`
+	Priority      string   `json:"priority"`
+	AssigneeEmail string   `json:"assignee_email,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	ChannelID     string   `json:"channel_id,omitempty"`
+	NumberSeries  string   `json:"number_series,omitempty"`
+	Number        int64    `json:"number,omitempty"`
+	NumberYear    int      `json:"number_year,omitempty"`
+	SLAApplies    bool     `json:"sla_applies,omitempty"`
+	ThreadKeys    []string `json:"thread_keys,omitempty"`
+	// Place is the chat of channel_id the conversation was opened in: its messages show there, and a
+	// customer reopens it by its code from there.
+	Place         *Place          `json:"place,omitempty"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
 	Origin        json.RawMessage `json:"origin,omitempty"`
 	StatusChanges []StatusChange  `json:"status_changes,omitempty"`
 	Messages      []Message       `json:"messages"`
+}
+
+// Place is a chat of a channel: a one-to-one chat ("direct") or a group, as the channel names it
+// ("user:<id>", "group:<id>" for a Zalo OA).
+type Place struct {
+	Kind       string `json:"kind"`
+	ExternalID string `json:"external_id"`
+	Name       string `json:"name,omitempty"`
 }
 
 // StatusChange is one change of a conversation's status.
@@ -205,6 +218,10 @@ func Read(r io.ReaderAt, size int64) (Archive, error) {
 	if err := decoder.Decode(&archive.Bundle); err != nil {
 		return archive, refuse("bundle.json: %v", err)
 	}
+	// A series is named in lower case in Colliedesk; a bundle may name it as its codes show it.
+	for index := range archive.Bundle.Conversations {
+		archive.Bundle.Conversations[index].NumberSeries = strings.ToLower(archive.Bundle.Conversations[index].NumberSeries)
+	}
 	return archive, archive.check()
 }
 
@@ -304,6 +321,21 @@ func (a Archive) check() error {
 			}
 			if _, taken := origin["import"]; taken {
 				return refuse("%s.origin.import: Colliedesk records where the conversation came from there", at)
+			}
+			// The parts the API reads (system, cc, due_at…) must have their types.
+			var known domain.ConversationOrigin
+			if err := json.Unmarshal(c.Origin, &known); err != nil {
+				return refuse("%s.origin: %v", at, err)
+			}
+		}
+		if p := c.Place; p != nil {
+			switch {
+			case c.ChannelID == "":
+				return refuse("%s.place: a place needs the conversation's channel_id", at)
+			case p.Kind != "direct" && p.Kind != "group":
+				return refuse("%s.place.kind: direct or group", at)
+			case p.ExternalID == "" || len([]rune(p.ExternalID)) > 200 || len([]rune(p.Name)) > 200:
+				return refuse("%s.place: an external_id, and a name, of at most 200 characters", at)
 			}
 		}
 		conversations[c.ID] = true

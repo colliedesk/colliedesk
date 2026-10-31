@@ -63,6 +63,8 @@ const targetExists = `CASE i.entity
 	WHEN 'kb_translation' THEN EXISTS(SELECT 1 FROM kb_article_translations x WHERE x.workspace_id=i.workspace_id AND x.article_id=i.target_id
 		AND x.locale=split_part(i.source_id,':',2))
 	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'chat' THEN EXISTS(SELECT 1 FROM channel_threads x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'chat_item' THEN EXISTS(SELECT 1 FROM channel_thread_items x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
 
 // Undo removes what one import (Freshdesk, Help Scout or a bundle: all write the same ledger entities, a
@@ -199,6 +201,12 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	}{
 		{&result.Conversations, `DELETE FROM conversations c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket'
 			AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND i.source_id <> ALL($3)`, []any{workspaceID, source, result.KeptConversationTickets}},
+		// A bundle's chat items go with their messages, and the chats it created with their last item.
+		{new(int), `DELETE FROM channel_thread_items x USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='chat_item'
+			AND x.workspace_id=i.workspace_id AND x.id=i.target_id AND x.message_id IS NULL`, []any{workspaceID, source}},
+		{new(int), `DELETE FROM channel_threads x USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='chat'
+			AND (i.meta->>'created')::boolean AND x.workspace_id=i.workspace_id AND x.id=i.target_id
+			AND NOT EXISTS (SELECT 1 FROM channel_thread_items n WHERE n.workspace_id=x.workspace_id AND n.thread_id=x.id)`, []any{workspaceID, source}},
 		// A bundle's identities it added to a contact that stays (one known before, or kept) go too, unless
 		// a conversation that stays came through them.
 		{new(int), `DELETE FROM contact_identities x USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='identity'

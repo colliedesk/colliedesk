@@ -20,7 +20,9 @@ docker compose run --rm --no-deps -T server '/app/collie import bundle --workspa
    import before anything is written, naming each. Create them first.
 5. A bundle already imported is refused. `collie import undo --workspace acme --source bundle:<source>`
    removes it, keeping a conversation the team wrote to since (it lists their ids), and the contacts,
-   identities and tags it created that nothing else uses.
+   identities, chats and tags it created that nothing else uses. While such a conversation stays, the
+   source is still imported: import again under another `source`. Undo never lowers a series' next
+   number, so a code is never given twice.
 
 ## The archive
 
@@ -46,7 +48,8 @@ conversation points at; they take space, nothing else.
     {"id": "t1", "contact": "c1", "subject": "The printer jams", "status": "resolved", "priority": "urgent",
      "assignee_email": "ann@example.com", "tags": ["bug"], "channel_id": "<channel uuid>",
      "number_series": "ref", "number": 123, "number_year": 2026, "sla_applies": true,
-     "thread_keys": ["user:100"], "created_at": "2026-03-02T09:00:00Z", "updated_at": "2026-03-04T09:00:00Z",
+     "thread_keys": ["user:100"], "place": {"kind": "direct", "external_id": "user:100"},
+     "created_at": "2026-03-02T09:00:00Z", "updated_at": "2026-03-04T09:00:00Z",
      "origin": {"reference": "REF-2026-0123"},
      "status_changes": [{"from": "open", "to": "resolved", "at": "2026-03-04T08:00:00Z"}],
      "messages": [
@@ -68,16 +71,24 @@ conversation points at; they take space, nothing else.
    created. Its identities are added to it.
 3. `channel_id` is a channel of the workspace: the conversation is that channel's, its replies leave
    through it, and `thread_keys` thread what the customer writes next into it (for a Zalo OA, `user:<id>`
-   or `group:<id>`). Without one, the conversation is `imported`.
-4. `number_series`, `number` and `number_year` keep the code the customer has; without them the
-   conversation takes the next number of its series. A number of this year or later in a series whose
+   or `group:<id>`). Without one, the conversation is `imported`. A customer's message on the channel
+   that names no command may join a conversation still open there, by the channel's join policy, as it
+   would join one opened in Colliedesk.
+4. `place` is the chat of that channel the conversation was opened in: `kind` `direct` (one to one) or
+   `group`, `external_id` as the channel names it (`user:<id>`, `group:<id>` for a Zalo OA), and a `name`.
+   Its customer's messages and the team's replies show in that chat (notes do not), and a customer
+   reopens it by its code from that chat only, as one opened in Colliedesk.
+5. `number_series` (the series' key, in any case: `REF` is `ref`), `number` and `number_year` keep the
+   code the customer has; without them the conversation takes the next number of its series. A number of this year or later in a series whose
    code shows the year (or any number in one whose code does not) moves the series' next number past it.
-5. `origin` (an object) is kept on the conversation as it is; Colliedesk adds where it came from under
-   `origin.import` (`source` "bundle", `bundle`, `id`), a key the bundle cannot set. Each message's
-   `origin.import` names it the same way.
-6. `sla_applies` gives the conversation response targets (the workspace's, counted from its own times).
-7. `status`, `priority` and `kind` take the values of the API (open, pending, resolved, closed; low,
+6. `origin` (an object) is kept on the conversation as it is; Colliedesk adds where it came from under
+   `origin.import` (`source` "bundle", `bundle`, `id`), a key the bundle cannot set, and the parts the
+   API reads that it left out (`system` "bundle", `external_id` the conversation's id, empty `cc` and
+   `forwarded_to`). A part the API reads must have its type (`cc` a list). Each message's origin names it
+   the same way, its `kind` reply, incoming or private_note.
+7. `sla_applies` gives the conversation response targets (the workspace's, counted from its own times).
+8. `status`, `priority` and `kind` take the values of the API (open, pending, resolved, closed; low,
    normal, high, urgent; incoming, outgoing, note). `author_email` of a reply or a note names a teammate;
    otherwise `author_name` is kept as written.
-8. Every time is RFC 3339 and stored in UTC. Each file's `size` and `sha256` are checked when the archive
+9. Every time is RFC 3339 and stored in UTC. Each file's `size` and `sha256` are checked when the archive
    is read and again once stored.

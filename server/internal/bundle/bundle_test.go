@@ -80,7 +80,7 @@ func sample(channel string) (bundle.Bundle, map[string][]byte) {
 		},
 		Conversations: []bundle.Conversation{
 			{ID: "t1", Contact: "u100", Subject: "Printer jams", Status: "resolved", Priority: "urgent", ChannelID: channel, NumberSeries: "ref", Number: 123, NumberYear: 2026,
-				Tags: []string{"bug"}, ThreadKeys: []string{"user:100"}, SLAApplies: true, CreatedAt: t0, UpdatedAt: t0.Add(48 * time.Hour),
+				Tags: []string{"bug"}, ThreadKeys: []string{"user:100"}, Place: &bundle.Place{Kind: "direct", ExternalID: "user:100"}, SLAApplies: true, CreatedAt: t0, UpdatedAt: t0.Add(48 * time.Hour),
 				StatusChanges: []bundle.StatusChange{{From: "open", To: "resolved", At: t0.Add(47 * time.Hour)}},
 				Messages: []bundle.Message{
 					{ID: "m1", Kind: "incoming", Body: "The printer jams", CreatedAt: t0, Files: []bundle.File{{ID: "f1", Name: "screen.png", ContentType: "image/png",
@@ -89,7 +89,7 @@ func sample(channel string) (bundle.Bundle, map[string][]byte) {
 					{ID: "m3", Kind: "note", Body: "Checked the tray", AuthorName: "Ann", CreatedAt: t0.Add(2 * time.Hour)},
 				}},
 			{ID: "t2", Contact: "u200", Subject: "Scanner", Status: "open", Priority: "normal", ChannelID: channel, NumberSeries: "ref", Number: 124, NumberYear: 2026,
-				AssigneeEmail: "ANN@bundle.example.com", ThreadKeys: []string{"user:200"}, CreatedAt: t0.Add(3 * time.Hour), UpdatedAt: t0.Add(3 * time.Hour),
+				AssigneeEmail: "ANN@bundle.example.com", ThreadKeys: []string{"user:200"}, Place: &bundle.Place{Kind: "direct", ExternalID: "user:200"}, CreatedAt: t0.Add(3 * time.Hour), UpdatedAt: t0.Add(3 * time.Hour),
 				Messages: []bundle.Message{{ID: "m4", Kind: "incoming", Body: "The scanner is offline", CreatedAt: t0.Add(3 * time.Hour)}}},
 		},
 		Counts: bundle.Counts{Contacts: 2, Identities: 2, Conversations: 2, Incoming: 2, Outgoing: 1, Notes: 1, StatusChanges: 1, ThreadKeys: 2, Files: 1, FileBytes: int64(len(file))},
@@ -169,6 +169,10 @@ func TestABundleImportsAsItWasAndReconciles(t *testing.T) {
 	}
 	if got := d.one(t, `SELECT count(*)::text FROM contact_identities WHERE workspace_id=$1`, d.workspace); got != "2" {
 		t.Fatalf("identities after undo = %s (the known one and the kept conversation's)", got)
+	}
+	if got := d.one(t, `SELECT COALESCE(string_agg(t.external_id||':'||(SELECT count(*) FROM channel_thread_items i WHERE i.workspace_id=t.workspace_id AND i.thread_id=t.id),',' ORDER BY t.external_id),'')
+		FROM channel_threads t WHERE t.workspace_id=$1`, d.workspace); got != "user:200:1" {
+		t.Fatalf("chats after undo = %s (the kept conversation's, with its message)", got)
 	}
 }
 
@@ -380,6 +384,27 @@ func TestABundleOriginIsKeptAndTheImportTraceIsApart(t *testing.T) {
 	}
 	if got := d.one(t, `SELECT (origin->>'source')||','||(origin->>'id')||','||(origin->'import'->>'source')||','||(origin->'import'->>'bundle')||','||(origin->'import'->>'id') FROM conversations WHERE workspace_id=$1 AND number=123`, d.workspace); got != "support_desk,S-1,bundle,sample,t1" {
 		t.Fatalf("origin = %s", got)
+	}
+	// With the frame the API reads: the lists empty, where it came from named.
+	if got := d.one(t, `SELECT (origin->>'system')||','||(origin->>'external_id')||','||(origin->'cc')::text||','||(origin->'forwarded_to')::text FROM conversations WHERE workspace_id=$1 AND number=123`, d.workspace); got != "bundle,t1,[],[]" {
+		t.Fatalf("conversation frame = %s", got)
+	}
+	if got := d.one(t, `SELECT string_agg((origin->>'kind')||':'||(origin->'to')::text||':'||(origin->'bcc')::text,',' ORDER BY created_at) FROM messages WHERE workspace_id=$1 AND conversation_id=(SELECT id FROM conversations WHERE workspace_id=$1 AND number=123)`, d.workspace); got != "incoming:[]:[],reply:[]:[],private_note:[]:[]" {
+		t.Fatalf("message frames = %s", got)
+	}
+	b.Conversations[0].Origin = json.RawMessage(`{"cc":"one@example.com"}`)
+	var bad bytes.Buffer
+	bw := zip.NewWriter(&bad)
+	badManifest, _ := json.Marshal(b)
+	bf, _ := bw.Create("bundle.json")
+	_, _ = bf.Write(badManifest)
+	for name, data := range files {
+		f, _ := bw.Create(name)
+		_, _ = f.Write(data)
+	}
+	_ = bw.Close()
+	if _, err := bundle.Read(bytes.NewReader(bad.Bytes()), int64(bad.Len())); err == nil || !strings.Contains(err.Error(), "conversations.0.origin") {
+		t.Fatalf("origin.cc a string = %v", err)
 	}
 	b.Conversations[0].Origin = json.RawMessage(`{"import":{"source":"elsewhere"}}`)
 	var buffer bytes.Buffer

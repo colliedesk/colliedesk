@@ -81,7 +81,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, archive Archive, options Optio
 	}
 	defer release()
 	w := &writer{db: db, workspaceID: workspaceID, source: source, archive: archive, dryRun: options.DryRun, storage: options.Storage,
-		contacts: map[string]string{}, agents: map[string]string{}, channels: map[string]string{}, objects: map[string]attachments.Object{}}
+		contacts: map[string]string{}, agents: map[string]string{}, channels: map[string]string{}, objects: map[string]attachments.Object{}, chats: map[string]bool{}}
 	if err := w.refuseImported(ctx, db, options.WorkspaceSlug); err != nil {
 		return report, err
 	}
@@ -156,6 +156,7 @@ type writer struct {
 	agents      map[string]string             // email to agent id
 	channels    map[string]string             // channel id to its type
 	objects     map[string]attachments.Object // archive path to the file stored for it
+	chats       map[string]bool               // chats recorded in the ledger
 }
 
 // refuseImported refuses a source the workspace already has, in the import's transaction (db nil) or
@@ -389,6 +390,13 @@ func (w *writer) conversation(ctx context.Context, c Conversation) error {
 		return fmt.Errorf("origin must be a JSON object")
 	}
 	merged["import"] = w.trace(c.ID)
+	// The frame the API reads (ConversationOrigin): where it came from, with empty lists.
+	for key, value := range map[string]any{"system": "bundle", "external_id": c.ID, "type": nil, "source": nil, "due_at": nil,
+		"first_response_due_at": nil, "cc": []string{}, "forwarded_to": []string{}} {
+		if _, ok := merged[key]; !ok {
+			merged[key] = value
+		}
+	}
 	origin, _ = json.Marshal(merged)
 	series := c.NumberSeries
 	if series == "" {
@@ -445,12 +453,85 @@ func (w *writer) conversation(ctx context.Context, c Conversation) error {
 			return fmt.Errorf("status change: %w", err)
 		}
 	}
+	thread, err := w.chat(ctx, c)
+	if err != nil {
+		return err
+	}
 	for _, message := range c.Messages {
-		if err := w.message(ctx, c, id, message); err != nil {
+		messageID, err := w.message(ctx, c, id, message)
+		if err != nil {
 			return fmt.Errorf("message %s: %w", message.ID, err)
+		}
+		if err := w.chatItem(ctx, c, thread, message, messageID); err != nil {
+			return fmt.Errorf("message %s in its chat: %w", message.ID, err)
 		}
 	}
 	return nil
+}
+
+// chat is the chat of the channel the conversation was opened in (its place), the one the channel has or a
+// new one; "" without a place.
+func (w *writer) chat(ctx context.Context, c Conversation) (string, error) {
+	if c.Place == nil {
+		return "", nil
+	}
+	var contact any
+	if c.Place.Kind == "direct" {
+		contact = w.contacts[c.Contact]
+	}
+	var id string
+	var created bool
+	if err := w.tx.QueryRow(ctx, `INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id,name,contact_id,opens_conversations)
+		VALUES($1,$2::uuid,$3,$4,NULLIF($5,''),$6::uuid,true)
+		ON CONFLICT (workspace_id,channel_id,external_id) DO UPDATE SET updated_at=channel_threads.updated_at RETURNING id::text,(xmax=0)`,
+		w.workspaceID, c.ChannelID, c.Place.Kind, c.Place.ExternalID, c.Place.Name, contact).Scan(&id, &created); err != nil {
+		return "", fmt.Errorf("chat %s: %w", c.Place.ExternalID, err)
+	}
+	if !w.chats[id] {
+		w.chats[id] = true
+		if err := w.mark(ctx, "chat", c.ChannelID+":"+c.Place.ExternalID, "", id, created); err != nil {
+			return "", err
+		}
+	}
+	return id, nil
+}
+
+// chatItem shows a customer's message or a reply in the conversation's chat; a note is no part of it.
+func (w *writer) chatItem(ctx context.Context, c Conversation, thread string, message Message, messageID string) error {
+	if thread == "" || message.Kind == "note" {
+		return nil
+	}
+	direction, role, contact, agent, sender := "in", "customer", any(w.contacts[c.Contact]), any(nil), contactName(w.archive.Bundle, c.Contact)
+	if message.Kind == "outgoing" {
+		direction, role, contact, sender = "out", "staff", nil, message.AuthorName
+		if id := w.agents[strings.ToLower(message.AuthorEmail)]; message.AuthorEmail != "" && id != "" {
+			agent = id
+		}
+	}
+	var id string
+	if err := w.tx.QueryRow(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_name,contact_id,agent_id,external_id,body,message_id,
+			disposition,occurred_at,created_at)
+		VALUES($1,$2::uuid,$3::uuid,$4,$5,NULLIF(left($6,200),''),$7::uuid,$8::uuid,left($9,1000),left($10,20000),$11::uuid,'conversation',$12,$12) RETURNING id::text`,
+		w.workspaceID, c.ChannelID, thread, direction, role, sender, contact, agent, message.ID, message.Body, messageID, message.CreatedAt.UTC()).Scan(&id); err != nil {
+		return err
+	}
+	if _, err := w.tx.Exec(ctx, `UPDATE channel_threads SET last_item_at=GREATEST(COALESCE(last_item_at,$3),$3) WHERE workspace_id=$1 AND id=$2::uuid`,
+		w.workspaceID, thread, message.CreatedAt.UTC()); err != nil {
+		return err
+	}
+	return w.mark(ctx, "chat_item", message.ID, c.ID, id, true)
+}
+
+func contactName(b Bundle, id string) string {
+	for _, contact := range b.Contacts {
+		if contact.ID == id {
+			if strings.TrimSpace(contact.Name) != "" {
+				return contact.Name
+			}
+			return contact.Email
+		}
+	}
+	return ""
 }
 
 // trace is where an imported row came from: origin.import.
@@ -458,22 +539,24 @@ func (w *writer) trace(id string) map[string]string {
 	return map[string]string{"source": "bundle", "bundle": w.archive.Bundle.Source, "id": id}
 }
 
-func (w *writer) message(ctx context.Context, c Conversation, conversationID string, message Message) error {
+func (w *writer) message(ctx context.Context, c Conversation, conversationID string, message Message) (string, error) {
 	var author any
 	if message.AuthorEmail != "" && message.Kind != "incoming" {
 		if id := w.agents[strings.ToLower(message.AuthorEmail)]; id != "" {
 			author = id
 		}
 	}
-	origin, _ := json.Marshal(map[string]any{"import": w.trace(message.ID)})
+	kind := map[string]string{"incoming": "incoming", "outgoing": "reply", "note": "private_note"}[message.Kind]
+	origin, _ := json.Marshal(map[string]any{"import": w.trace(message.ID), "system": "bundle", "external_id": message.ID, "kind": kind,
+		"from": nil, "to": []string{}, "cc": []string{}, "bcc": []string{}})
 	var id string
 	if err := w.tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,author_name,kind,body,origin,created_at)
 		VALUES($1,$2,$3::uuid,NULLIF($4,''),$5,$6,$7,$8) RETURNING id::text`,
 		w.workspaceID, conversationID, author, clip(message.AuthorName), message.Kind, message.Body, origin, message.CreatedAt.UTC()).Scan(&id); err != nil {
-		return err
+		return "", err
 	}
 	if err := w.mark(ctx, "thread", message.ID, c.ID, id, true); err != nil {
-		return err
+		return "", err
 	}
 	for _, file := range message.Files {
 		if w.dryRun {
@@ -481,7 +564,7 @@ func (w *writer) message(ctx context.Context, c Conversation, conversationID str
 		}
 		object, ok := w.objects[file.Path]
 		if !ok {
-			return fmt.Errorf("%s: %w", file.Path, errNoFile)
+			return "", fmt.Errorf("%s: %w", file.Path, errNoFile)
 		}
 		name := strings.TrimSpace(file.Name)
 		if name == "" {
@@ -493,13 +576,13 @@ func (w *writer) message(ctx context.Context, c Conversation, conversationID str
 		}
 		attachment, err := store.InsertAttachment(ctx, w.tx, w.workspaceID, store.NewAttachment{MessageID: id, Filename: name, ContentType: contentType, Object: object})
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := w.mark(ctx, "attachment", file.ID, c.ID, attachment.ID, true); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return id, nil
 }
 
 // forgetStored removes, after the rollback, the files a failed import stored that nothing else of the
