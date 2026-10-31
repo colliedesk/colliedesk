@@ -8158,8 +8158,10 @@ components:
         notices:
           type: array
           description: >-
-            What approving a status change would tell customers now, one per chat channel: missing for other
-            calls, a quiet change and once decided, and in a list without detail=full.
+            What a status change tells customers, one per chat channel: while it waits, what approving it would
+            tell now; once decided, what it would tell when the token asked (kept with the call, and cleared
+            with it after the retention). Missing for other calls and a quiet change, and in a list without
+            detail=full.
           items:
             type: object
             required: [channel_id, channel_name, example_ref, text, told]
@@ -8438,7 +8440,7 @@ components:
         sender: {$ref: '#/components/schemas/ChatSender'}
         contact_id: {type: [string, 'null'], format: uuid}
         agent_id: {type: [string, 'null'], format: uuid}
-        is_other_customer: {type: boolean, description: 'On a conversation''s chat: a customer who is not the conversation''s.'}
+        is_other_customer: {type: boolean, description: 'On a conversation''s chat: a customer who is not the conversation''s (another contact, or, for chatter that names no contact, someone other than who wrote the conversation''s own items).'}
         body: {type: string}
         external_id: {type: [string, 'null'], description: Its id on the channel.}
         quote_external_id: {type: [string, 'null'], description: The id on the channel of the message it answers.}

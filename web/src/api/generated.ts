@@ -4692,7 +4692,7 @@ export interface components {
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
-            /** @description What approving a status change would tell customers now, one per chat channel: missing for other calls, a quiet change and once decided, and in a list without detail=full. */
+            /** @description What a status change tells customers, one per chat channel: while it waits, what approving it would tell now; once decided, what it would tell when the token asked (kept with the call, and cleared with it after the retention). Missing for other calls and a quiet change, and in a list without detail=full. */
             notices?: {
                 /** Format: uuid */
                 channel_id: string;
@@ -4960,7 +4960,7 @@ export interface components {
             contact_id: string | null;
             /** Format: uuid */
             agent_id: string | null;
-            /** @description On a conversation's chat: a customer who is not the conversation's. */
+            /** @description On a conversation's chat: a customer who is not the conversation's (another contact, or, for chatter that names no contact, someone other than who wrote the conversation's own items). */
             is_other_customer: boolean;
             body: string;
             /** @description Its id on the channel. */

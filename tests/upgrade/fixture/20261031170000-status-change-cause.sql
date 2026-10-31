@@ -6,3 +6,6 @@ INSERT INTO conversation_status_changes (workspace_id, id, conversation_id, from
 UPDATE channels SET auto_close_since = '2026-10-31 17:00:00+00', settings = settings || '{"auto_close_hours": 48}' WHERE id = md5('channel-acme-2')::uuid;
 -- acme's bulk resolve has a notice still to tell.
 UPDATE conversations SET status_notice_due = status WHERE id = md5('conv-acme-1')::uuid;
+-- beta's draft token asked to resolve a conversation and tell its customer.
+UPDATE agent_requests SET notices = '[{"channel_id": "00000000-0000-0000-0000-000000000001", "channel_name": "Chat", "example_ref": "#1", "text": "#1: fixed.", "told": 1}]'
+    WHERE id = (SELECT id FROM agent_requests ORDER BY created_at, id LIMIT 1);

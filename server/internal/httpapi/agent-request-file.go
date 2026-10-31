@@ -35,6 +35,13 @@ const conversationRoutePrefix = "/api/v1/conversations/{id}"
 // body is the call's JSON; nil reads it from the request, which must then be JSON or empty. summary,
 // when not empty, replaces the one built from the route and body.
 func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, kind string, body json.RawMessage, summary string) {
+	a.fileAgentRequestTelling(response, request, route, who, kind, body, summary, nil)
+}
+
+// fileAgentRequestTelling files a call as fileAgentRequest does, keeping what its status change would tell
+// customers (notices), which the request shows after it was decided too.
+func (a *API) fileAgentRequestTelling(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, kind string, body json.RawMessage, summary string,
+	notices []domain.StatusNoticePreview) {
 	// A locked workspace cannot approve anything, so nothing is filed that would only expire.
 	if a.limits && who.Access.Locked {
 		writeLocked(response)
@@ -111,6 +118,7 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 	created, err := a.store.CreateAgentRequest(request.Context(), who.Workspace.ID, store.NewAgentRequest{
 		TokenID: who.SessionID, AgentID: who.Agent.ID, Kind: kind, Method: route.Method, Route: route.Pattern, Path: path,
 		Body: body, Summary: clip(summary), ConversationID: conversationID, SavedReply: savedReply, TokenPermissions: who.HeldPermissions(),
+		Notices: notices,
 	})
 	var rate *domain.AgentRequestRateError
 	if errors.As(err, &rate) {

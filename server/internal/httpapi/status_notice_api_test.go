@@ -123,6 +123,15 @@ func TestAStatusChangeThatTellsTheCustomerAsksADraftTokenFirst(t *testing.T) {
 	if got := lastChange(); got != "resolved by token: Claude draft · approved by Ada" {
 		t.Fatalf("approved change = %s", got)
 	}
+	// Decided, it still says what it told, as it was when the token asked.
+	var decided struct {
+		Status  string
+		Notices []struct{ Text string }
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/agent-requests/"+filed.RequestID, nil, admin, nil), &decided)
+	if decided.Status != "approved" || len(decided.Notices) != 1 || decided.Notices[0].Text != ref+": fixed." {
+		t.Fatalf("decided request = %+v", decided)
+	}
 	if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "pending", "notify": false}, draft, nil); response.Code != http.StatusOK || statusOf() != "pending" {
 		t.Fatalf("draft token, quiet: %d %s", response.Code, response.Body.String())
 	}

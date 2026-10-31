@@ -2,6 +2,7 @@ DROP TRIGGER conversations_status_notice_clear ON conversations;
 DROP FUNCTION conversations_status_notice_clear();
 ALTER TABLE conversations DROP COLUMN status_notice_due;
 ALTER TABLE channels DROP COLUMN auto_close_since;
+ALTER TABLE agent_requests DROP COLUMN notices;
 
 CREATE OR REPLACE FUNCTION conversation_status_changes_record() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

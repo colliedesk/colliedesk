@@ -50,6 +50,11 @@ BEGIN
 END
 $$;
 
+-- What a waiting status change would tell customers when an AI agent's token asked for it, one per chat
+-- channel (domain.StatusNoticePreview): the approval card shows it after the request was decided too.
+-- Cleared with the call after the retention (PruneAgentRequests).
+ALTER TABLE agent_requests ADD COLUMN notices jsonb CHECK (notices IS NULL OR octet_length(notices::text) <= 131072);
+
 -- When a channel's auto_close_hours was turned on: only a conversation resolved after it closes by itself,
 -- so turning it on never closes (and tells) a backlog. Changing the hours keeps it; NULL while off.
 ALTER TABLE channels ADD COLUMN auto_close_since timestamptz;

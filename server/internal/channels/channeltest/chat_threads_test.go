@@ -3,6 +3,7 @@ package channeltest_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -71,6 +72,14 @@ func TestEveryMessageOfAGroupIsAnItemAndConversationsKeepTheirOwn(t *testing.T) 
 	}
 	if !whole.Items[0].IsOtherCustomer || whole.Items[3].IsOtherCustomer {
 		t.Fatalf("other customers: %+v", whole.Items)
+	}
+	// Chatter part of no conversation names no contact: it is another customer's by who wrote it.
+	around, err := d.store.ConversationChat(ctx, d.workspaceID, second, "", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := around.Items[len(around.Items)-1]; last.Body != "good morning" || last.ContactID != nil || !last.IsOtherCustomer || around.Items[0].IsOtherCustomer {
+		t.Fatalf("the second conversation's chat: %+v", around.Items)
 	}
 	if got := d.one(t, `SELECT string_agg(disposition||':'||COALESCE(disposition_reason,'-'),',' ORDER BY occurred_at,external_id) FROM channel_thread_items WHERE workspace_id=$1`); got != "archived:chat,conversation:-,conversation:-,conversation:-" {
 		t.Fatalf("dispositions = %s", got)
@@ -148,5 +157,45 @@ func TestACancelConcludesItsItemsAndADiscardRemovesThem(t *testing.T) {
 	// Who wrote only what was discarded is no longer listed as having written.
 	if got := d.one(t, `SELECT string_agg(sender_value,',' ORDER BY sender_value) FROM channel_senders WHERE workspace_id=$1`); got != "u1" {
 		t.Fatalf("senders after the discard = %s", got)
+	}
+}
+
+// A member whose message joined another's conversation is still another customer there, before and after:
+// what they say later in the group, part of no conversation, reads as theirs, not the conversation's.
+func TestAMemberWhoJoinedAnotherConversationStaysAnotherCustomer(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	mode := func(mode string) {
+		t.Helper()
+		settings := json.RawMessage(`{"scopes":{"group":{"mode":"` + mode + `"}}}`)
+		if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: settings}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	say := func(events ...channeltest.LoopbackEvent) {
+		for _, event := range events {
+			*d.clock = d.clock.Add(time.Second)
+			d.send(t, event)
+		}
+	}
+	mode("all")
+	say(channeltest.LoopbackEvent{ID: "j-1", From: "m1", Group: "g1", Text: "report bug: the printer"},
+		channeltest.LoopbackEvent{ID: "j-2", From: "m2", Group: "g1", Text: "same here"})
+	first := d.one(t, `SELECT conversation_id::text FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id='j-1'`)
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='resolved',updated_at=now()-interval '30 days' WHERE workspace_id=$1`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	mode("commands")
+	say(channeltest.LoopbackEvent{ID: "j-3", From: "m2", Group: "g1", Text: "lunch?"})
+	page, err := d.store.ConversationChat(ctx, d.workspaceID, first, "", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, item := range page.Items {
+		got = append(got, fmt.Sprintf("%s=%v", item.Body, item.IsOtherCustomer))
+	}
+	if fmt.Sprint(got) != "[lunch?=true same here=true report bug: the printer=false]" {
+		t.Fatalf("other customers = %v", got)
 	}
 }

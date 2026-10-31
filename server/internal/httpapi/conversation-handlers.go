@@ -198,7 +198,7 @@ func (a *API) statusNeedsApproval(response http.ResponseWriter, request *http.Re
 	if len(notices) == 0 {
 		return false
 	}
-	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, raw, statusRequestSummary(ids, *status, notices))
+	a.fileAgentRequestTelling(response, request, route, who, domain.AgentRequestAction, raw, statusRequestSummary(ids, *status, notices), notices)
 	return true
 }
 

@@ -63,7 +63,7 @@ func (a *API) getAgentRequest(response http.ResponseWriter, request *http.Reques
 }
 
 // attachRequestNotices gives a waiting status change what approving it would tell customers now, per
-// chat channel, so the person who approves sees it.
+// chat channel, so the person who approves sees it; a decided one keeps what it told when it was asked.
 func (a *API) attachRequestNotices(ctx context.Context, workspaceID string, item *domain.AgentRequest) error {
 	if item.Status != domain.AgentRequestPending || item.Method != http.MethodPatch {
 		return nil
