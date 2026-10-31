@@ -177,10 +177,12 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if emailConfig.SMTP.Configured() {
 		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
+	// The journal wakes the outbox when it queued something, so a notice goes out as soon as it is due.
+	wake := make(chan struct{}, 1)
 	if httpapi.Outbound(channelConfig).Worker {
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
+			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
 				SwitchedOff: map[string]bool{domain.MailboxGoogle: off[serverconfig.FeatureGmail], domain.MailboxMicrosoft: off[serverconfig.FeatureMicrosoft]}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
@@ -191,10 +193,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		}
 	} else {
 		// Without either, email waits for a server that can send it; every other channel is sent here.
-		worker := outbox.New(channelStore, outbox.Options{Skip: []channels.Type{channelemail.Type}})
+		worker := outbox.New(channelStore, outbox.Options{Wake: wake, Skip: []channels.Type{channelemail.Type}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 	}
-	journal := pipeline.New(channelStore, nil)
+	journal := pipeline.New(channelStore, nil).WithWake(wake)
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
 	intakeSweep := intake.New(channelStore, journal, nil)

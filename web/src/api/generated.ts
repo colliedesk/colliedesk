@@ -7444,7 +7444,7 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
-            /** @description A reply the channel sent by itself (received: its received notice), which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. Null for a reply of the team. */
+            /** @description A reply the channel sent by itself (received, unmatched, ask_confirm, cancelled, ask_description, expired), which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. Null for a reply of the team. */
             notice_kind?: string | null;
             /**
              * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
@@ -7812,6 +7812,13 @@ export interface components {
             last_inbound_at: string | null;
             /** @description Whether this is its type's default channel: a call, link or address that names no channel uses it. */
             is_default?: boolean;
+            /**
+             * Format: date-time
+             * @description When the channel's processing was paused (null while it runs): what arrives waits in its journal as it came, nothing is decided, opened or sent; once resumed it is processed in order by the channel's rules.
+             */
+            processing_paused_at?: string | null;
+            /** @description Messages kept while the channel's processing is paused, waiting to be processed (0 while it runs). */
+            paused_count?: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -7918,7 +7925,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen or confirm; match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };
@@ -7938,6 +7945,8 @@ export interface components {
             is_default?: boolean;
             config?: components["schemas"]["ChannelConfigInput"];
             settings?: components["schemas"]["ChannelSettings"];
+            /** @description true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose messages wait in a journal (Zalo) can be paused; another answers 400. */
+            processing_paused?: boolean;
         };
         ChannelCredentialInput: {
             name: string;
@@ -7954,7 +7963,7 @@ export interface components {
             /** Format: date-time */
             at: string;
             /** @enum {string} */
-            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed" | "ai_changed";
+            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed" | "ai_changed" | "paused" | "resumed";
             /** Format: uuid */
             channel_id: string;
             channel_name: string;

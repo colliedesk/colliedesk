@@ -373,3 +373,55 @@ func TestAZaloNameLookupRetriesWhatFailedForNowAndKeepsAGroupsNames(t *testing.T
 		t.Fatalf("names kept after removal = %s", got)
 	}
 }
+
+// A Zalo channel's processing is paused and resumed through the API, and says so; a channel that takes each
+// message as it comes cannot be paused, and another workspace cannot pause this one.
+func TestAZaloChannelsProcessingIsPausedAndResumedThroughTheAPI(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+		config.Google = google.Config{Keys: keys}
+	})
+	d := zaloDesk{api: api, pool: pool, oaA: fmt.Sprint(600000 + time.Now().UnixNano()%100000)}
+	d.adminA = createSession(t, api, service, "Zalo Pause", "admin@zalo-pause.example.com")
+	other := createSession(t, api, service, "Zalo Pause Other", "admin@zalo-pause-other.example.com")
+	d.channelA = d.connect(t, d.adminA, d.oaA, "oa-secret-a")
+	patch := func(session, id string, paused bool) (int, map[string]any) {
+		response := request(t, api, http.MethodPatch, "/api/v1/channels/"+id, map[string]any{"processing_paused": paused}, session, nil)
+		var body map[string]any
+		_ = json.Unmarshal(response.Body.Bytes(), &body)
+		return response.Code, body
+	}
+	if code, body := patch(d.adminA, d.channelA, true); code != http.StatusOK || body["processing_paused_at"] == nil {
+		t.Fatalf("pause: %d %v", code, body)
+	}
+	// What arrives while it is paused is counted as kept.
+	for _, id := range []string{"pz-1", "pz-2"} {
+		timestamp := fmt.Sprint(time.Now().UnixMilli())
+		body, _ := json.Marshal(map[string]any{"app_id": "700001", "event_name": "user_send_text", "timestamp": timestamp,
+			"sender": map[string]string{"id": "1110001"}, "recipient": map[string]string{"id": d.oaA}, "message": map[string]string{"msg_id": id, "text": "hi"}})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/zalo/webhook", bytes.NewReader(body))
+		req.Header.Set(zalo.SignatureHeader, "mac="+zalo.Sign("700001", body, timestamp, "oa-secret-a"))
+		if response := serve(api, req); response.Code != http.StatusOK {
+			t.Fatalf("delivery %s: %d", id, response.Code)
+		}
+	}
+	for _, path := range []string{"/api/v1/channels/" + d.channelA, "/api/v1/channels"} {
+		response := request(t, api, http.MethodGet, path, nil, d.adminA, nil)
+		if !strings.Contains(response.Body.String(), `"paused_count":2`) {
+			t.Fatalf("%s while paused: %s", path, response.Body.String())
+		}
+	}
+	if code, _ := patch(other, d.channelA, false); code != http.StatusNotFound {
+		t.Fatalf("another workspace resumed it: %d", code)
+	}
+	if code, body := patch(d.adminA, d.channelA, false); code != http.StatusOK || body["processing_paused_at"] != nil || body["paused_count"] != float64(0) {
+		t.Fatalf("resume: %d %v", code, body)
+	}
+	email := create(t, api, d.adminA, "/api/v1/channels", map[string]any{"type": "email", "config": map[string]any{"support_address": "help@zalo-pause.example.com"}})
+	if code, body := patch(d.adminA, email, true); code != http.StatusBadRequest {
+		t.Fatalf("an email channel paused: %d %v", code, body)
+	}
+	if got := queryString(t, pool, `SELECT string_agg(kind,',' ORDER BY seq) FROM channel_events WHERE channel_id=$1 AND kind IN ('paused','resumed')`, d.channelA); got != "paused,resumed" {
+		t.Fatalf("history = %s", got)
+	}
+}

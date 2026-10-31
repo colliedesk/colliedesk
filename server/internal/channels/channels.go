@@ -39,6 +39,9 @@ type Channel struct {
 	DeletedAt       *time.Time
 	// IsDefault marks the channel of its type that answers what names no channel.
 	IsDefault bool
+	// ProcessingPausedAt is set while the channel's processing is paused: what arrives waits in its
+	// journal, nothing is decided or sent.
+	ProcessingPausedAt *time.Time
 }
 
 // Live is whether the channel was not removed.
@@ -89,6 +92,9 @@ const (
 	ActionCancel = "cancel"
 	// ActionReopen adds the message to the conversation the customer names (Intent.Ref).
 	ActionReopen = "reopen"
+	// ActionConfirm sends what the customer is writing now, where a scope asks before it opens
+	// (Gather.ConfirmSeconds); with nothing being written it is an ordinary message.
+	ActionConfirm = "confirm"
 )
 
 // Command matches.
@@ -112,12 +118,19 @@ type Command struct {
 	Phrases  []string `json:"phrases,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Priority string   `json:"priority,omitempty"`
+	// AskDescription, where messages are collected, answers the command alone (no words after it, no
+	// file) by asking for a description: the request opens only once it has one.
+	AskDescription string `json:"ask_description,omitempty"`
 }
 
 // Notice kinds, as their messages are marked (notice_kind).
 const (
-	NoticeReceived  = "received"
-	NoticeUnmatched = "unmatched"
+	NoticeReceived       = "received"
+	NoticeUnmatched      = "unmatched"
+	NoticeAskConfirm     = "ask_confirm"
+	NoticeCancelled      = "cancelled"
+	NoticeAskDescription = "ask_description"
+	NoticeExpired        = "expired"
 )
 
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
@@ -129,6 +142,12 @@ type Notices struct {
 	// UnmatchedEverySeconds is the least time between two unmatched notices of one chat (one customer
 	// writing on, or a bot answering the notice); 0 answers every message. Merge fills in the default.
 	UnmatchedEverySeconds *int `json:"unmatched_every_seconds,omitempty"`
+	// AskConfirm asks whether a request being written is complete (Gather.ConfirmSeconds).
+	AskConfirm string `json:"ask_confirm,omitempty"`
+	// Cancelled says a cancel command threw away the request being written.
+	Cancelled string `json:"cancelled,omitempty"`
+	// Expired tells a customer their request waiting for a description expired (Gather.ExpireSeconds).
+	Expired string `json:"expired,omitempty"`
 }
 
 // DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
@@ -137,7 +156,8 @@ const DefaultUnmatchedEverySeconds = 300
 
 // NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
 // sends the notice. A placeholder of no list is refused when the settings are saved.
-var NoticePlaceholders = map[string][]string{NoticeReceived: {}, NoticeUnmatched: {}}
+var NoticePlaceholders = map[string][]string{NoticeReceived: {}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
+	NoticeAskDescription: {}, NoticeExpired: {}}
 
 // noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
 var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)
@@ -192,6 +212,13 @@ type Gather struct {
 	// (a screenshot sent just before "report a bug"), unless the batch named a command of its own. 0: a
 	// command always starts a batch of its own.
 	PreCommandSeconds int `json:"pre_command_seconds,omitempty"`
+	// ConfirmSeconds asks before a commanded batch opens (a one-to-one request written over several
+	// messages): once the customer is quiet, the channel sends Notices.AskConfirm and waits this long; a
+	// confirm command opens it at once, more messages join it and ask again, silence opens it. 0 asks not.
+	ConfirmSeconds int `json:"confirm_seconds,omitempty"`
+	// ExpireSeconds throws away a request still waiting for its description (Command.AskDescription) this
+	// long after the customer's last message; their next message is told so (Notices.Expired). 0 keeps it.
+	ExpireSeconds int `json:"expire_seconds,omitempty"`
 }
 
 // Unmatched rules of a scope that opens conversations only on a command.

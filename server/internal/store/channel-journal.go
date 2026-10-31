@@ -60,11 +60,16 @@ type InboundWork struct {
 func (s *Store) DueInbound(ctx context.Context, now time.Time, limit, maxAttempts int) ([]InboundWork, error) {
 	var work []InboundWork
 	err := s.db.Privileged(ctx, database.PrivilegeChannelInboundClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `(SELECT workspace_id::text,channel_id::text,ARRAY[id::text],false FROM channel_inbound_events
-				WHERE state IN ('received','failed') AND attempts<$2 ORDER BY received_at LIMIT $3)
+		// A paused channel's events wait where they are.
+		rows, err := tx.Query(ctx, `(SELECT e.workspace_id::text,e.channel_id::text,ARRAY[e.id::text],false FROM channel_inbound_events e
+				WHERE e.state IN ('received','failed') AND e.attempts<$2
+					AND NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id=e.workspace_id AND c.id=e.channel_id AND c.processing_paused_at IS NOT NULL)
+				ORDER BY e.received_at LIMIT $3)
 			UNION ALL
-			(SELECT workspace_id::text,channel_id::text,array_agg(id::text ORDER BY received_at,id),true FROM channel_inbound_events
-				WHERE state='pending' GROUP BY workspace_id,channel_id,aggregate_key HAVING max(flush_at)<=$1 LIMIT $3)`, now, maxAttempts, limit)
+			(SELECT e.workspace_id::text,e.channel_id::text,array_agg(e.id::text ORDER BY e.received_at,e.id),true FROM channel_inbound_events e
+				WHERE e.state='pending'
+					AND NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id=e.workspace_id AND c.id=e.channel_id AND c.processing_paused_at IS NOT NULL)
+				GROUP BY e.workspace_id,e.channel_id,e.aggregate_key HAVING max(e.flush_at)<=$1 LIMIT $3)`, now, maxAttempts, limit)
 		if err != nil {
 			return err
 		}
@@ -79,6 +84,39 @@ func (s *Store) DueInbound(ctx context.Context, now time.Time, limit, maxAttempt
 		return nil, fmt.Errorf("list due channel events: %w", err)
 	}
 	return work, nil
+}
+
+// PausedInbound lists events of paused channels whose files were not fetched yet, oldest first: their
+// links expire, so their files are fetched while the rest waits.
+func (s *Store) PausedInbound(ctx context.Context, limit int) ([]InboundWork, error) {
+	var work []InboundWork
+	err := s.db.Privileged(ctx, database.PrivilegeChannelInboundClaim, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT e.workspace_id::text,e.channel_id::text,ARRAY[e.id::text],false FROM channel_inbound_events e
+			JOIN channels c ON c.workspace_id=e.workspace_id AND c.id=e.channel_id AND c.processing_paused_at IS NOT NULL
+			WHERE e.state IN ('received','failed') AND e.files_fetched_at IS NULL ORDER BY e.received_at LIMIT $1`, limit)
+		if err != nil {
+			return err
+		}
+		work, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (InboundWork, error) {
+			var item InboundWork
+			err := row.Scan(&item.WorkspaceID, &item.ChannelID, &item.EventIDs, &item.Flush)
+			return item, err
+		})
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list paused channel events: %w", err)
+	}
+	return work, nil
+}
+
+// MarkFilesFetched records that an event's files were fetched while its channel was paused.
+func (s *Store) MarkFilesFetched(ctx context.Context, workspaceID string, ids []string) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		_, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET files_fetched_at=now() WHERE workspace_id=$1 AND id::text=ANY($2)`, workspaceID, ids)
+		return struct{}{}, err
+	})
+	return err
 }
 
 // InboundEvents reads journal events of a channel of the workspace, in the order they arrived.

@@ -1040,7 +1040,8 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		var item stored
 		var kind, external string
 		if err := rows.Scan(&item.channel.ID, &item.channel.WorkspaceID, &kind, &item.channel.Name, &item.channel.Enabled, &item.settings, &external,
-			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt, &item.channel.IsDefault); err != nil {
+			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt, &item.channel.IsDefault,
+			&item.channel.ProcessingPausedAt); err != nil {
 			rows.Close()
 			return fmt.Errorf("export channels: %w", err)
 		}
@@ -1055,7 +1056,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		channel := item.channel
 		record := export.Channel{ID: channel.ID, Type: string(channel.Type), Name: channel.Name, Enabled: channel.Enabled, Settings: item.settings,
 			CreatedAt: domain.UTC(channel.CreatedAt), UpdatedAt: domain.UTC(channel.UpdatedAt), DisabledAt: domain.UTCOptional(channel.DisabledAt),
-			DeletedAt: domain.UTCOptional(channel.DeletedAt), IsDefault: channel.IsDefault}
+			DeletedAt: domain.UTCOptional(channel.DeletedAt), IsDefault: channel.IsDefault, ProcessingPausedAt: domain.UTCOptional(channel.ProcessingPausedAt)}
 		if channel.ExternalAccount != "" {
 			record.ExternalAccount = &channel.ExternalAccount
 		}
