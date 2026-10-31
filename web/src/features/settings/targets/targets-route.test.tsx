@@ -10,12 +10,13 @@ const mocks = vi.hoisted(() => {
     constructor(message: string, detail?: Record<string, unknown>) { super(message); this.detail = detail; }
   }
   class ConflictError extends InvalidRequestError {}
+  class ChangedElsewhereError extends ConflictError {}
   const api = { me: vi.fn(), config: vi.fn(), billing: vi.fn() };
   const responseTargetsApi = { get: vi.fn(), set: vi.fn(), setMyAlerts: vi.fn() };
   const channelsApi = { list: vi.fn() };
-  return { api, responseTargetsApi, channelsApi, InvalidRequestError, ConflictError };
+  return { api, responseTargetsApi, channelsApi, InvalidRequestError, ConflictError, ChangedElsewhereError };
 });
-vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError }));
+vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, ChangedElsewhereError: mocks.ChangedElsewhereError }));
 vi.mock('../../../api/response-targets', async (actual) => ({ ...(await actual<typeof import('../../../api/response-targets')>()), responseTargetsApi: mocks.responseTargetsApi }));
 vi.mock('../../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
 const { api, responseTargetsApi, channelsApi } = mocks;
@@ -66,7 +67,7 @@ test('business hours refuse a day that ends before it starts, copy Monday to the
   expect(sent().hours[4]).toEqual({ day: 'fri', open: true, from: '06:30', to: '07:00' });
   expect(sent().hours[5]).toMatchObject({ day: 'sat', open: true });
   expect(sent().targets).toEqual(doc().targets);
-  expect(sent()).not.toHaveProperty('updated_at');
+  expect(sent()).toHaveProperty('updated_at', '2026-10-31T00:00:00Z');
   expect(sent()).not.toHaveProperty('enabled_at');
 });
 
@@ -202,4 +203,22 @@ test('saving one card leaves what is being typed in the others', async () => {
   await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
   expect(within(hours).getByLabelText('Tuesday to')).toHaveValue('18:30');
   expect(within(holidays).getByLabelText('Name')).toHaveValue('Tết');
+});
+
+test('a save made after someone else saved is refused: the card says so, shows theirs, and keeps what is being typed', async () => {
+  const theirs = doc({ holidays: [{ date: '2026-12-25', name: 'Christmas' }], updated_at: '2026-10-31T02:00:00Z' });
+  responseTargetsApi.set.mockRejectedValueOnce(new mocks.ChangedElsewhereError('Someone saved the response targets since you read them.', { code: 'changed_elsewhere', current: theirs }));
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business hours'), { target: { value: '2' } });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(sent()).toMatchObject({ updated_at: '2026-10-31T00:00:00Z' }));
+  expect(await within(targets).findByRole('alert')).toHaveTextContent(/Someone else changed the response targets; your change was not saved\. They show as they are now/);
+  expect(within(targets).getByLabelText('First reply target for Low, in business hours')).toHaveValue(2);
+  expect(screen.getByRole('region', { name: 'Holidays' })).toHaveTextContent('Christmas');
+  // Saving again goes with the version now shown.
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
+  expect(sent()).toMatchObject({ updated_at: '2026-10-31T02:00:00Z', holidays: [{ date: '2026-12-25', name: 'Christmas' }] });
+  expect(sent().targets.low.first_response_minutes).toBe(120);
 });

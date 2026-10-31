@@ -52,6 +52,7 @@ export const targetsMessages = {
   pickOne: 'Pick at least one channel, or turn targets off.',
   saveApplies: 'Save channels',
   adminsOnly: 'Only admins change response targets.',
+  changedElsewhere: 'Someone else changed the response targets; your change was not saved. They show as they are now: save again to apply yours.',
   yes: 'On',
   no: 'Off',
   none: 'No target',

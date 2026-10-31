@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, InvalidRequestError } from '../../../api/client';
+import { api, ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
 import { channelsApi } from '../../../api/channels';
-import { responseTargetsApi, weekdays } from '../../../api/response-targets';
+import { responseTargetsApi, responseTargetsSchema, weekdays } from '../../../api/response-targets';
 import type { ResponseTargets, ResponseTargetsChange, Weekday } from '../../../api/response-targets';
 import { messages } from '../../../messages';
 import { useBillingShown } from '../../billing/billing-shown';
@@ -26,16 +26,30 @@ function fieldErrors(error: unknown): Record<string, string> {
   return fields && typeof fields === 'object' ? Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
 }
 
-// What a PUT takes: the document without what only the server writes or what is the reader's own.
-const withoutStamp = ({ updated_at: _updated, enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
+// What a PUT takes: the document without what only the server writes or what is the reader's own, with the
+// version it was read at (updated_at): a save after someone else's is refused, 409 changed_elsewhere.
+const withoutStamp = ({ enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
 // Hours in the form, minutes on the wire; a target is in half hours.
 const toHours = (minutes: number | null) => (minutes === null ? '' : String(minutes / 60));
 const toMinutes = (hours: string) => (hours.trim() === '' ? null : Math.round(Number(hours) * 60));
 const halfHours = (hours: string) => hours.trim() === '' || (Number(hours) > 0 && Number.isInteger(Number(hours) * 2));
 
+// A card's save state: someone else's save in between is said in words of this page.
+const cardState = (save: Parameters<typeof saveState>[0]) => {
+  const state = saveState(save);
+  return save.isError && save.error instanceof ChangedElsewhereError ? { ...state, error: m.changedElsewhere } : state;
+};
+
 function useSave() {
   const client = useQueryClient();
   return useMutation({
+    // Refused for someone else's save: the page shows theirs; what is being typed stays (the cards keep an edited form).
+    onError: (error) => {
+      if (!(error instanceof ChangedElsewhereError)) return;
+      const current = responseTargetsSchema.safeParse(error.detail?.current);
+      if (current.success) client.setQueryData<ResponseTargets>(['response-targets'], (old) => ({ ...current.data, my_alert_email: current.data.my_alert_email ?? old?.my_alert_email }));
+      else void client.invalidateQueries({ queryKey: ['response-targets'] });
+    },
     mutationFn: (value: ResponseTargetsChange) => responseTargetsApi.set(value),
     // A save answers the workspace's document; the reader's own email choice is not in it, so it is kept.
     onSuccess: (saved) => {
@@ -87,7 +101,7 @@ interface CardProps { doc: ResponseTargets; canManage: boolean }
 
 function OnCard({ doc, canManage }: CardProps) {
   const save = useSave();
-  const feedback = useSaveFeedback(saveState(save));
+  const feedback = useSaveFeedback(cardState(save));
   const id = useId();
   return <Card id={id} title={m.onHeading} lead={m.onLead}>
     {canManage
@@ -100,15 +114,19 @@ function OnCard({ doc, canManage }: CardProps) {
 function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZone: string }) {
   const [zone, setZone] = useState(doc.timezone ?? '');
   const [hours, setHours] = useState(doc.hours);
-  useEffect(() => { setZone(doc.timezone ?? ''); setHours(doc.hours); }, [doc.timezone, doc.hours]);
+  // A form someone is editing keeps their words when the document changes under it (another card's save,
+  // someone else's): it follows the document again once saved.
+  const edited = useRef(false);
+  useEffect(() => { if (!edited.current) { setZone(doc.timezone ?? ''); setHours(doc.hours); } }, [doc.timezone, doc.hours]);
   const [checked, setChecked] = useState(false);
   const save = useSave();
-  const feedback = useSaveFeedback(saveState(save));
+  const feedback = useSaveFeedback(cardState(save));
   const server = fieldErrors(save.error);
   const id = useId();
   const byDay = (day: Weekday) => hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' };
+  const touch = () => { edited.current = true; feedback.touch(); };
   const change = (day: Weekday, part: Partial<ResponseTargets['hours'][number]>) => {
-    feedback.touch();
+    touch();
     setHours((all) => weekdays.map((name) => (name === day ? { ...byDay(name), ...part } : all.find((item) => item.day === name) ?? byDay(name))));
   };
   // A day closing at midnight is 24:00 on the wire; the time field shows and takes 00:00 for it.
@@ -124,9 +142,9 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
       event.preventDefault();
       setChecked(true);
       if (feedback.pending || weekdays.some(bad)) return;
-      save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) });
+      save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) }, { onSuccess: () => { edited.current = false; } });
     }}>
-      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { feedback.touch(); setZone(next); }} />
+      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { touch(); setZone(next); }} />
       {server.timezone && <span className="error-copy field-note" role="alert">{server.timezone}</span>}
       {server.hours && <p className="error-copy" role="alert">{server.hours}</p>}
       <p className="muted-copy" id={`${id}-midnight`}>{m.midnight}</p>
@@ -150,7 +168,7 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
       </div>
       <span className="button-row"><button type="button" className="link-action" onClick={() => {
         const monday = byDay('mon');
-        feedback.touch();
+        touch();
         setHours(weekdays.map((day) => (['tue', 'wed', 'thu', 'fri'].includes(day) ? { ...monday, day } : byDay(day))));
       }}>{m.copyMonday}</button></span>
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveHours)}</button>{feedback.status}</span>
@@ -163,7 +181,7 @@ function HolidaysCard({ doc, canManage }: CardProps) {
   const [name, setName] = useState('');
   const [checked, setChecked] = useState(false);
   const save = useSave();
-  const feedback = useSaveFeedback(saveState(save));
+  const feedback = useSaveFeedback(cardState(save));
   const server = fieldErrors(save.error);
   const id = useId();
   const sorted = [...doc.holidays].sort((a, b) => a.date.localeCompare(b.date));
@@ -198,10 +216,11 @@ const formOf = (targets: ResponseTargets['targets']) => Object.fromEntries(prior
 function TargetsCard({ doc, canManage }: CardProps) {
   const [values, setValues] = useState(() => formOf(doc.targets));
   const [warn, setWarn] = useState(toHours(doc.warn_before_minutes));
-  useEffect(() => { setValues(formOf(doc.targets)); setWarn(toHours(doc.warn_before_minutes)); }, [doc.targets, doc.warn_before_minutes]);
+  const edited = useRef(false);
+  useEffect(() => { if (!edited.current) { setValues(formOf(doc.targets)); setWarn(toHours(doc.warn_before_minutes)); } }, [doc.targets, doc.warn_before_minutes]);
   const [checked, setChecked] = useState(false);
   const save = useSave();
-  const feedback = useSaveFeedback(saveState(save));
+  const feedback = useSaveFeedback(cardState(save));
   const server = fieldErrors(save.error);
   const id = useId();
   const cellBad = (value: string) => checked && !halfHours(value);
@@ -219,7 +238,7 @@ function TargetsCard({ doc, canManage }: CardProps) {
     return <td data-label={which === 'first' ? m.firstReply : m.resolve}><span className="tg-cell">
       <input type="number" min={0.5} step={0.5} inputMode="decimal" aria-label={m.targetFor(which === 'first' ? m.firstReply : m.resolve, priorityName(priority))} value={values[priority][which]}
         aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${priority}-${which}` : undefined}
-        onChange={(event) => { feedback.touch(); setValues((all) => ({ ...all, [priority]: { ...all[priority], [which]: event.target.value } })); }} />
+        onChange={(event) => { edited.current = true; feedback.touch(); setValues((all) => ({ ...all, [priority]: { ...all[priority], [which]: event.target.value } })); }} />
       <span>{m.hoursUnit}</span></span>
       {error && <span className="error-copy field-note" id={`${id}-${priority}-${which}`}>{error}</span>}</td>;
   };
@@ -230,7 +249,8 @@ function TargetsCard({ doc, canManage }: CardProps) {
       const bad = priorities.some((priority) => !halfHours(values[priority].first) || !halfHours(values[priority].resolve)) || !(warn.trim() !== '' && Number(warn) >= 0 && Number.isInteger(Number(warn) * 2));
       if (bad || feedback.pending) return;
       save.mutate({ ...withoutStamp(doc), warn_before_minutes: toMinutes(warn) ?? 0,
-        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: toMinutes(values[priority].first), resolution_minutes: toMinutes(values[priority].resolve) }])) as ResponseTargets['targets'] });
+        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: toMinutes(values[priority].first), resolution_minutes: toMinutes(values[priority].resolve) }])) as ResponseTargets['targets'] },
+        { onSuccess: () => { edited.current = false; } });
     }}>
       <table className="tg-table">
         <thead><tr><th scope="col">{m.priority}</th><th scope="col">{m.firstReply}</th><th scope="col">{m.resolve}</th></tr></thead>
@@ -239,7 +259,7 @@ function TargetsCard({ doc, canManage }: CardProps) {
       <div className={`field${warnBad || server.warn_before_minutes ? ' field-bad' : ''}`}>
         <span className="tg-cell"><label htmlFor={`${id}-warn`}>{m.dueSoon}</label>
           <input id={`${id}-warn`} type="number" min={0} step={0.5} inputMode="decimal" aria-label={m.dueSoonLabel} value={warn}
-            onChange={(event) => { feedback.touch(); setWarn(event.target.value); }} /><span>{m.dueSoonUnit(Number(warn))}</span></span>
+            onChange={(event) => { edited.current = true; feedback.touch(); setWarn(event.target.value); }} /><span>{m.dueSoonUnit(Number(warn))}</span></span>
         {(warnBad || server.warn_before_minutes) && <span className="error-copy field-note">{server.warn_before_minutes ?? m.halfHours}</span>}
       </div>
       <p className="muted-copy">{m.targetsNote}</p>
@@ -253,10 +273,11 @@ function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id:
   // The channels as one value, so a new list of the same channels does not reset the form.
   const everyKey = every.join(',');
   const [chosen, setChosen] = useState<string[]>(doc.channel_ids ?? every);
-  useEffect(() => setChosen(doc.channel_ids ?? everyKey.split(',').filter(Boolean)), [doc.channel_ids, everyKey]);
+  const edited = useRef(false);
+  useEffect(() => { if (!edited.current) setChosen(doc.channel_ids ?? everyKey.split(',').filter(Boolean)); }, [doc.channel_ids, everyKey]);
   const [checked, setChecked] = useState(false);
   const save = useSave();
-  const feedback = useSaveFeedback(saveState(save));
+  const feedback = useSaveFeedback(cardState(save));
   const id = useId();
   if (!canManage) return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}><ul className="muted-copy">{channels.filter((item) => chosen.includes(item.id)).map((item) => <li key={item.id}>{item.name}</li>)}</ul></Card>;
   return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}>
@@ -265,11 +286,11 @@ function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id:
       setChecked(true);
       if (chosen.length === 0 || feedback.pending) return;
       // Every channel is null: a channel added later is measured too.
-      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen });
+      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen }, { onSuccess: () => { edited.current = false; } });
     }}>
       <fieldset className="tg-channels"><legend className="sr-only">{m.appliesHeading}</legend>
         {channels.map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
-          onChange={(event) => { feedback.touch(); setChosen((all) => (event.target.checked ? [...all, item.id] : all.filter((other) => other !== item.id))); }} /><span>{item.name}</span></label>)}
+          onChange={(event) => { edited.current = true; feedback.touch(); setChosen((all) => (event.target.checked ? [...all, item.id] : all.filter((other) => other !== item.id))); }} /><span>{item.name}</span></label>)}
       </fieldset>
       {checked && chosen.length === 0 && <p className="error-copy" role="alert">{m.pickOne}</p>}
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveApplies)}</button>{feedback.status}</span>
@@ -281,7 +302,7 @@ function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id:
 function AlertsCard({ doc, canManage }: CardProps) {
   const client = useQueryClient();
   const save = useSave();
-  const feedback = useSaveFeedback(saveState(save));
+  const feedback = useSaveFeedback(cardState(save));
   const mine = useMutation({
     mutationFn: (email: boolean) => responseTargetsApi.setMyAlerts(email),
     onSuccess: (result) => client.setQueryData<ResponseTargets>(['response-targets'], (current) => (current ? { ...current, my_alert_email: result.email } : current)),
