@@ -208,6 +208,11 @@ body:has(.status-tabs input:not([value="all"]):checked) .conversation-meta .stat
 .status-split .action-popover button { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; white-space: normal; text-align: left; height: auto; padding-block: 6px; }
 .status-split .action-popover small { display: block; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
 @media (pointer: coarse), (max-width: 30rem) { .status-split > .action-menu > summary { min-width: var(--touch); } }
+/* The last status change not made by a person on the team: one quiet line, not a button. */
+.status-event { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-3); font-size: var(--fs-label); padding: var(--space-1) var(--space-2); }
+.status-event svg { width: 13px; height: 13px; flex: none; }
+.status-event time { margin-left: auto; white-space: nowrap; }
+.status-event a { color: inherit; }
 .status-button-error { flex-basis: 100%; margin: 0; text-align: right; font-size: var(--fs-label); }
 .timeline-scroll { overflow-y: auto; padding: var(--space-5) var(--space-6); }
 .timeline-stack { max-width: 46rem; margin: 0 auto; display: grid; gap: var(--space-4); }

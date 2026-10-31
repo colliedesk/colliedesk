@@ -205,6 +205,41 @@ test('Reopen that tells offers a quiet reopen, to add a note; a change that tell
   expect(screen.queryByLabelText('More ways to resolve')).not.toBeInTheDocument();
 });
 
+test('the last status change not made by a person on the team is one quiet line, at its time among the messages', () => {
+  const later: Message = { ...incoming, id: '66666666-6666-4666-8666-666666666666', created_at: '2026-10-20T10:00:00Z' };
+  const first: Message = { ...incoming, created_at: '2026-10-14T00:00:00Z' };
+  const closed = { ...thread, status: 'closed' as const, channel_ref: zaloRef, last_status_change: { to: 'closed' as const, at: '2026-10-18T09:00:00Z', by: 'auto_close' as const } };
+  const { unmount } = render(<TimelinePanel conversation={closed} items={[first, later]} timezone="UTC" canManageChannels />);
+  const line = screen.getByText(/Closed by itself after staying resolved/).closest('p') as HTMLElement;
+  expect(line).toHaveTextContent('Closed by itself after staying resolved (Hảo Đạt OA setting)');
+  expect(within(line).getByRole('link', { name: 'Hảo Đạt OA' })).toHaveAttribute('href', `/settings/channels/${zaloRef.id}?tab=messages`);
+  expect(line.querySelector('time')).toHaveAttribute('datetime', '2026-10-18T09:00:00Z');
+  const stack = line.parentElement as HTMLElement;
+  const order = Array.from(stack.children);
+  expect(order.indexOf(line)).toBeGreaterThan(order.findIndex((node) => node.textContent?.includes(first.body)));
+  expect(order.indexOf(line)).toBeLessThan(order.length - 1);
+  unmount();
+  render(<TimelinePanel conversation={closed} items={[first]} timezone="UTC" />);
+  expect(screen.queryByRole('link', { name: 'Hảo Đạt OA' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Closed by itself after staying resolved \(Hảo Đạt OA setting\)/)).toBeInTheDocument();
+});
+
+test('a status line names who set it: a token, the customer, their Reopen command, the import; never a person on the team', () => {
+  const cases = [
+    [{ to: 'resolved', by: 'token', name: 'Claude (Queue triage)' }, 'Claude (Queue triage) resolved it'],
+    [{ to: 'open', by: 'customer' }, 'Reopened when the customer wrote'],
+    [{ to: 'open', by: 'command' }, 'Reopened by the customer’s Reopen command'],
+    [{ to: 'resolved', by: 'import' }, 'Set to Resolved by the import'],
+  ] as const;
+  for (const [change, words] of cases) {
+    const { unmount } = render(<TimelinePanel conversation={{ ...thread, last_status_change: { at: '2026-10-18T09:00:00Z', ...change } }} items={[]} timezone="UTC" />);
+    expect(screen.getByText(words)).toBeInTheDocument();
+    unmount();
+  }
+  render(<TimelinePanel conversation={{ ...thread, last_status_change: { to: 'resolved', at: '2026-10-18T09:00:00Z', by: 'agent', name: 'Ann' } }} items={[]} timezone="UTC" />);
+  expect(document.querySelector('.status-event')).toBeNull();
+});
+
 test('no conversation, no status button', () => {
   render(<TimelinePanel items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
   expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();

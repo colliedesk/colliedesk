@@ -287,5 +287,5 @@ test('the count of customers told is said when the server gives it', async () =>
   pick(/chat one/i);
   pick(/chat two/i);
   fireEvent.click(within(bar()).getByRole('button', { name: 'Resolve and tell customers' }));
-  expect(await screen.findByText('2 conversations resolved; 1 customer was told.')).toBeInTheDocument();
+  expect(await screen.findByText('2 conversations resolved; 1 customer will be told in a few seconds.')).toBeInTheDocument();
 });

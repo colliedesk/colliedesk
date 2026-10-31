@@ -117,6 +117,17 @@ export const messages = {
   resolveQuietly: 'Resolve without telling the customer',
   reopenQuietly: 'Reopen without telling the customer',
   reopenQuietlyUse: 'To add a note or fix a detail',
+  // The timeline's line for the last status change not made by a person on the team.
+  statusEvent: {
+    token: (name: string, to: 'open' | 'pending' | 'resolved' | 'closed') =>
+      `${name} ${to === 'resolved' ? 'resolved it' : to === 'closed' ? 'closed it' : to === 'open' ? 'reopened it' : 'set it to Pending'}`,
+    aiAgent: 'An AI agent',
+    customer: 'Reopened when the customer wrote',
+    command: 'Reopened by the customer’s Reopen command',
+    autoClose: 'Closed by itself after staying resolved',
+    setting: 'setting',
+    imported: (status: string) => `Set to ${status} by the import`,
+  },
   // Details · Status on a chat that tells its customer.
   tellCustomer: 'Tell the customer',
   tellWhich: (channel: string, told: string[], quiet: string[]) =>
@@ -132,7 +143,7 @@ export const messages = {
   setStatusQuietly: 'Set status quietly',
   bulkMayHaveTold: ' Customers in a chat were told where their channel has a message for that status.',
   customersTold: (count: number, status: 'open' | 'pending' | 'resolved' | 'closed', told: number) =>
-    `${count} conversation${count === 1 ? '' : 's'} ${status === 'resolved' || status === 'closed' ? status : `set to ${status === 'open' ? 'Open' : 'Pending'}`}; ${told === 0 ? 'no customer was told' : `${told} customer${told === 1 ? ' was' : 's were'} told`}.`,
+    `${count} conversation${count === 1 ? '' : 's'} ${status === 'resolved' || status === 'closed' ? status : `set to ${status === 'open' ? 'Open' : 'Pending'}`}; ${told === 0 ? 'no customer is told' : `${told} customer${told === 1 ? '' : 's'} will be told in a few seconds`}.`,
   bulkUpdateFailed: 'The conversations could not be updated. Nothing was changed; try again.',
   clearFilters: 'Clear filters',
   showContactConversations: (name: string) => `All conversations of ${name}`,

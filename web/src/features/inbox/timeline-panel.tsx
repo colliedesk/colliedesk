@@ -2,7 +2,8 @@ import { Fragment, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, ChevronLeftIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
+import { CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
+import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
 import { ActionMenu } from './action-menu';
@@ -41,6 +42,8 @@ interface TimelinePanelProps {
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
   // notify false sets it without telling the customer (their chat channel's status notice).
   onSetStatus?: (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+  // An admin may open the channel's settings from the timeline's line for a channel closing it by itself.
+  canManageChannels?: boolean;
   // Returns to the list; the button shows only where the thread replaces the list (a phone).
   onBack?: () => void;
   // The server runs Autofix: narrow screens get the fix's one line under the header.
@@ -82,8 +85,13 @@ function StatusButton({ conversation, onSetStatus }: { conversation: Conversatio
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
+  const event = conversation ? <StatusEvent conversation={conversation} timezone={timezone} canManageChannels={canManageChannels} /> : null;
+  // The line stands at its time, before a message of the same moment (the notice it caused).
+  const at = conversation?.last_status_change?.at;
+  const next = at ? items.findIndex((item) => Date.parse(item.created_at) >= Date.parse(at)) : -1;
+  const eventAt = !at ? -1 : next === -1 ? items.length : next;
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -116,14 +124,31 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
-          {items.map((item, index) => <Fragment key={item.id}><MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
+          {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
             approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
+          {eventAt === items.length && event}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>
       </div>
     </section>
   );
+}
+
+// The last status change when something other than a person on the team made it: an AI agent, the customer,
+// their Reopen command, the channel closing it by itself, an import. Only the last one is known.
+function StatusEvent({ conversation, timezone, canManageChannels }: { conversation: Conversation; timezone: string; canManageChannels: boolean }) {
+  const change = conversation.last_status_change;
+  if (!change || change.by === 'agent') return null;
+  const channel = conversation.channel_ref;
+  const words = change.by === 'token' ? messages.statusEvent.token(change.name || messages.statusEvent.aiAgent, change.to)
+    : change.by === 'customer' ? messages.statusEvent.customer
+    : change.by === 'command' ? messages.statusEvent.command
+    : change.by === 'import' ? messages.statusEvent.imported(messages.statuses[change.to])
+    : <>{messages.statusEvent.autoClose}{channel && <> ({canManageChannels ? <a href={`/settings/channels/${channel.id}?tab=messages`}>{channel.name}</a> : channel.name} {messages.statusEvent.setting})</>}</>;
+  const icon = change.by === 'auto_close' ? <ClockIcon /> : change.to === 'open' ? <RotateCcwIcon /> : change.to === 'resolved' ? <CheckCircleIcon /> : <CircleDotIcon />;
+  return <p className="status-event">{icon}<span>{words}</span>
+    <time dateTime={change.at} title={stampTitle(change.at, timezone)}>{formatDate(change.at, timezone)}{zoneSuffix(change.at, timezone)}</time></p>;
 }
 
 // The header says which clock and when in full words, since the details (with Targets) hide below 75 rem.
