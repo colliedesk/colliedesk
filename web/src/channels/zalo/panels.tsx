@@ -440,9 +440,10 @@ function drafts(effective: Record<string, unknown>): Record<CommandAction, Draft
 interface Confirm { on: boolean; quiet: string; wait: string }
 const confirmLimit = 3600;
 const expireLimit = 1440;
+const everyLimit = 86_400;
 const seconds = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
 
-function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; reopenNotFound: string; reopenLegacy: string; reopened: string; reopenNoted: string; help: string; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
+function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; reopenNotFound: string; reopenLegacy: string; reopened: string; reopenNoted: string; help: string; helpEvery: number; unmatchedEvery: number; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
   const stored = record(channel.settings);
   const effective = record(channel.effective_settings);
   const commands = { ...(record(effective.commands) as Record<string, Command>) };
@@ -456,7 +457,8 @@ function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandA
   }
   const next: Record<string, unknown> = { ...stored, commands, notices: { ...record(effective.notices), received: edits.received.trim(), unmatched: edits.unmatched.trim(),
     ask_confirm: edits.askConfirm.trim(), cancelled: edits.cancelled.trim(), expired: edits.expired.trim(),
-    reopen_not_found: edits.reopenNotFound.trim(), reopen_legacy: edits.reopenLegacy.trim(), reopened: edits.reopened.trim(), reopen_noted: edits.reopenNoted.trim(), help: edits.help.trim() } };
+    reopen_not_found: edits.reopenNotFound.trim(), reopen_legacy: edits.reopenLegacy.trim(), reopened: edits.reopened.trim(), reopen_noted: edits.reopenNoted.trim(), help: edits.help.trim(),
+    help_every_seconds: edits.helpEvery, unmatched_every_seconds: edits.unmatchedEvery } };
   if (edits.answer !== undefined || edits.confirm) {
     const direct = { ...record(record(effective.scopes).direct) };
     if (edits.answer !== undefined) direct.unmatched = edits.answer ? 'notice' : 'join_open';
@@ -506,12 +508,17 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const [reopened, setReopened] = useState(text(notices.reopened));
   const [reopenNoted, setReopenNoted] = useState(text(notices.reopen_noted));
   const [help, setHelp] = useState(text(notices.help));
+  // The least time between two of these to one chat, in seconds (the server's default is 300; 0 is every time).
+  const every = (value: unknown) => String(typeof value === 'number' ? value : 300);
+  const [helpEvery, setHelpEvery] = useState(every(notices.help_every_seconds));
+  const [unmatchedEvery, setUnmatchedEvery] = useState(every(notices.unmatched_every_seconds));
+  const everyBad = (value: string) => !(seconds(value) >= 0 && seconds(value) <= everyLimit);
   const [reopenLegacy, setReopenLegacy] = useState(text(notices.reopen_legacy));
   const [confirmTouched, setConfirmTouched] = useState(false);
   const [checked, setChecked] = useState(false);
   const reload = useReload(channel.id);
   const save = useMutation({
-    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired, reopenNotFound, reopenLegacy, reopened, reopenNoted, help,
+    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired, reopenNotFound, reopenLegacy, reopened, reopenNoted, help, helpEvery: seconds(helpEvery), unmatchedEvery: seconds(unmatchedEvery),
       answer: onCommands && answer !== (direct.unmatched === 'notice') ? answer : undefined, confirm: confirmTouched ? confirm : undefined,
       expireSeconds: expireTouched ? seconds(expire) * 60 : undefined }) }),
     onSuccess: () => reload(),
@@ -558,7 +565,7 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </div>;
   }
   const edit = (action: CommandAction, change: Partial<Draft>) => { feedback.touch(); setCommands((all) => ({ ...all, [action]: { ...all[action], ...change } })); };
-  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad) save.mutate(); }}>
+  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad && !everyBad(helpEvery) && !everyBad(unmatchedEvery)) save.mutate(); }}>
     <section className="zl-block" aria-labelledby={`${id}-cmd`}><h3 id={`${id}-cmd`}>{m.commands}</h3>
       <p className="lead">{m.commandsLead}</p>
       <div className="zl-rows">
@@ -582,6 +589,8 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</Field>
       <Field id={`${id}-hlp`} label={m.helpNotice} error={server['settings.notices.help']} help={`${m.helpNoticeHint} ${m.count(help.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={help} onChange={(event) => { feedback.touch(); setHelp(event.target.value); }} />}</Field>
+      <Field id={`${id}-hev`} label={m.helpEvery} error={(checked && everyBad(helpEvery) ? m.everyRange : undefined) ?? server['settings.notices.help_every_seconds']} help={m.everyHint}>
+        {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={helpEvery} onChange={(event) => { feedback.touch(); setHelpEvery(event.target.value); }} />}</Field>
       <Field id={`${id}-rop`} label={m.reopened} error={server['settings.notices.reopened']} help={`${m.reopenedHint} ${m.unmatchedHint} ${m.count(reopened.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopened} onChange={(event) => { feedback.touch(); setReopened(event.target.value); }} />}</Field>
       <Field id={`${id}-rnt`} label={m.reopenNoted} error={server['settings.notices.reopen_noted']} help={`${m.reopenNotedHint} ${m.unmatchedHint} ${m.count(reopenNoted.length, noticeMax)}`}>
@@ -590,6 +599,8 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenNotFound} onChange={(event) => { feedback.touch(); setReopenNotFound(event.target.value); }} />}</Field>
       <Field id={`${id}-rlg`} label={m.reopenLegacy} error={server['settings.notices.reopen_legacy']} help={`${m.reopenLegacyHint} ${m.count(reopenLegacy.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenLegacy} onChange={(event) => { feedback.touch(); setReopenLegacy(event.target.value); }} />}</Field>
+      <Field id={`${id}-uev`} label={m.unmatchedEvery} error={(checked && everyBad(unmatchedEvery) ? m.everyRange : undefined) ?? server['settings.notices.unmatched_every_seconds']} help={m.everyHint}>
+        {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={unmatchedEvery} onChange={(event) => { feedback.touch(); setUnmatchedEvery(event.target.value); }} />}</Field>
       {onCommands && <label className="field-inline"><input type="checkbox" checked={answer} onChange={(event) => { feedback.touch(); setAnswer(event.target.checked); }} /><span>{m.unmatchedOn}</span></label>}
       <Field id={`${id}-cnl`} label={m.cancelled} error={server['settings.notices.cancelled']} help={`${m.unmatchedHint} ${m.count(cancelled.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>

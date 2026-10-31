@@ -270,7 +270,7 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
     commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'], tags: ['zalo'] }, cancel: { action: 'cancel', match: 'fuzzy', phrases: ['hủy'] } },
-    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '', help: '' },
+    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '', help: '', help_every_seconds: 300, unmatched_every_seconds: 300 },
     scopes: { direct: { mode: 'commands', unmatched: 'notice' } },
   } });
 });
@@ -457,4 +457,19 @@ test('the Help command and its answer are saved with the others; Help matches as
   const sent = channelsApi.update.mock.calls[0][1].settings;
   expect(sent.commands.help).toEqual({ action: 'help', match: 'words', phrases: ['Hỗ trợ'] });
   expect(sent.notices.help).toBe('Gõ “tạo phiếu” để tạo yêu cầu.');
+});
+
+test('how often the help and the unmatched reply go to one chat is set in seconds, 0 for every time, and refused out of range', async () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: { notices: { help_every_seconds: 300, unmatched_every_seconds: 300 } } })} canManage timezone="UTC" />);
+  const helpEvery = screen.getByLabelText('Answer help in one chat at most every');
+  expect(helpEvery).toHaveValue(300);
+  fireEvent.change(helpEvery, { target: { value: '90000' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  expect(helpEvery).toHaveAccessibleDescription(/0 to 86400/);
+  expect(channelsApi.update).not.toHaveBeenCalled();
+  fireEvent.change(helpEvery, { target: { value: '0' } });
+  fireEvent.change(screen.getByLabelText('Send the unmatched reply in one chat at most every'), { target: { value: '600' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ help_every_seconds: 0, unmatched_every_seconds: 600 });
 });
