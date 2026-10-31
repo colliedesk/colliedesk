@@ -11050,7 +11050,8 @@ components:
         (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits`
         {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
         {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type
-        declares), `notices` {received}. Never a secret.
+        declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
+        pre_command_seconds}, cut_on_command, unmatched: join_open}), `notices` {received}. Never a secret.
       additionalProperties: true
     ChannelCreate:
       type: object

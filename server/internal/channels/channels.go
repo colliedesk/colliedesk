@@ -132,7 +132,18 @@ const (
 type Gather struct {
 	QuietSeconds int `json:"quiet_seconds"`
 	MaxSeconds   int `json:"max_seconds"`
+	// PreCommandSeconds takes what a sender said this long before a command into the command's batch
+	// (a screenshot sent just before "report a bug"), unless the batch named a command of its own. 0: a
+	// command always starts a batch of its own.
+	PreCommandSeconds int `json:"pre_command_seconds,omitempty"`
 }
+
+// Unmatched rules of a scope that opens conversations only on a command.
+const (
+	// UnmatchedJoinOpen joins a message that names no command to its sender's open or pending
+	// conversation on the channel when there is exactly one; otherwise the message is kept unresolved.
+	UnmatchedJoinOpen = "join_open"
+)
 
 // Scope is the rules of one scope; a field left out keeps the channel's.
 type Scope struct {
@@ -140,7 +151,17 @@ type Scope struct {
 	JoinPolicy *JoinPolicy `json:"join_policy,omitempty"`
 	Gather     *Gather     `json:"gather,omitempty"`
 	Review     *bool       `json:"review,omitempty"`
+	// CutOnCommand: a command closes what its sender was collecting and starts a batch of its own (the
+	// default); false adds it to the batch being collected (a one-to-one chat composing a request).
+	CutOnCommand *bool `json:"cut_on_command,omitempty"`
+	// Unmatched is what a commands-only scope does with a message that names no command and continues
+	// nothing being collected: empty joins the open conversation its thread finds, else keeps it;
+	// UnmatchedJoinOpen joins the sender's only open conversation on the channel.
+	Unmatched string `json:"unmatched,omitempty"`
 }
+
+// Cuts says a command starts a batch of its own in this scope.
+func (s Scope) Cuts() bool { return s.CutOnCommand == nil || *s.CutOnCommand }
 
 // ForScope returns the rules of a scope: the channel's with what the scope sets over them.
 func (s Settings) ForScope(scope string) (Settings, Scope) {

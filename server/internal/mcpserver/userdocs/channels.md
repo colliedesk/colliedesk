@@ -130,6 +130,28 @@ a page a customer sees. Email and web forms have no places. For AI agents and th
 `colliedesk_conversation_chat_get`, `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items` and
 `colliedesk_channel_unresolved_items`.
 
+## Chat rules
+
+A chat channel's scopes (its one-to-one chats, its groups) can each set how a customer's messages become
+requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change):
+- `gather` collects what a customer says close together into one batch: `quiet_seconds` of silence
+  closes it, `max_seconds` after its first message at the latest. With `pre_command_seconds`, what the
+  customer said that long before a command (a screenshot sent just before "report a bug") is part of
+  the command's request; what they say after it inside the quiet window is too. A batch that already
+  named a command never joins the next one: three commands are three requests.
+- `cut_on_command` (on unless set to `false`): a command closes what the customer was collecting and
+  starts its own batch; off, a second command joins the batch being written (a one-to-one chat composing
+  one request).
+- A cancel command (such as "Hủy") cancels only a batch of its sender that named a command; with none
+  being collected it is an ordinary message.
+- `unmatched: join_open`, on a scope that opens conversations only on a command (`mode: commands`): a
+  message that names no command joins the customer's open or pending conversation on the channel when
+  they have exactly one. With none or several it is kept, unresolved, in the chat place: it shows in the
+  place and among the messages nobody concluded on, and joins nothing. The channel does not yet answer
+  such a message with a hint of its own.
+- A team member writing in a group on the chat app itself is part of the place, never a customer's
+  request: it opens and joins nothing, unless they name a command that opens one.
+
 ## Intake queue
 
 On a chat channel's scope that collects messages (its groups, on most chat types), what one customer says

@@ -281,15 +281,31 @@ func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, event
 }
 
 // basisOf is what the journal says decided a message of a gathering: a person, AI, or the rules as they
-// decided when the gathering was applied.
-func (a IntakeApply) basisOf(decision rules.Decision) rules.Decision {
-	switch a.Decider {
-	case DecidedByAgent:
+// decided when the gathering was applied. The rules joining it to the conversation they found when it
+// closed (a join-open scope's only open conversation) keep that rule.
+func (a IntakeApply) basisOf(decision rules.Decision, g pendingGathering) rules.Decision {
+	switch {
+	case a.Decider == DecidedByAgent:
 		decision.Basis, decision.Rule = rules.Person, "intake_"+decision.Action
-	case DecidedByAI:
+	case a.Decider == DecidedByAI:
 		decision.Basis, decision.Rule = rules.Model, "intake_"+decision.Action
+	case decision.Rule == rules.IntoConversation:
+		decision.Basis, decision.Rule = rules.Default, g.rulesRule
 	}
 	return decision
+}
+
+// ConversationStillOpen says a conversation of the workspace is open or pending.
+func (s *Store) ConversationStillOpen(ctx context.Context, workspaceID, conversationID string) (bool, error) {
+	if !isID(conversationID) {
+		return false, nil
+	}
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var open bool
+		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=$2::uuid AND status IN ('open','pending'))`,
+			workspaceID, conversationID).Scan(&open)
+		return open, err
+	})
 }
 
 // concludeGathering records how a gathering was decided once its message is stored, with the contact of
@@ -402,23 +418,23 @@ func gatheringMissingOr(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	return otherwise
 }
 
-// DueGathering is a gathering past its time to be decided.
+// DueGathering is a gathering past its time to be decided, with what the rules decided when it closed.
 type DueGathering struct {
-	WorkspaceID, ID, RulesAction string
+	WorkspaceID, ID, RulesAction, RulesTarget string
 }
 
 // DueGatherings lists, across workspaces, gatherings AI did not decide in time, oldest first.
 func (s *Store) DueGatherings(ctx context.Context, now time.Time, limit int) ([]DueGathering, error) {
 	var due []DueGathering
 	err := s.db.Privileged(ctx, database.PrivilegeIntakeDueClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,rules_action FROM intake_gatherings WHERE state='deciding' AND decide_by<=$1
-			ORDER BY decide_by LIMIT $2`, now, limit)
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,rules_action,COALESCE(rules_target::text,'') FROM intake_gatherings
+			WHERE state='deciding' AND decide_by<=$1 ORDER BY decide_by LIMIT $2`, now, limit)
 		if err != nil {
 			return err
 		}
 		due, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (DueGathering, error) {
 			var g DueGathering
-			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.RulesAction)
+			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.RulesAction, &g.RulesTarget)
 		})
 		return err
 	})

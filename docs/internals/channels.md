@@ -70,6 +70,25 @@ since the frame handled them before the rules. An AI decider may only ever repla
    a reply to someone else never files the message in their request. Only a shared scope reads the
    sender, so email gains no query.
 
+## Episodes
+
+The chat rules of a scope (`Gather.PreCommandSeconds`, `Scope.CutOnCommand`, `Scope.Unmatched`), the
+staff rule and the cancel rule are fields whose zero value is the behaviour before them, so email, web
+forms and `channeltest.Run` never change.
+
+1. **The journal knows a batch's command.** `channel_inbound_events.command` is written with the pending
+   row. A cancel command cancels only a batch with one (where messages are collected; elsewhere it is
+   still dropped), and a command keeps what came within `pre_command_seconds` before it only when the
+   batch named none (else three quick commands would merge).
+2. **Join open is by the sender's open conversations, not the thread.** `unmatched=join_open` skips the
+   thread lookup of a commands-only scope and joins the only open or pending conversation of the
+   sender's contact on the channel (`unmatched_join_open`); otherwise the item stays `unresolved`
+   (`unmatched_kept`), counted in `/api/v1/channel-thread-items`. The hint a one-to-one chat answers
+   with (support-desk's "N-07") needs notices to a place without a conversation: until that ships, a
+   chat type relying on it must not go live.
+3. **Staff.** `Inbound.Role = staff` that names no command that opens is a `staff` item and nothing
+   else; it never gathers, so it never makes or joins a customer's batch.
+
 ## Intake
 
 A scope a type declares in `Definition.IntakeScopes` (a chat's groups) gives every batch the rules decide
