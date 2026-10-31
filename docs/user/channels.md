@@ -155,6 +155,9 @@ requests, in the channel's settings (`settings.scopes.<scope>`, an admin's chang
   they have exactly one. With none or several it is kept, unresolved, in the chat place: it shows in the
   place and among the messages nobody concluded on, and joins nothing. The channel does not yet answer
   such a message with a hint of its own.
+- The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
+  its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
+  the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
 - A team member writing in a group on the chat app itself is part of the place, never a customer's
   request: it opens and joins nothing, unless they name a command that opens one.
 

@@ -58,7 +58,7 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 				WHEN EXISTS (SELECT 1 FROM pairing_links WHERE workspace_id=$1 AND kind='invite' AND used_at IS NULL AND revoked_at IS NULL AND expires_at>$2) THEN 'invited'
 				ELSE 'alone' END,
 			CASE WHEN EXISTS (SELECT 1 FROM messages m JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
-				WHERE m.workspace_id=$1 AND m.kind='outgoing' AND o.status='sent') THEN 'sent' ELSE 'none' END`,
+				WHERE m.workspace_id=$1 AND m.kind='outgoing' AND m.notice_kind IS NULL AND o.status='sent') THEN 'sent' ELSE 'none' END`,
 			workspaceID, now).Scan(&importState, &invite, &firstReply)
 	})
 	if err != nil {

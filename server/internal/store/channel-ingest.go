@@ -598,7 +598,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
-		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
+		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{NoticeKind: channels.NoticeReceived}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
 			return result, fmt.Errorf("send received notice: %w", err)
 		}
 	}

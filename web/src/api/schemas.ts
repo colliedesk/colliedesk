@@ -155,6 +155,7 @@ export const messageSchema = z.object({
   // A customer message moved in from another contact's conversation; an older server sends nothing.
   other_contact_id: z.string().uuid().nullable().optional(),
   intake_reply_kind: z.enum(['substantive', 'acknowledgement']).nullable().optional(),
+  notice_kind: z.string().nullable().optional(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
