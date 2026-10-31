@@ -578,11 +578,12 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 		var meta []byte
 		var cc []string
 		var origin string
-		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,c.id::text,c.subject,c.channel,o.meta
+		var notice *string
+		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,m.notice_kind,c.id::text,c.subject,c.channel,o.meta
 			FROM channel_outbox o JOIN messages m ON m.workspace_id=o.workspace_id AND m.id=o.message_id
 			JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 			WHERE o.workspace_id=$1 AND o.id=$2`, claim.WorkspaceID, claim.OutboxID).
-			Scan(&out.Message.ID, &out.Message.Body, &cc, &out.Message.CreatedAt, &out.Conversation.ID, &out.Conversation.Subject, &origin, &meta)
+			Scan(&out.Message.ID, &out.Message.Body, &cc, &out.Message.CreatedAt, &notice, &out.Conversation.ID, &out.Conversation.Subject, &origin, &meta)
 		if err != nil {
 			return out, fmt.Errorf("load delivery %s: %w", claim.OutboxID, err)
 		}
@@ -619,7 +620,8 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 				return out, fmt.Errorf("scan thread reference: %w", err)
 			}
 			out.References = append(out.References, id)
-			if kind == "incoming" {
+			// The received notice answers the message that opened the conversation, whatever came since.
+			if kind == "incoming" && (notice == nil || out.LastIncoming == "") {
 				out.LastIncoming = id
 			}
 		}
