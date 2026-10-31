@@ -21,6 +21,8 @@ export const chatItemSchema = z.object({
   files: z.array(z.object({ name: z.string(), content_type: z.string(), status: z.string(), size: z.number().int().nullable(), error: z.string().nullable() })),
   linked: z.boolean(),
   link_reason: z.enum(['opened', 'gathered', 'command', 'ai', 'agent', 'reopen', 'reply', 'import']).nullable(),
+  // A notice sent where no conversation is; an older server sends nothing.
+  delivery_status: z.enum(['queued', 'sent', 'failed']).nullable().optional(),
 }) satisfies z.ZodType<Generated<'ChatItem'>>;
 
 const deciderSchema = z.enum(['rules', 'ai', 'agent']);

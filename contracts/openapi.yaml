@@ -8266,6 +8266,7 @@ components:
               error: {type: [string, 'null']}
         linked: {type: boolean, description: 'On a conversation''s chat: the item is part of this conversation.'}
         link_reason: {type: [string, 'null'], enum: [opened, gathered, command, ai, agent, reopen, reply, import, null]}
+        delivery_status: {type: [string, 'null'], enum: [queued, sent, failed, null], description: 'A notice the channel sent in a chat where no conversation is (the unmatched notice): whether it went out. Null for every other item.'}
     ChatPage:
       type: object
       required: [items, next_cursor]
@@ -11297,7 +11298,8 @@ components:
         {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
         {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
-        pre_command_seconds}, cut_on_command, unmatched: join_open}), `notices` {received}. Never a secret.
+        pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched; a
+        placeholder the channel does not fill is refused}. Never a secret.
       additionalProperties: true
     ChannelCreate:
       type: object

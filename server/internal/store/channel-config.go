@@ -94,6 +94,12 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	if err != nil {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings": err.Error()}, Message: "Check the channel settings."}
 	}
+	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched} {
+		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
+				Message: "Check the channel settings."}
+		}
+	}
 	for key, command := range merged.Commands {
 		if command.Match != "" && command.Match != channels.MatchFuzzy && command.Match != channels.MatchWords && command.Match != channels.MatchExact {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".match": "Use fuzzy, words or exact, or leave it out."},
@@ -113,8 +119,8 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".mode": "Use all or commands."},
 				Message: "Check the channel settings."}
 		}
-		if scope.Unmatched != "" && scope.Unmatched != channels.UnmatchedJoinOpen {
-			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "Use join_open, or leave it out."},
+		if scope.Unmatched != "" && scope.Unmatched != channels.UnmatchedJoinOpen && scope.Unmatched != channels.UnmatchedNotice {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "Use join_open or notice, or leave it out."},
 				Message: "Check the channel settings."}
 		}
 		if scope.Gather != nil && (scope.Gather.PreCommandSeconds < 0 || scope.Gather.PreCommandSeconds > 3600) {

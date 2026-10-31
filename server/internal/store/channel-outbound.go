@@ -485,12 +485,13 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	return getMessage(ctx, tx, workspaceID, messageID)
 }
 
-// OutboxClaim is one leased outbox row of any channel type.
+// OutboxClaim is one leased outbox row of any channel type: a message, or the thread item of a notice
+// the channel sends in a chat where no conversation is (ThreadItemID).
 type OutboxClaim struct {
-	OutboxID, WorkspaceID, MessageID, ClaimToken string
-	Attempts                                     int
-	Type                                         channels.Type
-	ChannelID                                    string
+	OutboxID, WorkspaceID, MessageID, ThreadItemID, ClaimToken string
+	Attempts                                                   int
+	Type                                                       channels.Type
+	ChannelID                                                  string
 }
 
 // ClaimDueOutbox leases due rows of every channel type, counts the attempt and stamps a claim token
@@ -508,7 +509,8 @@ func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, le
 					AND NOT (channel_type=ANY($4))
 				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
 			UPDATE channel_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
-			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts,o.channel_type,COALESCE(o.channel_id::text,'')`,
+			RETURNING o.id::text,o.workspace_id::text,COALESCE(o.message_id::text,''),COALESCE(o.thread_item_id::text,''),o.claim_token::text,o.attempts,o.channel_type,
+				COALESCE(o.channel_id::text,'')`,
 			now, limit, now.Add(lease), skipped)
 		if err != nil {
 			return fmt.Errorf("claim deliveries: %w", err)
@@ -516,7 +518,7 @@ func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, le
 		claimed, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (OutboxClaim, error) {
 			var item OutboxClaim
 			var kind string
-			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts, &kind, &item.ChannelID)
+			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ThreadItemID, &item.ClaimToken, &item.Attempts, &kind, &item.ChannelID)
 			item.Type = channels.Type(kind)
 			return item, err
 		})
@@ -563,6 +565,9 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 			}
 		}
 		out.Channel = channel
+		if claim.ThreadItemID != "" {
+			return loadThreadNotice(ctx, tx, claim, out)
+		}
 		var meta []byte
 		var cc []string
 		var origin string
@@ -653,8 +658,9 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 			ids = append(ids, result.ExternalID)
 		}
 		if len(ids) > 0 && claim.ChannelID != "" {
-			if _, err := tx.Exec(ctx, `INSERT INTO channel_sent_ids(workspace_id,channel_id,external_id,message_id)
-				SELECT $1,$2,id,$3 FROM unnest($4::text[]) id ON CONFLICT DO NOTHING`, claim.WorkspaceID, claim.ChannelID, claim.MessageID, ids); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO channel_sent_ids(workspace_id,channel_id,external_id,message_id,thread_item_id)
+				SELECT $1,$2,id,NULLIF($3,'')::uuid,NULLIF($5,'')::uuid FROM unnest($4::text[]) id ON CONFLICT DO NOTHING`,
+				claim.WorkspaceID, claim.ChannelID, claim.MessageID, ids, claim.ThreadItemID); err != nil {
 				return 0, fmt.Errorf("record sent ids: %w", err)
 			}
 		}

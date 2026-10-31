@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"time"
 
@@ -113,13 +114,42 @@ type Command struct {
 	Priority string   `json:"priority,omitempty"`
 }
 
-// NoticeReceived is the notice_kind of the received notice, as its message is marked.
-const NoticeReceived = "received"
+// Notice kinds, as their messages are marked (notice_kind).
+const (
+	NoticeReceived  = "received"
+	NoticeUnmatched = "unmatched"
+)
 
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
 type Notices struct {
 	// Received answers the first message of a new conversation.
 	Received string `json:"received,omitempty"`
+	// Unmatched answers, in its chat, a message a scope with unmatched notice opens nothing for.
+	Unmatched string `json:"unmatched,omitempty"`
+}
+
+// NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
+// sends the notice. A placeholder of no list is refused when the settings are saved.
+var NoticePlaceholders = map[string][]string{NoticeReceived: {}, NoticeUnmatched: {}}
+
+// noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
+var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)
+
+// UnknownPlaceholder is the first placeholder of text that a notice of kind may not use, "" when none.
+func UnknownPlaceholder(kind, text string) string {
+	for _, match := range noticePlaceholder.FindAllStringSubmatch(text, -1) {
+		if !slices.Contains(NoticePlaceholders[kind], match[1]) {
+			return match[0]
+		}
+	}
+	return ""
+}
+
+// RenderNotice fills the placeholders of a notice's text with values; one without a value is left out.
+func RenderNotice(text string, values map[string]string) string {
+	return noticePlaceholder.ReplaceAllStringFunc(text, func(placeholder string) string {
+		return values[placeholder[1:len(placeholder)-1]]
+	})
 }
 
 // Settings are a channel's rules for what arrives and what leaves. They never hold a secret.
@@ -162,6 +192,9 @@ const (
 	// UnmatchedJoinOpen joins a message that names no command to its sender's open or pending
 	// conversation on the channel when there is exactly one; otherwise the message is kept unresolved.
 	UnmatchedJoinOpen = "join_open"
+	// UnmatchedNotice keeps a message that names no command in its chat and answers it there with the
+	// channel's unmatched notice.
+	UnmatchedNotice = "notice"
 )
 
 // Scope is the rules of one scope; a field left out keeps the channel's.
