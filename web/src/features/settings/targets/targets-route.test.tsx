@@ -222,3 +222,32 @@ test('a save made after someone else saved is refused: the card says so, shows t
   expect(sent()).toMatchObject({ updated_at: '2026-10-31T02:00:00Z', holidays: [{ date: '2026-12-25', name: 'Christmas' }] });
   expect(sent().targets.low.first_response_minutes).toBe(120);
 });
+
+test('after a refusal, the fields nobody here touched show and save the other admin\'s values; the touched one keeps its words', async () => {
+  const theirs = doc({ warn_before_minutes: 90, holidays: [{ date: '2026-12-25', name: 'Christmas' }], updated_at: '2026-10-31T02:00:00Z' });
+  responseTargetsApi.set.mockRejectedValueOnce(new mocks.ChangedElsewhereError('Someone saved the response targets since you read them.', { code: 'changed_elsewhere', current: theirs }));
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  fireEvent.change(within(targets).getByLabelText('First reply target for Normal, in business hours'), { target: { value: '2' } });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await within(targets).findByRole('alert');
+  expect(within(targets).getByLabelText('Due soon, in business hours before the target')).toHaveValue(1.5);
+  expect(within(targets).getByLabelText('First reply target for Normal, in business hours')).toHaveValue(2);
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
+  expect(sent()).toMatchObject({ warn_before_minutes: 90, updated_at: '2026-10-31T02:00:00Z' });
+  expect(sent().targets.normal.first_response_minutes).toBe(120);
+});
+
+test('business hours after a refusal: a day touched here keeps its hours, the others show the other admin\'s', async () => {
+  const theirs = doc({ hours: week.map((day) => ({ day, open: true, from: '07:00', to: '19:00' })), updated_at: '2026-10-31T02:00:00Z' });
+  responseTargetsApi.set.mockRejectedValueOnce(new mocks.ChangedElsewhereError('Someone saved.', { code: 'changed_elsewhere', current: theirs }));
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  fireEvent.change(within(hours).getByLabelText('Monday to'), { target: { value: '18:00' } });
+  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await within(hours).findByText(/Someone else changed the response targets/);
+  expect(within(hours).getByLabelText('Monday to')).toHaveValue('18:00');
+  expect(within(hours).getByLabelText('Monday from')).toHaveValue('07:00');
+  expect(within(hours).getByLabelText('Tuesday to')).toHaveValue('19:00');
+});

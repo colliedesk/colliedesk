@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
@@ -112,22 +112,20 @@ function OnCard({ doc, canManage }: CardProps) {
 }
 
 function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZone: string }) {
-  const [zone, setZone] = useState(doc.timezone ?? '');
-  const [hours, setHours] = useState(doc.hours);
-  // A form someone is editing keeps their words when the document changes under it (another card's save,
-  // someone else's): it follows the document again once saved.
-  const edited = useRef(false);
-  useEffect(() => { if (!edited.current) { setZone(doc.timezone ?? ''); setHours(doc.hours); } }, [doc.timezone, doc.hours]);
+  // What is typed here lies over the document, field by field: a field nobody touched always shows the
+  // document as it is now (after another card's save, or someone else's), a touched one keeps its words.
+  const [zoneEdit, setZoneEdit] = useState<string>();
+  const [dayEdits, setDayEdits] = useState<Partial<Record<Weekday, Partial<ResponseTargets['hours'][number]>>>>({});
+  const zone = zoneEdit ?? doc.timezone ?? '';
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
   const server = fieldErrors(save.error);
   const id = useId();
-  const byDay = (day: Weekday) => hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' };
-  const touch = () => { edited.current = true; feedback.touch(); };
+  const byDay = (day: Weekday) => ({ ...(doc.hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' }), ...dayEdits[day] });
   const change = (day: Weekday, part: Partial<ResponseTargets['hours'][number]>) => {
-    touch();
-    setHours((all) => weekdays.map((name) => (name === day ? { ...byDay(name), ...part } : all.find((item) => item.day === name) ?? byDay(name))));
+    feedback.touch();
+    setDayEdits((all) => ({ ...all, [day]: { ...all[day], ...part } }));
   };
   // A day closing at midnight is 24:00 on the wire; the time field shows and takes 00:00 for it.
   const bad = (day: Weekday) => { const item = byDay(day); return item.open && item.to !== '24:00' && item.to <= item.from; };
@@ -142,9 +140,9 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
       event.preventDefault();
       setChecked(true);
       if (feedback.pending || weekdays.some(bad)) return;
-      save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) }, { onSuccess: () => { edited.current = false; } });
+      save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) }, { onSuccess: () => { setZoneEdit(undefined); setDayEdits({}); } });
     }}>
-      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { touch(); setZone(next); }} />
+      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { feedback.touch(); setZoneEdit(next); }} />
       {server.timezone && <span className="error-copy field-note" role="alert">{server.timezone}</span>}
       {server.hours && <p className="error-copy" role="alert">{server.hours}</p>}
       <p className="muted-copy" id={`${id}-midnight`}>{m.midnight}</p>
@@ -167,9 +165,9 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
         })}
       </div>
       <span className="button-row"><button type="button" className="link-action" onClick={() => {
-        const monday = byDay('mon');
-        touch();
-        setHours(weekdays.map((day) => (['tue', 'wed', 'thu', 'fri'].includes(day) ? { ...monday, day } : byDay(day))));
+        const { open, from, to } = byDay('mon');
+        feedback.touch();
+        setDayEdits((all) => ({ ...all, tue: { open, from, to }, wed: { open, from, to }, thu: { open, from, to }, fri: { open, from, to } }));
       }}>{m.copyMonday}</button></span>
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveHours)}</button>{feedback.status}</span>
     </form>
@@ -214,10 +212,12 @@ const formOf = (targets: ResponseTargets['targets']) => Object.fromEntries(prior
   { first: toHours(targets[priority].first_response_minutes), resolve: toHours(targets[priority].resolution_minutes) }])) as Record<Priority, { first: string; resolve: string }>;
 
 function TargetsCard({ doc, canManage }: CardProps) {
-  const [values, setValues] = useState(() => formOf(doc.targets));
-  const [warn, setWarn] = useState(toHours(doc.warn_before_minutes));
-  const edited = useRef(false);
-  useEffect(() => { if (!edited.current) { setValues(formOf(doc.targets)); setWarn(toHours(doc.warn_before_minutes)); } }, [doc.targets, doc.warn_before_minutes]);
+  // Typed values lie over the document box by box ("urgent.first", "warn"); an untouched box follows it.
+  const [edits, setEdits] = useState<Partial<Record<string, string>>>({});
+  const base = formOf(doc.targets);
+  const values = Object.fromEntries(priorities.map((priority) => [priority, { first: edits[`${priority}.first`] ?? base[priority].first,
+    resolve: edits[`${priority}.resolve`] ?? base[priority].resolve }])) as Record<Priority, { first: string; resolve: string }>;
+  const warn = edits.warn ?? toHours(doc.warn_before_minutes);
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
@@ -238,7 +238,7 @@ function TargetsCard({ doc, canManage }: CardProps) {
     return <td data-label={which === 'first' ? m.firstReply : m.resolve}><span className="tg-cell">
       <input type="number" min={0.5} step={0.5} inputMode="decimal" aria-label={m.targetFor(which === 'first' ? m.firstReply : m.resolve, priorityName(priority))} value={values[priority][which]}
         aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${priority}-${which}` : undefined}
-        onChange={(event) => { edited.current = true; feedback.touch(); setValues((all) => ({ ...all, [priority]: { ...all[priority], [which]: event.target.value } })); }} />
+        onChange={(event) => { feedback.touch(); setEdits((all) => ({ ...all, [`${priority}.${which}`]: event.target.value })); }} />
       <span>{m.hoursUnit}</span></span>
       {error && <span className="error-copy field-note" id={`${id}-${priority}-${which}`}>{error}</span>}</td>;
   };
@@ -250,7 +250,7 @@ function TargetsCard({ doc, canManage }: CardProps) {
       if (bad || feedback.pending) return;
       save.mutate({ ...withoutStamp(doc), warn_before_minutes: toMinutes(warn) ?? 0,
         targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: toMinutes(values[priority].first), resolution_minutes: toMinutes(values[priority].resolve) }])) as ResponseTargets['targets'] },
-        { onSuccess: () => { edited.current = false; } });
+        { onSuccess: () => setEdits({}) });
     }}>
       <table className="tg-table">
         <thead><tr><th scope="col">{m.priority}</th><th scope="col">{m.firstReply}</th><th scope="col">{m.resolve}</th></tr></thead>
@@ -259,7 +259,7 @@ function TargetsCard({ doc, canManage }: CardProps) {
       <div className={`field${warnBad || server.warn_before_minutes ? ' field-bad' : ''}`}>
         <span className="tg-cell"><label htmlFor={`${id}-warn`}>{m.dueSoon}</label>
           <input id={`${id}-warn`} type="number" min={0} step={0.5} inputMode="decimal" aria-label={m.dueSoonLabel} value={warn}
-            onChange={(event) => { edited.current = true; feedback.touch(); setWarn(event.target.value); }} /><span>{m.dueSoonUnit(Number(warn))}</span></span>
+            onChange={(event) => { feedback.touch(); setEdits((all) => ({ ...all, warn: event.target.value })); }} /><span>{m.dueSoonUnit(Number(warn))}</span></span>
         {(warnBad || server.warn_before_minutes) && <span className="error-copy field-note">{server.warn_before_minutes ?? m.halfHours}</span>}
       </div>
       <p className="muted-copy">{m.targetsNote}</p>
@@ -270,11 +270,9 @@ function TargetsCard({ doc, canManage }: CardProps) {
 
 function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id: string; name: string }[] }) {
   const every = channels.map((item) => item.id);
-  // The channels as one value, so a new list of the same channels does not reset the form.
-  const everyKey = every.join(',');
-  const [chosen, setChosen] = useState<string[]>(doc.channel_ids ?? every);
-  const edited = useRef(false);
-  useEffect(() => { if (!edited.current) setChosen(doc.channel_ids ?? everyKey.split(',').filter(Boolean)); }, [doc.channel_ids, everyKey]);
+  // The choice follows the document until someone here changes it.
+  const [chosenEdit, setChosenEdit] = useState<string[]>();
+  const chosen = chosenEdit ?? doc.channel_ids ?? every;
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
@@ -286,11 +284,11 @@ function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id:
       setChecked(true);
       if (chosen.length === 0 || feedback.pending) return;
       // Every channel is null: a channel added later is measured too.
-      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen }, { onSuccess: () => { edited.current = false; } });
+      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
     }}>
       <fieldset className="tg-channels"><legend className="sr-only">{m.appliesHeading}</legend>
         {channels.map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
-          onChange={(event) => { edited.current = true; feedback.touch(); setChosen((all) => (event.target.checked ? [...all, item.id] : all.filter((other) => other !== item.id))); }} /><span>{item.name}</span></label>)}
+          onChange={(event) => { feedback.touch(); setChosenEdit(event.target.checked ? [...chosen, item.id] : chosen.filter((other) => other !== item.id)); }} /><span>{item.name}</span></label>)}
       </fieldset>
       {checked && chosen.length === 0 && <p className="error-copy" role="alert">{m.pickOne}</p>}
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveApplies)}</button>{feedback.status}</span>

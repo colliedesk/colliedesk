@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SLA } from '../../api/schemas';
 import { useSLARefresh } from './sla-refresh';
@@ -15,8 +15,8 @@ test('the list is read again once, at the soonest warning or deadline of what is
   const { rerender, unmount } = renderHook(({ list }) => useSLARefresh(list, refresh), { initialProps: { list: items } });
   vi.advanceTimersByTime(31 * 60_000);
   expect(refresh).toHaveBeenCalledTimes(1);
-  // After the reload the next moment is the first deadline.
-  rerender({ list: [{ sla: sla('2026-11-02T07:00:00Z', '2026-11-02T06:00:00Z') }] });
+  // After the reload the server says it is due soon; the next moment is the first deadline.
+  rerender({ list: [{ sla: { ...sla('2026-11-02T07:00:00Z', '2026-11-02T06:00:00Z'), state: 'due_soon', first_response: { ...clock('2026-11-02T07:00:00Z', '2026-11-02T06:00:00Z'), due_soon: true } } }] });
   vi.advanceTimersByTime(60 * 60_000);
   expect(refresh).toHaveBeenCalledTimes(2);
   rerender({ list: [{ sla: sla('2026-11-02T09:00:00Z', '2026-11-02T08:30:00Z') }] });
@@ -30,4 +30,20 @@ test('a moment beyond the longest timer is not read early', () => {
   renderHook(() => useSLARefresh([{ sla: sla('2027-06-01T00:00:00Z', '2027-05-31T00:00:00Z') }], refresh));
   vi.advanceTimersByTime(2 ** 31 - 1);
   expect(refresh).not.toHaveBeenCalled();
+});
+
+test('a browser clock ahead of the server reads again a little later, a few times, until the moment shows', () => {
+  const refresh = vi.fn();
+  const items = [{ sla: sla('2026-11-02T07:00:00Z', '2026-11-02T06:00:00Z') }];
+  const { rerender } = renderHook(({ list }) => useSLARefresh(list, refresh), { initialProps: { list: items } });
+  act(() => vi.advanceTimersByTime(31 * 60_000));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  // The server had not turned the flag yet: the list reads the same, and the warning is behind the browser's clock.
+  rerender({ list: [{ sla: sla('2026-11-02T07:00:00Z', '2026-11-02T06:00:00Z') }] });
+  act(() => vi.advanceTimersByTime(5_000));
+  expect(refresh).toHaveBeenCalledTimes(2);
+  act(() => vi.advanceTimersByTime(15_000));
+  expect(refresh).toHaveBeenCalledTimes(3);
+  act(() => vi.advanceTimersByTime(60_000));
+  expect(refresh).toHaveBeenCalledTimes(3);
 });
