@@ -133,7 +133,10 @@ a page a customer sees. Email and web forms have no places. For AI agents and th
 ## Chat rules
 
 A chat channel's scopes (its one-to-one chats, its groups) can each set how a customer's messages become
-requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change):
+requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change). `GET
+/api/v1/channels/{id}` answers `settings`, what the channel stores over its type's defaults, and
+`effective_settings`, the rules in force; `PATCH /api/v1/channels/{id}` with `settings` replaces the stored
+ones whole, so send them all.
 - `gather` collects what a customer says close together into one batch: `quiet_seconds` of silence
   closes it, `max_seconds` after its first message at the latest. With `pre_command_seconds`, what the
   customer said that long before a command (a screenshot sent just before "report a bug") is part of
@@ -157,7 +160,8 @@ requests, in the channel's settings (`settings.scopes.<scope>`, an admin's chang
 - `unmatched: notice`, on a scope that opens conversations only on a command: a message that names no
   command opens and joins nothing, is kept in its chat place, and is answered there with the channel's
   `settings.notices.unmatched` (say which command opens a request); every such message gets it, a
-  second delivery of the same one does not. The notice is in the place as the channel's own message,
+  second delivery of the same one does not. Only a scope where one customer writes (a one-to-one chat)
+  takes it: a group would answer everyone's chatter. The notice is in the place as the channel's own message,
   with whether it went out (`delivery_status`: queued, sent or failed). Without that text nothing is sent.
 - A notice's text (`settings.notices.received`, `settings.notices.unmatched`) may only name placeholders
   the channel fills; it fills none yet, so `{ref}` and the like are refused when the settings are saved.
