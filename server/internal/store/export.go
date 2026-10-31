@@ -400,7 +400,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		CASE WHEN c.sla_applies THEN json_build_object('first_response',json_build_object('state',c.sla_first_state,'due_at',c.sla_first_due_at,'warn_at',c.sla_first_warn_at,'met_at',c.sla_first_met_at),
 			'resolution',json_build_object('state',c.sla_resolution_state,'due_at',c.sla_resolution_due_at,'warn_at',c.sla_resolution_warn_at),
 			'alert_since',c.sla_alert_since,
-			'alerts',COALESCE((SELECT json_agg(json_build_object('clock',a.clock,'threshold',a.threshold,'due_at',a.due_at,'status',a.status,'recipients',a.recipients,'at',a.created_at)
+			'alerts',COALESCE((SELECT json_agg(json_build_object('clock',a.clock,'threshold',a.threshold,'due_at',a.due_at,'recipient',a.recipient,'status',a.status,'at',a.created_at)
 				ORDER BY a.created_at,a.id) FROM conversation_sla_alerts a WHERE a.workspace_id=c.workspace_id AND a.conversation_id=c.id),'[]')) END
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
 	if err != nil {

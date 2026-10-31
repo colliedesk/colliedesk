@@ -7425,7 +7425,7 @@ export interface components {
             open: boolean;
             /** @description Opening time, as 08:00, when open. */
             from?: string;
-            /** @description Closing time, after from. */
+            /** @description Closing time, after from; 24:00 for midnight. */
             to?: string;
         };
         TargetMinutes: {

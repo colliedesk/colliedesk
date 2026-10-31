@@ -1,6 +1,8 @@
--- Reminder and overdue emails of response targets: one row per conversation, clock, threshold and due
--- time, so each goes once however many servers or rounds see it due (a send that failed for now gives the
--- row back). sla_alert_since is when the conversation came in: a threshold before it (an import of what was
+-- Reminder and overdue emails of response targets: one row per conversation, clock, threshold, due time
+-- and recipient, so each goes to each person once however many servers or rounds see it due (a send that
+-- failed for now gives that person's row back; a claim left 'sending' by a stopped server is taken again
+-- after a while). The row with no recipient ('') closes the threshold: done once everyone's row is
+-- settled, or nobody when nobody gets these emails. sla_alert_since is when the conversation came in: a threshold before it (an import of what was
 -- already due) sends nothing. A teammate turns their emails off with agents.sla_alert_email.
 CREATE TABLE conversation_sla_alerts (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -9,10 +11,11 @@ CREATE TABLE conversation_sla_alerts (
     clock text NOT NULL CHECK (clock IN ('first_response', 'resolution')),
     threshold text NOT NULL CHECK (threshold IN ('reminder', 'overdue')),
     due_at timestamptz NOT NULL,
-    status text NOT NULL DEFAULT 'sending' CHECK (status IN ('sending', 'sent', 'rejected', 'nobody')),
-    recipients integer NOT NULL DEFAULT 0,
+    recipient text NOT NULL DEFAULT '' CHECK (char_length(recipient) <= 320),
+    status text NOT NULL DEFAULT 'sending' CHECK (status IN ('sending', 'sent', 'rejected', 'done', 'nobody')),
     created_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (workspace_id, conversation_id, clock, threshold, due_at),
+    UNIQUE (workspace_id, conversation_id, clock, threshold, due_at, recipient),
+    CHECK ((recipient = '') = (status IN ('done', 'nobody'))),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE CASCADE
 );
 CREATE INDEX conversation_sla_alerts_conversation ON conversation_sla_alerts(workspace_id, conversation_id, created_at);

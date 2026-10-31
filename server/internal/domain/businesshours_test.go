@@ -70,6 +70,27 @@ func TestBusinessTimeIsAddedAndCountedOverOpeningHours(t *testing.T) {
 	}
 }
 
+// A day open round the clock closes at 24:00, and business time runs on into the next one.
+func TestADayOpenRoundTheClockClosesAt24(t *testing.T) {
+	var days []domain.BusinessDay
+	for _, day := range domain.Weekdays {
+		days = append(days, domain.BusinessDay{Day: day, Open: true, From: "00:00", To: "24:00"})
+	}
+	calendar, err := domain.NewBusinessCalendar("UTC", days, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := calendar.Add(at(t, "UTC", "2026-11-02 23:30"), time.Hour); !got.Equal(at(t, "UTC", "2026-11-03 00:30")) {
+		t.Fatalf("over midnight = %s", got)
+	}
+	if got := calendar.Between(at(t, "UTC", "2026-11-02 00:00"), at(t, "UTC", "2026-11-03 00:00")); got != 24*time.Hour {
+		t.Fatalf("a whole day = %s", got)
+	}
+	if _, err := domain.NewBusinessCalendar("UTC", []domain.BusinessDay{{Day: "mon", Open: true, From: "24:00", To: "24:00"}}, nil); err == nil {
+		t.Fatal("a day opening at 24:00 was taken")
+	}
+}
+
 // A timezone that moves its clocks counts the hours the people there work.
 func TestBusinessTimeFollowsDaylightSaving(t *testing.T) {
 	const zone = "Europe/Berlin"

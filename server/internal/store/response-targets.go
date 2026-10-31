@@ -170,8 +170,22 @@ func (s *Store) SetResponseTargets(ctx context.Context, workspaceID, agentID str
 		return ResponseTargets{}, &ResponseTargetsError{Field: "warn_before_minutes", Message: "Use 0 to 10080 minutes."}
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ResponseTargets, error) {
-		if _, err := targetsPolicy(ctx, tx, workspaceID, input); err != nil {
+		policy, err := targetsPolicy(ctx, tx, workspaceID, input)
+		if err != nil {
 			return ResponseTargets{}, err
+		}
+		// On, a clock must be able to run: an open day, and business time within reach of now.
+		if input.Enabled {
+			open := false
+			for _, day := range input.Hours {
+				open = open || day.Open
+			}
+			if !open {
+				return ResponseTargets{}, &ResponseTargetsError{Field: "hours", Message: "Open at least one day to measure response targets."}
+			}
+			if !policy.Calendar.Open(s.now()) {
+				return ResponseTargets{}, &ResponseTargetsError{Field: "holidays", Message: "The holidays close every open day for the next two years: no target could ever be due."}
+			}
 		}
 		for index, id := range input.ChannelIDs {
 			var exists bool

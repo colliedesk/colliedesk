@@ -28,6 +28,10 @@ type Alerts struct {
 	Logger                         *slog.Logger
 }
 
+// AbandonedAfter is how long a claim may stay sending before another round takes it again: longer than
+// any send to the relay can take (email.SMTPTimeout), so a slow send is never sent twice.
+const AbandonedAfter = 10 * time.Minute
+
 // RunOnce sends what is due and returns how many emails went.
 func (a Alerts) RunOnce(ctx context.Context) (int, error) {
 	now, logger := time.Now().UTC(), a.Logger
@@ -43,48 +47,41 @@ func (a Alerts) RunOnce(ctx context.Context) (int, error) {
 	}
 	sent := 0
 	for _, item := range due {
-		alert, claimed, err := a.Store.ClaimSLAAlert(ctx, item)
+		alert, err := a.Store.ClaimSLAAlert(ctx, item, AbandonedAfter)
 		if err != nil {
 			return sent, err
 		}
-		if !claimed {
-			continue
+		for _, to := range alert.To {
+			status := a.send(ctx, alert, to, now, logger)
+			if status == "sent" {
+				sent++
+			}
+			if err := a.Store.SettleSLAAlert(context.WithoutCancel(ctx), alert, to, status); err != nil {
+				logger.Error("response alert not settled", "workspace_id", alert.WorkspaceID, "error", err)
+			}
 		}
-		status, delivered := a.send(ctx, alert, now, logger)
-		if err := a.Store.SettleSLAAlert(context.WithoutCancel(ctx), alert, status, delivered); err != nil {
-			logger.Error("response alert not settled", "workspace_id", alert.WorkspaceID, "error", err)
-		}
-		sent += delivered
 	}
 	return sent, nil
 }
 
-// send emails one alert to each recipient; "" when a send failed for now (the alert goes again).
-func (a Alerts) send(ctx context.Context, alert store.SLAAlert, now time.Time, logger *slog.Logger) (string, int) {
-	if len(alert.To) == 0 {
-		return "nobody", 0
+// send emails one alert to one recipient: sent, rejected for good, or "" when it failed for now (it goes
+// again in a later round).
+func (a Alerts) send(ctx context.Context, alert store.SLAAlert, to string, now time.Time, logger *slog.Logger) string {
+	message, err := a.compose(alert, to, now)
+	if err != nil {
+		logger.Error("response alert cannot be composed", "workspace_id", alert.WorkspaceID, "error", err)
+		return "rejected"
 	}
-	delivered := 0
-	for _, to := range alert.To {
-		message, err := a.compose(alert, to, now)
-		if err != nil {
-			logger.Error("response alert cannot be composed", "workspace_id", alert.WorkspaceID, "error", err)
-			return "rejected", delivered
-		}
-		switch err := a.Mailer.Send(ctx, a.From, []string{to}, message); {
-		case err == nil:
-			delivered++
-		case email.IsPermanent(err):
-			logger.Warn("response alert rejected for good", "workspace_id", alert.WorkspaceID)
-		case delivered == 0:
-			logger.Error("response alert not sent, will retry", "workspace_id", alert.WorkspaceID, "error", err)
-			return "", 0
-		}
+	switch err := a.Mailer.Send(ctx, a.From, []string{to}, message); {
+	case err == nil:
+		return "sent"
+	case email.IsPermanent(err):
+		logger.Warn("response alert rejected for good", "workspace_id", alert.WorkspaceID)
+		return "rejected"
+	default:
+		logger.Error("response alert not sent, will retry", "workspace_id", alert.WorkspaceID, "error", err)
+		return ""
 	}
-	if delivered == 0 {
-		return "rejected", 0
-	}
-	return "sent", delivered
 }
 
 func (a Alerts) compose(alert store.SLAAlert, to string, now time.Time) ([]byte, error) {

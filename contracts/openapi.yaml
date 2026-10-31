@@ -10737,7 +10737,7 @@ components:
         day: {type: string, enum: [mon, tue, wed, thu, fri, sat, sun]}
         open: {type: boolean}
         from: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 'Opening time, as 08:00, when open.'}
-        to: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 'Closing time, after from.'}
+        to: {type: string, pattern: '^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$', description: 'Closing time, after from; 24:00 for midnight.'}
     TargetMinutes:
       type: object
       properties:

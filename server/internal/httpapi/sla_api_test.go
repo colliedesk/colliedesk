@@ -186,3 +186,37 @@ func TestAConversationCarriesItsResponseClocks(t *testing.T) {
 		t.Fatalf("off, overdue = %v", got)
 	}
 }
+
+// Targets counted in the workspace's timezone count again when it changes.
+func TestTheClocksFollowTheWorkspaceTimezone(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Zoned Desk", "admin@zoned.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@zoned.example.com"})
+	targets := roundTheClock()
+	targets["timezone"] = nil
+	hours := []map[string]any{}
+	for _, day := range []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"} {
+		hours = append(hours, map[string]any{"day": day, "open": true, "from": "08:00", "to": "17:00"})
+	}
+	targets["hours"] = hours
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", targets, admin, nil); response.Code != http.StatusOK {
+		t.Fatal(response.Body.String())
+	}
+	id := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Zoned"})
+	due := func() time.Time {
+		t.Helper()
+		var item slaConversation
+		decode(t, request(t, api, http.MethodGet, "/api/v1/conversations/"+id, nil, admin, nil), &item)
+		if item.SLA == nil || item.SLA.FirstResponse == nil || item.SLA.FirstResponse.DueAt == nil {
+			t.Fatalf("clock = %+v", item.SLA)
+		}
+		return *item.SLA.FirstResponse.DueAt
+	}
+	before := due()
+	if response := request(t, api, http.MethodPatch, "/api/v1/workspace/timezone", map[string]any{"timezone": "Asia/Tokyo"}, admin, nil); response.Code != http.StatusOK {
+		t.Fatal(response.Body.String())
+	}
+	if after := due(); after.Equal(before) {
+		t.Fatalf("due %s stayed after the workspace moved nine hours", after)
+	}
+}

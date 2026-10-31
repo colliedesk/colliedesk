@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func contractTargets() map[string]any {
@@ -45,6 +46,22 @@ func TestResponseTargetsAreOneDocumentAnAdminSets(t *testing.T) {
 		}, "targets.urgent.first_response_minutes"},
 		{func(d map[string]any) { d["warn_before_minutes"] = -5 }, "warn_before_minutes"},
 		{func(d map[string]any) { d["channel_ids"] = []string{"00000000-0000-4000-8000-000000000000"} }, "channel_ids.0"},
+		// On, they need an open day, and one that is no holiday within reach.
+		{func(d map[string]any) {
+			for _, day := range d["hours"].([]map[string]any) {
+				day["open"] = false
+			}
+		}, "hours"},
+		{func(d map[string]any) {
+			d["hours"] = []map[string]any{{"day": "mon", "open": true, "from": "08:00", "to": "17:00"}}
+			var holidays []map[string]any
+			for day := time.Now().UTC(); len(holidays) < 120; day = day.AddDate(0, 0, 1) {
+				if day.Weekday() == time.Monday {
+					holidays = append(holidays, map[string]any{"date": day.Format("2006-01-02"), "name": "Off"})
+				}
+			}
+			d["holidays"] = holidays
+		}, "holidays"},
 	} {
 		document := contractTargets()
 		c.change(document)

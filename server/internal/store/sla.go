@@ -34,7 +34,7 @@ func refreshSLA(ctx context.Context, tx pgx.Tx, workspaceID string, policy domai
 			(SELECT h.from_status FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id ORDER BY h.changed_at,h.id LIMIT 1),
 			COALESCE((SELECT json_agg(json_build_object('at',h.changed_at,'status',h.to_status) ORDER BY h.changed_at,h.id) FROM conversation_status_changes h
 				WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id),'[]')
-		FROM conversations c WHERE c.workspace_id=$1 AND c.id::text=ANY($2) AND c.sla_applies AND c.sla_stale FOR UPDATE OF c`, workspaceID, ids)
+		FROM conversations c WHERE c.workspace_id=$1 AND c.id=ANY($2::uuid[]) AND c.sla_applies AND c.sla_stale FOR UPDATE OF c`, workspaceID, ids)
 	if err != nil {
 		return fmt.Errorf("read the facts of the clocks: %w", err)
 	}
@@ -131,7 +131,7 @@ func (s *Store) attachSLA(ctx context.Context, tx pgx.Tx, workspaceID string, it
 		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT id::text,sla_first_state,sla_first_due_at,sla_first_warn_at,sla_first_met_at,sla_resolution_state,sla_resolution_due_at,sla_resolution_warn_at
-		FROM conversations WHERE workspace_id=$1 AND id::text=ANY($2) AND sla_applies`, workspaceID, ids)
+		FROM conversations WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND sla_applies`, workspaceID, ids)
 	if err != nil {
 		return fmt.Errorf("read the clocks: %w", err)
 	}
@@ -245,7 +245,7 @@ func (s *Store) RefreshStaleSLA(ctx context.Context, limit int) (int, error) {
 			}
 			if !on {
 				// Off: nothing shows the clocks; they are counted again once the targets are on.
-				_, err := tx.Exec(ctx, `UPDATE conversations SET sla_stale=false WHERE workspace_id=$1 AND id::text=ANY($2)`, b.workspaceID, b.ids)
+				_, err := tx.Exec(ctx, `UPDATE conversations SET sla_stale=false WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, b.workspaceID, b.ids)
 				return struct{}{}, err
 			}
 			return struct{}{}, refreshSLA(ctx, tx, b.workspaceID, policy, b.ids)

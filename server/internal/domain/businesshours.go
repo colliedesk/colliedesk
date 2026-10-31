@@ -69,8 +69,9 @@ func NewBusinessCalendar(zone string, days []BusinessDay, holidays []Holiday) (B
 		if !clockTime.MatchString(day.From) {
 			return BusinessCalendar{}, &CalendarError{Field: field + ".from", Message: "Use a time such as 08:00."}
 		}
-		if !clockTime.MatchString(day.To) {
-			return BusinessCalendar{}, &CalendarError{Field: field + ".to", Message: "Use a time such as 17:00."}
+		// A day open round the clock closes at 24:00.
+		if !clockTime.MatchString(day.To) && day.To != "24:00" {
+			return BusinessCalendar{}, &CalendarError{Field: field + ".to", Message: "Use a time such as 17:00, or 24:00 for midnight."}
 		}
 		from, to := minutes(day.From), minutes(day.To)
 		if to <= from {
@@ -155,6 +156,11 @@ func (c BusinessCalendar) Between(start, end time.Time) time.Duration {
 		day = time.Date(y, m, d+1, 0, 0, 0, 0, c.location)
 	}
 	return total
+}
+
+// Open says whether the calendar has business time within reach of from.
+func (c BusinessCalendar) Open(from time.Time) bool {
+	return !c.Add(from, time.Minute).IsZero()
 }
 
 // Location is the calendar's timezone.
