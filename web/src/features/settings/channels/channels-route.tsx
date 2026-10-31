@@ -94,8 +94,12 @@ const navPage = (type: string | undefined): SettingsPath => (type && channelUI(t
 // provider's redirect): those open that channel, never the type's home.
 const carriesChannelState = (search: ChannelsSearch) => Boolean(search.tab || search.gmail || search.gmail_error || search.microsoft || search.microsoft_error);
 
+const pausedRefresh = 20_000;
+
+// The list counts what a paused channel keeps again every 20 seconds while one is paused.
 function useChannels() {
-  return useQuery({ queryKey: ['channels'], queryFn: channelsApi.list });
+  return useQuery({ queryKey: ['channels'], queryFn: channelsApi.list,
+    refetchInterval: (query) => (query.state.data?.items.some((item) => item.processing_paused_at) ? pausedRefresh : false) });
 }
 
 function LoadFailed({ onRetry }: { onRetry: () => void }) {
@@ -350,7 +354,9 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   useEffect(() => {
     if (mailboxOutcome && takeSetupReturn(id)) navigate(withSearch(`${base}/${id}/setup`, { ...search, tab: undefined }), true);
   }, [mailboxOutcome, id, search, navigate]);
-  const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
+  // While its processing is paused, what it keeps grows: the page counts it again every 20 seconds.
+  const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2,
+    refetchInterval: (query) => (query.state.data?.processing_paused_at ? pausedRefresh : false) });
   const [removing, setRemoving] = useState(false);
   // What the last open or discard of held messages did; it stays after the notice of held messages goes.
   const [heldDone, setHeldDone] = useState<{ kind: 'opened' | 'discarded'; count: number; skipped?: number }>();
@@ -405,8 +411,8 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
           {isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
       {channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={pausedNote}><span>{channel.enabled
-        ? <><strong>{m.pausedSince(formatDate(channel.processing_paused_at, timezone))}</strong> {m.pausedRunning(channel.paused_count)}</>
-        : m.pausedOffLead(formatDate(channel.processing_paused_at, timezone), channel.paused_count)}</span></p>}
+        ? <><strong>{m.pausedSince(formatDate(channel.processing_paused_at, timezone))}</strong> {m.pausedRunning(channel.paused_count, isAdmin)}</>
+        : m.pausedOffLead(formatDate(channel.processing_paused_at, timezone), channel.paused_count, isAdmin)}</span></p>}
       {resumed && !channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={resumedNote}><span>{m.resumed}</span></p>}
       {processing.isError && <p role="alert" className="error-copy">{processing.error instanceof InvalidRequestError ? processing.error.message : m.pauseFailed}</p>}
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}

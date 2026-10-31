@@ -915,3 +915,18 @@ function cleanupAndShowEmail() {
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL);
 }
+
+test('a paused channel counts what it keeps again while its page is open, and an agent is told an admin resumes it', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    api.me.mockResolvedValue(me('agent'));
+    channelsApi.get.mockResolvedValueOnce(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 1 })).mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 5 }));
+    channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+    show(ZALO);
+    expect(await screen.findByText(/1 message is kept and handled in the order they came when an admin resumes processing/)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await screen.findByText(/5 messages are kept/)).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
