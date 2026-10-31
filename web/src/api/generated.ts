@@ -2085,6 +2085,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/response-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's response targets: business hours in a timezone, holidays, first-response and resolution targets by priority in business minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out. Never set, they are off with no hours and no targets. */
+        get: operations["getResponseTargets"];
+        /** @description Replace the response targets with this document. Turning them on measures the conversations opened from then on; turning them off hides every target and keeps what was measured. A wrong part answers 400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes, timezone, channel_ids.0). */
+        put: operations["setResponseTargets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspace/slug": {
         parameters: {
             query?: never;
@@ -7330,6 +7348,54 @@ export interface components {
             passes: boolean;
             /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
             suggestion: string | null;
+        };
+        BusinessDay: {
+            /** @enum {string} */
+            day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+            open: boolean;
+            /** @description Opening time, as 08:00, when open. */
+            from?: string;
+            /** @description Closing time, after from. */
+            to?: string;
+        };
+        TargetMinutes: {
+            /** @description Business minutes to the first reply; null is no target. */
+            first_response_minutes?: number | null;
+            /** @description Business minutes to resolve; null is no target. */
+            resolution_minutes?: number | null;
+        };
+        ResponseTargetsInput: {
+            enabled: boolean;
+            /** @description IANA timezone the hours are in; null is the workspace timezone. */
+            timezone?: string | null;
+            /** @description A weekday left out is closed. */
+            hours: components["schemas"]["BusinessDay"][];
+            holidays?: {
+                /** Format: date */
+                date: string;
+                name: string;
+            }[];
+            targets: {
+                urgent?: components["schemas"]["TargetMinutes"];
+                high?: components["schemas"]["TargetMinutes"];
+                normal?: components["schemas"]["TargetMinutes"];
+                low?: components["schemas"]["TargetMinutes"];
+            };
+            /** @description Business minutes before a target a conversation is due soon (and its reminder goes). */
+            warn_before_minutes?: number;
+            /** @description The channels whose conversations have targets; null is every channel. */
+            channel_ids?: string[] | null;
+            /** @description Whether reminder and overdue emails go out (each teammate can turn theirs off). */
+            alert_email?: boolean;
+        };
+        ResponseTargets: components["schemas"]["ResponseTargetsInput"] & {
+            /**
+             * Format: date-time
+             * @description When they were last turned on: conversations opened before have no target.
+             */
+            enabled_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
         };
         ConversationNumberSeries: {
             series: string;
@@ -13631,6 +13697,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationNumberSeries"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getResponseTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The response targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseTargets"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setResponseTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResponseTargetsInput"];
+            };
+        };
+        responses: {
+            /** @description The response targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseTargets"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

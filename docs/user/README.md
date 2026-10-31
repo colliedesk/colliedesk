@@ -12,6 +12,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Workspace name](workspace.md)
 - [Setup guide](setup-guide.md)
 - [Work the inbox](inbox.md)
+- [Response targets](response-targets.md)
 - [Customers (contacts)](contacts.md)
 - [Channels](channels.md)
 - [Email channel](email-channel.md)

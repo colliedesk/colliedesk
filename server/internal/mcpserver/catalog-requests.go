@@ -190,6 +190,32 @@ func numberSeriesSetRequestSpec() Spec {
 		numberSeriesSetRequest)
 }
 
+func responseTargetsGetSpec() Spec {
+	return Spec{
+		Name: "colliedesk_response_targets_get", Title: "Read the response targets",
+		Description: `Read the workspace's response targets: business hours (timezone, weekdays, holidays), first-response and resolution targets by priority in business ` +
+			`minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out.` + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/response-targets"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: `{"type":"object","required":["enabled","hours","targets"],"properties":{"enabled":{"type":"boolean"},"timezone":{"type":["string","null"]},"hours":{"type":"array"},"holidays":{"type":"array"},"targets":{"type":"object"},"warn_before_minutes":{"type":"integer"},"channel_ids":{"type":["array","null"]},"alert_email":{"type":"boolean"},"enabled_at":{"type":["string","null"]},"updated_at":{"type":["string","null"]}}}`,
+		run:    responseTargetsGet,
+	}
+}
+
+func responseTargetsSetRequestSpec() Spec {
+	return approvalSpec("colliedesk_response_targets_set_request", "Ask to change the response targets",
+		`Ask to replace the response targets with a whole document (read it first with colliedesk_response_targets_get and change what you need): enabled, timezone, `+
+			`hours (mon to sun, open, from, to), holidays, targets by priority (first_response_minutes, resolution_minutes in business minutes, null for none), `+
+			`warn_before_minutes, channel_ids (null for every channel) and alert_email.`,
+		[]string{"PUT /api/v1/response-targets"},
+		`{"type":"object","additionalProperties":false,"required":["enabled","hours","targets"],"properties":{"enabled":{"type":"boolean"},"timezone":{"type":["string","null"]},`+
+			`"hours":{"type":"array","maxItems":7,"items":{"type":"object","required":["day","open"],"properties":{"day":{"type":"string","enum":["mon","tue","wed","thu","fri","sat","sun"]},"open":{"type":"boolean"},"from":{"type":"string"},"to":{"type":"string"}}}},`+
+			`"holidays":{"type":"array","maxItems":500,"items":{"type":"object","required":["date","name"],"properties":{"date":{"type":"string"},"name":{"type":"string","maxLength":100}}}},`+
+			`"targets":{"type":"object"},"warn_before_minutes":{"type":"integer","minimum":0,"maximum":10080},"channel_ids":{"type":["array","null"],"items":{"type":"string"}},"alert_email":{"type":"boolean"}}}`,
+		responseTargetsSetRequest)
+}
+
 func workspaceSlugRequestSpec() Spec {
 	return approvalSpec("colliedesk_workspace_slug_change_request", "Ask to change the workspace address",
 		`Ask to change the workspace's address (slug), which also changes its hosted support email address and web form link.`,

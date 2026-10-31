@@ -42,15 +42,15 @@ summary."
 
 ## What each tier can do
 
-Colliedesk has 224 tools. A token calls the tools of its tier directly; any other call
+Colliedesk has 226 tools. A token calls the tools of its tier directly; any other call
 becomes an [agent request](agent-requests.md) a person approves in **Requests**.
 
 | Tier | Tools it calls directly |
 |---|---|
-| `read` | 107 of 224 |
-| `draft` | 135 of 224 |
-| `send` | 173 of 224 |
-| `admin` | 224 of 224 |
+| `read` | 109 of 226 |
+| `draft` | 137 of 226 |
+| `send` | 175 of 226 |
+| `admin` | 226 of 226 |
 
 Every tool and its tier: [Connect an AI agent (MCP)](mcp.md#tools).
 
