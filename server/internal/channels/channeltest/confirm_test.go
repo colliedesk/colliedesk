@@ -219,3 +219,33 @@ func TestARequestIsCalledByWhatFollowsItsCommand(t *testing.T) {
 		t.Fatalf("subjects = %q", got)
 	}
 }
+
+// After the question, what the customer adds sends them back to writing: an OK before the question is
+// asked again is part of the request, the question comes once more, and the OK after it opens at once.
+// "oke", which the confirm command's exact phrases do not name, is words too.
+func TestAnOKAfterAnAdditionWaitsForTheQuestionAgain(t *testing.T) {
+	for _, first := range []string{"OK", "oke"} {
+		d := newLoopDesk(t, confirmLoop())
+		d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "u1", Text: "report bug the printer jams"})
+		d.step(t, 11*time.Second)
+		d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "u1", Text: "them thong tin"})
+		d.step(t, 2*time.Second)
+		d.send(t, channeltest.LoopbackEvent{ID: "c-3", From: "u1", Text: first})
+		d.step(t, time.Second)
+		if got := d.one(t, `SELECT count(*)::text FROM channel_inbound_events WHERE workspace_id=$1 AND state='dropped'`); got != "0" {
+			t.Fatalf("%s: dropped events while the request is still written = %s", first, got)
+		}
+		if got := d.conversations(t); got != "" {
+			t.Fatalf("%s: opened before the question was asked again: %s", first, got)
+		}
+		d.step(t, 11*time.Second)
+		if got := d.notices(t, channels.NoticeAskConfirm); got != "2" {
+			t.Fatalf("%s: asks = %s, want one more", first, got)
+		}
+		d.send(t, channeltest.LoopbackEvent{ID: "c-4", From: "u1", Text: "ok"})
+		d.step(t, time.Second)
+		if got := d.conversations(t); got != "report bug the printer jams+them thong tin+"+first {
+			t.Fatalf("%s: after the OK = %q", first, got)
+		}
+	}
+}
