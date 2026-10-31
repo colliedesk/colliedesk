@@ -115,10 +115,14 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, nil
 		}
 		// A batch listed by another worker as well may have been asked about since: it waits for its time.
+		// One that took a message since it was listed (a paused channel resumed) is left to the next round,
+		// which lists it whole.
 		if request.Flushing {
 			var due bool
-			if err := tx.QueryRow(ctx, `SELECT COALESCE(bool_and(state='pending') AND max(flush_at)<=$3,false) FROM channel_inbound_events
-				WHERE workspace_id=$1 AND id::text=ANY($2)`, workspaceID, request.EventIDs, now).Scan(&due); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(bool_and(e.state='pending') AND max(e.flush_at)<=$3,false)
+				AND NOT EXISTS(SELECT 1 FROM channel_inbound_events o WHERE o.workspace_id=$1 AND o.channel_id=$4 AND o.state='pending'
+					AND o.aggregate_key=(SELECT aggregate_key FROM channel_inbound_events WHERE workspace_id=$1 AND id::text=$5) AND NOT (o.id::text=ANY($2)))
+				FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.id::text=ANY($2)`, workspaceID, request.EventIDs, now, channel.ID, request.EventIDs[0]).Scan(&due); err != nil {
 				return result, fmt.Errorf("check collected messages are due: %w", err)
 			}
 			if !due {

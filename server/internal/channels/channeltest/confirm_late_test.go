@@ -51,3 +51,27 @@ func TestABatchListedTwiceWaitsForItsConfirmation(t *testing.T) {
 		t.Fatalf("opened right after the question: %s", got)
 	}
 }
+
+// What the customer adds while the channel is paused joins the request they started before it: resumed, the
+// batch opens with all of it, not with what was listed before the addition was taken.
+func TestWhatIsAddedWhilePausedJoinsTheRequestStartedBefore(t *testing.T) {
+	d := newLoopDesk(t, confirmLoop())
+	pause := func(on bool) {
+		t.Helper()
+		if _, err := d.store.UpdateChannel(t.Context(), d.workspaceID, d.channel.ID, store.ChannelInput{ProcessingPaused: &on}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "u1", Text: "report bug the printer jams"})
+	pause(true)
+	d.step(t, time.Minute)
+	d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "u1", Text: "on tray two"})
+	d.step(t, 30*time.Minute)
+	pause(false)
+	for range 3 {
+		d.step(t, time.Second)
+	}
+	if got := d.conversations(t); got != "report bug the printer jams+on tray two" {
+		t.Fatalf("once resumed = %q", got)
+	}
+}
