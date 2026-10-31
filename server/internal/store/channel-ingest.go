@@ -764,7 +764,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
-		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{NoticeKind: channels.NoticeReceived}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
+		// {ref} is the code of the conversation, which the customer types back.
+		var ref string
+		if err := tx.QueryRow(ctx, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&ref); err != nil {
+			return result, fmt.Errorf("read the conversation's code: %w", err)
+		}
+		text := channels.RenderNotice(channel.Settings.Notices.Received, map[string]string{"ref": ref})
+		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{NoticeKind: channels.NoticeReceived}, "outgoing", text, nil, nil); err != nil {
 			return result, fmt.Errorf("send received notice: %w", err)
 		}
 	}

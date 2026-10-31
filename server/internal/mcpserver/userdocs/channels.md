@@ -186,8 +186,10 @@ ones whole, so send them all.
   second delivery of the same message never is. Only a scope where one customer writes (a one-to-one chat)
   takes it: a group would answer everyone's chatter. The notice is in the place as the channel's own message,
   with whether it went out (`delivery_status`: queued, sent or failed). Without that text nothing is sent.
-- A notice's text (`settings.notices.received`, `settings.notices.unmatched`) may only name placeholders
-  the channel fills; it fills none yet, so `{ref}` and the like are refused when the settings are saved.
+- A notice's text may only name placeholders the channel fills; any other is refused when the settings are
+  saved. The received notice fills `{ref}`: the code of the conversation it acknowledges (`#12`, or its
+  channel's series' code, see [conversation numbers](inbox.md#conversation-numbers)), which the customer
+  types back. The other notices fill none.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
   the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
