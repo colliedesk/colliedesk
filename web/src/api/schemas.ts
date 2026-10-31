@@ -137,6 +137,8 @@ export const conversationSchema = z.object({
     .catch(null),
   // The statuses that, set now, would tell the customer in its chat (only on the conversation itself).
   status_notices: z.array(statusSchema).optional(),
+  // Whether a status the team sets now may tell its customer (any status); on every conversation, lists too.
+  may_tell_customer: z.boolean().optional(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
     // A server from before chat channels sends no type: its replies always left by email.
     replies_via: z.object({ id: z.string(), type: z.string().catch('email'), name: z.string(), enabled: z.boolean(),

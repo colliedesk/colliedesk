@@ -8,7 +8,7 @@ import { CheckIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
 import { AITriageSlot } from './ai-triage-slot';
 import { StatusLabel } from './conversation-labels';
-import { mayTell } from './status-tell';
+import { noticesOf, statusAsMenu } from './status-tell';
 import { AutofixDetails } from '../autofix/autofix-slot';
 
 interface DetailsPanelProps {
@@ -43,7 +43,8 @@ function StatusPick({ conversation, channel, onUpdate }: { conversation: Convers
   const [tell, setTell] = useState(true);
   const id = useId();
   const others = statusOrder.filter((status) => status !== conversation.status);
-  const told = others.filter((status) => conversation.status_notices?.includes(status));
+  const notices = noticesOf(conversation);
+  const told = others.filter((status) => notices?.includes(status));
   const quiet = others.filter((status) => !told.includes(status));
   return <div className="property-row status-pick-row"><span id={`${id}-label`}>{messages.status}</span>
     <ActionMenu<Conversation['status']> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!onUpdate}
@@ -52,7 +53,7 @@ function StatusPick({ conversation, channel, onUpdate }: { conversation: Convers
       onApply={(status) => onUpdate?.(conversation.id, tell ? { status } : { status, notify: false })}>
       {(apply) => <>
         <label className="field-inline status-pick-tell"><input type="checkbox" checked={tell} onChange={(event) => setTell(event.target.checked)} /><span>{messages.tellCustomer}</span></label>
-        <small className="status-pick-which">{!tell ? messages.tellUnticked : conversation.status_notices === undefined ? messages.tellUnknown(channel)
+        <small className="status-pick-which">{!tell ? messages.tellUnticked : notices === undefined ? messages.tellUnknown(channel)
           : told.length === 0 ? messages.tellNone(channel) : messages.tellWhich(channel, told.map((status) => messages.statusChange[status]), quiet.map((status) => messages.statusChange[status]))}</small>
         {(['open', 'pending', 'resolved', 'closed'] as const).filter((status) => status !== conversation.status)
           .map((status) => <button type="button" key={status} onClick={() => apply(status)}><StatusLabel status={status} /></button>)}
@@ -76,7 +77,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
         <h2>{messages.properties}</h2>
-        {conversation && mayTell(conversation)
+        {conversation && statusAsMenu(conversation)
           ? <StatusPick key={conversation.id} conversation={conversation} channel={conversation.channel_ref?.name ?? messages.theChannel} onUpdate={onUpdate} />
           : <label className="property-row"><span>{messages.status}</span><select value={conversation?.status ?? 'open'} disabled={!conversation}
             onChange={(event) => conversation && onUpdate?.(conversation.id, { status: event.target.value as UpdateConversationRequest['status'] })}>

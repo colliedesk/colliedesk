@@ -8,7 +8,7 @@ import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
 import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
-import { mayTell } from './status-tell';
+import { mayTell, noticesOf } from './status-tell';
 import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { ownRef } from './conversation-ref';
@@ -70,8 +70,9 @@ function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversati
   // A chat conversation whose answer is still on its way cannot be pressed: the press might tell. If it never
   // comes, the quiet way is offered beside the plain words.
   const channel = conversation.channel_ref?.name ?? messages.theChannel;
-  const known = conversation.status_notices !== undefined;
-  const tells = known && conversation.status_notices!.includes(target);
+  const notices = noticesOf(conversation);
+  const known = notices !== undefined;
+  const tells = known && notices.includes(target);
   const waiting = !known && mayTell(conversation) && !noticesFailed;
   const quietOffered = tells || (!known && mayTell(conversation) && noticesFailed);
   const change = (quiet: boolean) => {

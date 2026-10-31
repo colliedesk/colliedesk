@@ -289,3 +289,11 @@ test('the count of customers told is said when the server gives it', async () =>
   fireEvent.click(within(bar()).getByRole('button', { name: 'Resolve and tell customers' }));
   expect(await screen.findByText('2 conversations resolved; 1 customer will be told in a few seconds.')).toBeInTheDocument();
 });
+
+test('the server’s word on each row decides Tell customers: an email row a chat message moved into, never a chat that tells nothing', () => {
+  render(<InboxPage conversations={[{ ...alpha, may_tell_customer: true }, { ...chatA, may_tell_customer: false }]} agents={[colleague]} tags={[billing]} currentAgentId={me} onBulkUpdate={vi.fn()} />);
+  pick(/chat one/i);
+  expect(within(bar()).queryByRole('checkbox', { name: 'Tell customers' })).not.toBeInTheDocument();
+  pick(/alpha request/i);
+  expect(within(bar()).getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
+});

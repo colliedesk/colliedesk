@@ -254,6 +254,12 @@ test('a chat conversation whose notices are still unknown cannot be resolved yet
   expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
 });
 
+test('a chat conversation the server says tells nothing has a plain Resolve, ready at once', () => {
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, may_tell_customer: false }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+  expect(screen.queryByRole('group', { name: 'More ways to resolve' })).not.toBeInTheDocument();
+});
+
 test('an email conversation the server says would tell (a chat message moved in) offers the quiet way too', () => {
   render(<TimelinePanel conversation={{ ...thread, status_notices: ['resolved'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
   expect(screen.getByRole('button', { name: 'Resolve and tell the customer on the channel' })).toBeInTheDocument();

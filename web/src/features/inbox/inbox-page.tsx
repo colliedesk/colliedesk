@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { AgentRequest, Conversation, ConversationViewer, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
-import { mayTellCustomers } from './status-tell';
+import { mayTellCustomers, noticesOf } from './status-tell';
 import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
 import { AITriageSlot } from './ai-triage-slot';
@@ -268,7 +268,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
           // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
           onResolve={selected && onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
-          resolveTells={selected?.status_notices?.includes('resolved') ? selected.channel_ref?.name : undefined}
+          resolveTells={selected && noticesOf(selected)?.includes('resolved') ? selected.channel_ref?.name ?? messages.theChannel : undefined}
           aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
           findSent={selected && onFindSent ? (key) => onFindSent(selected.id, key) : undefined} />
       </div>

@@ -25,7 +25,7 @@ import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
 import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
-import { mayTellCustomers } from './status-tell';
+import { mayTell, noticesOf } from './status-tell';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -147,7 +147,7 @@ export function InboxRoute() {
   // A chat conversation is read too when listed: only the conversation itself says which statuses would tell
   // its customer (status_notices), which the header and the details offer a quiet way for.
   const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
-    enabled: Boolean(activeID && (!listed || mayTellCustomers([listed]))) });
+    enabled: Boolean(activeID && (!listed || (mayTell(listed) && listed.status_notices === undefined))) });
   // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
   // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
   // row of the list, whose composer would send a reply to the wrong customer.
@@ -323,7 +323,7 @@ export function InboxRoute() {
     viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
-    noticesFailed={Boolean(selected && opened.isError && mayTellCustomers([selected]) && selected.status_notices === undefined)}
+    noticesFailed={Boolean(selected && opened.isError && mayTell(selected) && noticesOf(selected) === undefined)}
     onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
