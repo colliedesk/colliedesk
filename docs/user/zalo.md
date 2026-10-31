@@ -36,9 +36,10 @@ The channel's page then has four tabs of its own, before AI and History:
 3. **Staff**: the Zalo accounts of your team. What they write in a group is the team's, never a customer's
    request. **Add staff account** picks one of the people who wrote to the OA lately, or takes a pasted
    Zalo user id; **Remove** asks first, then their new messages count as a customer's.
-4. **Messages**: the **Commands** a customer can type (Open a request, Cancel, Reopen), each with its
+4. **Messages**: the **Commands** a customer can type (Open a request, Cancel, Reopen, Confirm, Help), each with its
    phrases and how they match (Allow one typo, Whole words, Exact; a command with no phrase is off), and
-   **What the OA says**: the notice sent when a conversation opens (`{ref}` becomes its code), what Reopen
+   **What the OA says**: the notice sent when a conversation opens (`{ref}` becomes its code), the answer to
+   Help (**When a customer asks for help**, in a chat or a group; it opens nothing, and empty sends nothing), what Reopen
    answers when it reopens a resolved or closed conversation (`{ref}`), when the conversation is still open
    and the message joins it (`{ref}`), for a code it cannot find (`{ref}`: the code typed; a code of another
    chat or group reads the same, since a code reopens only a conversation of its own group or of the

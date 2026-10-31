@@ -1,7 +1,7 @@
 // The words of the Zalo OA channel's pages (docs/user/zalo.md).
 
 export type SecretName = 'app_secret' | 'oa_secret_key' | 'access_token' | 'refresh_token';
-export type CommandAction = 'open' | 'cancel' | 'reopen' | 'confirm';
+export type CommandAction = 'open' | 'cancel' | 'reopen' | 'confirm' | 'help';
 export type CommandMatch = 'fuzzy' | 'words' | 'exact';
 
 export const zaloMessages = {
@@ -115,8 +115,8 @@ export const zaloMessages = {
   // Messages
   commands: 'Commands',
   commandsLead: 'What a customer can type to the OA, one-to-one or in a group.',
-  action: { open: 'Open a request', cancel: 'Cancel', reopen: 'Reopen', confirm: 'Confirm' } satisfies Record<CommandAction, string>,
-  actionUse: { open: 'Opens a conversation with what came before it', cancel: 'Cancels the request being collected', reopen: 'Reopens the sender’s conversation in the same chat', confirm: 'Answers the question below: opens the request at once' } satisfies Record<CommandAction, string>,
+  action: { open: 'Open a request', cancel: 'Cancel', reopen: 'Reopen', confirm: 'Confirm', help: 'Help' } satisfies Record<CommandAction, string>,
+  actionUse: { open: 'Opens a conversation with what came before it', cancel: 'Cancels the request being collected', reopen: 'Reopens the sender’s conversation in the same chat', confirm: 'Answers the question below: opens the request at once', help: 'Answered with the help below; opens nothing' } satisfies Record<CommandAction, string>,
   phrases: (action: string) => `Phrases for ${action}`,
   noPhrase: 'No phrase: off',
   addPhrase: 'Add a phrase',
@@ -130,6 +130,8 @@ export const zaloMessages = {
   received: 'When a conversation opens',
   unmatched: 'Reply to a one-to-one message that is not a request',
   receivedHint: '{ref} becomes the conversation’s code, which the customer can send back with Reopen.',
+  helpNotice: 'When a customer asks for help',
+  helpNoticeHint: 'Sent for the Help command, in a chat or a group; say which commands open, cancel and reopen a request. Leave empty to send nothing.',
   reopened: 'When Reopen reopens a resolved or closed conversation',
   reopenedHint: '{ref} is its code. A code reopens only a conversation of the same place: its group, or the customer’s own one-to-one chat.',
   reopenNoted: 'When Reopen names a conversation still open',

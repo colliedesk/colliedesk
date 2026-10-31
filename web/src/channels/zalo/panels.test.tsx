@@ -270,7 +270,7 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
     commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'], tags: ['zalo'] }, cancel: { action: 'cancel', match: 'fuzzy', phrases: ['hủy'] } },
-    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '' },
+    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '', help: '' },
     scopes: { direct: { mode: 'commands', unmatched: 'notice' } },
   } });
 });
@@ -442,4 +442,19 @@ test('references count the next code\'s year where the workspace is, not where t
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('the Help command and its answer are saved with the others; Help matches as its phrases say', async () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: {} })} canManage timezone="UTC" />);
+  const help = screen.getByRole('group', { name: 'Phrases for Help' });
+  fireEvent.click(within(help).getByRole('button', { name: 'Add a phrase' }));
+  fireEvent.change(within(help).getByLabelText('New phrase for Help'), { target: { value: 'Hỗ trợ' } });
+  fireEvent.keyDown(within(help).getByLabelText('New phrase for Help'), { key: 'Enter' });
+  fireEvent.change(screen.getByLabelText('Match for Help'), { target: { value: 'words' } });
+  fireEvent.change(screen.getByLabelText('When a customer asks for help'), { target: { value: 'Gõ “tạo phiếu” để tạo yêu cầu.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  const sent = channelsApi.update.mock.calls[0][1].settings;
+  expect(sent.commands.help).toEqual({ action: 'help', match: 'words', phrases: ['Hỗ trợ'] });
+  expect(sent.notices.help).toBe('Gõ “tạo phiếu” để tạo yêu cầu.');
 });
