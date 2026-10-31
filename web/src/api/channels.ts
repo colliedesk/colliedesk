@@ -43,6 +43,11 @@ const chatThreadSchema = z.object({
 }) satisfies z.ZodType<Generated<'ChatThread'>>;
 const chatThreadPageSchema = z.object({ items: z.array(chatThreadSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<Generated<'ChatThreadPage'>>;
 export type ChatThread = z.infer<typeof chatThreadSchema>;
+const chatSenderListSchema = z.object({ items: z.array(z.object({
+  kind: z.string(), value: z.string(), name: z.string().nullable(), role: z.enum(['customer', 'staff']), last_at: z.string().datetime(),
+  thread_id: z.string().uuid(), thread_name: z.string().nullable(),
+})) }) satisfies z.ZodType<Generated<'ChatSenderList'>>;
+export type ChatSender = z.infer<typeof chatSenderListSchema>['items'][number];
 const channelTypeInfoSchema = z.object({
   type: channelTypeSchema, available: z.boolean(), count: z.number().int().nonnegative(), default_channel_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'ChannelTypeInfo'>>;
@@ -100,6 +105,8 @@ export const channelsApi = {
     const query = new URLSearchParams({ ...(kind ? { kind } : {}), ...(cursor ? { cursor } : {}) }).toString();
     return request(`/api/v1/channels/${id}/threads${query ? `?${query}` : ''}`, chatThreadPageSchema);
   },
+  // Everyone who wrote in a chat channel's places, each once, most recent first.
+  senders: (id: string) => request(`/api/v1/channels/${id}/senders`, chatSenderListSchema),
   // One email channel of several: its settings and its own actions.
   email: (id: string) => request(`/api/v1/channels/${id}/email`, emailChannelSettingsSchema),
   emailSecret: (id: string) => request(`/api/v1/channels/${id}/email/secret`, inboundSecretSchema, { method: 'POST' }),

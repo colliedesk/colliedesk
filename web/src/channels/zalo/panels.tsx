@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ConflictError, InvalidRequestError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
-import type { ChannelDetail, ChatThread, ZaloConfig } from '../../api/channels';
+import type { ChannelDetail, ChatSender, ChatThread, ZaloConfig } from '../../api/channels';
 import { CopyButton } from '../../features/settings/copy-button';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
 import { formatDate } from '../../lib/format-date';
@@ -292,24 +292,18 @@ function LinkDialog({ channel, group, onClose, onLinked }: { channel: ChannelDet
 
 // ---------- Staff ----------
 
-interface Person { id: string; name: string | null; at: string | null }
+interface Person { id: string; name: string | null; at: string | null; place: string | null }
 
-// people are the Zalo accounts that wrote to the OA lately, newest first, from the places' newest messages.
-function people(pages: { items: ChatThread[] }[] | undefined): Person[] {
-  const found = new Map<string, Person>();
-  for (const thread of pages?.flatMap((page) => page.items) ?? []) {
-    const sender = thread.last_item?.sender;
-    const id = sender?.kind === 'zalo_user' ? sender.value : thread.kind === 'direct' ? thread.external_id.replace(/^user:/, '') : null;
-    if (id && zaloID.test(id) && !found.has(id)) found.set(id, { id, name: sender?.name ?? null, at: thread.last_item_at });
-  }
-  return [...found.values()];
+// people are the Zalo accounts that wrote in the channel's chats and groups, newest first.
+function people(senders: ChatSender[] | undefined): Person[] {
+  return (senders ?? []).filter((sender) => sender.kind === 'zalo_user' && zaloID.test(sender.value))
+    .map((sender) => ({ id: sender.value, name: sender.name, at: sender.last_at, place: sender.thread_name }));
 }
 
 function Staff({ channel, canManage, timezone }: ChannelPanelProps) {
   const config = configOf(channel);
-  const direct = useThreads(channel.id, 'direct');
-  const groups = useThreads(channel.id, 'group');
-  const known = [...people(direct.data?.pages), ...people(groups.data?.pages)];
+  const senders = useQuery({ queryKey: ['zalo-threads', channel.id, 'senders'], queryFn: () => channelsApi.senders(channel.id) });
+  const known = people(senders.data?.items);
   const nameKnown = (id: string) => Boolean(known.find((person) => person.id === id)?.name);
   const nameOf = (id: string) => known.find((person) => person.id === id)?.name ?? m.uid(id);
   const [adding, setAdding] = useState(false);
@@ -366,9 +360,9 @@ function StaffDialog({ channel, people: candidates, timezone, onClose, onAdded }
     }}
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={change.isPending}>{change.isPending ? m.saving : m.addSave}</button></>}>
     {candidates.length > 0 && <fieldset className="field zl-pick"><legend className="field-label">{m.recent}</legend>
-      {candidates.slice(0, 8).map((person) => <label className="check-row" key={person.id}>
+      {candidates.map((person) => <label className="check-row" key={person.id}>
         <input type="radio" name={`${id}-uid`} checked={!pasted.trim() && picked === person.id} onChange={() => { change.reset(); setPasted(''); setPicked(person.id); }} />
-        <span>{m.wrote(person.name, person.id, person.at ? formatDate(person.at, timezone) : m.none)}</span></label>)}
+        <span>{m.wrote(person.name, person.id, person.at ? formatDate(person.at, timezone) : m.none, person.place)}</span></label>)}
     </fieldset>}
     <Field id={id} label={m.orPaste} error={error} help={m.pasteHint}>{(props) => <input {...props} className="zl-mono-input" inputMode="numeric" autoComplete="off" value={pasted}
       onChange={(event) => { change.reset(); setPasted(event.target.value); }} />}</Field>

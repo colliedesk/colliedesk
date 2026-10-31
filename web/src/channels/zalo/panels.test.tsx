@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => {
     constructor(message: string, detail?: Record<string, unknown>) { super(message); this.detail = detail; }
   }
   class ConflictError extends InvalidRequestError {}
-  const channelsApi = { setCredential: vi.fn(), threads: vi.fn(), update: vi.fn() };
+  const channelsApi = { setCredential: vi.fn(), threads: vi.fn(), senders: vi.fn(), update: vi.fn() };
   return { channelsApi, InvalidRequestError, ConflictError };
 });
 vi.mock('../../api/client', () => ({ InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError }));
@@ -29,6 +29,9 @@ const channel = (config: Record<string, unknown> = {}, change: Partial<ChannelDe
     credentials: credentials({ app_secret: 'a1f9', oa_secret_key: '7c20' }), ...config },
   settings: {}, effective_settings: {}, ...change,
 } as ChannelDetail);
+const sender = (value: string, name: string | null, place: string | null = null, role: 'customer' | 'staff' = 'customer') => ({
+  kind: 'zalo_user', value, name, role, last_at: '2026-10-31T05:00:00Z', thread_id: crypto.randomUUID(), thread_name: place,
+});
 const item = (sender: { value: string; name: string }) => ({ sender: { kind: 'zalo_user', ...sender } });
 const thread = (kind: 'direct' | 'group', external: string, sender?: { value: string; name: string }) => ({
   id: crypto.randomUUID(), channel_id: ID, kind, external_id: external, name: null, contact_id: null, opens_conversations: true,
@@ -43,6 +46,7 @@ const view = (ui: ReactElement) => {
 beforeEach(() => {
   vi.clearAllMocks();
   channelsApi.threads.mockResolvedValue({ items: [], next_cursor: null });
+  channelsApi.senders.mockResolvedValue({ items: [] });
   channelsApi.update.mockResolvedValue(channel());
   channelsApi.setCredential.mockResolvedValue({ name: 'x', hint: 'abcd' });
 });
@@ -166,12 +170,14 @@ test('a group nobody wrote from yet is an empty list that says how to add one', 
   expect(await screen.findByText(/No group has written to the OA yet/)).toBeInTheDocument();
 });
 
-test('staff: none says what that means; an account is added from who wrote, and removed after a question', async () => {
-  channelsApi.threads.mockImplementation(async (_id: string, kind: string) => ({ items: kind === 'direct' ? [thread('direct', 'user:7012003391', { value: '7012003391', name: 'Long Bùi' })] : [], next_cursor: null }));
+test('staff: none says what that means; an account is added from everyone who wrote, and removed after a question', async () => {
+  // A teammate who wrote earlier in a group, before a customer, is offered too.
+  channelsApi.senders.mockResolvedValue({ items: [sender('6620001029', 'Nguyễn Văn A', 'Group 6127000931'), sender('7012003391', 'Long Bùi', 'Group 6127000931')] });
   const { rerender } = view(<Tabs.staff channel={channel()} canManage timezone="UTC" />);
   expect(screen.getByText(/No staff accounts yet/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
   const dialog = screen.getByRole('dialog', { name: 'Add staff account' });
+  expect(await within(dialog).findByRole('radio', { name: /Nguyễn Văn A · uid 6620001029 · wrote .* in Group 6127000931/ })).toBeInTheDocument();
   fireEvent.click(await within(dialog).findByRole('radio', { name: /Long Bùi · uid 7012003391/ }));
   fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { config: { staff_user_ids: ['7012003391'] } }));
@@ -184,13 +190,24 @@ test('staff: none says what that means; an account is added from who wrote, and 
 });
 
 test('an account with no name is named once, by its user id', async () => {
-  channelsApi.threads.mockImplementation(async (_id: string, kind: string) => ({ items: kind === 'direct' ? [thread('direct', 'user:7012003391')] : [], next_cursor: null }));
+  channelsApi.senders.mockResolvedValue({ items: [sender('7012003391', null)] });
   view(<Tabs.staff channel={channel({ staff_user_ids: ['9930004402'] })} canManage timezone="UTC" />);
   const row = screen.getByRole('listitem');
   expect(row.textContent?.match(/uid 9930004402/g)).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
   const option = await screen.findByRole('radio', { name: /7012003391/ });
   expect(option.closest('label')?.textContent?.match(/7012003391/g)).toHaveLength(1);
+});
+
+test('people already on the staff list are not offered again, whatever their last message was taken as', async () => {
+  channelsApi.senders.mockResolvedValue({ items: [sender('9930004402', 'Minh Trần', null, 'customer'), sender('5521000187', 'Lan Phạm', null, 'staff'), sender('6620001029', 'Khách A')] });
+  view(<Tabs.staff channel={channel({ staff_user_ids: ['9930004402'] })} canManage timezone="UTC" />);
+  expect(await screen.findByText('Minh Trần')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
+  const dialog = screen.getByRole('dialog', { name: 'Add staff account' });
+  expect(await within(dialog).findByRole('radio', { name: /Khách A/ })).toBeInTheDocument();
+  expect(within(dialog).getByRole('radio', { name: /Lan Phạm/ })).toBeInTheDocument();
+  expect(within(dialog).queryByRole('radio', { name: /Minh Trần/ })).toBeNull();
 });
 
 test('a pasted user id that is not a number, or already staff, is refused before anything is sent', async () => {

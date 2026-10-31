@@ -89,7 +89,7 @@ export const zaloMessages = {
   addStaff: 'Add staff account',
   addStaffHelp: 'Pick the teammate’s Zalo account from people who wrote to the OA, or paste its user id. Ask them to send it one message first.',
   recent: 'People who wrote recently',
-  wrote: (name: string | null, id: string, when: string) => [name, `uid ${id}`, `wrote ${when}`].filter(Boolean).join(' · '),
+  wrote: (name: string | null, id: string, when: string, place?: string | null) => [name, `uid ${id}`, `wrote ${when}${place ? ` in ${place}` : ''}`].filter(Boolean).join(' · '),
   orPaste: 'Or paste a Zalo user id',
   pasteHint: 'A number, as the OA’s messages name the sender.',
   addSave: 'Add',
