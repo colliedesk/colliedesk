@@ -442,9 +442,10 @@ func TestBundlesOfTwoSourcesShareMessageIDsAndAPlaceNamesItsKind(t *testing.T) {
 	if report, err := bundle.Run(ctx, d.pool, pack(t, b, files), bundle.Options{WorkspaceSlug: d.slug, Storage: d.storage}); err != nil || report.Status != bundle.StatusOK {
 		t.Fatalf("second with the same message ids = %+v %v", report, err)
 	}
-	// A sender is only on a customer's message, with how the channel knows them.
+	// A sender is on a message of the chat (a customer's, or a team member's on the channel's app), never
+	// on a note.
 	misnamed, _ := sample(d.channel)
-	misnamed.Conversations[0].Messages[1].Sender = &bundle.Sender{Kind: "zalo_user", Value: "9"}
+	misnamed.Conversations[0].Messages[2].Sender = &bundle.Sender{Kind: "zalo_user", Value: "9"}
 	var mb bytes.Buffer
 	mw := zip.NewWriter(&mb)
 	mm, _ := json.Marshal(misnamed)
@@ -455,8 +456,8 @@ func TestBundlesOfTwoSourcesShareMessageIDsAndAPlaceNamesItsKind(t *testing.T) {
 		_, _ = f.Write(data)
 	}
 	_ = mw.Close()
-	if _, err := bundle.Read(bytes.NewReader(mb.Bytes()), int64(mb.Len())); err == nil || !strings.Contains(err.Error(), "messages.1.sender") {
-		t.Fatalf("a sender on a reply: %v", err)
+	if _, err := bundle.Read(bytes.NewReader(mb.Bytes()), int64(mb.Len())); err == nil || !strings.Contains(err.Error(), "messages.2.sender") {
+		t.Fatalf("a sender on a note: %v", err)
 	}
 	for _, place := range []bundle.Place{{Kind: "direct", ExternalID: "group:g1"}, {Kind: "group", ExternalID: "user:100"}, {Kind: "direct", ExternalID: "100"}} {
 		wrong, _ := sample(d.channel)

@@ -308,7 +308,14 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	// A request left waiting for its description past ExpireSeconds is thrown away by its sender's next
 	// message, which is told so unless it starts a new request.
-	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Flushing && !request.Replay && scope.Gather != nil && scope.Gather.ExpireSeconds > 0 {
+	// A reopen command without a code names nothing: it is an ordinary message, as the desk before read it.
+	if commanded && command.Action == channels.ActionReopen && strings.TrimSpace(in.Intent.Ref) == "" {
+		in.Intent, commanded, command = channels.Intent{}, false, channels.Command{}
+	}
+	// A reopen command is answered as it comes: it names a conversation of its own, so it is no part of a
+	// request being written, waits for nothing and asks nothing.
+	immediate := commanded && command.Action == channels.ActionReopen
+	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Flushing && !request.Replay && !immediate && scope.Gather != nil && scope.Gather.ExpireSeconds > 0 {
 		var expired bool
 		if err := tx.QueryRow(ctx, `WITH stale AS (
 				SELECT id FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3
@@ -437,8 +444,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if err := s.CheckInboundStorage(ctx, tx, workspaceID, bound, now); err != nil {
 		return result, err
 	}
-	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Replay && !request.Flushing {
-		if commanded && command.Action != channels.ActionReopen && scope.Cuts() {
+	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Replay && !request.Flushing && !immediate {
+		if commanded && scope.Cuts() {
 			// A command starts a new request: what was collected before it is sent on its own (or kept
 			// for review), and collecting starts again with this message. What the sender said just before
 			// it stays with it, unless what was collected named a command of its own.
@@ -669,6 +676,24 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
 			}
+			// A code the workspace has (an imported conversation of a year before the series was taken over)
+			// is never the old system's: from another place it is not found, as every other code.
+			if facts.RefConversation == "" && len(named) > 0 {
+				// Only a conversation of the channel's own series makes the code this workspace's: the same
+				// digits in another series with the same format are still the old system's.
+				series := channel.Settings.NumberSeries
+				if series == "" {
+					series = DefaultNumberSeries
+				}
+				var ours bool
+				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND number_series=$3)`,
+					workspaceID, named, series).Scan(&ours); err != nil {
+					return result, fmt.Errorf("find the code's series: %w", err)
+				}
+				if ours {
+					return s.refNotFound(ctx, tx, &journal, channel, in, typed, finish)
+				}
+			}
 			if facts.RefConversation == "" {
 				legacy, err := legacyCode(ctx, tx, workspaceID, channel.Settings.NumberSeries, typed)
 				if err != nil {
@@ -737,7 +762,12 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, err
 		}
 	} else {
-		if err := setStatusActor(ctx, tx, ""); err != nil {
+		// The customer writing again reopens, or their reopen command does.
+		cause := CauseCustomer
+		if decision.Rule == rules.CommandReopen {
+			cause = CauseCommand
+		}
+		if err := setStatusCause(ctx, tx, statusChange{Cause: cause}); err != nil {
 			return result, err
 		}
 		// An acknowledgement keeps a resolved conversation resolved, and only then is the message marked as

@@ -131,6 +131,14 @@ export const conversationSchema = z.object({
   number: z.number().int().positive().optional(), number_series: z.string().optional(), display_ref: z.string().optional(),
   // An older server sends none.
   sla: slaSchema.nullable().optional(),
+  // Who set the status last when it was not a person on the team; an older server sends none.
+  last_status_change: z.object({ to: statusSchema, at: z.string().datetime(), by: z.enum(['agent', 'token', 'customer', 'command', 'auto_close', 'import']), name: z.string().optional() }).nullable().optional()
+    // One a newer server tells of in a way this app does not know is left out, not a failed conversation.
+    .catch(null),
+  // The statuses that, set now, would tell the customer in its chat (only on the conversation itself).
+  status_notices: z.array(statusSchema).optional(),
+  // Whether a status the team sets now may tell its customer (any status); on every conversation, lists too.
+  may_tell_customer: z.boolean().optional(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
     // A server from before chat channels sends no type: its replies always left by email.
     replies_via: z.object({ id: z.string(), type: z.string().catch('email'), name: z.string(), enabled: z.boolean(),
@@ -274,7 +282,7 @@ export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) })
 export const savedReplyListSchema = z.object({ items: z.array(savedReplySchema) }) satisfies z.ZodType<JsonResponse<'listSavedReplies', 200>>;
 export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSavedReplySchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listTrashedSavedReplies', 200>>;
 export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
-export const bulkUpdateResultSchema = z.object({ updated: z.number().int() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
+export const bulkUpdateResultSchema = z.object({ updated: z.number().int(), told: z.number().int().optional() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
@@ -322,6 +330,8 @@ export const agentRequestSchema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
   approvable_by: z.enum(['agent', 'admin', 'owner']), summary: z.string(),
   conversation_id: z.string().uuid().nullable(),
+  // What approving a status change would tell customers, one per chat channel.
+  notices: z.array(z.object({ channel_id: z.string().uuid(), channel_name: z.string(), example_ref: z.string(), text: z.string(), told: z.number().int() })).nullable().optional(),
   saved_reply: z.object({
     id: z.string().uuid(),
     before: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime() }).nullable(),

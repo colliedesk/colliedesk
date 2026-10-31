@@ -212,8 +212,36 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   the message to nothing and is answered with `settings.notices.reopen_not_found` (`{ref}`: the code
   typed), the same words whatever the reason. A code of the system the channel's series was taken over
   from (below its `start`, in its `start_year` or an earlier year; see
-  [conversation numbers](inbox.md#conversation-numbers)) opens a new conversation tagged `legacy-ref`,
-  answered with `settings.notices.reopen_legacy` (`{old_ref}`, `{ref}`) instead of the received notice.
+  [conversation numbers](inbox.md#conversation-numbers)) and no conversation of the channel's series has
+  opens a new conversation tagged `legacy-ref`, answered with `settings.notices.reopen_legacy` (`{old_ref}`,
+  `{ref}`) instead of the received notice; one the workspace has (imported with its old code) is found as
+  any other. A reopen command is answered as it comes, even where messages are collected: it is no part
+  of the request being written, asks nothing and waits for nothing, and two of them are two. Without a code
+  after it, it is an ordinary message.
+- A status the team sets tells the customer in the conversation's chat, when the channel has words for it:
+  `settings.notices.status_pending`, `status_resolved` and `status_closed` (they fill `{ref}` and
+  `{subject}`), and `reopened` when the team opens it again. It is the channel's own message, quoting the
+  customer's first message only one to one (in a group, and for a chat moved into another conversation, it
+  quotes nothing), and changes neither the status nor the response clocks. Empty texts
+  (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
+  MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
+  the team started) or of a channel removed or turned off is told nothing; a chat message moved into a
+  conversation that came by email or the web form is told in its chat, through the chat's channel, never by
+  email; a channel whose processing is paused
+  sends it once it resumes. A change of several conversations at once tells
+  each customer a few seconds after it is saved; a conversation whose status changes again before then is
+  told only that later change. An AI agent's token below the send tier asks a person first when its change
+  would tell a customer: the request says what each channel would send. A conversation shows its last status
+  change and who made it (a team member, an AI agent's token, the customer, their reopen command, the
+  channel closing it, an import), and which statuses would tell its customer.
+- `settings.auto_close_hours` (0 to 720, none by default) closes a conversation resolved after it was turned
+  on, that long after its resolve and the customer's last message, and tells the customer with
+  `status_closed`. A conversation resolved before it was turned on never closes by itself (close it by hand),
+  so turning it on never closes a backlog at once; changing the hours keeps when it was turned on, and
+  turning it off and on again starts again. One resolved quietly closes quietly. One imported resolved and
+  untouched here since closes as the system before would have, that long after its resolve there and the
+  customer's last message, whenever auto-close was turned on, and quietly (that system had told them). A customer writing again
+  before then opens it, as always.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
   the inbox and in Results; a teammate who opened it before the notice is not told someone replied.

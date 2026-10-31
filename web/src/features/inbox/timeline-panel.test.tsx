@@ -179,6 +179,93 @@ test('the header button ignores presses while the change runs, keeps the focus, 
   expect(resolve).not.toHaveAttribute('aria-disabled');
 });
 
+const zaloRef = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+test('a change that would tell the customer says so on the button, and its arrow offers the quiet one', async () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, status_notices: ['resolved', 'closed'] }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' });
+  expect(resolve).toHaveTextContent('Resolve and tell');
+  expect(resolve).not.toHaveAttribute('data-tip');
+  const more = screen.getByLabelText('More ways to resolve', { selector: 'summary' });
+  expect(more).toHaveAttribute('data-tip', 'More ways to resolve');
+  fireEvent.click(within(screen.getByRole('group', { name: 'More ways to resolve' })).getByRole('button', { name: 'Resolve without telling the customer' }));
+  expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
+  await waitFor(() => expect(resolve).not.toHaveAttribute('aria-disabled'));
+  fireEvent.click(resolve);
+  expect(onSetStatus).toHaveBeenLastCalledWith('resolved');
+});
+
+test('Reopen that tells offers a quiet reopen, to add a note; a change that tells nothing has no arrow', async () => {
+  const { unmount } = render(<TimelinePanel conversation={{ ...thread, status: 'closed', channel_ref: zaloRef, status_notices: ['open'] }} items={[]} timezone="UTC" onSetStatus={vi.fn().mockResolvedValue(undefined)} />);
+  expect(screen.getByRole('button', { name: 'Reopen and tell the customer on Hảo Đạt OA' })).toHaveTextContent('Reopen and tell');
+  expect(within(screen.getByRole('group', { name: 'More ways to reopen' })).getByRole('button', { name: /Reopen without telling the customer/ })).toHaveTextContent('To add a note or fix a detail');
+  unmount();
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, status_notices: ['open'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('More ways to resolve')).not.toBeInTheDocument();
+});
+
+test('the last status change not made by a person on the team is one quiet line, at its time among the messages', () => {
+  const later: Message = { ...incoming, id: '66666666-6666-4666-8666-666666666666', created_at: '2026-10-20T10:00:00Z' };
+  const first: Message = { ...incoming, created_at: '2026-10-14T00:00:00Z' };
+  const closed = { ...thread, status: 'closed' as const, channel_ref: zaloRef, last_status_change: { to: 'closed' as const, at: '2026-10-18T09:00:00Z', by: 'auto_close' as const } };
+  const { unmount } = render(<TimelinePanel conversation={closed} items={[first, later]} timezone="UTC" canManageChannels />);
+  const line = screen.getByText(/Closed by itself after staying resolved/).closest('p') as HTMLElement;
+  expect(line).toHaveTextContent('Closed by itself after staying resolved (Hảo Đạt OA setting)');
+  expect(within(line).getByRole('link', { name: 'Hảo Đạt OA' })).toHaveAttribute('href', `/settings/channels/${zaloRef.id}?tab=messages`);
+  expect(line.querySelector('time')).toHaveAttribute('datetime', '2026-10-18T09:00:00Z');
+  const stack = line.parentElement as HTMLElement;
+  const order = Array.from(stack.children);
+  expect(order.indexOf(line)).toBeGreaterThan(order.findIndex((node) => node.textContent?.includes(first.body)));
+  expect(order.indexOf(line)).toBeLessThan(order.length - 1);
+  unmount();
+  render(<TimelinePanel conversation={closed} items={[first]} timezone="UTC" />);
+  expect(screen.queryByRole('link', { name: 'Hảo Đạt OA' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Closed by itself after staying resolved \(Hảo Đạt OA setting\)/)).toBeInTheDocument();
+});
+
+test('a status line names who set it: a token, the customer, their Reopen command, the import; never a person on the team', () => {
+  const cases = [
+    [{ to: 'resolved', by: 'token', name: 'Claude (Queue triage)' }, 'Claude (Queue triage) resolved it'],
+    [{ to: 'open', by: 'customer' }, 'Reopened when the customer wrote'],
+    [{ to: 'open', by: 'command' }, 'Reopened by the customer’s Reopen command'],
+    [{ to: 'resolved', by: 'import' }, 'Set to Resolved by the import'],
+  ] as const;
+  for (const [change, words] of cases) {
+    const { unmount } = render(<TimelinePanel conversation={{ ...thread, last_status_change: { at: '2026-10-18T09:00:00Z', ...change } }} items={[]} timezone="UTC" />);
+    expect(screen.getByText(words)).toBeInTheDocument();
+    unmount();
+  }
+  render(<TimelinePanel conversation={{ ...thread, last_status_change: { to: 'resolved', at: '2026-10-18T09:00:00Z', by: 'agent', name: 'Ann' } }} items={[]} timezone="UTC" />);
+  expect(document.querySelector('.status-event')).toBeNull();
+});
+
+test('a chat conversation whose notices are still unknown cannot be resolved yet; if they never come, the quiet way is offered', () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve' });
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  expect(resolve).toHaveAttribute('aria-busy', 'true');
+  fireEvent.click(resolve);
+  expect(onSetStatus).not.toHaveBeenCalled();
+  rerender(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef }} items={[]} timezone="UTC" onSetStatus={onSetStatus} noticesFailed />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+  fireEvent.click(within(screen.getByRole('group', { name: 'More ways to resolve' })).getByRole('button', { name: 'Resolve without telling the customer' }));
+  expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
+});
+
+test('a chat conversation the server says tells nothing has a plain Resolve, ready at once', () => {
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, may_tell_customer: false }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+  expect(screen.queryByRole('group', { name: 'More ways to resolve' })).not.toBeInTheDocument();
+});
+
+test('an email conversation the server says would tell (a chat message moved in) offers the quiet way too', () => {
+  render(<TimelinePanel conversation={{ ...thread, status_notices: ['resolved'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve and tell the customer on the channel' })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'More ways to resolve' })).toBeInTheDocument();
+});
+
 test('no conversation, no status button', () => {
   render(<TimelinePanel items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
   expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();

@@ -25,6 +25,7 @@ import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
 import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
+import { mayTell, noticesOf } from './status-tell';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -140,15 +141,22 @@ export function InboxRoute() {
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
   const isAdmin = me.data?.agent?.role === 'admin';
   const activeID = selectedId ?? params.conversationId;
-  const listed = conversations.data?.items.find((item) => item.id === activeID);
+  // With no conversation picked, the first row is the one on screen.
+  const shownID = activeID ?? conversations.data?.items[0]?.id;
+  const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
-  const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
-    enabled: Boolean(activeID && !listed) });
+  // A chat conversation is read too when listed: only the conversation itself says which statuses would tell
+  // its customer (status_notices), which the header and the details offer a quiet way for.
+  const opened = useQuery({ queryKey: ['conversations', 'one', shownID], queryFn: () => api.conversation(shownID!),
+    enabled: Boolean(shownID && (!listed || (mayTell(listed) && listed.status_notices === undefined))) });
   // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
   // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
   // row of the list, whose composer would send a reply to the wrong customer.
-  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
+  const detail = opened.data?.id === shownID ? opened.data : undefined;
+  // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
+  const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
+  const selected = withNotices ?? detail ?? (activeID ? undefined : conversations.data?.items[0]);
   // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
   // The Markdown of replies loads while the list does, before a conversation opens.
   useEffect(() => markdownPart.preload(), []);
@@ -245,7 +253,13 @@ export function InboxRoute() {
     else void navigate({ to: '/', search: filters });
   };
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
-  const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
+  // A change answers without status_notices (only GET has them): keep the ones known while the status is the
+  // same; after a status change they wait for the refetch, since they depend on the status.
+  const keepOpened = (changed: Conversation) => {
+    client.setQueryData<Conversation>(['conversations', 'one', changed.id], (now) =>
+      changed.status_notices === undefined && now?.status === changed.status && now.status_notices ? { ...changed, status_notices: now.status_notices } : changed);
+    return refresh();
+  };
   const agentId = me.data?.agent?.id;
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
     onSuccess: (changed, { changes }) => {
@@ -311,7 +325,8 @@ export function InboxRoute() {
     viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
-    onSetStatus={(conversationId, status) => update.mutateAsync({ conversationId, changes: { status } })}
+    noticesFailed={Boolean(selected && opened.isError && mayTell(selected) && noticesOf(selected) === undefined)}
+    onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}

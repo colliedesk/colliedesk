@@ -331,7 +331,7 @@ test('Escape inside a select does not close the drawer, Escape elsewhere does', 
   render(<InboxPage selected={conversation} conversations={[conversation]} />);
   openDrawer();
   const panel = screen.getByRole('complementary', { name: /conversation details/i });
-  fireEvent.keyDown(within(panel).getByLabelText(/^status$/i), { key: 'Escape' });
+  fireEvent.keyDown(within(panel).getByLabelText(/^priority$/i), { key: 'Escape' });
   expect(screen.getByRole('button', { name: /hide details/i })).toBeInTheDocument();
   fireEvent.keyDown(within(panel).getByLabelText(/new tag name/i), { key: 'Escape' });
   expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();

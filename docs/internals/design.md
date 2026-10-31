@@ -58,6 +58,11 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   is ticked, that row becomes the action bar (`role="group"`, named "Bulk actions"), as in Gmail and
   Gorgias: count on the left, then icon controls with a tooltip and an accessible name: **Resolve**
   (the most common bulk change, one press), **Set status**, **Assign to**, **Tags**, **Clear selection**.
+  With a chat conversation in the selection, a **Tell customers** checkbox stands between the count and
+  the icons (DOM order = reading order), ticked for each new selection; unticked, Resolve and Set status
+  are named "… quietly" and send `notify: false`. The list column has no room for all three, so the icons
+  then take a second line, right-aligned. A closed menu's choices and a hidden tip take no room (`display:
+  none`), so neither the bar nor the thread header is wider than its box.
   The title and filters stay visible. **Tags** is one menu, as in Linear: a check mark when every selected
   row has the tag, a dash when some do (`aria-pressed` true/mixed); a checked tag comes off, any other goes
   on. Each choice is a button in a `<details>` menu, never a `<select>`: a select fires on every arrow key
@@ -87,6 +92,13 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   Articles | Media row.
 - Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
   resolving never needs the details drawer.
+  When the change would tell the customer in their chat (`status_notices` of the conversation), the
+  visible words say so (**Resolve and tell**, named "… the customer on {channel}") and the button becomes a
+  split one: an arrow menu (`ActionMenu`) with the quiet way only, hung from `.timeline-actions` so it
+  never leaves a 390 px screen. No arrow when nothing would be told: only real choices are offered.
+- Details · Status is an `ActionMenu` on every conversation, never a select: arrow keys on a closed select
+  fire `change` per step in some browsers, each a change of the conversation (and on a chat a message to
+  the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
   is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.

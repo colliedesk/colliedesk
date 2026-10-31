@@ -270,7 +270,8 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
     commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'], tags: ['zalo'] }, cancel: { action: 'cancel', match: 'fuzzy', phrases: ['hủy'] } },
-    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '', help: '', help_every_seconds: 300, unmatched_every_seconds: 300 },
+    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '', reopened: '', reopen_noted: '', help: '', status_pending: '', status_resolved: '', status_closed: '', help_every_seconds: 300, unmatched_every_seconds: 300 },
+    auto_close_hours: 0,
     scopes: { direct: { mode: 'commands', unmatched: 'notice' } },
   } });
 });
@@ -423,7 +424,7 @@ test('the reopen notices are saved with the others, and the received notice says
   expect(screen.getByLabelText('When a conversation opens')).toHaveAccessibleDescription(/\{ref\} becomes the conversation’s code/);
   fireEvent.change(screen.getByLabelText('When Reopen names a code that is not found'), { target: { value: 'Không tìm thấy {ref}.' } });
   fireEvent.change(screen.getByLabelText('When Reopen names a code from before Colliedesk'), { target: { value: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' } });
-  fireEvent.change(screen.getByLabelText('When Reopen reopens a resolved or closed conversation'), { target: { value: 'Đã mở lại {ref}.' } });
+  fireEvent.change(screen.getByLabelText('When a resolved or closed conversation is reopened'), { target: { value: 'Đã mở lại {ref}.' } });
   fireEvent.change(screen.getByLabelText('When Reopen names a conversation still open'), { target: { value: 'Đã ghi nhận vào {ref}.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
@@ -482,4 +483,72 @@ test('a notice box shows every line of what it says, and each "at most every" si
   const order = (label: string) => screen.getAllByRole('textbox').concat(screen.getAllByRole('spinbutton')).sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)).indexOf(screen.getByLabelText(label));
   expect(order('Send the unmatched reply in one chat at most every')).toBe(order('Reply to a one-to-one message that is not a request') + 1);
   expect(order('Answer help in one chat at most every')).toBe(order('When a customer asks for help') + 1);
+});
+
+test('what the OA says when the team sets a status is saved with the other notices, empty for quiet', async () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: { notices: { status_resolved: 'Đã xử lý {ref}.' } } })} canManage timezone="UTC" />);
+  const block = screen.getByRole('region', { name: 'When a conversation’s status changes' });
+  expect(within(block).getByLabelText('When set to Resolved')).toHaveValue('Đã xử lý {ref}.');
+  expect(within(block).getByLabelText('When set to Closed')).toHaveAccessibleDescription(/Also sent when a conversation closes by itself/);
+  fireEvent.change(within(block).getByLabelText('When set to Pending'), { target: { value: '  Đang chờ {subject}  ' } });
+  fireEvent.change(within(block).getByLabelText('When set to Closed'), { target: { value: 'Đã đóng {ref}.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  const sent = channelsApi.update.mock.calls[0][1].settings;
+  expect(sent.notices).toMatchObject({ status_pending: 'Đang chờ {subject}', status_resolved: 'Đã xử lý {ref}.', status_closed: 'Đã đóng {ref}.' });
+  expect(sent.auto_close_hours).toBe(0);
+});
+
+test('the server refusing a status notice shows its words under that box', async () => {
+  channelsApi.update.mockRejectedValueOnce(new mocks.InvalidRequestError('Check the channel settings.', { fields: { 'settings.notices.status_pending': 'This notice cannot fill {name}.' } }));
+  view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
+  fireEvent.change(screen.getByLabelText('When set to Pending'), { target: { value: 'Chờ {name}' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(screen.getByLabelText('When set to Pending')).toHaveAccessibleDescription(/This notice cannot fill \{name\}\./));
+});
+
+test('closing resolved conversations by themselves is a number of hours, empty or 0 for never, and says what it will do', async () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: { notices: { status_closed: 'Đã đóng {ref}.' } } })} canManage timezone="UTC" />);
+  const hours = screen.getByLabelText('Close resolved conversations after');
+  expect(hours).toHaveValue(null);
+  expect(hours).toHaveAccessibleDescription(/Resolved conversations stay resolved until someone closes them\./);
+  fireEvent.change(hours, { target: { value: '1' } });
+  expect(hours).toHaveAccessibleDescription(/stays resolved for 1 hour closes by itself, and the customer is told with “When set to Closed”\./);
+  fireEvent.change(screen.getByLabelText('When set to Closed'), { target: { value: '' } });
+  fireEvent.change(hours, { target: { value: '48' } });
+  expect(hours).toHaveAccessibleDescription(/stays resolved for 48 hours closes by itself, quietly: “When set to Closed” is empty\./);
+  fireEvent.change(hours, { target: { value: '721' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  expect(hours).toHaveAccessibleDescription(/A whole number of hours, from 0 to 720\./);
+  expect(channelsApi.update).not.toHaveBeenCalled();
+  fireEvent.change(hours, { target: { value: '48' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update.mock.calls[0][1].settings.auto_close_hours).toBe(48);
+});
+
+test('changing the hours while closing is on says it also applies to conversations resolved since, and when fewer closes them now', () => {
+  view(<Tabs.messages channel={channel({}, { settings: { auto_close_hours: 48 }, effective_settings: { auto_close_hours: 48, notices: { status_closed: 'Đã đóng.' } } })} canManage timezone="UTC" />);
+  const hours = screen.getByLabelText('Close resolved conversations after');
+  expect(hours).toHaveValue(48);
+  expect(hours).not.toHaveAccessibleDescription(/also applies/);
+  fireEvent.change(hours, { target: { value: '72' } });
+  expect(hours).toHaveAccessibleDescription(/The new number also applies to conversations resolved since this was turned on\.$/);
+  fireEvent.change(hours, { target: { value: '24' } });
+  expect(hours).toHaveAccessibleDescription(/Those already resolved for 24 hours or more close, and their customers are told, within minutes of saving\./);
+  fireEvent.change(screen.getByLabelText('When set to Closed'), { target: { value: '' } });
+  expect(hours).toHaveAccessibleDescription(/Those already resolved for 24 hours or more close within minutes of saving\./);
+});
+
+test('Reopened is said when the team reopens too', () => {
+  view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
+  expect(screen.getByLabelText('When a resolved or closed conversation is reopened')).toHaveAccessibleDescription(/Sent when the customer’s Reopen command reopens it, and when your team does\./);
+});
+
+test('an agent reads the status notices and the closing rule', () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: { auto_close_hours: 48, notices: { status_resolved: 'Đã xử lý.' } } })} canManage={false} timezone="UTC" />);
+  const row = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling;
+  expect(row('When set to Resolved')).toHaveTextContent('Đã xử lý.');
+  expect(row('When set to Pending')).toHaveTextContent('—');
+  expect(row('Close resolved conversations after')).toHaveTextContent('48 hours');
 });

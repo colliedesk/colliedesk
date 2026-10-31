@@ -2,10 +2,13 @@ import { Fragment, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, ChevronLeftIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
+import { CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
+import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
+import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
+import { mayTell, noticesOf } from './status-tell';
 import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { ownRef } from './conversation-ref';
@@ -38,7 +41,12 @@ interface TimelinePanelProps {
   // The others who have this conversation open now, and whether one is writing a reply.
   viewers?: ConversationViewer[];
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
-  onSetStatus?: (status: Conversation['status']) => Promise<unknown>;
+  // notify false sets it without telling the customer (their chat channel's status notice).
+  onSetStatus?: (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+  // A chat conversation's statuses that would tell could not be read: its quiet way is offered anyway.
+  noticesFailed?: boolean;
+  // An admin may open the channel's settings from the timeline's line for a channel closing it by itself.
+  canManageChannels?: boolean;
   // Returns to the list; the button shows only where the thread replaces the list (a phone).
   onBack?: () => void;
   // The server runs Autofix: narrow screens get the fix's one line under the header.
@@ -51,26 +59,48 @@ interface TimelinePanelProps {
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
 // closed one offers the way back. A failure says so beside the button.
-function StatusButton({ status, onSetStatus }: { status: Conversation['status']; onSetStatus: (status: Conversation['status']) => Promise<unknown> }) {
+type SetStatus = (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+
+function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversation: Conversation; onSetStatus: SetStatus; noticesFailed: boolean }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const done = status === 'resolved' || status === 'closed';
-  const change = () => {
-    if (busy) return;
+  const done = conversation.status === 'resolved' || conversation.status === 'closed';
+  const target = done ? 'open' : 'resolved';
+  // The server says which statuses would tell the customer now; only then is there a quiet way to offer.
+  // A chat conversation whose answer is still on its way cannot be pressed: the press might tell. If it never
+  // comes, the quiet way is offered beside the plain words.
+  const channel = conversation.channel_ref?.name ?? messages.theChannel;
+  const notices = noticesOf(conversation);
+  const known = notices !== undefined;
+  const tells = known && notices.includes(target);
+  const waiting = !known && mayTell(conversation) && !noticesFailed;
+  const quietOffered = tells || (!known && mayTell(conversation) && noticesFailed);
+  const change = (quiet: boolean) => {
+    if (busy || waiting) return;
     setBusy(true);
     setFailed(false);
-    onSetStatus(done ? 'open' : 'resolved').catch(() => setFailed(true)).finally(() => setBusy(false));
+    (quiet ? onSetStatus(target, { notify: false }) : onSetStatus(target)).catch(() => setFailed(true)).finally(() => setBusy(false));
   };
+  // aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place.
+  const button = <button type="button" className="status-button" aria-disabled={busy || waiting || undefined} aria-busy={waiting || undefined} onClick={() => change(false)}
+    aria-label={tells ? (done ? messages.reopenAndTellName(channel) : messages.resolveAndTellName(channel)) : undefined}>
+    {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{tells ? (done ? messages.reopenAndTell : messages.resolveAndTell) : done ? messages.reopen : messages.resolve}</button>;
   return <>
-    {/* aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place. */}
-    <button type="button" className="status-button" aria-disabled={busy || undefined} onClick={change}>
-      {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{done ? messages.reopen : messages.resolve}</button>
+    {quietOffered ? <span className="status-split">{button}
+      <ActionMenu label={done ? messages.moreWaysToReopen : messages.moreWaysToResolve} icon={null} disabled={busy} onApply={() => change(true)}>
+        {(apply) => <button type="button" onClick={() => apply(undefined)}>{done ? <>{messages.reopenQuietly}{' '}<small>{messages.reopenQuietlyUse}</small></> : messages.resolveQuietly}</button>}
+      </ActionMenu></span> : button}
     {failed && <p role="alert" className="error-copy status-button-error">{messages.statusChangeFailed}</p>}
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
+  const event = conversation ? <StatusEvent conversation={conversation} timezone={timezone} canManageChannels={canManageChannels} /> : null;
+  // The line stands at its time, before a message of the same moment (the notice it caused).
+  const at = conversation?.last_status_change?.at;
+  const next = at ? items.findIndex((item) => Date.parse(item.created_at) >= Date.parse(at)) : -1;
+  const eventAt = !at ? -1 : next === -1 ? items.length : next;
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -89,7 +119,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && (onSetStatus || onToggleDetails) && <div className="timeline-actions">
-          {onSetStatus && <StatusButton key={conversation.id} status={conversation.status} onSetStatus={onSetStatus} />}
+          {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}
           {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
             aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
             aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
@@ -103,14 +133,31 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
-          {items.map((item, index) => <Fragment key={item.id}><MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
+          {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
             approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
+          {eventAt === items.length && event}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>
       </div>
     </section>
   );
+}
+
+// The last status change when something other than a person on the team made it: an AI agent, the customer,
+// their Reopen command, the channel closing it by itself, an import. Only the last one is known.
+function StatusEvent({ conversation, timezone, canManageChannels }: { conversation: Conversation; timezone: string; canManageChannels: boolean }) {
+  const change = conversation.last_status_change;
+  if (!change || change.by === 'agent') return null;
+  const channel = conversation.channel_ref;
+  const words = change.by === 'token' ? messages.statusEvent.token(change.name || messages.statusEvent.aiAgent, change.to)
+    : change.by === 'customer' ? messages.statusEvent.customer
+    : change.by === 'command' ? messages.statusEvent.command
+    : change.by === 'import' ? messages.statusEvent.imported(messages.statuses[change.to])
+    : <>{messages.statusEvent.autoClose}{channel && <> ({canManageChannels ? <a href={`/settings/channels/${channel.id}?tab=messages`}>{channel.name}</a> : channel.name} {messages.statusEvent.setting})</>}</>;
+  const icon = change.by === 'auto_close' ? <ClockIcon /> : change.to === 'open' ? <RotateCcwIcon /> : change.to === 'resolved' ? <CheckCircleIcon /> : <CircleDotIcon />;
+  return <p className="status-event">{icon}<span>{words}</span>
+    <time dateTime={change.at} title={stampTitle(change.at, timezone)}>{formatDate(change.at, timezone)}{zoneSuffix(change.at, timezone)}</time></p>;
 }
 
 // The header says which clock and when in full words, since the details (with Targets) hide below 75 rem.

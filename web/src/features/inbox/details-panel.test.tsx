@@ -69,3 +69,71 @@ test('a conversation without targets shows no Targets section', () => {
   render(<DetailsPanel conversation={{ ...conversation(null), sla: null } as unknown as Conversation} agents={[]} tags={[]} timezone="UTC" />);
   expect(screen.queryByRole('region', { name: 'Targets' })).toBeNull();
 });
+
+const zaloRef = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+test('on a chat that tells, Status is a menu: Tell the customer first, ticked, and unticked the status is set quietly', () => {
+  const onUpdate = vi.fn();
+  const chat = { ...conversation(null), channel_ref: zaloRef, status_notices: ['resolved', 'closed', 'open'] } as Conversation;
+  render(<DetailsPanel conversation={{ ...chat, status: 'pending' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+  const summary = screen.getByText('Pending', { selector: '.status-pick summary *' }).closest('summary') as HTMLElement;
+  expect(summary).toHaveAccessibleName('Status Pending');
+  const menu = within(screen.getByRole('group', { name: 'Status' }));
+  const tell = menu.getByRole('checkbox', { name: 'Tell the customer' });
+  expect(tell).toBeChecked();
+  expect(menu.getByText('Hảo Đạt OA tells Resolved, Closed and Reopened.')).toBeInTheDocument();
+  expect(tell.compareDocumentPosition(menu.getByRole('button', { name: 'Resolved' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(menu.queryByRole('button', { name: 'Pending' })).not.toBeInTheDocument();
+  fireEvent.click(menu.getByRole('button', { name: 'Resolved' }));
+  expect(onUpdate).toHaveBeenLastCalledWith(chat.id, { status: 'resolved' });
+  fireEvent.click(tell);
+  expect(menu.getByText('Unticked: the status you pick now is set quietly.')).toBeInTheDocument();
+  fireEvent.click(menu.getByRole('button', { name: 'Closed' }));
+  expect(onUpdate).toHaveBeenLastCalledWith(chat.id, { status: 'closed', notify: false });
+});
+
+test('the menu says which statuses stay quiet, and ticks Tell the customer again each time it opens', () => {
+  const chat = { ...conversation(null), status: 'open', channel_ref: zaloRef, status_notices: ['resolved'] } as Conversation;
+  render(<DetailsPanel conversation={chat} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+  const menu = within(screen.getByRole('group', { name: 'Status' }));
+  expect(menu.getByText('Hảo Đạt OA tells Resolved; Pending and Closed stay quiet.')).toBeInTheDocument();
+  fireEvent.click(menu.getByRole('checkbox', { name: 'Tell the customer' }));
+  const details = document.querySelector('.status-pick') as HTMLDetailsElement;
+  details.open = true;
+  fireEvent(details, new Event('toggle'));
+  expect(menu.getByRole('checkbox', { name: 'Tell the customer' })).toBeChecked();
+});
+
+test('Status is a menu for email too: arrow keys change nothing, a chosen status sends one change, and asks nothing about telling', () => {
+  const onUpdate = vi.fn();
+  render(<DetailsPanel conversation={{ ...conversation(null), status: 'open' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+  const summary = screen.getByText('Open', { selector: '.status-pick summary *' }).closest('summary') as HTMLElement;
+  expect(summary).toHaveAccessibleName('Status Open');
+  for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowDown']) fireEvent.keyDown(summary, { key });
+  expect(onUpdate).not.toHaveBeenCalled();
+  const menu = within(screen.getByRole('group', { name: 'Status' }));
+  expect(menu.queryByRole('checkbox', { name: 'Tell the customer' })).not.toBeInTheDocument();
+  fireEvent.click(menu.getByRole('button', { name: 'Resolved' }));
+  expect(onUpdate).toHaveBeenCalledTimes(1);
+  expect(onUpdate).toHaveBeenCalledWith(conversation(null).id, { status: 'resolved' });
+});
+
+test('every chat conversation has the Status menu: notices unknown, none for the other statuses, or no channel known', () => {
+  const cases: [Partial<Conversation>, string][] = [
+    [{ channel_ref: zaloRef }, 'Hảo Đạt OA may tell the customer the status you pick.'],
+    [{ channel_ref: zaloRef, status_notices: [] }, 'Hảo Đạt OA has no words for these statuses: they are set quietly.'],
+    [{ status_notices: ['open'] }, 'The channel tells Reopened; Pending and Closed stay quiet.'],
+  ];
+  for (const [change, words] of cases) {
+    const { unmount } = render(<DetailsPanel conversation={{ ...conversation(null), ...change }} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+    expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Status' })).getByText(words)).toBeInTheDocument();
+    unmount();
+  }
+});
+
+test('a chat the server says tells nothing (its channel off, or no words) asks nothing about telling', () => {
+  render(<DetailsPanel conversation={{ ...conversation(null), channel_ref: { ...zaloRef, enabled: false }, may_tell_customer: false }} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+  expect(within(screen.getByRole('group', { name: 'Status' })).queryByRole('checkbox', { name: 'Tell the customer' })).not.toBeInTheDocument();
+});

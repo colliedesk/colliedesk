@@ -195,6 +195,24 @@ body:has(.status-tabs input:not([value="all"]):checked) .conversation-meta .stat
 .timeline-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-left: auto; }
 .status-button svg { width: 14px; height: 14px; }
 .status-button[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+/* Resolve / Reopen that would tell the customer: the one press and an arrow menu with the quiet way. The menu
+   hangs from the header's action group (its right edge is the panel's), never wider than the screen. */
+.timeline-actions { position: relative; }
+.status-split { display: inline-flex; align-items: stretch; }
+.status-split > .status-button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.status-split > .action-menu { position: static; display: flex; }
+.status-split > .action-menu > summary { height: auto; align-self: stretch; min-height: var(--control); margin-left: -1px; padding: 0 6px; border: 1px solid var(--line-control);
+  border-top-left-radius: 0; border-bottom-left-radius: 0; background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-2); }
+.status-split > .action-menu > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.status-split .action-popover { right: 0; left: auto; min-width: 17rem; max-width: calc(100vw - 2 * var(--space-4)); }
+.status-split .action-popover button { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; white-space: normal; text-align: left; height: auto; padding-block: 6px; }
+.status-split .action-popover small { display: block; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
+@media (pointer: coarse), (max-width: 30rem) { .status-split > .action-menu > summary { min-width: var(--touch); } }
+/* The last status change not made by a person on the team: one quiet line, not a button. */
+.status-event { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-3); font-size: var(--fs-label); padding: var(--space-1) var(--space-2); }
+.status-event svg { width: 13px; height: 13px; flex: none; }
+.status-event time { margin-left: auto; white-space: nowrap; }
+.status-event a { color: inherit; }
 .status-button-error { flex-basis: 100%; margin: 0; text-align: right; font-size: var(--fs-label); }
 .timeline-scroll { overflow-y: auto; padding: var(--space-5) var(--space-6); }
 .timeline-stack { max-width: 46rem; margin: 0 auto; display: grid; gap: var(--space-4); }
@@ -398,6 +416,19 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .details-section h2, .details-section legend { margin-bottom: var(--space-2); padding: 0; }
 .details-section h2, .details-section legend { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .property-row { position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: var(--space-2); min-height: 32px; }
+/* Details · Status as a menu on a chat that tells its customer: it keeps the select's look (dot, word, an arrow
+   on hover), and its menu is as wide as the row, inside the panel. */
+.status-pick-row { position: relative; }
+.status-pick-row .status-pick { position: static; min-width: 0; }
+.status-pick-row .status-pick summary { justify-content: flex-start; width: 100%; min-height: 32px; padding: 0 var(--space-2); gap: var(--space-2); color: var(--text-1); }
+.status-pick-row .status-pick summary > svg:last-child { opacity: 0; margin-left: auto; }
+.status-pick-row .status-pick summary:is(:hover, :focus-visible) { background: var(--surface-2); }
+.status-pick-row .status-pick summary:is(:hover, :focus-visible) > svg:last-child, .status-pick[open] summary > svg:last-child { opacity: 1; }
+.status-pick .action-popover { left: 0; right: 0; width: auto; min-width: 0; max-width: none; }
+.status-pick-tell { padding: 0 var(--space-2); }
+.status-pick-tell span, .status-pick-which { white-space: normal; }
+.status-pick-which { display: block; padding: 0 var(--space-2) var(--space-2); border-bottom: 1px solid var(--line); margin-bottom: 2px; color: var(--text-3); font-size: var(--fs-label); }
+@media (pointer: coarse), (max-width: 30rem) { .status-pick .action-popover button, .status-pick-tell { min-height: var(--touch); } }
 .property-row + .property-row { margin-top: 2px; }
 .property-row > span { color: var(--text-3); font-size: var(--fs-small); }
 .property-row select { width: 100%; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); }
@@ -600,6 +631,17 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .bulk-actions .icon-button { color: var(--text-2); }
 .bulk-actions .icon-button:hover:not(:disabled), .action-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
 .bulk-actions .bulk-resolve { color: var(--text-1); }
+/* Tell customers: between the count and the icons (DOM order = reading order), pushing the icons right. */
+.bulk-tell { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: var(--control); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.bulk-tell input { margin: 0; }
+/* Its tip is a sentence: it hangs from the right edge and wraps, inside a phone's width. */
+.bulk-tell[data-tip]::after { left: auto; right: 0; translate: 0 0; width: max-content; max-width: min(18rem, calc(100vw - 2 * var(--space-4))); white-space: normal; }
+.bulk-tell + .bulk-actions { margin-left: 0; }
+@media (pointer: coarse), (max-width: 30rem) { .bulk-tell { min-height: var(--touch); } }
+/* The list column (at most 380 px) has no room for all three: the count and Tell customers on the first line,
+   the icons on the second, right-aligned, at every width. */
+.bulk-bar:has(.bulk-tell) { flex-wrap: wrap; row-gap: 0; }
+.bulk-bar .bulk-tell + .bulk-actions { flex-basis: 100%; justify-content: flex-end; }
 .action-menu { position: relative; }
 .action-menu summary {
   min-height: var(--control, 32px); min-width: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: 2px;
@@ -614,6 +656,13 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   position: absolute; z-index: 16; top: calc(100% + var(--space-1)); right: 0; display: grid; gap: 2px; width: max-content; min-width: 11rem; max-width: 18rem;
   max-height: 20rem; overflow-y: auto; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
 }
+/* A closed menu's choices take no room: never wider than the bar or the header that holds them. */
+.action-menu:not([open]) > .action-popover { display: none; }
+/* A tip of a control at the right edge of the list or the thread hangs from its right edge, so the pane that
+   clips sideways never cuts it: the last bulk action (Clear selection) and the header's quiet arrow. */
+.bulk-actions > [data-tip]:last-child::after, .status-split .action-menu > summary[data-tip]::after { left: auto; right: 0; translate: 0 0; }
+/* Nor does a hidden tip in the bulk bar or the header's actions: it shows (at once) on hover or focus only. */
+.bulk-bar [data-tip]:not(:hover, :focus-visible)::after, .timeline-actions [data-tip]:not(:hover, :focus-visible)::after { display: none; }
 .action-popover button { justify-content: flex-start; gap: var(--space-2); min-height: 30px; border-color: transparent; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2); font-weight: 400; }
 .action-popover button:hover { background: var(--surface-2); }
 .action-popover .muted-copy { margin: 0; padding: var(--space-2); }
@@ -708,6 +757,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .request-call { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; color: var(--text-3); font-size: var(--fs-small); }
 .request-call dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .request-body { max-height: 12rem; overflow: auto; margin: 0; border-radius: var(--radius-sm); background: var(--surface-2); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The words a status change would send, per chat channel. */
+.request-notice { display: grid; gap: var(--space-1); }
+.request-notice > span { color: var(--text-3); font-size: var(--fs-label); }
+.request-notice .reply-draft-text { margin: 0; }
 .request-result { display: grid; gap: var(--space-2); border-left: 3px solid var(--accent); padding-left: var(--space-3); }
 .request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .request-reason { display: flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }

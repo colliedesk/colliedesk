@@ -4,7 +4,7 @@ Colliedesk targets a usable screen within 200 ms from a user action. The target 
 
 ## Inbox server budget
 
-`TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95. The same test then runs the newer filters and sorts on the same data under the same budget: who replies next with the waiting-longest sort, three tags with `tag_match=all`, a search on the contact name, a search that matches nothing, the priority sort, several statuses and priorities, a waiting draft, a failed delivery, channel with source and assignee, and a date range with an organization (`docs/internals/inbox-filters.md`).
+`TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95. Three conversations in ten are in a chat (5 to 20 items each, one to one or in one of 50 groups, on a live Zalo channel or a removed one), so every row also reads its chat's channel (`may_tell_customer`). The same test then runs the newer filters and sorts on the same data under the same budget: who replies next with the waiting-longest sort, three tags with `tag_match=all`, a search on the contact name, a search that matches nothing, the priority sort, several statuses and priorities, a waiting draft, a failed delivery, channel with source and assignee, and a date range with an organization (`docs/internals/inbox-filters.md`).
 
 ## Contact page budget
 
@@ -232,6 +232,8 @@ Measured on the dev host: 2 ms. Do not widen the 20 ms.
 
 1. The number of SQL statements for 50 ids must equal the number for 1 id. This gate is deterministic: the cost never grows with the ids, so the API never runs one statement per conversation.
 2. The best of five runs for 50 ids must take at most 100 ms. The best of five keeps one scheduling stall on a shared host from failing the gate.
+
+Every conversation of the gate is in a chat whose channel tells each status, so the gate covers the status notices too: the update only marks each conversation with the status to tell (`conversations.status_notice_due`, in the same `UPDATE`), and the status notice worker (`autoclose.Notices`, every 5 seconds) sends them after the commit, one transaction per conversation that takes the mark. Sending them inside the update cost 368 statements for 50 ids. A status change of the conversation by any other way clears its mark (trigger `conversations_status_notice_clear`), so a notice never tells a status the conversation left.
 
 If the gate fails, look for a statement inside a loop over the ids. Do not raise the 100 ms threshold.
 

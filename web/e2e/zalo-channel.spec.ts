@@ -2,12 +2,33 @@ import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { ports } from './support/checkout';
+import { startFakeZalo } from './support/zalo';
 
 // docs/user/zalo.md: an admin connects a Zalo OA in Settings, adds its tokens, links a group that wrote to
 // it to an organization, adds a staff account and sets a command. Zalo itself is this test: it signs a
 // group message the way Zalo does (sha256 of app id, body, timestamp and OA secret key) and posts it to the
 // channel's webhook. Nothing goes to Zalo: the OA's replies are not part of this journey.
 const baseURL = servers.main;
+
+// tipFits hovers a control and says whether its tooltip (data-tip, drawn by ::after) is inside every box that
+// clips it sideways: the tip is not an element, so its box is worked out from its computed style.
+async function tipFits(page: import('@playwright/test').Page, selector: string) {
+  await page.locator(selector).hover();
+  return page.evaluate((sel) => {
+    const control = document.querySelector(sel) as HTMLElement;
+    const style = getComputedStyle(control, '::after');
+    const width = parseFloat(style.width);
+    const box = control.getBoundingClientRect();
+    const [left, right] = style.right === '0px' ? [box.right - width, box.right] : [box.left + box.width / 2 - width / 2, box.left + box.width / 2 + width / 2];
+    for (let node = control.parentElement; node; node = node.parentElement) {
+      if (getComputedStyle(node).overflowX === 'visible') continue;
+      const clip = node.getBoundingClientRect();
+      if (left < clip.left - 0.5 || right > clip.right + 0.5) return `${node.className}: ${Math.round(left)}–${Math.round(right)} outside ${Math.round(clip.left)}–${Math.round(clip.right)}`;
+    }
+    return style.display === 'none' ? 'hidden' : 'fits';
+  }, selector);
+}
 
 test('zalo channel: an admin connects an OA, adds its tokens, links a group that wrote to an organization, adds staff and a command', async ({ page }) => {
   const suffix = uniqueSuffix();
@@ -155,4 +176,158 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await page.goto(`${baseURL}/?ref=${encodeURIComponent(code)}`);
   await expect(page.getByRole('list', { name: 'Active filters' })).toContainText(`Reference: ${code}`);
   await expect(page.locator('.conversation-row')).toHaveCount(1);
+});
+
+test('zalo channel: words for Resolved make the header say it tells, the quiet way resolves without a word, at phone width too', async ({ page }) => {
+  test.setTimeout(90_000);
+  // Zalo is the stand-in the server is started against (COLLIEDESK_E2E_ZALO_URL): what the OA sends lands here.
+  const zalo = await startFakeZalo(ports.zalo);
+  try {
+  const suffix = uniqueSuffix();
+  const oa = `45${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const app = '1188200455';
+  const secret = `oa-secret-${suffix}`;
+  await redeemLink(page, createWorkspace(`Zalo Status ${suffix}`, `admin-${suffix}@example.com`, baseURL));
+  await page.goto(`${baseURL}/settings/channels/new/zalo`);
+  await page.getByRole('textbox', { name: 'OA ID' }).fill(oa);
+  await page.getByRole('textbox', { name: 'App ID' }).fill(app);
+  await page.getByLabel('OA secret key').fill(secret);
+  await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
+  await page.getByRole('button', { name: 'Add tokens' }).click();
+  const tokens = page.getByRole('dialog', { name: 'Add the tokens of Zalo OA' });
+  await tokens.getByLabel('Access token').fill(`access-${suffix}`);
+  await tokens.getByLabel('Refresh token').fill(`refresh-${suffix}`);
+  await tokens.getByRole('button', { name: 'Save tokens' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Tokens saved.' })).toBeVisible();
+
+  // Messages: the words for Resolved, and closing after 48 hours (said under the box before saving).
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  const block = page.getByRole('region', { name: 'When a conversation’s status changes' });
+  await block.getByLabel('When set to Resolved').fill('Yêu cầu {ref} đã được xử lý.');
+  await block.getByLabel('When set to Pending').fill('Yêu cầu {ref} đang chờ.');
+  await block.getByLabel('Close resolved conversations after').fill('48');
+  await expect(block.getByText('A conversation that stays resolved for 48 hours closes by itself, quietly: “When set to Closed” is empty.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save messages' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  await expect(page.getByLabel('When set to Resolved')).toHaveValue('Yêu cầu {ref} đã được xử lý.');
+  await expect(page.getByLabel('Close resolved conversations after')).toHaveValue('48');
+
+  // A customer writes one to one; the conversation's header says Resolve tells them.
+  const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),
+    sender: { id: '7700002031' }, recipient: { id: oa }, message: { msg_id: `m-${suffix}`, text: 'Cần hỗ trợ đổi mật khẩu' } });
+  const timestamp = (JSON.parse(body) as { timestamp: string }).timestamp;
+  const signature = createHash('sha256').update(app).update(body).update(timestamp).update(secret).digest('hex');
+  expect((await page.request.post(`${baseURL}/api/v1/channels/zalo/webhook`, { headers: { 'Content-Type': 'application/json', 'X-ZEvent-Signature': `mac=${signature}` }, data: body })).status()).toBe(200);
+  await page.goto(`${baseURL}/`);
+  await expect(async () => {
+    await page.reload();
+    await page.locator('.conversation-row').first().click({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  const resolve = page.getByRole('button', { name: /^Resolve and tell the customer on / });
+  await expect(resolve).toHaveText('Resolve and tell');
+  // Its arrow's tip is read whole: the thread pane clips sideways.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  expect(await tipFits(page, 'summary[aria-label="More ways to resolve"]')).toBe('fits');
+  // So is the tip of the customer message's own menu (Move this message), at every width.
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await tipFits(page, '.message-move-menu summary')).toBe('fits');
+  }
+
+  // At 390 px nothing scrolls sideways, the quiet menu open or closed.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sideways = () => page.evaluate(() => [document.documentElement, ...Array.from(document.querySelectorAll('.timeline-actions, .status-split, .details-panel'))]
+    .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName));
+  expect(await sideways()).toEqual([]);
+  await page.setViewportSize({ width: 768, height: 1024 });
+  expect(await sideways()).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('summary[aria-label="More ways to resolve"]').click();
+  const quiet = page.getByRole('button', { name: 'Resolve without telling the customer' });
+  await expect(quiet).toBeInViewport({ ratio: 1 });
+  expect(await sideways()).toEqual([]);
+
+  // The quiet way resolves it and the channel sends nothing.
+  await quiet.click();
+  const reopen = page.getByRole('button', { name: /^Reopen/ });
+  await expect(reopen).toBeVisible();
+  await page.waitForTimeout(6000); // longer than the notice worker's 5 s round
+  expect(zalo.sent().filter((item) => item.text?.includes('đã được xử lý'))).toEqual([]);
+
+  // Reopened and resolved with one press, the OA tells the customer, one to one, with the conversation's code.
+  await reopen.click();
+  await page.getByRole('button', { name: /^Resolve and tell the customer on / }).click();
+  await expect(page.getByRole('button', { name: /^Reopen/ })).toBeVisible();
+  await expect.poll(() => zalo.sent().filter((item) => item.text?.includes('đã được xử lý')), { timeout: 20_000 })
+    .toEqual([expect.objectContaining({ path: '/v3.0/oa/message/cs', recipient: { user_id: '7700002031' }, text: expect.stringMatching(/^Yêu cầu #\d+ đã được xử lý\.$/) })]);
+
+  // The bulk bar and the Messages tab fit a phone too, Tell customers on the first line of the bar.
+  const fits = async (selector: string) => (page.evaluate((sel) => [document.documentElement, ...Array.from(document.querySelectorAll(sel))]
+    .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName), selector));
+  await page.goto(`${baseURL}/`);
+  await page.getByRole('radio', { name: 'Resolved' }).check();
+  await page.locator('.row-check input').first().check();
+  await expect(page.getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
+  expect(await fits('.bulk-bar')).toEqual([]);
+  expect(await tipFits(page, '.bulk-actions > button:last-child')).toBe('fits');
+  for (const width of [768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await fits('.bulk-bar')).toEqual([]);
+    expect(await tipFits(page, '.bulk-actions > button:last-child')).toBe('fits');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/settings/channels`);
+  await page.getByRole('link', { name: /Zalo OA/ }).first().click();
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  await expect(page.getByLabel('When set to Resolved')).toBeVisible();
+  expect(await fits('#status-notices')).toEqual([]);
+  } finally {
+    await zalo.stop();
+  }
+});
+
+test('zalo channel: a token’s status change that would tell nobody by the time a person looks says so under its title', async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const oa = `46${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const app = '1188200455';
+  const secret = `oa-secret-${suffix}`;
+  const headers = { Origin: baseURL };
+  await redeemLink(page, createWorkspace(`Zalo Request ${suffix}`, `admin-${suffix}@example.com`, baseURL));
+  await page.goto(`${baseURL}/settings/channels/new/zalo`);
+  await page.getByRole('textbox', { name: 'OA ID' }).fill(oa);
+  await page.getByRole('textbox', { name: 'App ID' }).fill(app);
+  await page.getByLabel('OA secret key').fill(secret);
+  await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  await page.getByLabel('When set to Pending').fill('Yêu cầu {ref} đang chờ.');
+  await page.getByRole('button', { name: 'Save messages' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+
+  const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),
+    sender: { id: '7700003041' }, recipient: { id: oa }, message: { msg_id: `m-${suffix}`, text: 'Cho hỏi tình trạng đơn' } });
+  const timestamp = (JSON.parse(body) as { timestamp: string }).timestamp;
+  const signature = createHash('sha256').update(app).update(body).update(timestamp).update(secret).digest('hex');
+  expect((await page.request.post(`${baseURL}/api/v1/channels/zalo/webhook`, { headers: { 'Content-Type': 'application/json', 'X-ZEvent-Signature': `mac=${signature}` }, data: body })).status()).toBe(200);
+  let id = '';
+  await expect(async () => {
+    const list = await (await page.request.get(`${baseURL}/api/v1/conversations?status=open`)).json() as { items: { id: string }[] };
+    id = list.items[0]?.id ?? '';
+    expect(id).not.toBe('');
+  }).toPass({ timeout: 20_000 });
+
+  // A draft token may not write to customers: its Pending, which would tell, waits for a person.
+  const created = await page.request.post(`${baseURL}/api/v1/auth/tokens`, { headers: { ...headers, 'Idempotency-Key': `t-${suffix}` }, data: { label: 'Queue triage', scope: 'draft' } });
+  expect(created.status()).toBe(201);
+  const { token } = await created.json() as { token: string };
+  const asked = await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers: { Authorization: `Bearer ${token}` }, data: { status: 'pending' } });
+  expect(asked.status()).toBe(202);
+  // Before anyone approves, the team sets Pending quietly: approving it now would tell nobody.
+  expect((await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers, data: { status: 'pending', notify: false } })).status()).toBe(200);
+
+  await page.goto(`${baseURL}/requests`);
+  const card = page.getByRole('article').filter({ hasText: 'Queue triage' });
+  await expect(card.getByRole('note')).toHaveText('Approving it now tells no customer: the status is set already.');
+  await expect(card.locator('pre.request-body')).toHaveCount(0);
 });
