@@ -260,6 +260,8 @@ const (
 	DropChannelRemoved = "channel_removed"
 	DropEcho           = "echo"
 	DropCancelled      = "cancelled"
+	// DropHelp: a help command, answered with the channel's guide.
+	DropHelp = "help"
 	// DropConfirmed: a confirm command sent the request being written; it is no part of it.
 	DropConfirmed = "confirmed"
 	// DropExpired: a request left without its description past Gather.ExpireSeconds, and the message

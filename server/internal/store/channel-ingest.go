@@ -271,6 +271,31 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		result.Status = channels.ResultArchived
 		return finish(result)
 	}
+	// A help command is answered with the channel's guide and is no part of anything: not collected, not a
+	// request, not counted against the unmatched notice. A channel that is off keeps it like every message;
+	// opened later from what it kept, it is dropped unanswered (the guide would come late).
+	if commanded && command.Action == channels.ActionHelp && !off {
+		if err := journal.write(ctx, "dropped", journalDetail{dropReason: channels.DropHelp}); err != nil {
+			return result, err
+		}
+		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemNotRequest, reason: channels.DropHelp}); err != nil {
+			return result, err
+		}
+		if !request.Replay {
+			// Once in a while per chat: a customer or a bot repeating it is not answered each time.
+			every := channels.DefaultHelpEverySeconds
+			if channel.Settings.Notices.HelpEverySeconds != nil {
+				every = *channel.Settings.Notices.HelpEverySeconds
+			}
+			if err := queueThreadNotice(ctx, tx, &journal, journal.eventID, channels.NoticeHelp, channels.RenderNotice(channel.Settings.Notices.Help, nil),
+				time.Duration(every)*time.Second); err != nil {
+				return result, err
+			}
+		}
+		reason := channels.DropHelp
+		result.Status, result.Reason = channels.ResultDropped, &reason
+		return finish(result)
+	}
 	// The message's own time: a journal processed late (a paused channel resumed) keeps the clocks of when
 	// its messages came.
 	received := now
