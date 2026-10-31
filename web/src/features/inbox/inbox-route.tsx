@@ -15,7 +15,7 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
-import { useSLARefresh } from './sla-refresh';
+import { useSettleTargets, useSLARefresh } from './sla-refresh';
 import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
@@ -154,6 +154,8 @@ export function InboxRoute() {
   useEffect(() => markdownPart.preload(), []);
   const refreshTargets = useCallback(() => void client.invalidateQueries({ queryKey: ['conversations'] }), [client]);
   useSLARefresh([...(conversations.data?.items ?? []), ...(opened.data ? [opened.data] : [])], refreshTargets);
+  // A reply or a status change meets or stops a clock: the marks follow once the server has counted it.
+  const settleTargets = useSettleTargets(refreshTargets);
   // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
   // they go out together with the list and the detail instead of after one of them. Without an address the id
   // is the first row of the list, which is the one thing that has to be waited for.
@@ -247,7 +249,7 @@ export function InboxRoute() {
   const agentId = me.data?.agent?.id;
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
     onSuccess: (changed, { changes }) => {
-      if (changes.status) track('conversation_status_changed', { to: changes.status });
+      if (changes.status) { track('conversation_status_changed', { to: changes.status }); settleTargets(); }
       if (changes.assignee_id) track('conversation_assigned', { to_self: changes.assignee_id === agentId });
       return keepOpened(changed);
     } });
@@ -273,8 +275,9 @@ export function InboxRoute() {
   const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
   const sent = useMutation({ mutationFn: message.run,
     // The conversation the message went to, which the person may have left while it was sending.
-    onSuccess: (_sent, { conversationId, aiDraft }) => {
+    onSuccess: (_sent, { conversationId, aiDraft, kind }) => {
       if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+      if (kind === 'outgoing') settleTargets();
       return client.invalidateQueries({ queryKey: ['messages', conversationId] });
     },
     // A reply refused for a newer one: the timeline shows it at once.
