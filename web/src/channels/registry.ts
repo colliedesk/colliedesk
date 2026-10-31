@@ -15,11 +15,12 @@ export interface ChannelPanelProps {
   navigate?: (href: string) => void;
 }
 
-// What the type's connect form gets: create posts POST /api/v1/channels for this type.
+// What the type's connect form gets: create posts POST /api/v1/channels for this type, then runs
+// beforeOpen (a type's secrets, stored on the new channel) before the channel's page opens.
 export interface ConnectProps {
   canManage: boolean;
   timezone: string;
-  create: (input: Omit<ChannelCreate, 'type'>) => Promise<unknown>;
+  create: (input: Omit<ChannelCreate, 'type'>, beforeOpen?: (created: ChannelDetail) => Promise<void>) => Promise<unknown>;
 }
 
 // What a type's home (Settings → the type's name) gets: the workspace's channels, every type.

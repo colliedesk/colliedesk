@@ -269,8 +269,10 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
 function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
   const client = useQueryClient();
   const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
-  return (guided: boolean): ConnectProps['create'] => async (input) => {
+  return (guided: boolean): ConnectProps['create'] => async (input, beforeOpen) => {
     const created = await createChannel.run({ type: type as ChannelType, ...input });
+    // The channel exists from here: what beforeOpen could not do shows on its page, never undoes it.
+    await beforeOpen?.(created).catch(() => undefined);
     await client.invalidateQueries({ queryKey: ['channels'] });
     navigate(`${base}/${created.id}${guided ? '/setup' : ''}`, true);
     return created;
