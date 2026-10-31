@@ -132,3 +132,8 @@ test('every chat conversation has the Status menu: notices unknown, none for the
     unmount();
   }
 });
+
+test('a chat the server says tells nothing (its channel off, or no words) asks nothing about telling', () => {
+  render(<DetailsPanel conversation={{ ...conversation(null), channel_ref: { ...zaloRef, enabled: false }, may_tell_customer: false }} agents={[]} tags={[]} onUpdate={vi.fn()} />);
+  expect(within(screen.getByRole('group', { name: 'Status' })).queryByRole('checkbox', { name: 'Tell the customer' })).not.toBeInTheDocument();
+});

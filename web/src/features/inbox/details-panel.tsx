@@ -8,7 +8,7 @@ import { CheckIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
 import { AITriageSlot } from './ai-triage-slot';
 import { StatusLabel } from './conversation-labels';
-import { noticesOf, statusAsMenu } from './status-tell';
+import { mayTell, noticesOf } from './status-tell';
 import { AutofixDetails } from '../autofix/autofix-slot';
 
 interface DetailsPanelProps {
@@ -44,7 +44,8 @@ function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; o
   const [tell, setTell] = useState(true);
   const id = useId();
   const status = conversation?.status ?? 'open';
-  const asks = conversation ? statusAsMenu(conversation) : false;
+  // Asked only where a status may tell: a chat whose channel is on and has words (the server's word).
+  const asks = conversation ? mayTell(conversation) : false;
   const channel = conversation?.channel_ref?.name ?? messages.theChannel;
   const others = statusOrder.filter((value) => value !== status);
   const notices = conversation ? noticesOf(conversation) : [];
