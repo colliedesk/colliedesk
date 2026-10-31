@@ -66,3 +66,18 @@ BEGIN
             AND (c.last_public_kind IS DISTINCT FROM l.kind OR c.last_public_at IS DISTINCT FROM l.created_at);
 END
 $$;
+
+-- A notice the channel sends in a chat where no conversation is (the unmatched notice of a one-to-one
+-- chat) is its thread item: the outbox sends either a message or such an item, and the ids the channel
+-- gives what it sent name either.
+ALTER TABLE channel_outbox ALTER COLUMN message_id DROP NOT NULL,
+    ADD COLUMN thread_item_id uuid,
+    ADD CONSTRAINT channel_outbox_target CHECK ((message_id IS NULL) <> (thread_item_id IS NULL)),
+    ADD CONSTRAINT channel_outbox_thread_item_fkey FOREIGN KEY (workspace_id, thread_item_id)
+        REFERENCES channel_thread_items(workspace_id, id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX channel_outbox_thread_item_idx ON channel_outbox(workspace_id, thread_item_id) WHERE thread_item_id IS NOT NULL;
+ALTER TABLE channel_sent_ids ALTER COLUMN message_id DROP NOT NULL,
+    ADD COLUMN thread_item_id uuid,
+    ADD CONSTRAINT channel_sent_ids_target CHECK ((message_id IS NULL) <> (thread_item_id IS NULL)),
+    ADD CONSTRAINT channel_sent_ids_thread_item_fkey FOREIGN KEY (workspace_id, thread_item_id)
+        REFERENCES channel_thread_items(workspace_id, id) ON DELETE CASCADE;

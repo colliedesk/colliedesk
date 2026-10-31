@@ -4886,6 +4886,11 @@ export interface components {
             linked: boolean;
             /** @enum {string|null} */
             link_reason: "opened" | "gathered" | "command" | "ai" | "agent" | "reopen" | "reply" | "import" | null;
+            /**
+             * @description A notice the channel sent in a chat where no conversation is (the unmatched notice): whether it went out. Null for every other item.
+             * @enum {string|null}
+             */
+            delivery_status?: "queued" | "sent" | "failed" | null;
         };
         ChatPage: {
             items: components["schemas"]["ChatItem"][];
@@ -7871,7 +7876,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open}), `notices` {received}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; match: fuzzy (the default), words or exact; phrases; tags; priority}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched; a placeholder the channel does not fill is refused}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };
