@@ -8440,7 +8440,7 @@ components:
         sender: {$ref: '#/components/schemas/ChatSender'}
         contact_id: {type: [string, 'null'], format: uuid}
         agent_id: {type: [string, 'null'], format: uuid}
-        is_other_customer: {type: boolean, description: 'On a conversation''s chat: a customer who is not the conversation''s.'}
+        is_other_customer: {type: boolean, description: 'On a conversation''s chat: a customer who is not the conversation''s (another contact, or, for chatter that names no contact, someone other than who wrote the conversation''s own items).'}
         body: {type: string}
         external_id: {type: [string, 'null'], description: Its id on the channel.}
         quote_external_id: {type: [string, 'null'], description: The id on the channel of the message it answers.}
