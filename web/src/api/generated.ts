@@ -2049,6 +2049,42 @@ export interface paths {
         patch: operations["updateWorkspaceName"];
         trace?: never;
     };
+    "/api/v1/conversation-number-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The series the workspace's conversations are numbered in, the default one ("#{n}") first: each with its code format, the number the next conversation takes, and where this server took it over. */
+        get: operations["listConversationNumberSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversation-number-series/{series}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Add a series, or change its format, next number or start. A channel numbers the conversations it opens in the series its settings name (number_series). The next number only counts on: never below what it was, nor below a number the series gave. A code below start (in start_year or before) that is not here belongs to the system the series was taken over from. A new series needs its format: letters, digits, # - _ / . and {n} once, {n:04} to pad (2 to 8 digits), {yyyy} for the year it was opened in the workspace's timezone. Changing the format changes the codes of conversations opened afterwards. */
+        put: operations["setConversationNumberSeries"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspace/slug": {
         parameters: {
             query?: never;
@@ -7295,6 +7331,17 @@ export interface components {
             /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
             suggestion: string | null;
         };
+        ConversationNumberSeries: {
+            series: string;
+            /** @example #{n} */
+            format: string;
+            /** @description The number the next conversation of the series takes. */
+            next: number;
+            start: number;
+            start_year: number | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
         SavedReplyText: {
             title: string;
             body: string;
@@ -7304,6 +7351,12 @@ export interface components {
         Conversation: {
             /** @description The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply. */
             latest_reply_number: number;
+            /** @description Its number in number_series, which counts on and never restarts. */
+            number?: number;
+            /** @description The series it is numbered in: default, or the one its channel names (settings.number_series). */
+            number_series?: string;
+            /** @description The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=. */
+            display_ref?: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -7967,7 +8020,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen or confirm; match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen or confirm; match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };
@@ -11040,6 +11093,8 @@ export interface operations {
                 tag?: string;
                 /** @description any (default): a conversation with one of the tags. all: with every tag. */
                 tag_match?: "any" | "all";
+                /** @description The conversation with this code (`display_ref`), as a person types it: another case, surrounding spaces or more or fewer leading zeros match; a code naming another year does not. A code of no series of the workspace returns no rows. */
+                ref?: string;
                 /** @description Only the conversations of this contact (any status unless `status` is given), for the contact's history. An id of another workspace's contact returns no rows; a value that is not a UUID answers 400. */
                 contact?: string;
                 /** @description Only conversations of contacts whose organization has this name, ignoring case. */
@@ -13522,6 +13577,66 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["NameNotAllowed"];
+        };
+    };
+    listConversationNumberSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConversationNumberSeries"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setConversationNumberSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    format?: string;
+                    next?: number;
+                    start?: number;
+                    start_year?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNumberSeries"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     updateWorkspaceSlug: {

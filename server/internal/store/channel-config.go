@@ -86,6 +86,24 @@ func (s *Store) adapterOf(kind channels.Type) (channels.Adapter, error) {
 }
 
 // validSettings checks stored settings decode over the type's defaults.
+// numberSeriesExists refuses settings that number a channel's conversations in a series the workspace
+// does not have.
+func numberSeriesExists(ctx context.Context, tx pgx.Tx, workspaceID string, definition channels.Definition, settings json.RawMessage) error {
+	merged, err := definition.Defaults.Merge(settings)
+	if err != nil || merged.NumberSeries == "" || merged.NumberSeries == DefaultNumberSeries {
+		return nil
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversation_number_series WHERE workspace_id=$1 AND series=$2)`, workspaceID, merged.NumberSeries).Scan(&exists); err != nil {
+		return fmt.Errorf("find number series: %w", err)
+	}
+	if !exists {
+		return &channels.FieldError{Fields: map[string]string{"settings.number_series": "This workspace has no such number series: add it first."},
+			Message: "Check the channel settings."}
+	}
+	return nil
+}
+
 func validSettings(definition channels.Definition, settings json.RawMessage) (json.RawMessage, error) {
 	if len(settings) == 0 {
 		return json.RawMessage(`{}`), nil
@@ -207,6 +225,9 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	}
 	settings, err := validSettings(definition, input.Settings)
 	if err != nil {
+		return channels.Channel{}, err
+	}
+	if err := numberSeriesExists(ctx, tx, workspaceID, definition, settings); err != nil {
 		return channels.Channel{}, err
 	}
 	change, err := adapter.Config().Validate(ctx, tx, workspaceID, nil, input.Config)
@@ -356,6 +377,9 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 	if input.Settings != nil {
 		settings, err := validSettings(definition, input.Settings)
 		if err != nil {
+			return channels.Channel{}, err
+		}
+		if err := numberSeriesExists(ctx, tx, workspaceID, definition, settings); err != nil {
 			return channels.Channel{}, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE channels SET settings=$3,updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, settings); err != nil {

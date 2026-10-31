@@ -30,6 +30,7 @@ type conversationContent struct {
 
 type conversationOut struct {
 	ID                       string              `json:"id"`
+	DisplayRef               string              `json:"display_ref,omitempty"`
 	Status                   string              `json:"status"`
 	Priority                 string              `json:"priority"`
 	Assignee                 *personOut          `json:"assignee"`
@@ -86,7 +87,7 @@ func state(conversation restConversation, agents map[string]restAgent) stateOut 
 }
 
 func conversationRow(conversation restConversation, contact *restContact, agents map[string]restAgent, full bool) conversationOut {
-	row := conversationOut{ID: conversation.ID, Status: conversation.Status, Priority: conversation.Priority,
+	row := conversationOut{ID: conversation.ID, DisplayRef: conversation.DisplayRef, Status: conversation.Status, Priority: conversation.Priority,
 		Assignee: person(agents, conversation.AssigneeID), Tags: tagNames(conversation.Tags), Channel: conversation.Channel, UpdatedAt: utc(conversation.UpdatedAt),
 		UntrustedCustomerContent: conversationContent{Subject: conversation.Subject}}
 	if contact != nil {
