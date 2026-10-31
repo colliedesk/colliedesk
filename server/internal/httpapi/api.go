@@ -724,6 +724,9 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/intake/summary", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/intake/stats", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/conversations/{id}/intake", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/conversations/{id}/messages/move", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/conversations/{id}/message-moves", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/message-moves/{id}/undo", auth.PermissionConversationsWrite},
 		// One email channel or web form of several; the routes above without an id act on the default one.
 		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionAccessWrite},

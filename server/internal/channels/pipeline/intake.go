@@ -2,14 +2,13 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // ErrNotAnOpenCommand means a decision named a command of the channel that does not open a request.
-var ErrNotAnOpenCommand = errors.New("not a command of the channel that opens a request")
+var ErrNotAnOpenCommand = store.ErrNotAnOpenCommand
 
 // ApplyGathering applies a decision of a gathering of intake that opens a message: its held events,
 // parsed again, are replayed as the one message the batch is, into a new conversation (apply.ForceNew)

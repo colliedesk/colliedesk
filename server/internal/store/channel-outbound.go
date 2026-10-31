@@ -579,8 +579,10 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 			return out, err
 		}
 		prefix := string(channel.Type) + ":"
+		// A message moved in from another customer's conversation, or taken back to the queue, is not this
+		// thread: the customer never wrote it here.
 		rows, err := tx.Query(ctx, `SELECT substr(external_id,$5),kind FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND id<>$3 AND created_at<=$4
-			AND starts_with(external_id,$6) ORDER BY created_at,id`, claim.WorkspaceID, out.Conversation.ID, out.Message.ID, out.Message.CreatedAt, len(prefix)+1, prefix)
+			AND starts_with(external_id,$6) AND other_contact_id IS NULL AND detached_at IS NULL ORDER BY created_at,id`, claim.WorkspaceID, out.Conversation.ID, out.Message.ID, out.Message.CreatedAt, len(prefix)+1, prefix)
 		if err != nil {
 			return out, fmt.Errorf("load thread references: %w", err)
 		}
@@ -599,7 +601,7 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 		if err := rows.Err(); err != nil {
 			return out, err
 		}
-		if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming')`,
+		if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming' AND detached_at IS NULL)`,
 			claim.WorkspaceID, out.Conversation.ID).Scan(&out.Conversation.Opening); err != nil {
 			return out, fmt.Errorf("check thread start: %w", err)
 		}

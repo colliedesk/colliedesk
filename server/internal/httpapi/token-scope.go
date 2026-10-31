@@ -348,6 +348,10 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/intake/summary":                  grant(auth.PermConversationsRead),
 	"GET /api/v1/intake/stats":                    grant(auth.PermConversationsRead),
 	"GET /api/v1/conversations/{id}/intake":       grant(auth.PermMessagesRead),
+	// Moving customer messages between conversations sends nothing; reading the moves names no words.
+	"POST /api/v1/conversations/{id}/messages/move": grant(auth.PermConversationsUpdate),
+	"GET /api/v1/conversations/{id}/message-moves":  grant(auth.PermConversationsRead),
+	"POST /api/v1/message-moves/{id}/undo":          grant(auth.PermConversationsUpdate),
 	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
 	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
 	"GET /api/v1/ai/usage":      grant(auth.PermBillingRead),

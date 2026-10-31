@@ -23,7 +23,7 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
-	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code
+	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
@@ -46,7 +46,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
 		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome,
-		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode); err != nil {
+		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
@@ -83,7 +83,8 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 }
 
 func listMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Message, error) {
-	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 ORDER BY m.created_at,m.id`, workspaceID, conversationID)
+	// A chat message taken back to the intake queue is out of the timeline until it is decided again.
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.detached_at IS NULL ORDER BY m.created_at,m.id`, workspaceID, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}

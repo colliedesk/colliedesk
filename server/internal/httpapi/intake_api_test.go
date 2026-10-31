@@ -156,7 +156,7 @@ func TestATokenBelowTheTierFilesAnIntakeDecision(t *testing.T) {
 }
 
 // A card joins only a conversation where its reply goes to the same people: one of another place or
-// customer or an email thread is refused, nothing is written and the card still waits.
+// customer, an email thread or one merged away is refused, nothing is written and the card still waits.
 func TestADecisionJoinsOnlyAConversationTheCardOffers(t *testing.T) {
 	d := newLevelDesk(t)
 	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
@@ -168,11 +168,16 @@ func TestADecisionJoinsOnlyAConversationTheCardOffers(t *testing.T) {
 	otherPlace := conversation(d.chatA, "open")
 	closed := conversation(d.chatA, "closed")
 	emailThread := conversation("", "resolved")
+	survivor := conversation(d.chatA, "open")
+	merged := conversation(d.chatA, "closed")
+	if _, err := d.pool.Exec(context.Background(), `UPDATE conversations SET merged_into_id=$2 WHERE id=$1`, merged, survivor); err != nil {
+		t.Fatal(err)
+	}
 	messages := func() string {
 		return queryString(t, d.pool, `SELECT count(*)::text FROM messages WHERE workspace_id=$1`, d.workspaceA)
 	}
 	before := messages()
-	for name, target := range map[string]string{"another place": otherPlace, "closed in another place": closed, "an email thread": emailThread} {
+	for name, target := range map[string]string{"another place": otherPlace, "closed in another place": closed, "an email thread": emailThread, "merged away": merged} {
 		response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "attach", "conversation_id": target}, d.adminA, nil)
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "may join") {
 			t.Errorf("attach to %s: %d %s", name, response.Code, response.Body.String())

@@ -75,7 +75,7 @@ func (s *Service) loadDraftContext(ctx context.Context, run *Run) (draftContext,
 		}
 		// Private notes never leave: only what the customer wrote and the replies sent.
 		rows, err := tx.Query(ctx, `SELECT kind,body FROM (SELECT kind,body,created_at,id FROM messages
-			WHERE workspace_id=$1 AND conversation_id=$2 AND kind IN ('incoming','outgoing') ORDER BY created_at DESC,id DESC LIMIT $3) m ORDER BY created_at,id`,
+			WHERE workspace_id=$1 AND conversation_id=$2 AND kind IN ('incoming','outgoing') AND detached_at IS NULL ORDER BY created_at DESC,id DESC LIMIT $3) m ORDER BY created_at,id`,
 			ws, run.Task.ConversationID, draftMessages)
 		if err != nil {
 			return err

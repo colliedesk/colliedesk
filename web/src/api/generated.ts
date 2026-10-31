@@ -1224,6 +1224,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/messages/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Moves customer messages (and their files) of this conversation: to another conversation of the workspace (to.conversation_id), into a new conversation (to.new, a split), or, for a chat channel's messages, back to the intake queue (to.queue; email and web forms have none: 422 no_intake_queue). Replies and notes of the team stay. A resolved or closed conversation that gets them reopens. close_source with to.conversation_id takes every customer message of this conversation and closes it, pointing to where they went ("not a new request"); refused with 409 source_has_activity once someone replied, wrote a note or assigned it. Nothing is sent to the customer. warnings says the messages now sit in a conversation of another contact (replies go to that conversation's contact) or of another channel. Every move is undone with POST /api/v1/message-moves/{id}/undo. A repeat with the same Idempotency-Key answers the first move and moves nothing; the key with other messages or another target is refused with 422, code `idempotency_key_reused`. */
+        post: operations["moveConversationMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/message-moves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The newest 100 moves of messages out of or into this conversation, newest first, each with whether it can still be undone. */
+        get: operations["listMessageMoves"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/message-moves/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Puts the messages of a move back where they were, with the statuses it changed while nobody changed them since: a conversation it closed reopens, one it opened (a split) closes and points back. Undoing it again changes nothing. Only the newest move of a message is undone (409 move_superseded); a move to the intake queue whose card was decided since is not (409 move_decided). A repeat with the same Idempotency-Key answers what the first one got; the key with another move is refused with 422, code `idempotency_key_reused`. */
+        post: operations["undoMessageMove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channel-thread-items": {
         parameters: {
             query?: never;
@@ -4983,6 +5040,68 @@ export interface components {
             /** @description AI's decisions a person changed afterwards. */
             ai_corrected: number;
         };
+        MessageMoveInput: {
+            /** @description Customer messages of this conversation. */
+            message_ids: string[];
+            /** @description Exactly one of conversation_id, new or queue. */
+            to: {
+                /** Format: uuid */
+                conversation_id?: string;
+                new?: {
+                    subject: string;
+                };
+                /** @enum {boolean} */
+                queue?: true;
+            };
+            /** @description With to.conversation_id: every customer message of this conversation goes, and it closes pointing there. */
+            close_source?: boolean;
+        };
+        MessageMove: {
+            /** Format: uuid */
+            id: string;
+            message_ids: string[];
+            /** Format: uuid */
+            from_conversation_id: string;
+            /**
+             * Format: uuid
+             * @description Null for a move back to the intake queue.
+             */
+            to_conversation_id: string | null;
+            /** @description The move opened to_conversation_id (a split). */
+            created_conversation: boolean;
+            /** @description The move took every customer message of the source and closed it. */
+            closed_source: boolean;
+            /**
+             * Format: uuid
+             * @description The intake card a move to the queue made.
+             */
+            gathering_id: string | null;
+            /**
+             * Format: uuid
+             * @description The person's intake decision it recorded, when it corrected what AI had applied.
+             */
+            decision_id: string | null;
+            /** Format: uuid */
+            moved_by_agent_id: string | null;
+            /** @description An AI agent moved them with a token. */
+            via_token: boolean;
+            /** Format: date-time */
+            moved_at: string;
+            /** Format: date-time */
+            undone_at: string | null;
+            /** Format: uuid */
+            undone_by_agent_id: string | null;
+            /** @description Not undone, the newest move of each of its messages, and (to the queue) its card not decided since. */
+            undoable: boolean;
+        };
+        MessageMoveResult: {
+            move: components["schemas"]["MessageMove"];
+            /** @description other_contact: a message now sits in a conversation of another contact, whose replies go to that contact; other_channel: a message came through another channel than the conversation's. */
+            warnings: ("other_contact" | "other_channel")[];
+        };
+        MessageMovePage: {
+            items: components["schemas"]["MessageMove"][];
+        };
         ConversationIntake: {
             messages: {
                 /** Format: uuid */
@@ -7109,6 +7228,11 @@ export interface components {
              * @description The channel that carried the message; null for a note and for messages stored before channels were recorded.
              */
             channel_id?: string | null;
+            /**
+             * Format: uuid
+             * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
+             */
+            other_contact_id?: string | null;
             /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
             external_id?: string | null;
             /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */
@@ -11494,6 +11618,107 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    moveConversationMessages: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageMoveInput"];
+            };
+        };
+        responses: {
+            /** @description The move */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageMoveResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description no_intake_queue: these messages came through no chat scope with an intake queue; or idempotency_key_reused: the Idempotency-Key already names another move, and nothing was moved */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMessageMoves: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The moves */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageMovePage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    undoMessageMove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The move, undone */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageMove"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listUnresolvedChatItems: {

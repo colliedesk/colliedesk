@@ -461,15 +461,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
 	}
-	for _, key := range in.Thread.Record {
-		if _, err := tx.Exec(ctx, `INSERT INTO conversation_thread_keys(workspace_id,conversation_id,channel_type,key) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-			workspaceID, conversationID, string(channel.Type), key); err != nil {
-			return result, fmt.Errorf("record thread key: %w", err)
-		}
-	}
 	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, in)
 	if err != nil {
 		return result, err
+	}
+	// A key names the message that recorded it, so moving the message moves the key.
+	for _, key := range in.Thread.Record {
+		if _, err := tx.Exec(ctx, `INSERT INTO conversation_thread_keys(workspace_id,conversation_id,channel_type,key,message_id) VALUES($1,$2,$3,$4,$5)
+			ON CONFLICT DO NOTHING`, workspaceID, conversationID, string(channel.Type), key, messageID); err != nil {
+			return result, fmt.Errorf("record thread key: %w", err)
+		}
 	}
 	original, err := linkChannelFiles(ctx, tx, s.objects, workspaceID, messageID, files, in.EmailMeta != nil)
 	if err != nil {
@@ -679,7 +680,7 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 				m.kind='incoming' AND $3 AND COALESCE((SELECT e.sender_key FROM channel_inbound_events e
 					WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id LIMIT 1) <> $4,false)
 			FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
-			WHERE m.workspace_id=$1 AND m.external_id=ANY($2)`, channel.WorkspaceID, candidates, shared, senderKey)
+			WHERE m.workspace_id=$1 AND m.external_id=ANY($2) AND m.detached_at IS NULL`, channel.WorkspaceID, candidates, shared, senderKey)
 		if err != nil {
 			return found, fmt.Errorf("match thread references: %w", err)
 		}
@@ -724,7 +725,7 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 			JOIN conversations c ON c.workspace_id=k.workspace_id AND c.id=k.conversation_id
 			WHERE k.workspace_id=$1 AND k.channel_type=$2 AND k.key=$3 AND (NOT $4 OR EXISTS(SELECT 1 FROM messages m
 				JOIN channel_inbound_events e ON e.workspace_id=m.workspace_id AND e.message_id=m.id
-				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND e.sender_key=$5))
+				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND m.detached_at IS NULL AND e.sender_key=$5))
 			ORDER BY k.created_at DESC LIMIT 1`,
 			channel.WorkspaceID, string(channel.Type), key, shared, senderKey).Scan(&conversationID, &status, &updatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -769,18 +770,26 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
+	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {
+		return "", err
+	}
+	return conversationID, nil
+}
+
+// tagConversation gives a conversation tags by name, creating the ones the workspace lacks.
+func tagConversation(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, tags []string) error {
 	for _, name := range tags {
 		var tagID string
 		if err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
-			ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, channel.WorkspaceID, name).Scan(&tagID); err != nil {
-			return "", fmt.Errorf("find or create tag: %w", err)
+			ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, name).Scan(&tagID); err != nil {
+			return fmt.Errorf("find or create tag: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-			channel.WorkspaceID, conversationID, tagID); err != nil {
-			return "", fmt.Errorf("tag conversation: %w", err)
+			workspaceID, conversationID, tagID); err != nil {
+			return fmt.Errorf("tag conversation: %w", err)
 		}
 	}
-	return conversationID, nil
+	return nil
 }
 
 func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Channel, conversationID, externalID string, in channels.Inbound) (string, error) {

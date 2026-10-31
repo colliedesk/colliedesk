@@ -348,7 +348,7 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 		pattern := q.arg(escapeLikePattern(filter.Search))
 		like := `ILIKE '%'||` + pattern + `||'%' ESCAPE '\'`
 		q.and(`(c.subject ` + like +
-			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.body ` + like + `)` +
+			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.detached_at IS NULL AND m.body ` + like + `)` +
 			` OR EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND (k.name ` + like + ` OR k.email ` + like + `)))`)
 	}
 	if filter.ResultSnapshotID != "" {

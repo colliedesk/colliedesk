@@ -356,7 +356,7 @@ func (s *Store) ConversationParticipants(ctx context.Context, workspaceID, conve
 				SELECT m.email_meta->>'from' UNION ALL SELECT jsonb_array_elements_text(COALESCE(m.email_meta->'cc','[]'::jsonb))
 				UNION ALL SELECT m.origin->>'from' UNION ALL SELECT jsonb_array_elements_text(COALESCE(m.origin->'cc','[]'::jsonb))
 				UNION ALL SELECT unnest(COALESCE(m.cc,'{}'::text[]))) AS addresses(a)
-			WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND a IS NOT NULL`, workspaceID, conversationID)
+			WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND a IS NOT NULL AND m.other_contact_id IS NULL AND m.detached_at IS NULL`, workspaceID, conversationID)
 		if err != nil {
 			return fmt.Errorf("load conversation participants: %w", err)
 		}

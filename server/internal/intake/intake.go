@@ -70,18 +70,33 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 		Command: d.Command, Subject: d.Subject, ReplyKind: d.ReplyKind, Reason: d.Reason, IgnoreReason: d.IgnoreReason, Confidence: d.Confidence,
 		CorrectsDecisionID: d.CorrectsDecisionID}}
 	var err error
+	// A card of messages a person took back to the queue holds no held events: its messages move.
+	var detached *store.DetachedCard
+	if d.Action == Create || d.Action == Attach {
+		if detached, err = s.store.DetachedCardOf(ctx, workspaceID, gatheringID); err != nil {
+			return store.GatheringOutcome{}, err
+		}
+	}
 	switch d.Action {
 	case Create:
 		if d.ConversationID != "" {
 			return store.GatheringOutcome{}, ErrInvalid
 		}
 		apply.ForceNew, apply.Command, apply.Subject = true, d.Command, d.Subject
-		_, err = s.pipeline.ApplyGathering(ctx, workspaceID, gatheringID, "", apply)
+		if detached != nil {
+			_, err = s.store.DecideDetachedCard(ctx, workspaceID, gatheringID, "", d.Subject, apply, s.now().UTC())
+		} else {
+			_, err = s.pipeline.ApplyGathering(ctx, workspaceID, gatheringID, "", apply)
+		}
 	case Attach:
 		if d.ConversationID == "" {
 			return store.GatheringOutcome{}, ErrInvalid
 		}
-		_, err = s.pipeline.ApplyGathering(ctx, workspaceID, gatheringID, d.ConversationID, apply)
+		if detached != nil {
+			_, err = s.store.DecideDetachedCard(ctx, workspaceID, gatheringID, d.ConversationID, "", apply, s.now().UTC())
+		} else {
+			_, err = s.pipeline.ApplyGathering(ctx, workspaceID, gatheringID, d.ConversationID, apply)
+		}
 	case Ignore:
 		err = s.store.SetGatheringState(ctx, workspaceID, gatheringID, Ignore, "", apply, s.now().UTC())
 	case Review:

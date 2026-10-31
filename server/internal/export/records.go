@@ -105,6 +105,28 @@ type IntakeGathering struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
+// MessageMove is one move of customer messages between conversations, or back to a chat's intake queue,
+// with its undo.
+type MessageMove struct {
+	ID                  string          `json:"id"`
+	MessageIDs          []string        `json:"message_ids"`
+	FromConversationID  string          `json:"from_conversation_id"`
+	ToConversationID    *string         `json:"to_conversation_id"`
+	CreatedConversation bool            `json:"created_conversation"`
+	ClosedSource        bool            `json:"closed_source"`
+	SourceStatusBefore  *string         `json:"source_status_before"`
+	TargetStatusBefore  *string         `json:"target_status_before"`
+	ThreadKeysMoved     json.RawMessage `json:"thread_keys_moved"`
+	GatheringID         *string         `json:"gathering_id"`
+	DecisionID          *string         `json:"decision_id"`
+	MovedByAgentID      *string         `json:"moved_by_agent_id"`
+	MovedByTokenID      *string         `json:"moved_by_token_id"`
+	MovedAt             time.Time       `json:"moved_at"`
+	UndoneAt            *time.Time      `json:"undone_at"`
+	UndoneByAgentID     *string         `json:"undone_by_agent_id"`
+	UndoneByTokenID     *string         `json:"undone_by_token_id"`
+}
+
 // IntakeDecision is one time AI or a person decided a gathering, as it was.
 type IntakeDecision struct {
 	ID                     string          `json:"id"`
@@ -910,9 +932,14 @@ type Message struct {
 	DecisionBasis *string `json:"decision_basis"`
 	DecisionRule  *string `json:"decision_rule"`
 	// GatheringID is the batch of a chat's intake it came from.
-	GatheringID *string      `json:"gathering_id"`
-	CreatedAt   time.Time    `json:"created_at"`
-	Attachments []Attachment `json:"attachments"`
+	GatheringID *string `json:"gathering_id"`
+	// OtherContactID is the contact whose conversation a customer message was moved from; DetachedAt when a
+	// chat message was taken back to the intake queue (it is out of the timeline, not deleted).
+	OtherContactID    *string      `json:"other_contact_id"`
+	DetachedAt        *time.Time   `json:"detached_at"`
+	DetachedByAgentID *string      `json:"detached_by_agent_id"`
+	CreatedAt         time.Time    `json:"created_at"`
+	Attachments       []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -928,11 +955,13 @@ type ConversationHead struct {
 	// ChannelScope is the scope of its channel's type the first message came in (a chat's group).
 	ChannelScope *string `json:"channel_scope"`
 	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send.
-	ReplyChannelID *string                    `json:"reply_channel_id"`
-	Origin         *domain.ConversationOrigin `json:"origin"`
-	TagIDs         []string                   `json:"tag_ids"`
-	CreatedAt      time.Time                  `json:"created_at"`
-	UpdatedAt      time.Time                  `json:"updated_at"`
+	ReplyChannelID *string `json:"reply_channel_id"`
+	// MergedIntoID is where its customer messages went when a move closed it as no new request.
+	MergedIntoID *string                    `json:"merged_into_id"`
+	Origin       *domain.ConversationOrigin `json:"origin"`
+	TagIDs       []string                   `json:"tag_ids"`
+	CreatedAt    time.Time                  `json:"created_at"`
+	UpdatedAt    time.Time                  `json:"updated_at"`
 }
 
 // StatusChange is one change of a conversation's status (conversation_status_changes). Source is
@@ -955,7 +984,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -1000,6 +1029,7 @@ type Sink interface {
 	ConversationThreadItem(ConversationThreadItem) error
 	IntakeGathering(IntakeGathering) error
 	IntakeDecision(IntakeDecision) error
+	MessageMove(MessageMove) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error

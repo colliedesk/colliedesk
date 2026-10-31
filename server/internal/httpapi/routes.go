@@ -52,6 +52,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getChannelAI, a.setChannelAI, a.setAISourceConsent, a.removeAISourceConsent,
 		a.getConversationChat, a.listChannelThreads, a.listThreadItems, a.listUnresolvedItems,
 		a.listIntakeGatherings, a.getIntakeGathering, a.decideIntakeGathering, a.requeueIntakeGathering, a.getIntakeSummary, a.getIntakeStats, a.getConversationIntake,
+		a.moveConversationMessages, a.listMessageMoves, a.undoMessageMove,
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
 		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
 		a.connectMicrosoft, a.disconnectMicrosoft,

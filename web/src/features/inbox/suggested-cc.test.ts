@@ -57,3 +57,9 @@ test('on the hosted cloud, mail that did not come through the platform forwarder
   // A self-hosted desk receives all its mail on its own inbound address.
   expect(suggestedCc(posted)).toEqual(['boss@customer.example']);
 });
+
+test('mail moved in from another customer offers nothing, neither its sender nor its Cc line', () => {
+  const moved = { ...incoming('bob@other.example', ['bobs-boss@other.example']), other_contact_id: '22222222-2222-4222-8222-222222222222' };
+  expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example']), moved])).toEqual(['boss@customer.example']);
+  expect(suggestedCc([moved, incoming('ada@customer.example')])).toEqual([]);
+});

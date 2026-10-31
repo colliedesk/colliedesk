@@ -292,6 +292,9 @@ type Message struct {
 	ChannelID   *string         `json:"channel_id"`
 	ExternalID  *string         `json:"external_id"`
 	ChannelMeta json.RawMessage `json:"channel_meta"`
+	// OtherContactID is the contact whose conversation a customer message was moved from, while it sits
+	// in a conversation of another contact.
+	OtherContactID *string `json:"other_contact_id"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the
