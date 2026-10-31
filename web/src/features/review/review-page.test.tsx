@@ -58,10 +58,10 @@ test('the counts of the last 7 days, AI corrections only when AI decided, and no
   const stats = { days: 7, gatherings: 9, by_state: { created: 5, attached: 1, ignored: 3 }, decided_by: { ai: 4, agent: 5 }, fallback: 0, ai_decisions: 4, ai_corrected: 1 };
   const { rerender } = render(<ReviewPage {...props({ stats })} />);
   expect(screen.getByText('Last 7 days: 9 cards, 6 became conversations')).toBeInTheDocument();
-  expect(screen.getByText('AI corrected: 1 of 4 automatic')).toBeInTheDocument();
+  expect(screen.getByText('People changed 1 of 4 AI decisions')).toBeInTheDocument();
   rerender(<ReviewPage {...props({ stats: { ...stats, gatherings: 0, by_state: {}, ai_decisions: 0, ai_corrected: 0 } })} />);
   expect(screen.getByText('Last 7 days: no cards yet')).toBeInTheDocument();
-  expect(screen.queryByText(/AI corrected/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/AI decision/)).not.toBeInTheDocument();
   rerender(<ReviewPage {...props({ stats: undefined })} />);
   expect(screen.queryByText(/Last 7 days/)).not.toBeInTheDocument();
 });

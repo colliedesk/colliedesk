@@ -55,10 +55,31 @@ interface ActionsProps {
 }
 
 // MessageIntakeLabel says why a chat message is in this conversation: the channel's rules (and which one),
-// a person in Review, or AI. Email and web form messages say nothing: every one of them is the rules'.
-export function MessageIntakeLabel({ conversationID, messageID }: { conversationID: string; messageID: string }) {
-  const intake = useIntake(conversationID).data?.messages.find((entry) => entry.message_id === messageID);
-  return intake?.gathering_id ? <span className="message-kind message-intake">{addedLabel(intake.decision_basis, intake.decision_rule)}</span> : null;
+// a person in Review, or AI. Email and web form messages say nothing: every one of them is the rules'. A
+// thank-you written after the conversation was resolved says it kept it resolved, with Reopen.
+export function MessageIntakeLabel({ conversation, message }: { conversation: Conversation; message: Message }) {
+  const client = useQueryClient();
+  const intake = useIntake(conversation.id).data?.messages.find((entry) => entry.message_id === message.id);
+  const [reopening, setReopening] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const reopen = async () => {
+    setReopening(true);
+    setFailed(false);
+    try {
+      await api.updateConversation(conversation.id, { status: 'open' });
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+    } catch {
+      setFailed(true);
+    } finally {
+      setReopening(false);
+    }
+  };
+  return <>
+    {intake?.gathering_id && <span className="message-kind message-intake">{addedLabel(intake.decision_basis, intake.decision_rule)}</span>}
+    {message.intake_reply_kind === 'acknowledgement' && <span className="message-kind message-kept">{m.keptResolved}
+      {conversation.status === 'resolved' && <> · <button type="button" className="link-action" disabled={reopening} onClick={() => void reopen()}>{m.reopen}</button></>}
+      {failed && <span role="alert" className="error-copy"> {m.reopenFailed}</span>}</span>}
+  </>;
 }
 
 // useMoveAction sends a move under the key of its press: a press sent again (a double click, a retry after a

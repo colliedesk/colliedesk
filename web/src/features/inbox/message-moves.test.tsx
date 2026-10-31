@@ -8,7 +8,7 @@ import { MessageIntakeLabel, MessageMoveMenu, MessageMovesLog } from './message-
 const { api, ConflictError, InvalidRequestError } = vi.hoisted(() => {
   class InvalidRequestError extends Error {}
   class ConflictError extends InvalidRequestError { constructor(message: string, readonly detail?: Record<string, unknown>) { super(message); } }
-  return { api: { conversations: vi.fn(), conversation: vi.fn() }, ConflictError, InvalidRequestError };
+  return { api: { conversations: vi.fn(), conversation: vi.fn(), updateConversation: vi.fn() }, ConflictError, InvalidRequestError };
 });
 const moves = vi.hoisted(() => ({ list: vi.fn(), move: vi.fn(), undo: vi.fn(), intake: vi.fn() }));
 vi.mock('../../api/client', () => ({ api, ConflictError, InvalidRequestError }));
@@ -105,7 +105,7 @@ test('a split opens a conversation with a subject from the message\'s first line
 test('a chat message says why it is here and goes back to Review in one press', async () => {
   moves.intake.mockResolvedValue(intake('88888888-8888-4888-8888-888888888888'));
   moves.move.mockResolvedValue({ move: move({ to_conversation_id: null }), warnings: [] });
-  view(<><MessageIntakeLabel conversationID={HERE} messageID={FIRST} />
+  view(<><MessageIntakeLabel conversation={conversation()} message={timeline[0]} />
     <MessageMoveMenu conversation={conversation({ channel: 'loopback' })} message={timeline[0]} timeline={timeline} timezone="UTC" /></>);
   expect(await screen.findByText('Added: a reply to a message here')).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText('Move this message', { selector: 'summary' }));
@@ -114,7 +114,7 @@ test('a chat message says why it is here and goes back to Review in one press', 
 });
 
 test('an email message has no label: every one is the rules\'', async () => {
-  const { container } = view(<MessageIntakeLabel conversationID={HERE} messageID={FIRST} />);
+  const { container } = view(<MessageIntakeLabel conversation={conversation()} message={timeline[0]} />);
   await waitFor(() => expect(moves.intake).toHaveBeenCalled());
   expect(container).toBeEmptyDOMElement();
 });
@@ -162,4 +162,16 @@ test('a chat conversation nobody worked on offers to move all of it as no new re
   view(<MessageMovesLog conversation={conversation({ channel: 'loopback' })} timeline={timeline} timezone="UTC" />);
   await waitFor(() => expect(moves.intake).toHaveBeenCalledTimes(3));
   expect(screen.queryByRole('button', { name: 'Not a new request? Move it…' })).not.toBeInTheDocument();
+});
+
+test('a thank-you after a conversation was resolved says it kept it resolved, with Reopen', async () => {
+  api.updateConversation.mockResolvedValue(conversation({ status: 'open' }));
+  const thanks = { ...message(FIRST, 'cảm ơn em'), intake_reply_kind: 'acknowledgement' as const };
+  const { rerender } = view(<MessageIntakeLabel conversation={conversation({ status: 'resolved' })} message={thanks} />);
+  expect(screen.getByText(/^Written after it was resolved · kept Resolved/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(HERE, { status: 'open' }));
+  rerender(<QueryClientProvider client={client}><MessageIntakeLabel conversation={conversation({ status: 'open' })} message={thanks} /></QueryClientProvider>);
+  expect(screen.getByText(/^Written after it was resolved · kept Resolved/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
 });

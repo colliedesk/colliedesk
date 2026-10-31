@@ -62,4 +62,8 @@ export const moveMessages = {
   addedByAI: 'Added by AI',
   addedByRules: 'Added by the channel’s rules',
   notANewRequest: 'Not a new request? Move it…',
+  // A thank-you AI or a person kept out of reopening the conversation.
+  keptResolved: 'Written after it was resolved · kept Resolved',
+  reopen: 'Reopen',
+  reopenFailed: 'It was not reopened. Try again.',
 };

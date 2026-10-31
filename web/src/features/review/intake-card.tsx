@@ -4,6 +4,7 @@ import type { ChatItem, IntakeDecideInput, IntakeGathering, IntakeGatheringDetai
 import { formatDate } from '../../lib/format-date';
 import { PlainTextBody } from '../inbox/plain-text-body';
 import { Choice } from '../../ui/choice';
+import { AISuggestion } from './ai-suggestion';
 import { CandidatePicker } from './candidate-picker';
 import { reviewMessages as m } from './review-messages';
 
@@ -82,7 +83,9 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
         {waiting && reason && <span className="badge badge-intake" data-reason={item.review_reason}>{reason}</span>}
         {settled && <span className="badge badge-intake-done">{item.state === 'ignored' && item.ignore_reason ? m.setAsideWhy(m.ignoreReasons[item.ignore_reason]) : m.outcome[item.state]}</span>}
       </header>
-      {item.review_reason === 'credential' && waiting && <p className="notice notice-danger" role="note"><span>{m.credentialWarning}</span></p>}
+      {/* A password in the messages: set aside for it, or AI held its suggestion back for it whatever else the card waits for. */}
+      {(item.review_reason === 'credential' || item.suggestion?.not_applied_reason === 'credential') && waiting
+        && <p className="notice notice-danger" role="note"><span>{m.credentialWarning}</span></p>}
       {item.review_reason === 'lane_blocked' && waiting && <p className="muted-copy">{m.laneBlocked}</p>}
       {!open && <p className="intake-preview">{item.preview}</p>}
       <p className="intake-meta muted-copy">
@@ -90,6 +93,9 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
         <span>{m.messagesCount(item.item_count)}</span>
         <button type="button" className="intake-toggle" aria-expanded={open} onClick={onToggle}>{open ? m.hideMessages : waiting ? m.decide : m.showMessages}</button>
       </p>
+      {/* Filed by the rules while AI only suggests: the suggestion shows, but the card is decided (move messages to change it). */}
+      {(waiting || item.state === 'applied') && item.suggestion && <AISuggestion suggestion={item.suggestion} busy={busy}
+        onFollow={waiting ? (input) => void run(() => onDecide(input)) : undefined} />}
       {settled && <dl className="intake-decided">
         <dt>{m.decidedBy}</dt><dd><span>{whoDecided(item, agentName)}</span>{item.decided_at && <> · <time dateTime={item.decided_at}>{formatDate(item.decided_at, timezone)}</time></>}</dd>
         {item.fallback && <dd className="muted-copy">{m.fallback}</dd>}
@@ -113,12 +119,15 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
 
 function DecideForm({ item, detail, timezone, busy, onDecide }: { item: IntakeGathering; detail: IntakeGatheringDetail; timezone: string; busy: boolean;
   onDecide: (input: IntakeDecideInput) => void }) {
-  const target = detail.candidates.find((entry) => entry.conversation_id === item.rules.target_conversation_id)?.conversation_id;
-  const [action, setAction] = useState<Action>(item.rules.action === 'attach' && target ? 'attach' : 'create');
-  const [subject, setSubject] = useState(() => subjectOf(detail.items, detail.commands));
-  const [command, setCommand] = useState('');
+  // The form starts from what AI suggested, else from what the rules would have done.
+  const suggested = item.suggestion;
+  const offered = (id: string | null | undefined) => detail.candidates.find((entry) => entry.conversation_id === id)?.conversation_id;
+  const target = (suggested?.action === 'attach' ? offered(suggested.target_conversation_id) : undefined) ?? offered(item.rules.target_conversation_id);
+  const [action, setAction] = useState<Action>(suggested && (suggested.action !== 'attach' || target) ? suggested.action : item.rules.action === 'attach' && target ? 'attach' : 'create');
+  const [subject, setSubject] = useState(() => suggested?.subject ?? subjectOf(detail.items, detail.commands));
+  const [command, setCommand] = useState(suggested?.command && detail.commands.includes(suggested.command) ? suggested.command : '');
   const [conversation, setConversation] = useState(target ?? detail.candidates[0]?.conversation_id);
-  const [why, setWhy] = useState<IntakeIgnoreReason>('chat');
+  const [why, setWhy] = useState<IntakeIgnoreReason>(suggested?.ignore_reason ?? 'chat');
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (action === 'create') onDecide({ action, subject: subject.trim(), ...(command ? { command } : {}) });

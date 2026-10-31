@@ -1,4 +1,4 @@
-import type { ChatItem, IntakeCandidate, IntakeGathering, IntakeGatheringDetail } from '../../api/intake';
+import type { ChatItem, IntakeCandidate, IntakeGathering, IntakeGatheringDetail, IntakeSuggestion } from '../../api/intake';
 
 export const CHANNEL = '11111111-1111-4111-8111-111111111111';
 export const CARD = '22222222-2222-4222-8222-222222222222';
@@ -32,4 +32,13 @@ export const detail = (overrides: Partial<IntakeGatheringDetail> = {}): IntakeGa
   ...gathering(),
   items: [chatItem(), chatItem({ id: '99999999-9999-4999-8999-999999999999', body: 'Since this morning', external_id: 'm2', occurred_at: '2026-10-26T02:00:30Z' })],
   decisions: [], candidates: [candidate()], commands: ['bug', 'question'], ...overrides,
+});
+
+export const DECISION = '99999999-0000-4000-8000-000000000001';
+
+export const suggestion = (overrides: Partial<IntakeSuggestion> = {}): IntakeSuggestion => ({
+  decision_id: DECISION, action: 'attach', target_conversation_id: CONVERSATION, target_subject: 'Scale prints blank labels', target_status: 'open',
+  runner_up_conversation_id: OTHER_CONVERSATION, runner_up_subject: 'Login fails', runner_up_confidence: 0.61, confidence: 0.92, command: null, subject: null,
+  reply_kind: 'substantive', ignore_reason: null, reason: 'Same scale, same morning; she wrote about it yesterday.', not_applied_reason: 'level_suggest',
+  created_at: '2026-10-26T02:01:30Z', ...overrides,
 });

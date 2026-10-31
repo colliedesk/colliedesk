@@ -48,3 +48,11 @@
 .review-notice:empty { display: none; }
 .review-notice { margin: 0 0 var(--space-3); border-left: 3px solid var(--accent); padding-left: var(--space-3); font-size: var(--fs-small); }
 .review-notice a { margin-left: var(--space-2); }
+
+/* What AI suggested for a card a person decides. */
+.intake-suggestion { display: grid; gap: var(--space-1); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface-0); padding: var(--space-2) var(--space-3); }
+.intake-suggestion p { margin: 0; font-size: var(--fs-small); overflow-wrap: anywhere; }
+.intake-suggestion-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.intake-ai-chip { display: inline-flex; align-items: center; gap: 2px; border-radius: var(--radius-sm); background: var(--accent-soft); padding: 0 var(--space-1); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
+.intake-ai-chip svg { width: 12px; height: 12px; }
+.intake-suggestion-reason { color: var(--text-2); }

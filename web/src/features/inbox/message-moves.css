@@ -28,3 +28,6 @@
 .move-close > span { display: grid; gap: 2px; }
 .move-close small { font-size: var(--fs-label); }
 .move-dialog .candidate-list { max-height: 14rem; }
+/* Kept Resolved takes a line of its own under the byline, with Reopen inline. */
+.message-byline .message-kept { display: block; flex-basis: 100%; color: var(--text-3); }
+.message-kept .link-action { display: inline; min-height: 0; padding: 0; font-size: inherit; vertical-align: baseline; }
