@@ -45,7 +45,23 @@ const (
 type Message struct {
 	Role Role
 	Text string
+	// Images go after the text of a user's turn (a screenshot a customer sent).
+	Images []Image
 }
+
+// Image is a picture sent to the model with its bytes; the model must take images.
+type Image struct {
+	MediaType string
+	Data      []byte
+}
+
+// What an image may be: the types every provider takes, at most MaxImages a request and MaxImageBytes each.
+const (
+	MaxImages     = 4
+	MaxImageBytes = 5 << 20
+)
+
+var imageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
 
 // Request is everything a feature sends. System holds Colliedesk's own instructions only; text
 // written by a customer goes in Messages, wrapped by the feature.
@@ -110,10 +126,25 @@ func (r Request) Validate() error {
 	case !r.Warm && (r.MaxOutput <= 0 || r.MaxOutput > MaxOutputLimit):
 		return fmt.Errorf("aiprovider: the output limit must be 1 to %d tokens", MaxOutputLimit)
 	}
+	images := 0
 	for _, message := range r.Messages {
 		if message.Role != RoleUser && message.Role != RoleAssistant {
 			return fmt.Errorf("aiprovider: message role %q is not user or assistant", message.Role)
 		}
+		for _, image := range message.Images {
+			images++
+			switch {
+			case message.Role != RoleUser:
+				return errors.New("aiprovider: only a user's message carries images")
+			case !imageTypes[image.MediaType]:
+				return fmt.Errorf("aiprovider: image type %q is not png, jpeg, gif or webp", image.MediaType)
+			case len(image.Data) == 0 || len(image.Data) > MaxImageBytes:
+				return fmt.Errorf("aiprovider: an image is 1 byte to %d bytes", MaxImageBytes)
+			}
+		}
+	}
+	if images > MaxImages {
+		return fmt.Errorf("aiprovider: at most %d images a request", MaxImages)
 	}
 	return nil
 }
@@ -172,6 +203,9 @@ type Response struct {
 	Hops []Hop
 	// RequestID is the provider's id for the attempt, kept for reconciliation.
 	RequestID string
+	// ProviderCost is what the provider says the attempt cost, in its own unit (OpenRouter: credits),
+	// nil when it says nothing. It is never a price Colliedesk computed.
+	ProviderCost *float64
 }
 
 // Provider is one configured provider: a kind, an endpoint and a credential.

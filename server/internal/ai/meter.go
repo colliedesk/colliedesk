@@ -20,7 +20,8 @@ const (
 	FeatureTriage = "triage"
 	FeatureDraft  = "draft"
 	// FeatureChat is the help center's AI chat: answers, pre-warms and the admin's previews.
-	FeatureChat = "chat"
+	FeatureChat   = "chat"
+	FeatureIntake = "intake"
 )
 
 // Who pays for a call.
@@ -119,13 +120,15 @@ func (s *Service) MeteredStream(ctx context.Context, call Call, provider aiprovi
 // character, more than English uses), and all of its output.
 func estimateTokens(request aiprovider.Request) (input, output int64) {
 	size := len(request.SystemText())
+	images := 0
 	for _, message := range request.Messages {
 		size += len(message.Text)
+		images += len(message.Images)
 	}
 	if request.Schema != nil {
 		size += 500
 	}
-	return int64(size/3 + 1), int64(request.MaxOutput)
+	return int64(size/3+1) + int64(images)*tokensPerImage, int64(request.MaxOutput)
 }
 
 // operatorCheck is the one provider call that is not metered: the operator console's check of the server
@@ -135,6 +138,10 @@ func operatorCheck(ctx context.Context, provider aiprovider.Provider, model stri
 	_, err := provider.Check(ctx, model)
 	return err
 }
+
+// tokensPerImage is the most an image costs as input: Claude counts a picture of at most 1.15
+// megapixels at about 1,600 tokens, and other providers about the same or less.
+const tokensPerImage = 1600
 
 // meteredCheck is Metered for a provider check.
 func (s *Service) meteredCheck(ctx context.Context, call Call, provider aiprovider.Provider, model string) (aiprovider.Response, error) {
@@ -239,9 +246,9 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 			return err
 		}
 		_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='ok',stop_reason=$3,served_model=$4,input_tokens=$5,output_tokens=$6,cache_read_tokens=$7,
-				cache_write_tokens=$8,hops=$9,provider_request_id=$10,finished_at=$11,latency_ms=$12,cost_micro_usd=$13
+				cache_write_tokens=$8,hops=$9,provider_request_id=$10,finished_at=$11,latency_ms=$12,cost_micro_usd=$13,provider_cost=$14
 			WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(response.Stop), nullable(response.Model),
-			input, output, cacheRead, cacheWrite, hops, nullable(response.RequestID), finished, latency, cost)
+			input, output, cacheRead, cacheWrite, hops, nullable(response.RequestID), finished, latency, cost, response.ProviderCost)
 		return err
 	})
 	if err != nil && callErr == nil {

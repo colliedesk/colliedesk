@@ -81,6 +81,31 @@ host gets `max_tokens` and no reasoning field, which the copies of the API read 
 that sends no `usage` gives `Usage.Reported = false`: unknown, never zero. Bodies are read through a
 size limit.
 
+OpenRouter (`openrouter.ai`) is the exception, and three traps live there:
+
+1. **Effort.** OpenRouter reads `reasoning: {effort}`, but a JSON-schema request also carries
+   `provider.require_parameters: true` (so the answer is JSON), and with it a model whose providers do
+   not take `reasoning` has no provider left: the call would fail. So the adapter sends the effort only
+   to a model `GET /models` lists with `reasoning` in `supported_parameters` and the effort in
+   `reasoning.supported_efforts` (absent: every effort). The list is public and free; it is kept per
+   endpoint for an hour (five minutes after a failed read, asked with a five-second bound), and a list
+   that cannot be read means no effort, which is how every call went before.
+2. **Routing.** `ai_providers.routing` (`{"data_collection":"deny","zdr":true}`, only what differs from
+   OpenRouter's default) goes in `provider` beside `require_parameters`. Loosening it is a widening of
+   who receives customers' data, so `UpdateProvider` refuses it without `MayLoosen` and the route files
+   an agent's loosening for approval; tightening runs at once. The provider check runs with the routing,
+   so a model no allowed provider serves fails before it is saved.
+3. **Cost.** `usage.cost` comes with every answer and is in OpenRouter's **credits**
+   (https://openrouter.ai/docs/use-cases/usage-accounting), not dollars: it is stored as
+   `ai_usage.provider_cost`, never converted and never mixed with `cost_micro_usd`, which only the
+   server's provider has.
+
+## Images
+
+`Message.Images` (at most 4, 5 MB each, PNG, JPEG, GIF or WebP) go to the OpenAI-compatible adapter as
+`image_url` parts with a data URL after the text, and to Anthropic as `image` blocks. The metered
+estimate counts each image at 1,600 tokens, the most a picture costs Claude at its largest size.
+
 ## Network
 
 Adapters take an `*http.Client`. `NewHTTPClient` has no response-header timeout, because a
@@ -177,7 +202,19 @@ Handlers register per kind (`Worker.Handle`); a task without one fails (`no_hand
 
 Automatic tasks count against `ai_automatic_limits` (default 300 a UTC day, 30 a minute) when they
 first start; tasks count, not calls, so retries use no more. An advisory lock per workspace serializes
-the admission, so two workers cannot both take the last place.
+the admission, so two workers cannot both take the last place. Inside the day, drafts stop at
+`draft_per_day` (100) and intake decisions at `intake_per_day` (300, `intake_limit`).
+
+## Intake's fallback model
+
+`ai_slots.fallback_model` (intake only, a CHECK says so) is another model of the slot's provider.
+`Run.Metered` sends a request on the slot's model with 35 seconds of the attempt's 75, and once more on
+the fallback model after a timeout, rate limit, overload, server error, `model_not_found`,
+`invalid_response`, or a schema answer that is not JSON. Errors another model would get too (a key,
+credit, a request too large) are not tried again. Each call is its own usage row and passes the budget
+on its own. The provider cannot drop the fallback model (`ai_model_in_use`); moving intake to another
+provider drops it, and a new one lowers intake's channel levels as another model does
+(`model_changed`), since the gate's labels were the old models' decisions.
 
 `ai_usage.cost_micro_usd` is computed when a call of the server's provider finishes, per hop at the
 served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,

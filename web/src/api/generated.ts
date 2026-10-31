@@ -2439,7 +2439,7 @@ export interface paths {
         delete: operations["removeAIProvider"];
         options?: never;
         head?: never;
-        /** @description Renames a provider or changes its models. A new first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409 `ai_model_in_use`). The base URL never changes: the stored key and the features' data would go to a new address without anyone entering the key or turning the features on again. Add the new address as another provider instead. */
+        /** @description Renames a provider, changes its models, or (OpenRouter only) its routing by data policy. A new first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses, or intake's fallback model, cannot be removed (409 `ai_model_in_use`). A change of routing that lets requests reach providers it kept them off (data_collection deny to allow, zdr true to false) is a person's: an agent token's is filed for approval (202). The base URL never changes: the stored key and the features' data would go to a new address without anyone entering the key or turning the features on again. Add the new address as another provider instead. */
         patch: operations["updateAIProvider"];
         trace?: never;
     };
@@ -4710,6 +4710,14 @@ export interface components {
             updated_at: string;
             /** @description The features set to this provider, on or off. */
             used_by: components["schemas"]["AISlotName"][];
+            /** @description OpenRouter's routing by data policy; null on another server, which has none. */
+            routing: components["schemas"]["AIProviderRouting"] | null;
+        };
+        /** @description How OpenRouter picks the provider that serves each request (https://openrouter.ai/docs/features/provider-routing). data_collection deny keeps requests off providers that store or may train on what they are sent; zdr keeps them on providers with zero data retention. A model no such provider serves fails its check. */
+        AIProviderRouting: {
+            /** @enum {string} */
+            data_collection: "allow" | "deny";
+            zdr: boolean;
         };
         AISlot: {
             slot: components["schemas"]["AISlotName"];
@@ -4720,6 +4728,8 @@ export interface components {
             /** Format: uuid */
             provider_id: string | null;
             model: string | null;
+            /** @description Intake only: the same provider's model a request goes to when model fails (timeout, rate limit, provider busy or down, model gone) or answers what cannot be read. */
+            fallback_model: string | null;
             /** @enum {string} */
             effort: "low" | "medium" | "high";
             enabled: boolean;
@@ -4795,6 +4805,14 @@ export interface components {
              * @description When automatic drafts spent half of this month's allowance of the server's provider: the next month. The other half stays for drafts people ask for and for triage.
              */
             drafts_reserved_until: string | null;
+            /** @description Intake decisions in a UTC day, counted inside per_day, so a busy group cannot spend the day's triage and drafts. */
+            intake_per_day: number;
+            intake_today: number;
+            /**
+             * Format: date-time
+             * @description When today's intake decisions (or all automatic runs) are used up: the next UTC midnight.
+             */
+            intake_paused_until: string | null;
         };
         HelpChatWidgetConfig: {
             name: string;
@@ -5200,6 +5218,8 @@ export interface components {
                 output_tokens: number;
                 /** @description Only for the server's provider. */
                 cost_micro_usd: number | null;
+                /** @description What the provider itself said the calls cost, in its own unit (OpenRouter: credits), never converted to dollars; null when it said nothing. */
+                provider_cost: number | null;
             }[];
         };
         AIDraft: {
@@ -5387,6 +5407,7 @@ export interface components {
             /** @description Required except for an OpenAI-compatible server on a private address the operator allowed. */
             api_key?: string;
             models: string[];
+            routing?: components["schemas"]["AIProviderRouting"];
         };
         AIModelsInput: {
             kind: components["schemas"]["AIProviderKind"];
@@ -5401,6 +5422,7 @@ export interface components {
         AIProviderChange: {
             label?: string;
             models?: string[];
+            routing?: components["schemas"]["AIProviderRouting"];
         };
         AISlotInput: {
             /** @enum {string} */
@@ -5411,6 +5433,8 @@ export interface components {
              */
             provider_id?: string;
             model?: string;
+            /** @description Intake only: another of the same provider's models; an empty string removes it. Left out: kept while the provider stays and still offers it. */
+            fallback_model?: string;
             /**
              * @description Low when left out.
              * @enum {string}
@@ -14174,6 +14198,8 @@ export interface operations {
                     per_minute: number;
                     /** @description Kept when left out. */
                     draft_per_day?: number;
+                    /** @description Intake decisions a UTC day, inside per_day; 300 by default. Kept when left out. */
+                    intake_per_day?: number;
                 };
             };
         };

@@ -12,19 +12,21 @@ import (
 )
 
 type slotRow struct {
-	slot         string
-	usesServer   bool
-	providerID   *string
-	model        *string
-	effort       string
-	enabled      bool
-	defaultLevel string
-	autoParts    []string
-	consentedBy  *string
-	consentedAt  *time.Time
-	updatedBy    *string
-	updatedAt    *time.Time
-	monthlyCap   *int64
+	slot       string
+	usesServer bool
+	providerID *string
+	model      *string
+	// fallbackModel is intake's: the model it tries when model fails or answers what cannot be read.
+	fallbackModel *string
+	effort        string
+	enabled       bool
+	defaultLevel  string
+	autoParts     []string
+	consentedBy   *string
+	consentedAt   *time.Time
+	updatedBy     *string
+	updatedAt     *time.Time
+	monthlyCap    *int64
 }
 
 func (r slotRow) source() string {
@@ -38,7 +40,7 @@ func (r slotRow) source() string {
 }
 
 func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
-	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+	query := `SELECT slot,uses_server,provider_id::text,model,fallback_model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 		monthly_cap_micro_usd FROM ai_slots WHERE workspace_id=$1`
 	if lock {
 		query += ` FOR UPDATE`
@@ -49,7 +51,7 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (slotRow, error) {
 		var r slotRow
-		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.defaultLevel, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt,
+		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.fallbackModel, &r.effort, &r.enabled, &r.defaultLevel, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt,
 			&r.monthlyCap)
 		return r, err
 	})
@@ -71,6 +73,7 @@ func (s *Service) view(slot string, row slotRow, found bool) Slot {
 		return view
 	}
 	view.Source, view.ProviderID, view.Model, view.Effort, view.Enabled = row.source(), row.providerID, row.model, row.effort, row.enabled
+	view.FallbackModel = row.fallbackModel
 	view.DefaultLevel, view.Automatic, view.AutoParts = row.defaultLevel, legacyAutomatic(slot, row.defaultLevel), orderedParts(row.autoParts)
 	view.ConsentedBy, view.ConsentedAt, view.UpdatedBy, view.UpdatedAt = row.consentedBy, utcPointer(row.consentedAt), row.updatedBy, utcPointer(row.updatedAt)
 	view.MonthlyCap = row.monthlyCap
@@ -227,6 +230,7 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		next := slotRow{slot: slot, effort: string(effort), enabled: input.Enabled}
 		label := ""
+		var offered []string
 		switch input.Source {
 		case SourceServer:
 			if s.config.ServerOff {
@@ -245,6 +249,7 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 				return invalid("The server's provider offers %v for this feature.", models)
 			}
 			next.model = &model
+			offered = models
 			label = s.config.Server.Label
 		case SourceProvider:
 			if err := lockProviders(ctx, tx, workspaceID); err != nil {
@@ -265,6 +270,7 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 				return invalid("Pick one of the provider's models: %v.", provider.Models)
 			}
 			next.providerID, next.model = &provider.ID, &model
+			offered = provider.Models
 			label = provider.Label
 		case SourceNone, "":
 			if input.Enabled {
@@ -279,6 +285,9 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		}
 		current, found := slots[slot]
 		sameRecipient := found && current.usesServer == next.usesServer && equalPointer(current.providerID, next.providerID)
+		if next.fallbackModel, err = fallbackModel(slot, input.FallbackModel, current, sameRecipient, next.model, offered); err != nil {
+			return err
+		}
 		next.consentedBy, next.consentedAt = current.consentedBy, current.consentedAt
 		renewed := next.enabled && !(found && current.enabled && sameRecipient)
 		if renewed {
@@ -304,26 +313,28 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "recipient_changed", now); err != nil {
 				return err
 			}
-		case slot == SlotIntake && found && current.enabled && next.enabled && !equalPointer(current.model, next.model):
-			// Intake's gate was passed with this model's labels; another model starts over at suggest.
+		case slot == SlotIntake && found && current.enabled && next.enabled &&
+			(!equalPointer(current.model, next.model) || (next.fallbackModel != nil && !equalPointer(current.fallbackModel, next.fallbackModel))):
+			// Intake's gate was passed with these models' labels; another model (or a new fallback
+			// model) starts over at suggest. Taking the fallback model away leaves fewer models.
 			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "model_changed", now); err != nil {
 				return err
 			}
 		}
 		updatedBy := nullable(actor.AgentID)
 		var row slotRow
-		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,default_level,auto_parts,consented_by,consented_at,updated_by,updated_at,
+		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,fallback_model,effort,enabled,default_level,auto_parts,consented_by,consented_at,updated_by,updated_at,
 				monthly_cap_micro_usd)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			VALUES($1,$2,$3,$4,$5,$15,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 			ON CONFLICT (workspace_id,slot) DO UPDATE SET uses_server=EXCLUDED.uses_server,provider_id=EXCLUDED.provider_id,model=EXCLUDED.model,
-				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,default_level=EXCLUDED.default_level,auto_parts=EXCLUDED.auto_parts,
+				fallback_model=EXCLUDED.fallback_model,effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,default_level=EXCLUDED.default_level,auto_parts=EXCLUDED.auto_parts,
 				consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at,
 				monthly_cap_micro_usd=EXCLUDED.monthly_cap_micro_usd
-			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+			RETURNING slot,uses_server,provider_id::text,model,fallback_model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 				monthly_cap_micro_usd`,
 			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.defaultLevel, next.autoParts, next.consentedBy, next.consentedAt, updatedBy, now,
-			next.monthlyCap).
-			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.defaultLevel, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt,
+			next.monthlyCap, next.fallbackModel).
+			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.fallbackModel, &row.effort, &row.enabled, &row.defaultLevel, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt,
 				&row.monthlyCap)
 		if err != nil {
 			return err
@@ -359,6 +370,9 @@ func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if row.model != nil {
 		detail["model"] = *row.model
 	}
+	if row.fallbackModel != nil {
+		detail["fallback_model"] = *row.fallbackModel
+	}
 	switch {
 	case row.usesServer && s.config.Server != nil:
 		detail["provider_label"] = s.config.Server.Label
@@ -369,6 +383,38 @@ func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string,
 		}
 	}
 	return detail
+}
+
+// fallbackModel decides intake's fallback model: the one asked for ("" for none), or the one it has
+// while its provider stays and still offers it. It is another model of the same provider.
+func fallbackModel(slot string, asked *string, current slotRow, sameRecipient bool, model *string, offered []string) (*string, error) {
+	fallback := current.fallbackModel
+	if !sameRecipient {
+		fallback = nil
+	}
+	if asked != nil {
+		fallback = nil
+		if *asked != "" {
+			fallback = asked
+		}
+	}
+	switch {
+	case fallback == nil:
+		return nil, nil
+	case slot != SlotIntake:
+		return nil, invalid("A fallback model is for intake only.")
+	case model == nil:
+		return nil, invalid("Pick the provider and model before a fallback model.")
+	case *fallback == *model:
+		return nil, invalid("The fallback model is another model than the one intake uses.")
+	case !slices.Contains(offered, *fallback):
+		if asked == nil {
+			// The provider no longer offers it: the fallback goes, the feature stays.
+			return nil, nil
+		}
+		return nil, invalid("Pick the fallback model among the same provider's models: %v.", offered)
+	}
+	return fallback, nil
 }
 
 // AutoParts are the parts of a triage suggestion AI may apply by itself, in display order.

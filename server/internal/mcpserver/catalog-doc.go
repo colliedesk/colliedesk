@@ -173,7 +173,7 @@ var toolDocs = map[string]string{
 	"colliedesk_ai_settings_get":                    "Shows the [AI settings](ai.md): providers (never a key), each feature's provider and model, and the change history",
 	"colliedesk_ai_models_list":                     "Lists the models a key may use, before adding the provider; saves and bills nothing. Refused below `admin` so the key never waits in a request",
 	"colliedesk_ai_provider_add":                    "Adds an AI provider after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request",
-	"colliedesk_ai_provider_update":                 "Renames an AI provider or changes its models",
+	"colliedesk_ai_provider_update":                 "Renames an AI provider, changes its models, or an OpenRouter provider's routing (loosening it waits for a person)",
 	"colliedesk_ai_provider_key_set":                "Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request",
 	"colliedesk_ai_provider_check":                  "Runs a check of an AI provider",
 	"colliedesk_ai_provider_remove":                 "Deletes an AI provider and erases its key; its features turn off",

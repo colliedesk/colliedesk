@@ -4090,9 +4090,11 @@ paths:
       operationId: updateAIProvider
       x-permission: access:write
       description: >
-        Renames a provider or changes its models. A new first model is checked before it is saved (422
-        `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409
-        `ai_model_in_use`). The base URL never changes: the stored key and the features' data would go to
+        Renames a provider, changes its models, or (OpenRouter only) its routing by data policy. A new
+        first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a
+        feature uses, or intake's fallback model, cannot be removed (409 `ai_model_in_use`). A change of
+        routing that lets requests reach providers it kept them off (data_collection deny to allow, zdr
+        true to false) is a person's: an agent token's is filed for approval (202). The base URL never changes: the stored key and the features' data would go to
         a new address without anyone entering the key or turning the features on again. Add the new
         address as another provider instead.
       requestBody:
@@ -4540,6 +4542,7 @@ paths:
                 per_day: {type: integer, minimum: 0, maximum: 10000}
                 per_minute: {type: integer, minimum: 0, maximum: 1000}
                 draft_per_day: {type: integer, minimum: 0, maximum: 10000, description: Kept when left out.}
+                intake_per_day: {type: integer, minimum: 0, maximum: 10000, description: 'Intake decisions a UTC day, inside per_day; 300 by default. Kept when left out.'}
       responses:
         '200':
           description: The limits and today's use
@@ -7966,7 +7969,7 @@ components:
     AIProviderKind: {type: string, enum: [anthropic, openai_compatible]}
     AIProvider:
       type: object
-      required: [id, kind, label, base_url, auth_kind, key_hint, models, check_status, check_error_code, checked_at, created_by, created_at, updated_at, used_by]
+      required: [id, kind, label, base_url, auth_kind, key_hint, models, check_status, check_error_code, checked_at, created_by, created_at, updated_at, used_by, routing]
       properties:
         id: {type: string, format: uuid}
         kind: {$ref: '#/components/schemas/AIProviderKind'}
@@ -7982,15 +7985,28 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         used_by: {type: array, items: {$ref: '#/components/schemas/AISlotName'}, description: 'The features set to this provider, on or off.'}
+        routing: {anyOf: [{$ref: '#/components/schemas/AIProviderRouting'}, {type: 'null'}], description: 'OpenRouter''s routing by data policy; null on another server, which has none.'}
+    AIProviderRouting:
+      type: object
+      additionalProperties: false
+      required: [data_collection, zdr]
+      description: >
+        How OpenRouter picks the provider that serves each request (https://openrouter.ai/docs/features/provider-routing).
+        data_collection deny keeps requests off providers that store or may train on what they are sent;
+        zdr keeps them on providers with zero data retention. A model no such provider serves fails its check.
+      properties:
+        data_collection: {type: string, enum: [allow, deny]}
+        zdr: {type: boolean}
     AISlot:
       type: object
-      required: [slot, source, provider_id, model, effort, enabled, default_level, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at, monthly_cap_micro_usd]
+      required: [slot, source, provider_id, model, fallback_model, effort, enabled, default_level, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at, monthly_cap_micro_usd]
       properties:
         slot: {$ref: '#/components/schemas/AISlotName'}
         monthly_cap_micro_usd: {type: [integer, 'null'], description: 'AI chat only: the most it may spend a UTC calendar month, in millionths of a US dollar, on the workspace''s own provider or a server without plan limits; null is no limit. The cloud''s own provider has its plan''s limits.'}
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: [string, 'null'], format: uuid}
         model: {type: [string, 'null']}
+        fallback_model: {type: [string, 'null'], description: 'Intake only: the same provider''s model a request goes to when model fails (timeout, rate limit, provider busy or down, model gone) or answers what cannot be read.'}
         effort: {type: string, enum: [low, medium, high]}
         enabled: {type: boolean}
         default_level: {$ref: '#/components/schemas/AILevel'}
@@ -8018,7 +8034,7 @@ components:
         created_at: {type: string, format: date-time}
     AIAutomaticLimits:
       type: object
-      required: [per_day, per_minute, used_today, paused_until, draft_per_day, drafts_today, drafts_paused_until, drafts_reserved_until]
+      required: [per_day, per_minute, used_today, paused_until, draft_per_day, drafts_today, drafts_paused_until, drafts_reserved_until, intake_per_day, intake_today, intake_paused_until]
       properties:
         per_day: {type: integer}
         per_minute: {type: integer}
@@ -8028,6 +8044,9 @@ components:
         drafts_today: {type: integer}
         drafts_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s automatic drafts (or all automatic runs) are used up: the next UTC midnight.'}
         drafts_reserved_until: {type: [string, 'null'], format: date-time, description: 'When automatic drafts spent half of this month''s allowance of the server''s provider: the next month. The other half stays for drafts people ask for and for triage.'}
+        intake_per_day: {type: integer, description: 'Intake decisions in a UTC day, counted inside per_day, so a busy group cannot spend the day''s triage and drafts.'}
+        intake_today: {type: integer}
+        intake_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s intake decisions (or all automatic runs) are used up: the next UTC midnight.'}
     HelpChatWidgetConfig:
       type: object
       required: [name, greeting, suggestions, brand]
@@ -8399,7 +8418,7 @@ components:
           type: array
           items:
             type: object
-            required: [feature, billed_to, provider_label, calls, failed, automatic, input_tokens, output_tokens, cost_micro_usd]
+            required: [feature, billed_to, provider_label, calls, failed, automatic, input_tokens, output_tokens, cost_micro_usd, provider_cost]
             properties:
               feature: {type: string, enum: [check, triage, draft, chat, intake]}
               billed_to: {type: string, enum: [server, workspace_key]}
@@ -8410,6 +8429,7 @@ components:
               input_tokens: {type: integer}
               output_tokens: {type: integer}
               cost_micro_usd: {type: [integer, 'null'], description: 'Only for the server''s provider.'}
+              provider_cost: {type: [number, 'null'], description: 'What the provider itself said the calls cost, in its own unit (OpenRouter: credits), never converted to dollars; null when it said nothing.'}
     AIDraft:
       type: object
       required: [id, conversation_id, status, error_code, prompt, text, missing_info, sources, warnings, model, outcome, similarity, sent_message_id, requested_by_agent_id, automatic, answers_message_id, reply_needed, created_at, ready_at, decided_at]
@@ -8565,6 +8585,7 @@ components:
         base_url: {type: string, maxLength: 500, description: 'OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1.'}
         api_key: {type: string, maxLength: 500, description: Required except for an OpenAI-compatible server on a private address the operator allowed.}
         models: {type: array, minItems: 1, maxItems: 20, items: {type: string, minLength: 1, maxLength: 200}}
+        routing: {$ref: '#/components/schemas/AIProviderRouting'}
     AIModelsInput:
       type: object
       additionalProperties: false
@@ -8584,6 +8605,7 @@ components:
       properties:
         label: {type: string, minLength: 1, maxLength: 80}
         models: {type: array, minItems: 1, maxItems: 20, items: {type: string, minLength: 1, maxLength: 200}}
+        routing: {$ref: '#/components/schemas/AIProviderRouting'}
     AISlotInput:
       type: object
       additionalProperties: false
@@ -8592,6 +8614,7 @@ components:
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: string, format: uuid, description: With source provider.}
         model: {type: string, maxLength: 200}
+        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it.'}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
         default_level: {$ref: '#/components/schemas/AILevel'}
