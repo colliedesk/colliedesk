@@ -73,6 +73,19 @@ func TestResponseTargetsAreOneDocumentAnAdminSets(t *testing.T) {
 	if response := request(t, api, http.MethodGet, "/api/v1/response-targets", nil, other, nil); strings.Contains(response.Body.String(), "Asia/Bangkok") {
 		t.Fatalf("another workspace sees them: %s", response.Body.String())
 	}
+	// Each teammate turns their own emails off, and reads it back.
+	if response := request(t, api, http.MethodGet, "/api/v1/response-targets", nil, admin, nil); !strings.Contains(response.Body.String(), `"my_alert_email":true`) {
+		t.Fatalf("mine: %s", response.Body.String())
+	}
+	if response := request(t, api, http.MethodPatch, "/api/v1/agents/me/sla-alerts", map[string]any{"email": false}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("off for me: %d %s", response.Code, response.Body.String())
+	}
+	if response := request(t, api, http.MethodGet, "/api/v1/response-targets", nil, admin, nil); !strings.Contains(response.Body.String(), `"my_alert_email":false`) {
+		t.Fatalf("mine after: %s", response.Body.String())
+	}
+	if response := request(t, api, http.MethodGet, "/api/v1/response-targets", nil, other, nil); !strings.Contains(response.Body.String(), `"my_alert_email":true`) {
+		t.Fatalf("another workspace's admin's: %s", response.Body.String())
+	}
 	// Off again: kept as they were.
 	document := contractTargets()
 	document["enabled"] = false

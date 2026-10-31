@@ -152,6 +152,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_number_series_set_request` | Asks to add a number series or change its format, next number or start | `read` |
 | `colliedesk_response_targets_get` | Reads the business hours and the response targets by priority | `read` |
 | `colliedesk_response_targets_set_request` | Asks to change the business hours or the response targets | `read` |
+| `colliedesk_my_sla_alerts_set` | Turns your own reminder and overdue emails on or off | `draft` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |

@@ -13,7 +13,11 @@ import (
 	"time"
 )
 
-const defaultSMTPTimeout = 60 * time.Second
+// SMTPTimeout bounds one send to the relay, after SMTPDialTimeout to reach it.
+const (
+	SMTPTimeout     = 60 * time.Second
+	SMTPDialTimeout = 15 * time.Second
+)
 
 // SMTPConfig is the outbound relay. Host empty means outbound email is disabled.
 type SMTPConfig struct {
@@ -79,14 +83,14 @@ func (s SMTPSender) SendCopying(ctx context.Context, from, to string, copies []s
 
 func (s SMTPSender) send(ctx context.Context, from string, to, copies []string, message []byte) (refused []RefusedCopy, err error) {
 	address := net.JoinHostPort(s.Config.Host, strconv.Itoa(s.Config.Port))
-	dialer := net.Dialer{Timeout: 15 * time.Second}
+	dialer := net.Dialer{Timeout: SMTPDialTimeout}
 	conn, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("connect %s: %w", address, err)
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadline = time.Now().Add(defaultSMTPTimeout)
+		deadline = time.Now().Add(SMTPTimeout)
 	}
 	if err := conn.SetDeadline(deadline); err != nil {
 		_ = conn.Close()

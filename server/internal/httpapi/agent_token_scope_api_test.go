@@ -138,6 +138,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/response-targets":                                     "read",
 	"PUT /api/v1/response-targets":                                     "approval",
 	"PATCH /api/v1/agents/me/timezone":                                 "draft",
+	"PATCH /api/v1/agents/me/sla-alerts":                               "draft",
 	"PATCH /api/v1/agents/me/display-name":                             "draft",
 	"GET /api/v1/tags":                                                 "read",
 	"GET /api/v1/results":                                              "read",

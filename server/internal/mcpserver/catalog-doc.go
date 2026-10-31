@@ -147,6 +147,7 @@ var toolDocs = map[string]string{
 	"colliedesk_workspace_settings_update":                   "Sets the workspace timezone",
 	"colliedesk_workspace_rename":                            "Renames the workspace (replies never carry this name; it is the help center title while the help center has none)",
 	"colliedesk_my_timezone_set":                             "Sets or clears your own timezone",
+	"colliedesk_my_sla_alerts_set":                           "Turns your own reminder and overdue emails on or off",
 	"colliedesk_my_display_name_set":                         "Sets or clears your own display name",
 	"colliedesk_team_member_update":                          "Renames, deactivates or reactivates an agent; making someone an admin or changing an admin always waits for approval",
 	"colliedesk_invites_list":                                "Lists invites and their state, never their links",
