@@ -113,7 +113,8 @@ while empty:
 ### When the status of a conversation changes
 
 The OA tells the customer when someone on your team, an AI agent or the closing rule below sets a
-conversation's status, as a reply to the customer's first message in that chat. `{ref}` is the
+conversation's status, in that chat: one to one as a reply to the customer's first message; in a group,
+and for a chat moved into another conversation, without a quote. `{ref}` is the
 conversation's code and `{subject}` its subject; an empty box sets that status quietly:
 
 1. **When set to Pending**.

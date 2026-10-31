@@ -152,7 +152,7 @@ export const zaloMessages = {
   count: (n: number, max: number) => `${n.toLocaleString()} / ${max.toLocaleString()}`,
   cancelled: 'When a request is cancelled',
   statusHeading: 'When a conversation’s status changes',
-  statusLead: 'The OA sends these in the conversation’s chat, as a reply to the customer’s first message, when someone on your team, an AI agent or the rule below sets the status. An empty box sets that status quietly. Reopening is told with “When a resolved or closed conversation is reopened” above.',
+  statusLead: 'The OA sends these in the conversation’s chat (one to one, as a reply to the customer’s first message) when someone on your team, an AI agent or the rule below sets the status. An empty box sets that status quietly. Reopening is told with “When a resolved or closed conversation is reopened” above.',
   statusPending: 'When set to Pending',
   statusResolved: 'When set to Resolved',
   statusClosed: 'When set to Closed',
