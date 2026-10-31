@@ -15,7 +15,7 @@ func inboxSearchSpec() Spec {
 		Name:  "colliedesk_inbox_search",
 		Title: "Search the inbox",
 		Description: `List conversations (tickets) of the shared support inbox, most recently active first unless sort says otherwise. Each row gives the status, priority, assignee, tags, channel and who wrote in. ` +
-			`Use it to find work: status "open" is the working queue, assignee "unassigned" is what nobody owns, awaiting "team" is where the customer wrote last, tag follows a topic, q searches subjects, message text and the customer's name and email. ` +
+			`Use it to find work: status "open" is the working queue, assignee "unassigned" is what nobody owns, awaiting "team" is where the customer wrote last, tag follows a topic, q searches subjects, message text and the customer's name and email, and finds a conversation by its code (display_ref, such as #12) ahead of the rest. ` +
 			`Filters that take a list match any of its values (tag with tag_match "all" needs every tag); every filter given narrows further. saved_view_id applies a saved view (colliedesk_saved_views_list); an argument given next to it replaces that one filter of the view. ` +
 			`A row is only a summary; call colliedesk_conversation_get with its id to read the messages. ` +
 			`Results come in pages: when next_cursor is not null, call again with the same arguments plus that cursor. A page that is full may be followed by an empty one.` +
@@ -31,6 +31,7 @@ func inboxSearchSpec() Spec {
 			`"tag":` + oneOrMany(`{"type":"string","maxLength":100}`, 50, `"Name of an existing tag (see colliedesk_tags_list): its exact spelling, or any case when no other tag has the same letters. A list matches any of them unless tag_match is all."`) + `,` +
 			`"tag_match":{"type":"string","enum":["any","all"],"default":"any"},` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"Only conversations of this contact (colliedesk_contacts_find)."},` +
+			`"ref":{"type":"string","maxLength":60,"description":"The conversation with this code (display_ref), as a customer typed it: another case or leading zeros match, another year does not. q finds a code too, first."},` +
 			`"organization":{"type":"string","maxLength":200,"description":"Only conversations of contacts of this organization, ignoring case."},` +
 			`"awaiting":{"type":"string","enum":["team","customer"],"description":"team: the customer wrote last (notes do not count), the team owes an answer. customer: the team answered last."},` +
 			`"has_pending_draft":{"type":"boolean","description":"true: an AI agent's reply draft waits for a person's approval. false: none waits."},` +

@@ -38,6 +38,9 @@ type ConversationFilter struct {
 	CreatedBefore *time.Time
 	UpdatedAfter  *time.Time
 	UpdatedBefore *time.Time
+	// Ref keeps the conversations whose code (display_ref) is the one a person typed, read by the
+	// formats of the workspace's series: another case or padding matches, another year does not.
+	Ref string
 	// Sort is one of the ConversationSort* values; empty is ConversationSortUpdatedDesc.
 	Sort   string
 	Search string
@@ -221,9 +224,11 @@ func (s *Store) withChannelRef(ctx context.Context, tx pgx.Tx, workspaceID strin
 
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL)
+	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),
+		c.number,c.number_series,c.display_ref
 		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber)
+		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber,
+			&item.Number, &item.NumberSeries, &item.DisplayRef)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -250,7 +255,9 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 // fixed SQL text is concatenated.
 type conversationQuery struct {
 	where []string
-	args  []any
+	// searchRef is true for the conversation whose code the search names, which comes first.
+	searchRef string
+	args      []any
 }
 
 func (q *conversationQuery) arg(value any) string {
@@ -300,6 +307,9 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	if filter.ContactID != "" {
 		q.and("c.contact_id=" + q.arg(filter.ContactID) + "::uuid")
 	}
+	if filter.Ref != "" {
+		q.and(refMatches(q.arg(filter.Ref)))
+	}
 	if filter.Organization != "" {
 		q.and(`EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND lower(k.organization)=lower(` + q.arg(filter.Organization) + `))`)
 	}
@@ -347,7 +357,9 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	if filter.Search != "" {
 		pattern := q.arg(escapeLikePattern(filter.Search))
 		like := `ILIKE '%'||` + pattern + `||'%' ESCAPE '\'`
-		q.and(`(c.subject ` + like +
+		// The words may be a conversation's code, read as ?ref= reads it.
+		q.searchRef = refMatches(q.arg(strings.TrimSpace(filter.Search)))
+		q.and(`(` + q.searchRef + ` OR c.subject ` + like +
 			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.detached_at IS NULL AND m.body ` + like + `)` +
 			` OR EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND (k.name ` + like + ` OR k.email ` + like + `)))`)
 	}
@@ -356,6 +368,13 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 			`::uuid AND rm.metric=` + q.arg(filter.ResultMetric) + ` AND rm.conversation_id=c.id)`)
 	}
 	return q
+}
+
+// refMatches is true for the conversation whose code is the one in arg, read by the format of its own
+// series (conversation_ref_read): another case or padding matches, another year or series does not.
+func refMatches(arg string) string {
+	return `EXISTS(SELECT 1 FROM conversation_number_series s, LATERAL conversation_ref_read(s.format, ` + arg + `) r
+		WHERE s.workspace_id=c.workspace_id AND s.series=c.number_series AND r.n=c.number AND (r.year IS NULL OR r.year=c.number_year))`
 }
 
 func negateUnless(keep bool, condition string) string {
@@ -381,6 +400,10 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	}
 	q := conversationConditions(workspaceID, filter, now)
 	limit, offset := q.arg(filter.PageSize), q.arg((filter.Page-1)*filter.PageSize)
+	// A conversation whose code the search names comes first.
+	if q.searchRef != "" {
+		order = q.searchRef + ` DESC,` + order
+	}
 	idRows, err := tx.Query(ctx, `SELECT c.id::text FROM conversations c WHERE `+strings.Join(q.where, " AND ")+
 		` ORDER BY `+order+` LIMIT `+limit+` OFFSET `+offset, q.args...)
 	if err != nil {
@@ -396,7 +419,8 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,
-		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb)
+		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb),
+		c.number,c.number_series,c.display_ref
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
@@ -415,7 +439,8 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		var item domain.Conversation
 		var tagsJSON []byte
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority,
-			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON); err != nil {
+			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON,
+			&item.Number, &item.NumberSeries, &item.DisplayRef); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {

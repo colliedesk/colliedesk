@@ -55,6 +55,8 @@ type restConversation struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 	// LatestReplyNumber is the number of the newest reply, for seen_reply_number.
 	LatestReplyNumber int `json:"latest_reply_number"`
+	// DisplayRef is the code customers see and type back.
+	DisplayRef string `json:"display_ref"`
 }
 
 type restDelivery struct {

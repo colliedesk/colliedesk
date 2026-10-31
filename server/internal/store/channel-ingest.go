@@ -595,7 +595,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// yet: the contact is found once the message is stored. A reopen command names the sender's own
 	// conversation, which needs the contact first; it is a match, never held.
 	reopening := request.IntoConversation == "" && commanded && command.Action == channels.ActionReopen && in.Intent.Ref != ""
-	var contactID string
+	var contactID, legacyRef string
 	if level != intakeAuto || reopening {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
 			return result, err
@@ -621,10 +621,31 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	} else {
 		if commanded && command.Action == channels.ActionReopen && in.Intent.Ref != "" {
-			err := tx.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND id::text=$2 AND contact_id=$3`,
-				workspaceID, in.Intent.Ref, contactID).Scan(&facts.RefConversation)
+			// The code is the first word after the command; what follows is the customer's note. It names
+			// the customer's own conversation, or, in a group, one of the group's.
+			typed := strings.Fields(in.Intent.Ref)[0]
+			group := ""
+			if in.Place != nil && in.Place.Kind == channels.PlaceGroup {
+				group = in.Place.ExternalID
+			}
+			err := tx.QueryRow(ctx, `SELECT c.id::text FROM conversations c WHERE c.workspace_id=$1 AND (c.id::text=$2 OR `+refMatches("$2")+`)
+				AND (c.contact_id=$3 OR ($4<>'' AND EXISTS(SELECT 1 FROM conversation_thread_items l
+					JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
+					JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
+					WHERE l.workspace_id=c.workspace_id AND l.conversation_id=c.id AND l.unlinked_at IS NULL AND t.channel_id=$5 AND t.external_id=$4)))
+				ORDER BY c.created_at DESC LIMIT 1`, workspaceID, typed, contactID, group, channel.ID).Scan(&facts.RefConversation)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
+			}
+			if facts.RefConversation == "" {
+				legacy, err := legacyCode(ctx, tx, workspaceID, channel.Settings.NumberSeries, typed)
+				if err != nil {
+					return result, err
+				}
+				if !legacy {
+					return s.refNotFound(ctx, tx, &journal, channel, in, typed, finish)
+				}
+				legacyRef = typed
 			}
 		}
 		// A gathering decided to be a new request opens one, whatever conversation its thread found since.
@@ -635,6 +656,10 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	decision := rules.Decide(facts)
+	if legacyRef != "" {
+		// A code of the system before opens a new conversation, whatever the place's thread holds.
+		decision = rules.Decision{Action: rules.Create, Basis: rules.Match, Rule: rules.CommandOpen}
+	}
 	if request.Intake != nil {
 		decision = request.Intake.basisOf(decision, pending)
 	}
@@ -763,12 +788,69 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			}
 		}
 	}
-	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
-		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{NoticeKind: channels.NoticeReceived}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
+	if result.Status == channels.ResultCreated && legacyRef != "" {
+		if err := tagConversation(ctx, tx, workspaceID, conversationID, []string{LegacyRefTag}); err != nil {
+			return result, err
+		}
+	}
+	notice, kind := channel.Settings.Notices.Received, channels.NoticeReceived
+	if legacyRef != "" && channel.Settings.Notices.ReopenLegacy != "" {
+		notice, kind = channel.Settings.Notices.ReopenLegacy, channels.NoticeReopenLegacy
+	}
+	if result.Status == channels.ResultCreated && notice != "" {
+		// {ref} is the code of the conversation, which the customer types back.
+		var ref string
+		if err := tx.QueryRow(ctx, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&ref); err != nil {
+			return result, fmt.Errorf("read the conversation's code: %w", err)
+		}
+		text := channels.RenderNotice(notice, map[string]string{"ref": ref, "old_ref": legacyRef})
+		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{NoticeKind: kind}, "outgoing", text, nil, nil); err != nil {
 			return result, fmt.Errorf("send received notice: %w", err)
 		}
 	}
 	result.ConversationID, result.MessageID = &conversationID, &messageID
+	return finish(result)
+}
+
+// LegacyRefTag marks a conversation a customer opened by naming a code of the system before.
+const LegacyRefTag = "legacy-ref"
+
+// legacyCode says whether a code is one of the system the channel's series was taken over from: in the
+// series' format, and below its start (in start_year, or any number of an earlier year).
+func legacyCode(ctx context.Context, tx pgx.Tx, workspaceID, series, typed string) (bool, error) {
+	if series == "" {
+		series = DefaultNumberSeries
+	}
+	var legacy bool
+	err := tx.QueryRow(ctx, `SELECT COALESCE(bool_or(CASE WHEN r.year IS NULL OR s.start_year IS NULL THEN r.n<s.start
+			ELSE r.year<s.start_year OR (r.year=s.start_year AND r.n<s.start) END),false)
+		FROM conversation_number_series s, LATERAL conversation_ref_read(s.format,$3) r WHERE s.workspace_id=$1 AND s.series=$2`,
+		workspaceID, series, typed).Scan(&legacy)
+	if err != nil {
+		return false, fmt.Errorf("read a code of the system before: %w", err)
+	}
+	return legacy, nil
+}
+
+// refNotFound answers a reopen command whose code names no conversation of the customer's, the same way
+// whatever the reason, and adds the message to nothing.
+func (s *Store) refNotFound(ctx context.Context, tx pgx.Tx, journal *journalWriter, channel channels.Channel, in channels.Inbound, typed string,
+	finish func(channels.IngestResult) (channels.IngestResult, error)) (channels.IngestResult, error) {
+	var result channels.IngestResult
+	if err := journal.write(ctx, "dropped", journalDetail{dropReason: channels.DropRefNotFound}); err != nil {
+		return result, err
+	}
+	if err := recordThreadItems(ctx, tx, journal, in, itemOutcome{disposition: ItemNotRequest, reason: channels.DropRefNotFound}); err != nil {
+		return result, err
+	}
+	if channel.Settings.Notices.ReopenNotFound != "" {
+		if err := queueThreadNotice(ctx, tx, journal, journal.eventID, channels.NoticeReopenNotFound,
+			channels.RenderNotice(channel.Settings.Notices.ReopenNotFound, map[string]string{"ref": clip(typed, 60)}), 0); err != nil {
+			return result, err
+		}
+	}
+	reason := channels.DropRefNotFound
+	result.Status, result.Reason = channels.ResultDropped, &reason
 	return finish(result)
 }
 
@@ -1030,9 +1112,13 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 		scope = in.Scope
 	}
 	var conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id)
-		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid)) RETURNING id::text`,
-		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID).Scan(&conversationID); err != nil {
+	series := settings.NumberSeries
+	if series == "" {
+		series = DefaultNumberSeries
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series)
+		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10) RETURNING id::text`,
+		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {
