@@ -1,6 +1,7 @@
 package zalo
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -108,5 +109,11 @@ func (a *Adapter) webhook(kit channels.RouteKit) http.HandlerFunc {
 			return
 		}
 		ok()
+		background := context.WithoutCancel(r.Context())
+		a.config.Background(func() {
+			ctx, cancel := context.WithTimeout(background, 15*time.Second)
+			defer cancel()
+			a.lookupName(ctx, kit, channel, e)
+		})
 	}
 }

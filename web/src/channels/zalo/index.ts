@@ -5,6 +5,7 @@ import type { ChannelUI } from '../registry';
 const capabilities: Record<string, string> = {
   threads: 'Keeps a customer’s chat in one conversation',
   attachments_in: 'Receives pictures and files',
+  attachments_out: 'Sends pictures',
 };
 
 // The Zalo OA type until its settings pages are designed: its words and one tab that says how it is set up.

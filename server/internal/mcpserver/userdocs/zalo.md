@@ -40,7 +40,13 @@ kept. The channel's line in **Channels** reads "OA 1234…5678 · 2 groups linke
    [AI intake](ai.md) where it is on.
 3. Pictures, files and videos are fetched and kept with the message. A sticker, a location or another
    kind Zalo sends is kept as a message saying what it was, never dropped.
-4. What the OA sends (your replies, and what someone writes in the OA's own chat on Zalo) is the team's.
+4. A customer is called by their Zalo id until their name is read from Zalo, right after their first
+   message is taken: their profile as the OA sees it, or for a group member who does not follow the OA,
+   the group's member list (read once for every member, at most once an hour a group). The contact and
+   the chat then show it. Zalo is asked at most once an hour for someone it has no name for, and again
+   with the next message when it could not answer (a token it refused, the network); your team's Zalo
+   users are never looked up.
+5. What the OA sends (your replies, and what someone writes in the OA's own chat on Zalo) is the team's.
 
 ## Replies
 
@@ -49,5 +55,8 @@ again without the quote when Zalo cannot make it). A reply longer than 2000 char
 Zalo refuses the access token, Colliedesk refreshes it once with the refresh token and keeps both new
 tokens; only one sender refreshes at a time, because a refresh token is used once.
 
-Not yet: files in a reply (the reply fails and says so), connecting an OA from Zalo's own consent page,
-and reading a group's or a customer's name from Zalo.
+A reply carries pictures (JPEG or PNG, read from the file itself, 1 MB at most each; not GIF yet): each goes up to Zalo and is sent as a
+message of its own after the text. Another file, or a larger picture, fails the reply before anything is
+sent and says why (`zalo_no_files`, `zalo_file_too_large`): send the text again without it.
+
+Not yet: other files in a reply, connecting an OA from Zalo's own consent page.

@@ -1,6 +1,7 @@
 package zalo_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -53,7 +54,7 @@ func newFakeZalo(t *testing.T) *fakeZalo {
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		c := call{Path: r.URL.Path, Token: r.Header.Get("access_token"), SecretKey: r.Header.Get("secret_key")}
-		if r.URL.Path == "/v4/oa/access_token" {
+		if r.URL.Path == "/v4/oa/access_token" || r.URL.Path == "/v2.0/oa/upload/image" {
 			c.Form = string(body)
 		} else {
 			_ = json.Unmarshal(body, &c.Body)
@@ -73,6 +74,8 @@ func newFakeZalo(t *testing.T) *fakeZalo {
 			f.tokens = "access-2"
 			f.mu.Unlock()
 			_, _ = w.Write([]byte(`{"access_token":"access-2","refresh_token":"refresh-2","expires_in":"90000"}`))
+		case r.URL.Path == "/v2.0/oa/upload/image" && c.Token == current:
+			_, _ = w.Write([]byte(`{"error":0,"data":{"attachment_id":"att-1"}}`))
 		case scripted == "500":
 			w.WriteHeader(http.StatusInternalServerError)
 		case scripted != "":
@@ -113,11 +116,12 @@ func (f *fakeZalo) refreshes() []call {
 
 // desk is a database with the Zalo type pointed at the stand-in.
 type desk struct {
-	pool   *pgxpool.Pool
-	store  *store.Store
-	zalo   *fakeZalo
-	media  *httptest.Server
-	client *http.Client
+	pool    *pgxpool.Pool
+	store   *store.Store
+	zalo    *fakeZalo
+	media   *httptest.Server
+	client  *http.Client
+	storage attachments.Storage
 }
 
 func newDesk(t *testing.T) desk {
@@ -143,7 +147,7 @@ func newDesk(t *testing.T) desk {
 	roots := x509.NewCertPool()
 	roots.AddCert(media.Certificate())
 	client := pipeline.FetchClient(map[string]bool{media.Listener.Addr().String(): true}, &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12})
-	return desk{pool: pool, store: store.New(pool).WithChannels(registry).WithObjects(storage).WithSealKeys(keys), zalo: fake, media: media, client: client}
+	return desk{pool: pool, store: store.New(pool).WithChannels(registry).WithObjects(storage).WithSealKeys(keys), zalo: fake, media: media, client: client, storage: storage}
 }
 
 var oaNumber atomic.Int64
@@ -423,5 +427,58 @@ func TestAResumedReplyKeepsItsFirstPartsID(t *testing.T) {
 	a.deliverAt(t, time.Hour)
 	if got := a.one(t, `SELECT o.status||':'||o.external_id FROM channel_outbox o WHERE o.workspace_id=$1`); got != "sent:first-part" {
 		t.Fatalf("after the retry: %s", got)
+	}
+}
+
+func (a at) replyWith(t *testing.T, conversationID, body, name, contentType string, data []byte) string {
+	t.Helper()
+	object, err := a.storage.Put(context.Background(), a.workspaceID, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := a.store.CreateMessage(context.Background(), a.workspaceID, conversationID, store.Actor{AgentID: a.agentID}, "outgoing", body,
+		store.NewAttachment{Filename: name, ContentType: contentType, Object: object})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return message.ID
+}
+
+// A picture of a reply goes up to Zalo and then as a message of its own, after the text; a file that is
+// no picture, or a picture over 1 MB, is refused before anything goes, and says why.
+func TestAReplyCarriesItsPicturesAndRefusesOtherFiles(t *testing.T) {
+	a := newAt(t)
+	oa := a.channel.ExternalAccount
+	a.receive(t, event("user_send_text", oa, "1110002", oa, "m-1", "Hello"))
+	conversation := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-1'`)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("png-bytes")...)
+	a.replyWith(t, conversation, "Here is where to click.", "where.png", "image/png", png)
+	a.deliver(t)
+	sends := a.zalo.sends()
+	if len(sends) != 3 || sends[1].Path != "/v2.0/oa/upload/image" || !strings.Contains(sends[1].Form, `filename="where.png"`) || !strings.Contains(sends[1].Form, "png-bytes") {
+		t.Fatalf("sends = %+v", sends)
+	}
+	picture, _ := sends[2].Body["message"].(map[string]any)
+	if !strings.Contains(fmt.Sprint(picture), "attachment_id:att-1") || !strings.Contains(fmt.Sprint(picture), "media_type:image") {
+		t.Fatalf("picture message = %v", picture)
+	}
+	if got := a.one(t, `SELECT status FROM channel_outbox WHERE workspace_id=$1`); got != "sent" {
+		t.Fatalf("delivery = %s", got)
+	}
+	for _, c := range []struct {
+		name, contentType, code string
+		size                    int
+	}{
+		{"invoice.pdf", "application/pdf", zalo.CodeNoFiles, 10}, {"big.jpg", "image/jpeg", zalo.CodeFileTooLarge, zalo.MaxPicture + 1},
+		{"moving.gif", "image/gif", zalo.CodeNoFiles, 10}, {"named.png", "image/png", zalo.CodeNoFiles, 10}} {
+		before := len(a.zalo.sends())
+		id := a.replyWith(t, conversation, "See the file.", c.name, c.contentType, make([]byte, c.size))
+		a.deliver(t)
+		if got := a.one(t, `SELECT status||':'||COALESCE(last_error_code,'') FROM channel_outbox WHERE workspace_id=$1 AND message_id=$2`, id); got != "failed:"+c.code {
+			t.Fatalf("%s: %s", c.name, got)
+		}
+		if after := len(a.zalo.sends()); after != before {
+			t.Fatalf("%s: %d calls to Zalo, want none", c.name, after-before)
+		}
 	}
 }
