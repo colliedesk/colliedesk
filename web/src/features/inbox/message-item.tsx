@@ -60,14 +60,14 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu 
   return (
     <article className={`message message-${item.kind}`}>
       <header className="message-meta">
-        <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
+        <Avatar name={item.author_name ?? item.email?.from ?? (item.notice_kind ? messages.channelNoticeAuthor : kindLabel(item))} />
         <div className="message-byline">
           {plainAuthor && <span className="message-author">{item.author_name}</span>}
           {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
           {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
-          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
+          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item)}</span>
           {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
             {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
           {label}
@@ -93,7 +93,9 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu 
   );
 }
 
-function kindLabel(kind: Message['kind']) {
+// A notice the channel sent by itself (its received notice) is no reply of the team, and says so.
+function kindLabel({ kind, notice_kind }: Pick<Message, 'kind' | 'notice_kind'>) {
+  if (notice_kind) return messages.channelNotice;
   if (kind === 'note') return messages.noteMode;
   return kind === 'incoming' ? messages.incoming : messages.replyMode;
 }
