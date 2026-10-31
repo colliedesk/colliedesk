@@ -2111,7 +2111,7 @@ export interface paths {
         };
         /** @description The workspace's response targets: business hours in a timezone, holidays, first-response and resolution targets by priority in business minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out. Never set, they are off with no hours and no targets. */
         get: operations["getResponseTargets"];
-        /** @description Replace the response targets with this document. Turning them on measures the conversations opened from then on; turning them off hides every target and keeps what was measured. A wrong part answers 400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes, timezone, channel_ids.0). */
+        /** @description Replace the response targets with this document. Turning them on measures the conversations opened from then on; turning them off hides every target and keeps what was measured. A wrong part answers 400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes, timezone, channel_ids.0). Send updated_at as you read it to save only if nobody saved since: 409 changed_elsewhere otherwise, with the stored document as current, and nothing changes. Without it the last save wins. */
         put: operations["setResponseTargets"];
         post?: never;
         delete?: never;
@@ -7457,6 +7457,11 @@ export interface components {
             channel_ids?: string[] | null;
             /** @description Whether reminder and overdue emails go out (each teammate can turn theirs off). */
             alert_email?: boolean;
+            /**
+             * Format: date-time
+             * @description As you read it: save only if nobody saved since (409 changed_elsewhere otherwise).
+             */
+            updated_at?: string | null;
         };
         ResponseTargets: components["schemas"]["ResponseTargetsInput"] & {
             /**
@@ -13862,6 +13867,23 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description Someone saved the response targets after you read them (changed_elsewhere); nothing changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            /** @enum {string} */
+                            code: "changed_elsewhere";
+                            message: string;
+                            request_id?: string;
+                        };
+                        current: components["schemas"]["ResponseTargets"];
+                    };
+                };
+            };
         };
     };
     updateWorkspaceSlug: {
