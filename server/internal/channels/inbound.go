@@ -260,6 +260,11 @@ const (
 	DropChannelRemoved = "channel_removed"
 	DropEcho           = "echo"
 	DropCancelled      = "cancelled"
+	// DropConfirmed: a confirm command sent the request being written; it is no part of it.
+	DropConfirmed = "confirmed"
+	// DropExpired: a request left without its description past Gather.ExpireSeconds, and the message
+	// that found it expired.
+	DropExpired = "expired"
 )
 
 // Hold reasons.
