@@ -729,6 +729,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/conversations/{id}/chat", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channels/{id}/threads", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channels/{id}/threads/{threadId}/items", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/channels/{id}/senders", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channel-thread-items", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/intake/gatherings", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/intake/gatherings/{id}", auth.PermissionConversationsRead},

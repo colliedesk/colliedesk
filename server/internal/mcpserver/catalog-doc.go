@@ -191,6 +191,7 @@ var toolDocs = map[string]string{
 	"colliedesk_message_move_undo":                           "Undoes a move of customer messages",
 	"colliedesk_channel_threads_list":                        "Lists a chat channel's one-to-one chats and groups",
 	"colliedesk_channel_thread_items":                        "Reads everything said in one chat place",
+	"colliedesk_channel_senders":                             "Lists everyone who wrote in a chat channel's places, each once, most recent first",
 	"colliedesk_channel_unresolved_items":                    "Lists chat messages nobody concluded on yet",
 	"colliedesk_channel_ai_get":                              "Shows what each AI feature does by itself on a channel and its scopes",
 	"colliedesk_channel_ai_set":                              "Sets what an AI feature does by itself on a channel or a scope; a raise waits for a person (admin token)",

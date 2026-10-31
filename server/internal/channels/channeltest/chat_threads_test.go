@@ -136,10 +136,17 @@ func TestACancelConcludesItsItemsAndADiscardRemovesThem(t *testing.T) {
 	if got := d.one(t, `SELECT count(*)::text FROM channel_thread_items WHERE workspace_id=$1 AND body LIKE '%secret%'`); got != "1" {
 		t.Fatalf("held item = %s", got)
 	}
+	if got := d.one(t, `SELECT string_agg(sender_value,',' ORDER BY sender_value) FROM channel_senders WHERE workspace_id=$1`); got != "u1,u2" {
+		t.Fatalf("senders while held = %s", got)
+	}
 	if _, err := d.store.DiscardHeld(ctx, d.workspaceID, d.channel.ID, nil, store.ChannelActor{AgentID: d.agentID}); err != nil {
 		t.Fatal(err)
 	}
 	if got := d.one(t, `SELECT count(*)::text FROM channel_thread_items WHERE workspace_id=$1 AND body LIKE '%secret%'`); got != "0" {
 		t.Fatalf("a discarded message's item stayed: %s", got)
+	}
+	// Who wrote only what was discarded is no longer listed as having written.
+	if got := d.one(t, `SELECT string_agg(sender_value,',' ORDER BY sender_value) FROM channel_senders WHERE workspace_id=$1`); got != "u1" {
+		t.Fatalf("senders after the discard = %s", got)
 	}
 }

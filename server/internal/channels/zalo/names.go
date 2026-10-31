@@ -163,8 +163,13 @@ func (a *Adapter) keepNames(ctx context.Context, kit channels.RouteKit, channel 
 			channel.WorkspaceID, channel.ID, IdentityUser, users, given); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE channel_thread_items i SET sender_name=x.n FROM unnest($4::text[],$5::text[]) AS x(u,n)
+		if _, err := tx.Exec(ctx, `UPDATE channel_thread_items i SET sender_name=x.n FROM unnest($4::text[],$5::text[]) AS x(u,n)
 			WHERE i.workspace_id=$1 AND i.channel_id=$2 AND i.sender_kind=$3 AND i.sender_value=x.u AND i.sender_name IS NULL`,
+			channel.WorkspaceID, channel.ID, IdentityUser, users, given); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE channel_senders s SET name=x.n FROM unnest($4::text[],$5::text[]) AS x(u,n)
+			WHERE s.workspace_id=$1 AND s.channel_id=$2 AND s.sender_kind=$3 AND s.sender_value=x.u AND s.name IS NULL`,
 			channel.WorkspaceID, channel.ID, IdentityUser, users, given)
 		return err
 	}); err != nil {

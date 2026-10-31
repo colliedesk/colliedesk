@@ -208,6 +208,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/conversations/{id}/chat":                              "read",
 	"GET /api/v1/channels/{id}/threads":                                "read",
 	"GET /api/v1/channels/{id}/threads/{threadId}/items":               "read",
+	"GET /api/v1/channels/{id}/senders":                                "read",
 	"GET /api/v1/channel-thread-items":                                 "read",
 	"GET /api/v1/intake/gatherings":                                    "read",
 	"GET /api/v1/intake/gatherings/{id}":                               "read",

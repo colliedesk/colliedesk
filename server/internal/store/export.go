@@ -1196,6 +1196,26 @@ func exportChatThreads(ctx context.Context, tx pgx.Tx, workspaceID string, sink 
 	if err := rowsError("export chat items", items); err != nil {
 		return err
 	}
+	senders, err := tx.Query(ctx, `SELECT channel_id::text,sender_kind,sender_value,name,role,last_at,thread_id::text FROM channel_senders
+		WHERE workspace_id=$1 ORDER BY channel_id,last_at,sender_value`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export chat senders: %w", err)
+	}
+	for senders.Next() {
+		var r export.ChannelSender
+		if err := senders.Scan(&r.ChannelID, &r.SenderKind, &r.SenderValue, &r.Name, &r.Role, &r.LastAt, &r.ThreadID); err != nil {
+			senders.Close()
+			return fmt.Errorf("export chat senders: %w", err)
+		}
+		r.LastAt = domain.UTC(r.LastAt)
+		if err := sink.ChannelSender(r); err != nil {
+			senders.Close()
+			return err
+		}
+	}
+	if err := rowsError("export chat senders", senders); err != nil {
+		return err
+	}
 	links, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,item_id::text,reason,decision_id::text,linked_by_agent_id::text,linked_at,unlinked_at,
 			unlinked_by_agent_id::text FROM conversation_thread_items WHERE workspace_id=$1 ORDER BY linked_at,id`, workspaceID)
 	if err != nil {

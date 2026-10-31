@@ -266,6 +266,11 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 			workspaceID, channelID); err != nil {
 			return discarded{}, fmt.Errorf("discard held chat items: %w", err)
 		}
+		if _, err := tx.Exec(ctx, `DELETE FROM channel_senders s WHERE s.workspace_id=$1 AND s.channel_id=$2 AND NOT EXISTS(SELECT 1 FROM channel_thread_items i
+			WHERE i.workspace_id=s.workspace_id AND i.channel_id=s.channel_id AND i.sender_kind=s.sender_kind AND i.sender_value=s.sender_value)`,
+			workspaceID, channelID); err != nil {
+			return discarded{}, fmt.Errorf("discard held chat senders: %w", err)
+		}
 		if count > 0 {
 			if err := insertChannelEvent(ctx, tx, channel, "held_discarded", actor, map[string]any{"count": count}); err != nil {
 				return discarded{}, err
