@@ -52,6 +52,7 @@ export const billingSchema = z.object({
   complimentary: z.boolean(), complimentary_until: nullableDate, checkout_plans: z.array(checkoutPlanSchema),
   checkout_refusals: z.array(z.object({ plan: checkoutPlanSchema, reason: z.string() })),
   storage_upgrade_plan: z.enum(['solo', 'small', 'team', 'team25', 'founding']).nullable(),
+  purchased_plan: checkoutPlanSchema.nullable(),
   migration_requested_at: nullableDate,
   limits: z.object({ agents: z.number().int(), replies_per_24h: z.number().int().nullable(), storage_bytes: z.number().int().nullable(), storage_warn_bytes: z.number().int().nullable() }),
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int(), storage_bytes: z.number().int() }),

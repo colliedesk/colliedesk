@@ -221,7 +221,7 @@ that suit you for a call, with a time zone.
 
 | Row | What it says |
 |---|---|
-| Plan | The plan, and for Founding its price every 3 months |
+| Plan | The plan and what it costs: for example "Team 25 · $149 a month", "Team 25 · $1,490 a year" or Founding's $99 every 3 months |
 | Next charge | The amount and the date, or "None. Your plan ends …" after you cancel |
 | Agents | Agents used of the plan's limit, with pending invites, and **Invite people** |
 | Attachment storage | Used of the plan's limit, in GiB |

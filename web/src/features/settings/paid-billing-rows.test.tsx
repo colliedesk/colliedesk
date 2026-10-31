@@ -7,12 +7,12 @@ import { PaidBillingRows } from './paid-billing-rows';
 type Props = Partial<Parameters<typeof PaidBillingRows>[0]>;
 function show(billing: Billing, props: Props = {}) {
   const handlers = { onRequestMigration: vi.fn(), onManage: vi.fn() };
-  render(<PaidBillingRows billing={billing} timezone="UTC" {...handlers} {...props} />);
-  return handlers;
+  const { unmount } = render(<PaidBillingRows billing={billing} timezone="UTC" {...handlers} {...props} />);
+  return { ...handlers, unmount };
 }
 const row = (label: string) => screen.getByText(label, { selector: 'dt' }).closest('.billing-row') as HTMLElement;
-const founding = paidBilling('founding', 10, 20);
-const team25 = paidBilling('team25', 25, 250, { current_period_end: '2026-11-30T09:00:00Z', usage: { agents: 14, pending_invites: 0, replies_last_24h: 0, storage_bytes: 3.1 * GiB } });
+const founding = paidBilling('founding', 10, 20, { purchased_plan: 'founding' });
+const team25 = paidBilling('team25', 25, 250, { purchased_plan: 'team25_monthly', current_period_end: '2026-11-30T09:00:00Z', usage: { agents: 14, pending_invites: 0, replies_last_24h: 0, storage_bytes: 3.1 * GiB } });
 
 test('a Founding workspace reads as rows: plan and price, next charge, seats, storage, migration, billing portal', () => {
   show(founding, { migration: { requestedAt: null, done: false } });
@@ -69,16 +69,45 @@ test('a finished Freshdesk import reads Done', () => {
   expect(row('Freshdesk migration')).not.toHaveTextContent('Requested');
 });
 
-test('Team 25 names its plan and its charge date, and the price too when this browser just bought it', () => {
-  const { unmount } = render(<PaidBillingRows billing={team25} timezone="UTC" onRequestMigration={vi.fn()} onManage={vi.fn()} />);
-  expect(row('Plan')).toHaveTextContent('Team 25');
-  expect(row('Plan')).not.toHaveTextContent('$');
-  expect(row('Next charge')).toHaveTextContent('Nov 30, 2026');
-  expect(row('Next charge')).not.toHaveTextContent('$');
+test('the Plan row states the price of the plan it was bought as, with the charge it makes on the date it falls', () => {
+  const cases: [Billing['plan'], NonNullable<Billing['purchased_plan']>, string, string][] = [
+    ['team25', 'team25_monthly', 'Team 25 · $149 a month', '$149 on Nov 30, 2026'],
+    ['team25', 'team25_yearly', 'Team 25 · $1,490 a year', '$1,490 on Nov 30, 2026'],
+    ['founding', 'founding', 'Founding · $99 every 3 months', '$99 on Nov 30, 2026'],
+    ['team', 'team_monthly', 'Team · $69 a month', '$69 on Nov 30, 2026'],
+    ['team', 'team_yearly', 'Team · $690 a year', '$690 on Nov 30, 2026'],
+    ['small', 'small_monthly', 'Small · $39 a month', '$39 on Nov 30, 2026'],
+    ['solo', 'solo_yearly', 'Solo · $190 a year', '$190 on Nov 30, 2026'],
+  ];
+  for (const [plan, purchased, planText, chargeText] of cases) {
+    const { unmount } = show(paidBilling(plan, 10, 100, { purchased_plan: purchased, current_period_end: '2026-11-30T09:00:00Z' }), { migration: undefined });
+    expect(row('Plan'), purchased).toHaveTextContent(planText);
+    expect(row('Next charge'), purchased).toHaveTextContent(chargeText);
+    unmount();
+  }
+});
+
+test('a yearly Team 25 never reads as monthly, and a monthly one never as yearly', () => {
+  const { unmount } = show({ ...team25, purchased_plan: 'team25_yearly' });
+  expect(row('Plan')).not.toHaveTextContent('a month');
+  // A plan already paid states what it costs, not the discount that sold it.
+  expect(row('Plan')).not.toHaveTextContent('2 months free');
+  expect(row('Plan')).not.toHaveTextContent('$149');
   unmount();
-  show(team25, { remembered: 'team25_monthly' });
-  expect(row('Plan')).toHaveTextContent('Team 25 · $149 a month');
-  expect(row('Next charge')).toHaveTextContent('$149 on Nov 30, 2026');
+  show(team25);
+  expect(row('Plan')).not.toHaveTextContent('a year');
+  expect(row('Plan')).not.toHaveTextContent('$1,490');
+});
+
+test('a paid plan whose price the server does not know names the plan and the charge date, and no price', () => {
+  for (const unknown of [team25, founding]) {
+    const { unmount } = show({ ...unknown, purchased_plan: null });
+    expect(row('Plan')).toHaveTextContent(unknown.plan === 'team25' ? 'Team 25' : 'Founding');
+    expect(row('Plan')).not.toHaveTextContent('$');
+    expect(row('Next charge')).not.toHaveTextContent('$');
+    expect(row('Next charge')).toHaveTextContent(/[A-Z][a-z]{2} \d{1,2}, 20\d\d/);
+    unmount();
+  }
 });
 
 test('a plan with no migration promised, such as Team, has no migration row', () => {

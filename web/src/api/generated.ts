@@ -5208,6 +5208,8 @@ export interface components {
              * @enum {string|null}
              */
             storage_upgrade_plan: "solo" | "small" | "team" | "team25" | "founding" | null;
+            /** @description The checkout plan the paid subscription in effect was bought as, such as `team25_yearly`, which names its plan and its period (`_monthly`, `_yearly`; `founding` is billed every 3 months). The web app reads the price of the plan row from it. Null on the trial, for a complimentary plan, when the product is no longer on sale here, and for a subscription stored before its product was kept (the next subscription event or `collie billing reconcile` fills it). */
+            purchased_plan: components["schemas"]["CheckoutPlan"] | null;
             /** @description The plans this server can sell, in the order to offer them. `solo_*`, `small_*` and `team25_*` appear only for the Polar products this server has configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
             checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {

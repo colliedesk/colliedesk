@@ -19,11 +19,11 @@ const (
 	SubscriptionUnknownWorkspace SubscriptionResult = "unknown_workspace" // nothing is stored
 )
 
-const subscriptionColumns = `plan,polar_subscription_id,polar_customer_id,status,current_period_end,cancel_at_period_end,ended_at,source_modified_at`
+const subscriptionColumns = `plan,polar_subscription_id,polar_customer_id,status,current_period_end,cancel_at_period_end,ended_at,source_modified_at,polar_product_id`
 
 func scanSubscription(row pgx.Row) (domain.Subscription, error) {
 	var s domain.Subscription
-	err := row.Scan(&s.Plan, &s.SubscriptionID, &s.CustomerID, &s.Status, &s.CurrentPeriodEnd, &s.CancelAtPeriodEnd, &s.EndedAt, &s.ModifiedAt)
+	err := row.Scan(&s.Plan, &s.SubscriptionID, &s.CustomerID, &s.Status, &s.CurrentPeriodEnd, &s.CancelAtPeriodEnd, &s.EndedAt, &s.ModifiedAt, &s.ProductID)
 	return s, err
 }
 
@@ -50,14 +50,14 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 		if recorded.RowsAffected() == 0 {
 			return SubscriptionDuplicate, nil
 		}
-		written, err := tx.Exec(ctx, `INSERT INTO workspace_billing(workspace_id,`+subscriptionColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		written, err := tx.Exec(ctx, `INSERT INTO workspace_billing(workspace_id,`+subscriptionColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 			ON CONFLICT(workspace_id,polar_subscription_id) DO UPDATE SET plan=EXCLUDED.plan,
 				polar_customer_id=EXCLUDED.polar_customer_id,status=EXCLUDED.status,current_period_end=EXCLUDED.current_period_end,
 				cancel_at_period_end=EXCLUDED.cancel_at_period_end,ended_at=EXCLUDED.ended_at,
-				source_modified_at=EXCLUDED.source_modified_at,updated_at=now()
+				source_modified_at=EXCLUDED.source_modified_at,polar_product_id=EXCLUDED.polar_product_id,updated_at=now()
 			WHERE workspace_billing.source_modified_at <= EXCLUDED.source_modified_at`,
 			workspaceID, incoming.Plan, incoming.SubscriptionID, incoming.CustomerID, incoming.Status, incoming.CurrentPeriodEnd,
-			incoming.CancelAtPeriodEnd, incoming.EndedAt, incoming.ModifiedAt)
+			incoming.CancelAtPeriodEnd, incoming.EndedAt, incoming.ModifiedAt, incoming.ProductID)
 		if err != nil {
 			return "", err
 		}
@@ -111,7 +111,7 @@ func LoadAllSubscriptions(ctx context.Context, tx pgx.Tx) (map[string][]domain.S
 	for rows.Next() {
 		var workspaceID string
 		var s domain.Subscription
-		if err := rows.Scan(&workspaceID, &s.Plan, &s.SubscriptionID, &s.CustomerID, &s.Status, &s.CurrentPeriodEnd, &s.CancelAtPeriodEnd, &s.EndedAt, &s.ModifiedAt); err != nil {
+		if err := rows.Scan(&workspaceID, &s.Plan, &s.SubscriptionID, &s.CustomerID, &s.Status, &s.CurrentPeriodEnd, &s.CancelAtPeriodEnd, &s.EndedAt, &s.ModifiedAt, &s.ProductID); err != nil {
 			return nil, err
 		}
 		all[workspaceID] = append(all[workspaceID], s)

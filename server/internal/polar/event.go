@@ -112,7 +112,7 @@ func (s Subscription) Stored(plan string) domain.Subscription {
 		status = domain.StatusUnknown
 	}
 	return domain.Subscription{
-		Plan: plan, SubscriptionID: s.ID, CustomerID: s.CustomerID, Status: status,
+		Plan: plan, SubscriptionID: s.ID, CustomerID: s.CustomerID, ProductID: s.ProductID, Status: status,
 		CurrentPeriodEnd: s.CurrentPeriodEnd, CancelAtPeriodEnd: s.CancelAtPeriodEnd, EndedAt: s.EndedAt, ModifiedAt: s.ModifiedAt,
 	}
 }

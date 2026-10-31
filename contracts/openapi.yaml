@@ -8356,7 +8356,7 @@ components:
         requested_at: {type: string, format: date-time}
     Billing:
       type: object
-      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans, checkout_refusals, storage_upgrade_plan, migration_requested_at]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans, checkout_refusals, storage_upgrade_plan, purchased_plan, migration_requested_at]
       properties:
         plan:
           type: string
@@ -8403,6 +8403,14 @@ components:
           type: [string, 'null']
           enum: [solo, small, team, team25, founding, null]
           description: The plan this server sells with more storage and as many agents as the plan in effect, for the storage notice; null on the trial and when none is on sale.
+        purchased_plan:
+          anyOf: [{$ref: '#/components/schemas/CheckoutPlan'}, {type: 'null'}]
+          description: >
+            The checkout plan the paid subscription in effect was bought as, such as `team25_yearly`, which
+            names its plan and its period (`_monthly`, `_yearly`; `founding` is billed every 3 months). The web app
+            reads the price of the plan row from it. Null on the trial, for a complimentary plan, when the product
+            is no longer on sale here, and for a subscription stored before its product was kept (the next
+            subscription event or `collie billing reconcile` fills it).
         checkout_plans:
           type: array
           items: {$ref: '#/components/schemas/CheckoutPlan'}

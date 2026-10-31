@@ -106,22 +106,47 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	return config, nil
 }
 
-// CheckoutPlans lists the checkout plan names this configuration can sell, in the order they are
-// offered: from the smallest plan up, Founding last. An optional plan is listed per configured product.
-func (c Config) CheckoutPlans() []string {
-	p := c.Products
-	var plans []string
-	for _, offer := range []struct{ name, product string }{
+// offer is a checkout plan name and the Polar product it sells.
+type offer struct{ plan, product string }
+
+// offers lists the checkout plans in the order they are offered: from the smallest plan up, Founding
+// last. A product that is not set is listed with an empty id.
+func (p Products) offers() []offer {
+	return []offer{
 		{"solo_monthly", p.SoloMonthly}, {"solo_yearly", p.SoloYearly},
 		{"small_monthly", p.SmallMonthly}, {"small_yearly", p.SmallYearly},
 		{"team_monthly", p.TeamMonthly}, {"team_yearly", p.TeamYearly},
 		{"team25_monthly", p.Team25Monthly}, {"team25_yearly", p.Team25Yearly},
-	} {
-		if offer.product != "" {
-			plans = append(plans, offer.name)
+		{"founding", p.Founding},
+	}
+}
+
+// CheckoutPlans lists the checkout plan names this configuration can sell, in the order they are
+// offered: from the smallest plan up, Founding last. An optional plan is listed per configured product.
+func (c Config) CheckoutPlans() []string {
+	var plans []string
+	for _, offer := range c.Products.offers() {
+		// Founding is a required product, so it is always offered.
+		if offer.product != "" || offer.plan == "founding" {
+			plans = append(plans, offer.plan)
 		}
 	}
-	return append(plans, "founding")
+	return plans
+}
+
+// CheckoutPlanOf is the checkout plan a Polar product is sold as ("team25_yearly", "founding"), which
+// names its price and period, or "" when the product is not on sale here: a retired product may have
+// sold at another price, so it names none.
+func (p Products) CheckoutPlanOf(productID string) string {
+	if productID == "" {
+		return ""
+	}
+	for _, offer := range p.offers() {
+		if offer.product == productID {
+			return offer.plan
+		}
+	}
+	return ""
 }
 
 // PlansOnSale lists the plans a workspace can move to here: a plan with a monthly and a yearly

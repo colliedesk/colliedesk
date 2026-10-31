@@ -15,7 +15,7 @@ func LoadAccessHistory(ctx context.Context, tx pgx.Tx, workspaceID string) ([]do
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT plan,'`+domain.CompSubscriptionPrefix+`' || id::text,'','canceled',until,false,revoked_at,granted_at
+	rows, err := tx.Query(ctx, `SELECT plan,'`+domain.CompSubscriptionPrefix+`' || id::text,'','canceled',until,false,revoked_at,granted_at,''
 		FROM workspace_comp_plans WHERE workspace_id=$1 AND revoked_at IS NOT NULL`, workspaceID)
 	if err != nil {
 		return nil, err
