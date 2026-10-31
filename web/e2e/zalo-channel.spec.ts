@@ -80,6 +80,14 @@ test('zalo channel: an admin connects an OA, adds its tokens, links a group that
   await page.getByRole('alertdialog', { name: /Stop treating .* as staff\?/ }).getByRole('button', { name: 'Remove' }).click();
   await expect(page.getByText(/No staff accounts yet/)).toBeVisible();
 
+  // Pause asks first and keeps what arrives; Resume takes nothing more than a click.
+  await page.getByRole('button', { name: 'Pause processing' }).click();
+  await page.getByRole('alertdialog', { name: 'Pause processing on Zalo OA?' }).getByRole('button', { name: 'Pause processing' }).click();
+  await expect(page.getByText(/Processing is paused since/)).toBeVisible();
+  await page.getByRole('button', { name: 'Resume processing' }).click();
+  await expect(page.locator('p', { hasText: 'Processing resumed.' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Pause processing' })).toBeVisible();
+
   // Messages: a command with its phrase, matched exactly, is saved and in force after a reload.
   await page.getByRole('tab', { name: 'Messages' }).click();
   const open = page.getByRole('group', { name: 'Phrases for Open a request' });

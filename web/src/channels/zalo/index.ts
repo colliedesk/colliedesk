@@ -26,4 +26,5 @@ export const zaloChannel: ChannelUI = {
   defaultHelp: 'Each Zalo Official Account is a channel of its own: its one-to-one chats and its groups come in, and replies go back where they were said. New conversations you start go out from the default channel.',
   defaultBadge: 'Default Zalo OA',
   caches: ['zalo-threads'],
+  pausable: true,
 };

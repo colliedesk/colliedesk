@@ -1,7 +1,7 @@
 // The words of the Zalo OA channel's pages (docs/user/zalo.md).
 
 export type SecretName = 'app_secret' | 'oa_secret_key' | 'access_token' | 'refresh_token';
-export type CommandAction = 'open' | 'cancel' | 'reopen';
+export type CommandAction = 'open' | 'cancel' | 'reopen' | 'confirm';
 export type CommandMatch = 'fuzzy' | 'words' | 'exact';
 
 export const zaloMessages = {
@@ -56,6 +56,10 @@ export const zaloMessages = {
   close: 'Close',
   saving: 'Saving…',
   failed: 'That did not work. Try again.',
+  processing: 'Processing',
+  running: 'Running',
+  pausedSince: (when: string, kept?: number) => `Paused since ${when}${kept === undefined ? '' : ` · ${kept} ${kept === 1 ? 'message' : 'messages'} kept`}`,
+  processingHelp: 'Pause, at the top of this page, keeps every message from Zalo and opens nothing, adds nothing and sends nothing; Resume handles them in order with the same rules. Turning the channel off is different: messages wait under Held until someone opens or discards them.',
   // Groups
   groupsLead: 'Messages in a group are gathered into cards in Review; a command or a decision there opens the conversation. In a linked group, that conversation belongs to the group’s organization; in a group nobody linked, only to the person who wrote. Link each group to file its requests under the right customer.',
   groupsLabel: 'Zalo groups',
@@ -102,8 +106,8 @@ export const zaloMessages = {
   // Messages
   commands: 'Commands',
   commandsLead: 'What a customer can type to the OA, one-to-one or in a group.',
-  action: { open: 'Open a request', cancel: 'Cancel', reopen: 'Reopen' } satisfies Record<CommandAction, string>,
-  actionUse: { open: 'Opens a conversation with what came before it', cancel: 'Cancels the request being collected', reopen: 'Reopens the sender’s conversation in the same chat' } satisfies Record<CommandAction, string>,
+  action: { open: 'Open a request', cancel: 'Cancel', reopen: 'Reopen', confirm: 'Confirm' } satisfies Record<CommandAction, string>,
+  actionUse: { open: 'Opens a conversation with what came before it', cancel: 'Cancels the request being collected', reopen: 'Reopens the sender’s conversation in the same chat', confirm: 'Answers the question below: opens the request at once' } satisfies Record<CommandAction, string>,
   phrases: (action: string) => `Phrases for ${action}`,
   noPhrase: 'No phrase: off',
   addPhrase: 'Add a phrase',
@@ -120,6 +124,26 @@ export const zaloMessages = {
   unmatchedHint: 'Leave empty to send nothing.',
   unmatchedAllOpen: 'One-to-one messages open a conversation each, so this reply is never sent.',
   count: (n: number, max: number) => `${n.toLocaleString()} / ${max.toLocaleString()}`,
+  cancelled: 'When a request is cancelled',
+  confirmHeading: 'Ask before opening (one-to-one)',
+  confirmOn: 'Ask the customer to confirm',
+  confirmSentence: (quiet: number, wait: number) => `When a customer who named a command stops writing for ${quiet} ${quiet === 1 ? 'second' : 'seconds'}, the OA asks the question below. Confirm opens the conversation at once, and so do ${wait} ${wait === 1 ? 'second' : 'seconds'} of silence; Cancel throws the request away; more messages join it and the question comes again.`,
+  confirmOff: 'A request opens as soon as the customer is done writing; nothing is asked.',
+  confirmNeedsCommand: 'One-to-one messages here open a conversation each, without a command, so the question is never asked.',
+  askAfter: 'Ask after',
+  secondsOfSilence: 'Seconds of silence.',
+  openAnyway: 'Open anyway after',
+  secondsUnit: 'Seconds, 1 to 3600.',
+  wholeSeconds: 'A whole number of seconds, 0 or more.',
+  waitRange: 'From 1 to 3600 seconds.',
+  question: 'Question',
+  expiresAfter: 'Question expires after',
+  minutesUnit: 'Minutes; 0 never expires.',
+  expireRange: (wait: number) => `0, or longer than “Open anyway after” (${wait} s), and at most 1440 minutes.`,
+  expiredNotice: 'When a question expires',
+  askDescription: 'When a customer sends only the command',
+  askDescriptionHint: 'Asks what the request is about when “Open a request” comes with nothing before it. Leave empty to open it as it is.',
+  questionHint: 'Name the Confirm and Cancel phrases, for example “Send OK to send it, or Hủy to cancel.”',
   saveMessages: 'Save messages',
   messagesAdminsOnly: 'Only admins change what the OA says and the commands it understands.',
   none: '—',

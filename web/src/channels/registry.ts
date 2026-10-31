@@ -74,6 +74,9 @@ export interface ChannelUI {
   defaultBadge?: string;
   // caches: the query keys of the type's own settings, reloaded when the channel is turned on or off.
   caches?: string[];
+  // pausable: the type keeps what arrives in a journal, so its processing can pause and resume
+  // (PATCH processing_paused); its page offers Pause and Resume.
+  pausable?: boolean;
 }
 
 // The order here is the order of the Add channel list and of the empty page.

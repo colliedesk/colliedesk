@@ -38,9 +38,23 @@ The channel's page then has four tabs of its own, before AI and History:
    **What the OA says**: the notice sent when a conversation opens, and the reply to a one-to-one message
    that is not a request (sent only where one-to-one messages open a conversation on a command, and only
    when **Answer such a message with this reply** is on). The OA's own messages are not your team's first
-   reply. **Save messages** saves the whole tab.
+   reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")
+   stops writing for **Ask after** seconds, the OA sends the **Question**; the Confirm command (say "OK",
+   best matched exactly) opens the conversation at once, and so does silence for **Open anyway after**
+   seconds; Cancel throws the request away and sends **When a request is cancelled**. A question nobody
+   answers within **Question expires after** minutes (0: never) throws the request away and sends **When
+   a question expires**. Off, nothing is asked. **When a customer sends only the command** asks what the
+   request is about when "Open a request" comes with nothing before it. **Save messages** saves the whole
+   tab.
 
 Agents see the same tabs and change nothing.
+
+**Pause processing**, at the top of the channel's page (admins), asks first, then keeps every message
+Zalo delivers and opens nothing, adds nothing and sends nothing until **Resume processing**: what arrived
+is then handled in order by the channel's rules. While paused the channel reads **Processing paused**,
+here and in **Channels**, with since when and how many messages wait. Pause is not the same as turning the channel off (its messages
+then wait under Held for someone to open or discard): a channel that is paused and off says to turn it on
+first, and stays paused when you do.
 
 With the API instead:
 

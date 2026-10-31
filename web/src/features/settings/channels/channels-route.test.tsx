@@ -850,3 +850,64 @@ test('a channel of a type the web app has no screens for still opens: its name a
   expect(screen.getByRole('button', { name: 'Remove channel' })).toBeInTheDocument();
   expect(screen.queryByText(/not supported|unknown/i)).not.toBeInTheDocument();
 });
+
+const ZALO = '77777777-7777-4777-8777-777777777777';
+const zaloConfig = { oa_id: '4318002291772207', app_id: '1188200455', staff_user_ids: [], groups: {}, webhook_path: '/api/v1/channels/zalo/webhook',
+  credentials: ['app_secret', 'oa_secret_key', 'access_token', 'refresh_token'].map((name) => ({ name, hint: null, set_at: null })) };
+const zalo = (change: Record<string, unknown> = {}) => ({ ...channel('email', { id: ZALO, type: 'zalo', name: 'Hảo Đạt OA', summary: 'OA 4318…2207 · 0 groups linked', capabilities: ['threads'], is_default: true, processing_paused_at: null, ...change }),
+  config: zaloConfig, settings: {}, effective_settings: {} });
+
+test('a channel that can pause is paused from its page after a question, and only then', async () => {
+  channelsApi.get.mockResolvedValue(zalo());
+  channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  channelsApi.update.mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z' }));
+  show(ZALO);
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause processing' }));
+  const ask = screen.getByRole('alertdialog', { name: 'Pause processing on Hảo Đạt OA?' });
+  expect(within(ask).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+  expect(channelsApi.update).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Pause processing' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Pause processing' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ZALO, { processing_paused: true }));
+});
+
+test('a paused channel says so, since when, and resumes without a question', async () => {
+  // Paused when the page opens; running once Resume reloads it.
+  channelsApi.get.mockResolvedValueOnce(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 12 })).mockResolvedValue(zalo());
+  channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  channelsApi.update.mockResolvedValue(zalo());
+  show(ZALO);
+  expect(await screen.findByText('Processing paused')).toBeInTheDocument();
+  expect(screen.getByText(/Processing is paused since/)).toBeInTheDocument();
+  expect(screen.getByText(/12 messages are kept and handled in the order they came/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Pause processing' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Resume processing' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ZALO, { processing_paused: false }));
+  const note = (await screen.findByText(/Processing resumed/)).closest('p');
+  await waitFor(() => expect(note).toHaveFocus());
+});
+
+test('a paused channel that is also off says to turn it on first, and offers no Resume', async () => {
+  channelsApi.get.mockResolvedValue(zalo({ enabled: false, status: { state: 'off', reason_code: null, message: null }, processing_paused_at: '2026-10-31T07:05:00Z' }));
+  channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  show(ZALO);
+  expect(await screen.findByText(/and the channel is also off\. Turn the channel on first/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Resume processing|Pause processing/ })).toBeNull();
+});
+
+test('the list shows a paused channel as paused; a channel that cannot pause offers no Pause', async () => {
+  channelsApi.list.mockResolvedValue({ items: [zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 3 }), channel('email')], types: [...types(1, 0), { type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  show('');
+  expect(await screen.findByText('Processing paused')).toBeInTheDocument();
+  expect(screen.getByText('3 messages waiting')).toBeInTheDocument();
+  cleanupAndShowEmail();
+  expect(await screen.findByRole('heading', { name: 'Email' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Pause processing' })).toBeNull();
+});
+
+function cleanupAndShowEmail() {
+  document.body.innerHTML = '';
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL);
+}

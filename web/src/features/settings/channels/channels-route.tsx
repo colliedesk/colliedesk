@@ -107,8 +107,21 @@ const stateLabel: Record<Channel['status']['state'], string> = {
 };
 const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', waiting: 'ch-st-off', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
 
+// A channel whose processing is paused says so while it is on; off says Off, as the switch does.
 function StatePill({ channel }: { channel: Channel }) {
+  if (channel.processing_paused_at && channel.enabled) return <span className="status ch-st-off">{m.statusPaused}</span>;
   return <span className={`status ${stateClass[channel.status.state]}`}>{stateLabel[channel.status.state]}</span>;
+}
+
+// Processing is the Pause and Resume of a type that keeps what arrives (registry pausable): Pause asks
+// first; Resume does not (it loses nothing) and says what it did where the button was.
+function useProcessing(channel: Channel, onResumed: () => void) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (paused: boolean) => channelsApi.update(channel.id, { processing_paused: paused }),
+    onSuccess: (_data, paused) => { if (!paused) onResumed(); },
+    onSettled: () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events'].includes(String(query.queryKey[0])) }),
+  });
 }
 
 // The types this server runs, in the registry's order, only those the web knows. A workspace may add
@@ -201,7 +214,8 @@ function ChannelRow({ channel, isAdmin, markDefault }: { channel: Channel; isAdm
     <div className="ch-row-name">{ui && <ui.Icon />}<span><span className="ch-row-title"><strong>{channel.name}</strong>{markDefault && <span className="ch-default">{m.defaultLabel}</span>}</span>
       {channel.summary && <small>{channel.summary}</small>}</span></div>
     <div className="ch-row-state"><StatePill channel={channel} />
-      {channel.held_count > 0 && <small>{m.held(channel.held_count, channel.name)}</small>}</div>
+      {channel.held_count > 0 && <small>{m.held(channel.held_count, channel.name)}</small>}
+      {channel.processing_paused_at && (channel.paused_count ?? 0) > 0 && <small>{m.pausedWaiting(channel.paused_count ?? 0)}</small>}</div>
     <div className="ch-row-actions">
       {isAdmin && <EnabledSwitch channel={channel} />}
       <a href={href} className="button" aria-label={m.configureName(channel.name)}>{m.configure}</a>
@@ -346,6 +360,13 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   const prefix = useId();
   const channel = detail.data;
   const ui = channel ? channelUI(channel.type) : undefined;
+  const [pausing, setPausing] = useState(false);
+  const [resumed, setResumed] = useState(false);
+  const resumedNote = useRef<HTMLParagraphElement>(null);
+  // The Resume button goes once the channel reloads running; focus goes to what it did.
+  const runningAgain = Boolean(detail.data && !detail.data.processing_paused_at);
+  useEffect(() => { if (resumed && runningAgain) resumedNote.current?.focus(); }, [resumed, runningAgain]);
+  const processing = useProcessing(channel ?? ({ id } as Channel), () => setResumed(true));
   // Removing the default hands it to the oldest other live channel of the type, as the server does.
   const channels = useChannels();
   const nextDefault = channel && channels.data?.items.filter((item) => item.type === channel.type && item.id !== channel.id)
@@ -372,8 +393,17 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
     <section className="settings-card ch-detail" aria-labelledby="ch-detail-heading">
       <div className="ch-detail-head">
         <div className="ch-row-name">{ui ? <ui.Icon /> : <ChatIcon />}<span><h2 id="ch-detail-heading">{channel.name}</h2>{channel.summary && <small>{channel.summary}</small>}</span></div>
-        <div className="ch-row-actions"><StatePill channel={channel} />{isAdmin && <EnabledSwitch channel={channel} />}</div>
+        <div className="ch-row-actions"><StatePill channel={channel} />
+          {isAdmin && ui?.pausable && channel.enabled && (channel.processing_paused_at
+            ? <button type="button" disabled={processing.isPending} onClick={() => processing.mutate(false)}>{m.resume}</button>
+            : <button type="button" disabled={processing.isPending} onClick={() => { setResumed(false); setPausing(true); }}>{m.pause}</button>)}
+          {isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
+      {channel.processing_paused_at && <p className="notice notice-plain" role="status"><span>{channel.enabled
+        ? <><strong>{m.pausedSince(formatDate(channel.processing_paused_at, timezone))}</strong> {m.pausedRunning(channel.paused_count)}</>
+        : m.pausedOffLead(formatDate(channel.processing_paused_at, timezone), channel.paused_count)}</span></p>}
+      {resumed && !channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={resumedNote}><span>{m.resumed}</span></p>}
+      {processing.isError && <p role="alert" className="error-copy">{processing.error instanceof InvalidRequestError ? processing.error.message : m.pauseFailed}</p>}
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{ui?.waitingHelp ?? m.waitingHelp}</span></p>}
       {ui && <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />}
@@ -396,6 +426,11 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
         {remove.isError && <span role="alert" className="error-copy">{remove.error instanceof InvalidRequestError ? remove.error.message : m.actionFailed}</span>}
       </div>}
     </section>
+    {pausing && <Dialog alert title={m.pauseTitle(channel.name)} closeLabel={m.close} onClose={() => setPausing(false)}
+      onSubmit={() => { setPausing(false); processing.mutate(true); }}
+      footer={<><button type="button" autoFocus onClick={() => setPausing(false)}>{m.cancel}</button><button type="submit" className="primary-action">{m.pause}</button></>}>
+      <p>{m.pauseBody}</p>
+    </Dialog>}
     {removing && <Dialog alert title={ui?.removal?.title ?? m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
       onSubmit={() => { if (channel.held_count > 0) return; setRemoving(false); remove.mutate(); }}
       footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button>

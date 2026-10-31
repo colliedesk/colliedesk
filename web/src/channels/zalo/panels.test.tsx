@@ -108,6 +108,12 @@ test('connection shows the webhook, the ids and which secrets are set, never a v
   expect(screen.getByRole('status')).toHaveTextContent('Paste this webhook URL in your Zalo app, then add the tokens.');
   expect(screen.getByRole('button', { name: 'Add tokens' })).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: 'Replace' })).toHaveLength(2);
+  expect(screen.getByText('Running')).toBeInTheDocument();
+});
+
+test('connection says since when processing is paused and how many messages are kept', () => {
+  view(<Tabs.connection channel={channel({}, { processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 12 })} canManage timezone="UTC" />);
+  expect(screen.getByText(/^Paused since .* · 12 messages kept$/)).toBeInTheDocument();
 });
 
 test('replacing a secret stores the new one and says so', async () => {
@@ -219,9 +225,58 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
     commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'], tags: ['zalo'] }, cancel: { action: 'cancel', match: 'fuzzy', phrases: ['hủy'] } },
-    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.' },
+    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '' },
     scopes: { direct: { mode: 'commands', unmatched: 'notice' } },
   } });
+});
+
+test('asking before a one-to-one request opens sets the wait, the question and the Confirm command, and writes the scope whole', async () => {
+  const rules = {
+    commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'] } },
+    notices: { received: '', unmatched: '' },
+    scopes: { direct: { mode: 'commands', unmatched: 'notice', gather: { quiet_seconds: 0, max_seconds: 1800 } } },
+  };
+  view(<Tabs.messages channel={channel({}, { settings: {}, effective_settings: rules })} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('switch', { name: 'Ask the customer to confirm' }));
+  expect(screen.getByLabelText('Ask after')).toHaveValue(10);
+  expect(screen.getByLabelText('Open anyway after')).toHaveValue(60);
+  expect(screen.getByLabelText('Question expires after')).toHaveValue(30);
+  fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '0' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  expect(screen.getByLabelText('Open anyway after')).toHaveAccessibleDescription(/1 to 3600/);
+  expect(channelsApi.update).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '90' } });
+  expect(screen.getByText(/stops writing for 10 seconds.*90 seconds of silence/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Nhắn OK để tạo phiếu, hoặc Hủy.' } });
+  fireEvent.change(screen.getByLabelText('When a request is cancelled'), { target: { value: 'Đã hủy.' } });
+  fireEvent.change(screen.getByLabelText('When a question expires'), { target: { value: 'Yêu cầu đã hết hạn.' } });
+  fireEvent.change(screen.getByLabelText('When a customer sends only the command'), { target: { value: 'Anh/chị mô tả giúp vấn đề nhé.' } });
+  fireEvent.change(screen.getByLabelText('Question expires after'), { target: { value: '1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  expect(screen.getByLabelText('Question expires after')).toHaveAccessibleDescription(/longer than “Open anyway after” \(90 s\)/);
+  fireEvent.change(screen.getByLabelText('Question expires after'), { target: { value: '30' } });
+  const confirm = screen.getByRole('group', { name: 'Phrases for Confirm' });
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Add a phrase' }));
+  fireEvent.change(within(confirm).getByLabelText('New phrase for Confirm'), { target: { value: 'ok' } });
+  fireEvent.keyDown(within(confirm).getByLabelText('New phrase for Confirm'), { key: 'Enter' });
+  expect(screen.getByLabelText('Match for Confirm')).toHaveValue('exact');
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  const sent = channelsApi.update.mock.calls[0][1].settings;
+  expect(sent.scopes.direct).toEqual({ mode: 'commands', unmatched: 'notice', gather: { quiet_seconds: 10, max_seconds: 1800, confirm_seconds: 90, expire_seconds: 1800 } });
+  expect(sent.commands.confirm).toEqual({ action: 'confirm', match: 'exact', phrases: ['ok'] });
+  expect(sent.notices).toMatchObject({ ask_confirm: 'Nhắn OK để tạo phiếu, hoặc Hủy.', cancelled: 'Đã hủy.', expired: 'Yêu cầu đã hết hạn.' });
+  expect(sent.commands.open).toEqual({ action: 'open', match: 'exact', phrases: ['tạo phiếu'], ask_description: 'Anh/chị mô tả giúp vấn đề nhé.' });
+});
+
+test('turning the question off keeps the gathering and sets its wait to 0', async () => {
+  const rules = { scopes: { direct: { mode: 'commands', gather: { quiet_seconds: 10, confirm_seconds: 60 } } } };
+  view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('switch', { name: 'Ask the customer to confirm' }));
+  expect(screen.queryByLabelText('Open anyway after')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update.mock.calls[0][1].settings.scopes.direct).toEqual({ mode: 'commands', gather: { quiet_seconds: 10, confirm_seconds: 0 } });
 });
 
 test('where every one-to-one message opens a conversation, the page offers no answer to turn on', () => {

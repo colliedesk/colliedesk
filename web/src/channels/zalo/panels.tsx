@@ -153,6 +153,10 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
       </div>
       {done && <p className="notice notice-plain" role="status" tabIndex={-1} ref={doneNote}><span>{done}</span></p>}
     </section>
+    <section className="zl-block" aria-labelledby={`${channel.id}-processing`}><h3 id={`${channel.id}-processing`}>{m.processing}</h3>
+      <p className="zl-state">{channel.processing_paused_at ? m.pausedSince(formatDate(channel.processing_paused_at, timezone), channel.paused_count) : m.running}</p>
+      <p className="muted-copy">{m.processingHelp}</p>
+    </section>
     {editing === 'tokens' && <TokensDialog channel={channel} replace={tokensAny} onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); setDone(m.tokensSaved); }} />}
     {editing && editing !== 'tokens' && <SecretDialog channel={channel} name={editing} hint={credential(editing)?.hint ?? null} replace={Boolean(credential(editing)?.set_at)}
       onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); setDone(m.secretSaved(m.secretLabel[editing])); }} />}
@@ -373,9 +377,9 @@ function StaffDialog({ channel, people: candidates, timezone, onClose, onAdded }
 
 // ---------- Messages ----------
 
-interface Command { action?: string; match?: string; phrases?: string[]; tags?: string[]; priority?: string }
-interface Draft { key: string; phrases: string[]; match: CommandMatch }
-const actions: CommandAction[] = ['open', 'cancel', 'reopen'];
+interface Command { action?: string; match?: string; phrases?: string[]; tags?: string[]; priority?: string; ask_description?: string }
+interface Draft { key: string; phrases: string[]; match: CommandMatch; askDescription: string }
+const actions: CommandAction[] = ['open', 'cancel', 'reopen', 'confirm'];
 const matches: CommandMatch[] = ['fuzzy', 'words', 'exact'];
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {});
@@ -388,27 +392,44 @@ function drafts(effective: Record<string, unknown>): Record<CommandAction, Draft
   return Object.fromEntries(actions.map((action) => {
     const key = names.find((name) => (commands[name].action ?? 'open') === action) ?? action;
     const command = commands[key];
-    const match = matches.find((value) => value === command?.match) ?? 'fuzzy';
-    return [action, { key, phrases: command?.phrases ?? [], match }];
+    // A new Confirm is exact: "ok" is too short to forgive a letter.
+    const match = matches.find((value) => value === command?.match) ?? (command || action !== 'confirm' ? 'fuzzy' : 'exact');
+    return [action, { key, phrases: command?.phrases ?? [], match, askDescription: command?.ask_description ?? '' }];
   })) as Record<CommandAction, Draft>;
 }
 
 // nextSettings is the whole of what the channel stores (a change replaces it): its stored rules, with the
 // commands, notices and one-to-one answer of the page over them. A scope or command is written whole,
 // from the one in force, since a stored one replaces its default entirely.
-function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; answer?: boolean }) {
+interface Confirm { on: boolean; quiet: string; wait: string; expire: string }
+const confirmLimit = 3600;
+const expireLimit = 1440;
+const seconds = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
+
+function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; answer?: boolean; confirm?: Confirm }) {
   const stored = record(channel.settings);
   const effective = record(channel.effective_settings);
   const commands = { ...(record(effective.commands) as Record<string, Command>) };
   for (const action of actions) {
     const draft = edits.commands[action];
     if (draft.phrases.length === 0) delete commands[draft.key];
-    else commands[draft.key] = { ...commands[draft.key], action, match: draft.match, phrases: draft.phrases };
+    else {
+      const { ask_description: _old, ...rest } = commands[draft.key] ?? {};
+      commands[draft.key] = { ...rest, action, match: draft.match, phrases: draft.phrases, ...(draft.askDescription.trim() ? { ask_description: draft.askDescription.trim() } : {}) };
+    }
   }
-  const next: Record<string, unknown> = { ...stored, commands, notices: { ...record(effective.notices), received: edits.received.trim(), unmatched: edits.unmatched.trim() } };
-  if (edits.answer !== undefined) {
-    const scopes = record(effective.scopes);
-    next.scopes = { ...record(stored.scopes), direct: { ...record(scopes.direct), unmatched: edits.answer ? 'notice' : 'join_open' } };
+  const next: Record<string, unknown> = { ...stored, commands, notices: { ...record(effective.notices), received: edits.received.trim(), unmatched: edits.unmatched.trim(),
+    ask_confirm: edits.askConfirm.trim(), cancelled: edits.cancelled.trim(), expired: edits.expired.trim() } };
+  if (edits.answer !== undefined || edits.confirm) {
+    const direct = { ...record(record(effective.scopes).direct) };
+    if (edits.answer !== undefined) direct.unmatched = edits.answer ? 'notice' : 'join_open';
+    if (edits.confirm) {
+      const gather = record(direct.gather);
+      direct.gather = edits.confirm.on
+        ? { ...gather, quiet_seconds: seconds(edits.confirm.quiet), confirm_seconds: seconds(edits.confirm.wait), expire_seconds: seconds(edits.confirm.expire) * 60 }
+        : { ...gather, confirm_seconds: 0 };
+    }
+    next.scopes = { ...record(stored.scopes), direct };
   }
   return next;
 }
@@ -422,14 +443,37 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const [received, setReceived] = useState(text(notices.received));
   const [unmatched, setUnmatched] = useState(text(notices.unmatched));
   const [answer, setAnswer] = useState(direct.unmatched === 'notice');
+  const [askConfirm, setAskConfirm] = useState(text(notices.ask_confirm));
+  const [cancelled, setCancelled] = useState(text(notices.cancelled));
+  const gather = record(direct.gather);
+  const [confirm, setConfirm] = useState<Confirm>(() => ({ on: Number(gather.confirm_seconds) > 0, quiet: String(Number(gather.quiet_seconds) || 0), wait: String(Number(gather.confirm_seconds) || 0),
+    expire: String(Math.round((Number(gather.expire_seconds) || 0) / 60)) }));
+  const [expired, setExpired] = useState(text(notices.expired));
+  const [confirmTouched, setConfirmTouched] = useState(false);
+  const [checked, setChecked] = useState(false);
   const reload = useReload(channel.id);
   const save = useMutation({
-    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, answer: onCommands ? answer : undefined }) }),
+    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired,
+      answer: onCommands && answer !== (direct.unmatched === 'notice') ? answer : undefined, confirm: confirmTouched ? confirm : undefined }) }),
     onSuccess: () => reload(),
   });
   const feedback = useSaveFeedback(saveState(save));
   const id = useId();
   const server = fieldErrors(save.error);
+  const quietBad = confirm.on && !(seconds(confirm.quiet) >= 0);
+  const waitBad = confirm.on && !(seconds(confirm.wait) >= 1 && seconds(confirm.wait) <= confirmLimit);
+  // 0 never expires; otherwise the question must outlive the wait that opens the request anyway.
+  const expireBad = confirm.on && !(seconds(confirm.expire) === 0 || (seconds(confirm.expire) <= expireLimit && seconds(confirm.expire) * 60 > seconds(confirm.wait)));
+  const changeConfirm = (change: Partial<Confirm>) => {
+    feedback.touch();
+    setConfirmTouched(true);
+    setConfirm((now) => {
+      const next = { ...now, ...change };
+      // Turned on with no wait yet: ten seconds of quiet, then a minute for OK, as most teams start.
+      if (change.on && !now.on) return { ...next, quiet: seconds(now.quiet) > 0 ? now.quiet : '10', wait: seconds(now.wait) > 0 ? now.wait : '60', expire: seconds(now.expire) > 0 ? now.expire : '30' };
+      return next;
+    });
+  };
   const commandError = (draft: Draft) => Object.entries(server).find(([field]) => field.startsWith(`settings.commands.${draft.key}`))?.[1];
   if (!canManage) {
     return <div className="settings-body">
@@ -438,17 +482,24 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         {actions.map((action) => <ReadOnly key={action} label={m.action[action]} value={commands[action].phrases.length ? `${commands[action].phrases.join(' · ')} (${m.match[commands[action].match]})` : m.noPhrase} />)}
         <ReadOnly label={m.received} value={received || m.none} />
         <ReadOnly label={m.unmatched} value={unmatched || m.none} />
+        <ReadOnly label={m.confirmHeading} value={confirm.on ? m.confirmSentence(seconds(confirm.quiet), seconds(confirm.wait)) : m.confirmOff} />
+        <ReadOnly label={m.question} value={askConfirm || m.none} />
+        <ReadOnly label={m.cancelled} value={cancelled || m.none} />
+        <ReadOnly label={m.expiredNotice} value={expired || m.none} />
+        <ReadOnly label={m.askDescription} value={commands.open.askDescription || m.none} />
       </dl>
     </div>;
   }
   const edit = (action: CommandAction, change: Partial<Draft>) => { feedback.touch(); setCommands((all) => ({ ...all, [action]: { ...all[action], ...change } })); };
-  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate(); }}>
+  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad) save.mutate(); }}>
     <section className="zl-block" aria-labelledby={`${id}-cmd`}><h3 id={`${id}-cmd`}>{m.commands}</h3>
       <p className="lead">{m.commandsLead}</p>
       <div className="zl-rows">
         {actions.map((action) => <CommandRow key={action} action={action} draft={commands[action]} error={commandError(commands[action])} onChange={(change) => edit(action, change)} />)}
       </div>
       <p className="muted-copy">{m.matchHelp}</p>
+      <Field id={`${id}-desc`} label={m.askDescription} error={commandError(commands.open)} help={`${m.askDescriptionHint} ${m.count(commands.open.askDescription.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={commands.open.askDescription} onChange={(event) => edit('open', { askDescription: event.target.value })} />}</Field>
     </section>
     <section className="zl-block" aria-labelledby={`${id}-ntc`}><h3 id={`${id}-ntc`}>{m.notices}</h3>
       <p className="lead">{m.noticesLead}</p>
@@ -458,6 +509,25 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         help={`${onCommands ? m.unmatchedHint : m.unmatchedAllOpen} ${m.count(unmatched.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</Field>
       {onCommands && <label className="field-inline"><input type="checkbox" checked={answer} onChange={(event) => { feedback.touch(); setAnswer(event.target.checked); }} /><span>{m.unmatchedOn}</span></label>}
+      <Field id={`${id}-cnl`} label={m.cancelled} error={server['settings.notices.cancelled']} help={`${m.unmatchedHint} ${m.count(cancelled.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>
+    </section>
+    <section className="zl-block" aria-labelledby={`${id}-ok`}><h3 id={`${id}-ok`}>{m.confirmHeading}</h3>
+      <label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={confirm.on} aria-describedby={`${id}-ok-d`}
+        onChange={(event) => changeConfirm({ on: event.target.checked })} /></span><span>{m.confirmOn}</span></label>
+      <p className="lead" id={`${id}-ok-d`}>{confirm.on && !quietBad && !waitBad ? m.confirmSentence(seconds(confirm.quiet), seconds(confirm.wait)) : m.confirmOff}{onCommands ? '' : ` ${m.confirmNeedsCommand}`}</p>
+      {confirm.on && <div className="zl-numbers">
+        <Field id={`${id}-q`} label={m.askAfter} error={checked && quietBad ? m.wholeSeconds : undefined} help={m.secondsOfSilence}>
+          {(props) => <input {...props} type="number" min={0} step={1} inputMode="numeric" value={confirm.quiet} onChange={(event) => changeConfirm({ quiet: event.target.value })} />}</Field>
+        <Field id={`${id}-w`} label={m.openAnyway} error={(checked && waitBad ? m.waitRange : undefined) ?? server[`settings.scopes.direct.gather.confirm_seconds`]} help={m.secondsUnit}>
+          {(props) => <input {...props} type="number" min={1} max={confirmLimit} step={1} inputMode="numeric" value={confirm.wait} onChange={(event) => changeConfirm({ wait: event.target.value })} />}</Field>
+        <Field id={`${id}-x`} label={m.expiresAfter} error={(checked && expireBad ? m.expireRange(seconds(confirm.wait)) : undefined) ?? server['settings.scopes.direct.gather.expire_seconds']} help={m.minutesUnit}>
+          {(props) => <input {...props} type="number" min={0} max={expireLimit} step={1} inputMode="numeric" value={confirm.expire} onChange={(event) => changeConfirm({ expire: event.target.value })} />}</Field>
+      </div>}
+      <Field id={`${id}-ask`} label={m.question} error={server['settings.notices.ask_confirm']} help={`${m.questionHint} ${m.count(askConfirm.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={askConfirm} onChange={(event) => { feedback.touch(); setAskConfirm(event.target.value); }} />}</Field>
+      <Field id={`${id}-exp`} label={m.expiredNotice} error={server['settings.notices.expired']} help={`${m.unmatchedHint} ${m.count(expired.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={expired} onChange={(event) => { feedback.touch(); setExpired(event.target.value); }} />}</Field>
     </section>
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveMessages)}</button>{feedback.status}</span>
   </form>;
