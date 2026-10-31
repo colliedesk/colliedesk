@@ -146,6 +146,11 @@ const (
 	NoticeReopenNoted = "reopen_noted"
 	// NoticeHelp answers a help command with the channel's guide.
 	NoticeHelp = "help"
+	// NoticeStatusPending, NoticeStatusResolved and NoticeStatusClosed tell a customer the team changed
+	// their conversation's status; one the team opens again is told with NoticeReopened.
+	NoticeStatusPending  = "status_pending"
+	NoticeStatusResolved = "status_resolved"
+	NoticeStatusClosed   = "status_closed"
 )
 
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
@@ -170,6 +175,11 @@ type Notices struct {
 	ReopenNoted    string `json:"reopen_noted,omitempty"`
 	// Help answers a help command (NoticeHelp).
 	Help string `json:"help,omitempty"`
+	// StatusPending, StatusResolved and StatusClosed tell the customer the team set the conversation to
+	// that status (NoticeStatusPending…); empty is quiet. Reopened (above) tells them it is open again.
+	StatusPending  string `json:"status_pending,omitempty"`
+	StatusResolved string `json:"status_resolved,omitempty"`
+	StatusClosed   string `json:"status_closed,omitempty"`
 	// HelpEverySeconds is the least time between two help notices of one chat; 0 answers each help.
 	// Merge fills in the default.
 	HelpEverySeconds *int `json:"help_every_seconds,omitempty"`
@@ -186,7 +196,8 @@ const DefaultHelpEverySeconds = 300
 // sends the notice. A placeholder of no list is refused when the settings are saved.
 var NoticePlaceholders = map[string][]string{NoticeReceived: {"ref"}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
 	NoticeAskDescription: {}, NoticeExpired: {}, NoticeReopenNotFound: {"ref"}, NoticeReopenLegacy: {"ref", "old_ref"},
-	NoticeReopened: {"ref"}, NoticeReopenNoted: {"ref"}, NoticeHelp: {}}
+	NoticeReopened: {"ref"}, NoticeReopenNoted: {"ref"}, NoticeHelp: {},
+	NoticeStatusPending: {"ref", "subject"}, NoticeStatusResolved: {"ref", "subject"}, NoticeStatusClosed: {"ref", "subject"}}
 
 // noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
 var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)
@@ -210,10 +221,13 @@ func RenderNotice(text string, values map[string]string) string {
 
 // Settings are a channel's rules for what arrives and what leaves. They never hold a secret.
 type Settings struct {
-	JoinPolicy        JoinPolicy `json:"join_policy"`
-	DefaultTags       []string   `json:"default_tags,omitempty"`
-	DefaultPriority   string     `json:"default_priority,omitempty"`
-	DefaultAssigneeID string     `json:"default_assignee_id,omitempty"`
+	JoinPolicy JoinPolicy `json:"join_policy"`
+	// AutoCloseHours closes a conversation that stayed resolved this long (wall-clock, from its resolve or
+	// the customer's last message after it); nil or 0 never.
+	AutoCloseHours    *int     `json:"auto_close_hours,omitempty"`
+	DefaultTags       []string `json:"default_tags,omitempty"`
+	DefaultPriority   string   `json:"default_priority,omitempty"`
+	DefaultAssigneeID string   `json:"default_assignee_id,omitempty"`
 	// NumberSeries is the series of the workspace the conversations it opens are numbered in (empty: the
 	// default one, "#n").
 	NumberSeries string             `json:"number_series,omitempty"`

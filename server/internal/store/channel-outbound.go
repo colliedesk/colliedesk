@@ -201,6 +201,9 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 	// once, at the first one, and every address is looked up in them.
 	var mailboxes map[string]*channels.Channel
 	for i := range items {
+		if items[i].ChatChannelID != nil {
+			items[i].MayTellCustomer = mayTell(byID[*items[i].ChatChannelID], items[i].Status)
+		}
 		choice := replyChoice{origin: channels.Type(items[i].Channel)}
 		if items[i].ChannelID != nil {
 			choice.own = byID[*items[i].ChannelID]

@@ -38,6 +38,12 @@ func (a *API) listAgentRequests(response http.ResponseWriter, request *http.Requ
 	}
 	for index := range items {
 		items[index].ApprovableBy = approvableBy(items[index])
+		if full {
+			if err := a.attachRequestNotices(request.Context(), who.Workspace.ID, &items[index]); err != nil {
+				writeInternalError(response, err)
+				return
+			}
+		}
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items})
 }
@@ -49,7 +55,58 @@ func (a *API) getAgentRequest(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	item.ApprovableBy = approvableBy(item)
+	if err := a.attachRequestNotices(request.Context(), principal(request).Workspace.ID, &item); err != nil {
+		writeInternalError(response, err)
+		return
+	}
 	writeJSON(response, http.StatusOK, item)
+}
+
+// attachRequestNotices gives a waiting status change what approving it would tell customers now, per
+// chat channel, so the person who approves sees it; a decided one keeps what it told when it was asked.
+func (a *API) attachRequestNotices(ctx context.Context, workspaceID string, item *domain.AgentRequest) error {
+	if item.Status != domain.AgentRequestPending || item.Method != http.MethodPatch {
+		return nil
+	}
+	ids, status, ok := requestedStatusChange(*item)
+	if !ok {
+		return nil
+	}
+	notices, err := a.store.StatusNoticePreview(ctx, workspaceID, ids, status)
+	item.Notices = notices
+	return err
+}
+
+// requestedStatusChange is the conversations and the status a waiting PATCH of one or of several
+// conversations sets, when it tells their customers (notify not false).
+func requestedStatusChange(item domain.AgentRequest) ([]string, string, bool) {
+	var change struct {
+		Status *string `json:"status"`
+		Notify *bool   `json:"notify"`
+	}
+	var ids []string
+	switch item.Route {
+	case "/api/v1/conversations/{id}":
+		if item.ConversationID == nil || json.Unmarshal(item.Body, &change) != nil {
+			return nil, "", false
+		}
+		ids = []string{*item.ConversationID}
+	case "/api/v1/conversations":
+		var bulk struct {
+			IDs     []string        `json:"ids"`
+			Changes json.RawMessage `json:"changes"`
+		}
+		if json.Unmarshal(item.Body, &bulk) != nil || json.Unmarshal(bulk.Changes, &change) != nil {
+			return nil, "", false
+		}
+		ids = bulk.IDs
+	default:
+		return nil, "", false
+	}
+	if change.Status == nil || (change.Notify != nil && !*change.Notify) || len(ids) == 0 {
+		return nil, "", false
+	}
+	return ids, *change.Status, true
 }
 
 // approveTimeout bounds one approval, call included. It does not follow the approver's connection: a
