@@ -7842,6 +7842,14 @@ export interface components {
         };
         ChannelDetail: components["schemas"]["Channel"] & {
             config: components["schemas"]["ChannelConfig"];
+            /** @description The rules the channel stores over its type's defaults (ChannelSettings), as a change of settings replaces them whole. Left out for a removed channel. */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description The rules in force: the type's defaults with the channel's settings over them (ChannelSettings). Left out for a removed channel. */
+            effective_settings?: {
+                [key: string]: unknown;
+            };
         };
         ChannelTypeInfo: {
             type: components["schemas"]["ChannelType"];

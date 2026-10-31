@@ -18,6 +18,7 @@ func noticeLoop() *channeltest.Loopback {
 	loop.Defaults.Commands = map[string]channels.Command{"bug": {Match: channels.MatchWords, Phrases: []string{"report bug"}}}
 	loop.Defaults.Notices.Unmatched = "Write report bug and what happened."
 	loop.Defaults.Scopes = map[string]channels.Scope{"user": {Mode: channels.ModeCommands, Unmatched: channels.UnmatchedNotice}}
+	loop.SharedScopes = []string{"group"}
 	return loop
 }
 
@@ -89,7 +90,7 @@ func TestTheUnmatchedNoticeNeedsItsTextAndKnownPlaceholders(t *testing.T) {
 		t.Fatalf("notices without a text = %s", got)
 	}
 	for _, settings := range []string{`{"notices":{"unmatched":"Your ticket {ref} is open"}}`, `{"notices":{"received":"Thanks {name}"}}`,
-		`{"scopes":{"user":{"mode":"commands","unmatched":"answer"}}}`} {
+		`{"scopes":{"user":{"mode":"commands","unmatched":"answer"}}}`, `{"scopes":{"group":{"mode":"commands","unmatched":"notice"}}}`} {
 		if _, err := d.updateSettings(settings); err == nil {
 			t.Errorf("%s was kept, want it refused", settings)
 		}
@@ -101,4 +102,15 @@ func TestTheUnmatchedNoticeNeedsItsTextAndKnownPlaceholders(t *testing.T) {
 
 func (d loopDesk) updateSettings(settings string) (channels.Channel, error) {
 	return d.store.UpdateChannel(context.Background(), d.workspaceID, d.channel.ID, store.ChannelInput{Settings: []byte(settings)}, store.ChannelActor{AgentID: d.agentID})
+}
+
+// What the team writes on the chat app, and the copy the channel sends back of its own messages, are
+// never answered: the channel never answers itself.
+func TestTheUnmatchedNoticeNeverAnswersTheTeamOrTheChannel(t *testing.T) {
+	d := newLoopDesk(t, noticeLoop())
+	d.send(t, channeltest.LoopbackEvent{ID: "s-1", From: "nv1", Text: "checking the printer", Staff: true})
+	d.send(t, channeltest.LoopbackEvent{ID: "e-1", From: "u1", Text: "Write report bug and what happened.", Echo: true})
+	if got := d.one(t, `SELECT count(*)::text FROM channel_outbox WHERE workspace_id=$1 AND thread_item_id IS NOT NULL`); got != "0" {
+		t.Fatalf("notices = %s, want none", got)
+	}
 }
