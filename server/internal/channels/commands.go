@@ -39,13 +39,15 @@ func FoldText(text string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// MatchCommand finds the command a message starts with: a phrase of a command matches the first
-// words of the text when folded the same (FoldText), or, for a phrase of five letters or more, when
-// one letter is wrong, missing, added or two are swapped. The longest phrase wins. rest is the text
+// MatchCommand finds the command a message starts with, as each command's Match says: a phrase matches
+// the first words of the text when folded the same (FoldText, keeping a # or / that starts a word), or
+// with MatchFuzzy, for a phrase of five letters or more, when one letter is wrong, missing, added or two
+// are swapped. With MatchExact a phrase is the whole message. The longest phrase wins. rest is the text
 // after the phrase.
 func MatchCommand(text string, commands map[string]Command) (name string, command Command, rest string, ok bool) {
-	words := strings.Fields(FoldText(text))
+	words := commandWords(text)
 	original := strings.Fields(text)
+	whole := norm.NFC.String(strings.TrimSpace(text))
 	names := make([]string, 0, len(commands))
 	for candidate := range commands {
 		names = append(names, candidate)
@@ -53,21 +55,25 @@ func MatchCommand(text string, commands map[string]Command) (name string, comman
 	sort.Strings(names)
 	best := 0
 	for _, candidate := range names {
+		match := commands[candidate].Match
 		for _, phrase := range commands[candidate].Phrases {
-			wanted := strings.Fields(FoldText(phrase))
-			if len(wanted) == 0 || len(wanted) > len(words) {
-				continue
-			}
-			got := strings.Join(words[:len(wanted)], " ")
-			joined := strings.Join(wanted, " ")
-			if got != joined && (len([]rune(joined)) < 5 || damerau(got, joined) > 1) {
-				continue
-			}
-			if len(joined) > best {
-				best, name, command, ok = len(joined), candidate, commands[candidate], true
-				if len(wanted) <= len(original) {
-					rest = strings.Join(original[len(wanted):], " ")
+			if match == MatchExact {
+				phrase = norm.NFC.String(strings.TrimSpace(phrase))
+				if phrase != "" && strings.EqualFold(whole, phrase) && len(phrase) > best {
+					best, name, command, rest, ok = len(phrase), candidate, commands[candidate], "", true
 				}
+				continue
+			}
+			wanted := commandWords(phrase)
+			joined := strings.Join(wanted, " ")
+			used := phraseWords(words, wanted, match)
+			if used == 0 || len(joined) <= best {
+				continue
+			}
+			best, name, command, ok = len(joined), candidate, commands[candidate], true
+			rest = ""
+			if used <= len(original) {
+				rest = strings.Join(original[used:], " ")
 			}
 		}
 	}
@@ -75,6 +81,56 @@ func MatchCommand(text string, commands map[string]Command) (name string, comman
 		command.Action = ActionOpen
 	}
 	return name, command, rest, ok
+}
+
+// phraseWords is how many of the text's first words the phrase takes, 0 when it does not match.
+func phraseWords(words, wanted []string, match string) int {
+	if len(wanted) == 0 {
+		return 0
+	}
+	if match == MatchWords {
+		// The words of the phrase, its spaces aside: "báolỗi" is "báo lỗi", "báo lỗix" is not.
+		target := strings.Join(wanted, "")
+		got := ""
+		for used, word := range words {
+			got += word
+			switch {
+			case got == target:
+				return used + 1
+			case len(got) >= len(target) || !strings.HasPrefix(target, got):
+				return 0
+			}
+		}
+		return 0
+	}
+	if len(wanted) > len(words) {
+		return 0
+	}
+	got := strings.Join(words[:len(wanted)], " ")
+	joined := strings.Join(wanted, " ")
+	if got != joined && (len([]rune(joined)) < 5 || damerau(got, joined) > 1) {
+		return 0
+	}
+	return len(wanted)
+}
+
+// commandWords is text folded (FoldText) into words, a word keeping the # or / it starts with: a
+// command named "/loi" is that token, not the word it spells.
+func commandWords(text string) []string {
+	var words []string
+	for _, field := range strings.Fields(text) {
+		sigil := ""
+		if strings.HasPrefix(field, "#") || strings.HasPrefix(field, "/") {
+			sigil = field[:1]
+		}
+		for i, word := range strings.Fields(FoldText(field)) {
+			if i == 0 {
+				word = sigil + word
+			}
+			words = append(words, word)
+		}
+	}
+	return words
 }
 
 // damerau is the optimal string alignment distance of two strings, in runes.
