@@ -16,6 +16,7 @@ import { NameForm } from '../name-form';
 import { saveState } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
 import type { SettingsPath, Shown } from '../settings-nav';
+import { ChannelAITab } from './channel-ai-tab';
 import { channelsMessages as m } from './channels-messages';
 import './channels.css';
 import { useCreateAction } from '../../../api/use-create';
@@ -360,7 +361,7 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   if (detail.isError) return <LoadFailed onRetry={() => void detail.refetch()} />;
   if (!channel) return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
   if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
-  const tabs = [...ui.tabs, { id: 'history', label: m.tabHistory }];
+  const tabs = [...ui.tabs, { id: 'ai', label: m.tabAI }, { id: 'history', label: m.tabHistory }];
   const open = tabs.find((item) => item.id === tab)?.id ?? tabs[0].id;
   const capabilities = channel.capabilities.map(ui.capabilityLabel).filter(Boolean);
   return <>
@@ -381,6 +382,7 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
       <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
+          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} />
           : <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
               return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
