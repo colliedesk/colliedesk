@@ -55,10 +55,8 @@ func importBundle(ctx context.Context, pool *pgxpool.Pool, args []string, output
 	if err != nil {
 		return fmt.Errorf("import stopped, nothing was written: %w", err)
 	}
-	jsonPath, markdownPath, err := report.WriteFiles(*reportDir)
-	if err != nil {
-		return err
-	}
+	// The outcome is printed before the report files are written: an import that committed is never
+	// hidden behind a report that cannot be written.
 	lines := make([]string, 0, len(report.Lines))
 	for _, line := range report.Lines {
 		lines = append(lines, fmt.Sprintf("%s %d/%d/%d", line.What, line.Written, line.Bundle, line.Source))
@@ -67,7 +65,17 @@ func importBundle(ctx context.Context, pool *pgxpool.Pool, args []string, output
 	if *dryRun {
 		mode = " (dry run: nothing was written)"
 	}
-	if _, err := fmt.Fprintf(output, "Status: %s%s\n%s (written/bundle/source)\nReport: %s\nReport: %s\n", report.Status, mode, strings.Join(lines, ", "), jsonPath, markdownPath); err != nil {
+	if _, err := fmt.Fprintf(output, "Status: %s%s\n%s (written/bundle/source)\n", report.Status, mode, strings.Join(lines, ", ")); err != nil {
+		return err
+	}
+	jsonPath, markdownPath, err := report.WriteFiles(*reportDir)
+	if err != nil {
+		if report.Status == bundle.StatusOK && !*dryRun {
+			return fmt.Errorf("%s is imported (Status: OK above), but its report could not be written: %w", report.Source, err)
+		}
+		return fmt.Errorf("the report could not be written: %w", err)
+	}
+	if _, err := fmt.Fprintf(output, "Report: %s\nReport: %s\n", jsonPath, markdownPath); err != nil {
 		return err
 	}
 	if report.Status != bundle.StatusOK {

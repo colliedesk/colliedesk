@@ -54,4 +54,10 @@ func TestImportBundleFromTheCommandLine(t *testing.T) {
 	if !strings.Contains(undone.String(), "Removed from bundle:cli: 1 conversations, 1 contacts") {
 		t.Fatalf("undo output:\n%s", undone.String())
 	}
+	// A report that cannot be written never hides what was imported: the outcome is printed first.
+	var unwritten bytes.Buffer
+	err := run(context.Background(), []string{"import", "bundle", "--workspace", "bundle-desk", "--report-dir", filepath.Join(path, "not-a-directory"), path}, &unwritten, databaseURL, "https://desk.example.com")
+	if err == nil || !strings.Contains(err.Error(), "imported") || !strings.Contains(unwritten.String(), "Status: OK") || !strings.Contains(unwritten.String(), "conversations 1/1/1") {
+		t.Fatalf("with a report it cannot write: %v\n%s", err, unwritten.String())
+	}
 }

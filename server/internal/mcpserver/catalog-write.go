@@ -11,7 +11,8 @@ func conversationUpdateSpec() Spec {
 			`a name matches the tag with exactly that spelling, otherwise the one tag that differs only in case; if two tags differ only in case, give the exact name). ` +
 			`remove_tags takes names of existing tags, matched the same way. Both leave the other tags alone. ` +
 			`If a step fails after another has saved, the error says some changes may already be applied; repeat the same call. ` +
-			`It never sends anything to the customer and deletes nothing; every change can be undone by another call.` +
+			`It deletes nothing and every change can be undone by another call. A status set on a conversation of a chat channel that has words for it tells the customer ` +
+			`(the channel's status notice); with a draft token that change is filed for a person to approve. notify false sets the status quietly, without asking.` +
 			"\n\nTier: draft.",
 		Tier: "draft", Idempotent: true,
 		REST: []string{"PATCH /api/v1/conversations/{id}", "PUT /api/v1/conversations/{id}/tags/{tagId}", "DELETE /api/v1/conversations/{id}/tags/{tagId}",
@@ -22,7 +23,8 @@ func conversationUpdateSpec() Spec {
 			`"priority":{"type":"string","enum":["low","normal","high","urgent"]},` +
 			`"assignee":{"type":"string","maxLength":200,"description":"me, unassigned, or a team member's email, name or id."},` +
 			`"add_tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":100},"description":"Names of tags to put on the conversation. A name that is not a tag yet is created."},` +
-			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off."}}}`,
+			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off."},` +
+			`"notify":{"type":"boolean","description":"false sets the status without telling the customer. true by default."}}}`,
 		Output: `{"type":"object","required":["conversation","timezone"],"properties":{"conversation":` + stateSchema + `,"timezone":{"type":"string"}}}`,
 		run:    conversationUpdate,
 	}
@@ -60,7 +62,8 @@ func conversationsBulkUpdateSpec() Spec {
 			`assignee takes "me", "unassigned", or a team member's email, name or id (see colliedesk_agents_list). ` +
 			`add_tags and remove_tags take names of existing tags (see colliedesk_tags_list), matched like in colliedesk_conversation_update; this tool creates no tag. ` +
 			`To change the priority, or to add a tag that does not exist yet, use colliedesk_conversation_update on each conversation. ` +
-			`It never sends anything to the customer and deletes nothing; every change can be undone by another call.` +
+			`It deletes nothing and every change can be undone by another call. A status set on conversations of a chat channel that has words for it tells their customers ` +
+			`(the channel's status notice); with a draft token that change is filed for a person to approve. notify false sets the status quietly, without asking.` +
 			"\n\nTier: draft.",
 		Tier: "draft", Idempotent: true,
 		REST: []string{"PATCH /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
@@ -69,7 +72,8 @@ func conversationsBulkUpdateSpec() Spec {
 			`"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
 			`"assignee":{"type":"string","maxLength":200,"description":"me, unassigned, or a team member's email, name or id."},` +
 			`"add_tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":100},"description":"Names of existing tags to put on every conversation."},` +
-			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off every conversation."}}}`,
+			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off every conversation."},` +
+			`"notify":{"type":"boolean","description":"false sets the status without telling the customers. true by default."}}}`,
 		Output: `{"type":"object","required":["updated","conversation_ids"],"properties":{"updated":{"type":"integer","description":"How many conversations were changed."},` +
 			`"conversation_ids":{"type":"array","items":{"type":"string"}}}}`,
 		run: conversationsBulkUpdate,

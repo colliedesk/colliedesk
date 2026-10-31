@@ -63,6 +63,10 @@ const (
 	// PrivilegeSLAClaim lists the conversations of every workspace whose response clocks are stale, or due
 	// a reminder, for the response clock worker; each is then counted or sent in its own workspace.
 	PrivilegeSLAClaim Privilege = "sla-claim"
+	// PrivilegeAutoCloseClaim lists the resolved conversations of every workspace whose chat channel closes
+	// them by itself and whose time came, for the auto-close worker; each is then closed in its own
+	// workspace.
+	PrivilegeAutoCloseClaim Privilege = "auto-close-claim"
 	// PrivilegeIntakeDueClaim lists the gatherings of chat intake of every workspace past their time to
 	// be decided, for the rules' decision to apply; each is then applied in its own workspace.
 	PrivilegeIntakeDueClaim Privilege = "intake-due-claim"

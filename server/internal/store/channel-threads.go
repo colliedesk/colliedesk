@@ -324,8 +324,12 @@ const MaxChatPage = 100
 
 const chatItemColumns = `i.id::text,i.thread_id::text,i.direction,i.role,i.sender_kind,i.sender_value,i.sender_name,i.contact_id::text,i.agent_id::text,
 	i.body,i.external_id,i.quote_external_id,i.message_id::text,i.disposition,i.disposition_reason,i.occurred_at,
-	(SELECT COALESCE(json_agg(json_build_object('name',f.name,'content_type',f.content_type,'status',f.status,'size',f.size,'error',f.error) ORDER BY f.idx),'[]')
-		FROM channel_inbound_files f WHERE f.workspace_id=i.workspace_id AND f.event_id=i.inbound_event_id),
+	CASE WHEN i.inbound_event_id IS NULL AND i.message_id IS NOT NULL AND i.direction='in' THEN
+		-- An item written with its message (an import) has the message's files.
+		(SELECT COALESCE(json_agg(json_build_object('name',a.filename,'content_type',a.content_type,'status','stored','size',a.size,'error',NULL) ORDER BY a.created_at,a.id),'[]')
+			FROM attachments a WHERE a.workspace_id=i.workspace_id AND a.message_id=i.message_id)
+	ELSE (SELECT COALESCE(json_agg(json_build_object('name',f.name,'content_type',f.content_type,'status',f.status,'size',f.size,'error',f.error) ORDER BY f.idx),'[]')
+		FROM channel_inbound_files f WHERE f.workspace_id=i.workspace_id AND f.event_id=i.inbound_event_id) END,
 	(SELECT o.status FROM channel_outbox o WHERE o.workspace_id=i.workspace_id AND o.thread_item_id=i.id)`
 
 func scanChatItem(row pgx.Row, extra ...any) (ChatItem, error) {

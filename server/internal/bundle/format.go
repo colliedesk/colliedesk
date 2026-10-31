@@ -358,8 +358,8 @@ func (a Archive) check() error {
 				return refuse("%s: an id once, kind incoming, outgoing or note, created_at", where)
 			}
 			messages[message.ID] = true
-			if s := message.Sender; s != nil && (message.Kind != "incoming" || s.Kind == "" || s.Value == "" || len(s.Kind) > 40 || len(s.Value) > 200 || len([]rune(s.Name)) > 200) {
-				return refuse("%s.sender: only on an incoming message, with a kind and a value", where)
+			if s := message.Sender; s != nil && (message.Kind == "note" || s.Kind == "" || s.Value == "" || len(s.Kind) > 40 || len(s.Value) > 200 || len([]rune(s.Name)) > 200) {
+				return refuse("%s.sender: a kind and a value, never on a note", where)
 			}
 			for f, file := range message.Files {
 				stored, ok := a.files[file.Path]

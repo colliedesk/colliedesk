@@ -895,6 +895,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly. A token that may not write to customers (below the send tier) asks a person first (202) when the change would tell one; a quiet change does not ask. */
         patch: operations["updateConversation"];
         trace?: never;
     };
@@ -4964,7 +4965,7 @@ export interface components {
             disposition_reason: string | null;
             /** Format: date-time */
             occurred_at: string;
-            /** @description The files of an item that came in, as they were fetched; the conversation message it became has them as attachments. */
+            /** @description The files of an item that came in, as they were fetched (an imported item: the attachments of its message); the conversation message it became has them as attachments. */
             files: {
                 name: string;
                 content_type: string;
@@ -7567,6 +7568,8 @@ export interface components {
                 assignee_id?: string | null;
                 add_tag_ids?: string[];
                 remove_tag_ids?: string[];
+                /** @description false sets the status without telling the customers (the channels' status notices); a token below the send tier asks a person first when one would be told. true by default. */
+                notify?: boolean;
             };
         };
         BulkConversationUpdateResult: {
@@ -8167,7 +8170,7 @@ export interface components {
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat), unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}}. Never a secret. */
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, status_pending, status_resolved, status_closed (what the team setting that status tells the customer; reopened for open), help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat), unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation that stayed resolved that long after its resolve and the customer's last message closes by itself, telling the customer with status_closed, quietly for one imported resolved and untouched since). Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };
@@ -11436,6 +11439,8 @@ export interface operations {
                     /** Format: uuid */
                     assignee_id?: string | null;
                     tag_ids?: string[];
+                    /** @description false sets the status without telling the customer (the channel's status notice). true by default. */
+                    notify?: boolean;
                 };
             };
         };

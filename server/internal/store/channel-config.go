@@ -120,6 +120,10 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.unmatched_every_seconds": "Use 0 to 86400 seconds."},
 			Message: "Check the channel settings."}
 	}
+	if hours := merged.AutoCloseHours; hours != nil && (*hours < 0 || *hours > 720) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.auto_close_hours": "Use 0 (never) to 720 hours."},
+			Message: "Check the channel settings."}
+	}
 	if every := merged.Notices.HelpEverySeconds; every != nil && (*every < 0 || *every > 86400) {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.help_every_seconds": "Use 0 to 86400 seconds."},
 			Message: "Check the channel settings."}
@@ -127,7 +131,9 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
 		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired,
 		channels.NoticeReopenNotFound: merged.Notices.ReopenNotFound, channels.NoticeReopenLegacy: merged.Notices.ReopenLegacy,
-		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted, channels.NoticeHelp: merged.Notices.Help} {
+		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted, channels.NoticeHelp: merged.Notices.Help,
+		channels.NoticeStatusPending: merged.Notices.StatusPending, channels.NoticeStatusResolved: merged.Notices.StatusResolved,
+		channels.NoticeStatusClosed: merged.Notices.StatusClosed} {
 		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
 				Message: "Check the channel settings."}
