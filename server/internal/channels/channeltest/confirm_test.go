@@ -202,3 +202,20 @@ func TestALongRequestOpensWhole(t *testing.T) {
 		t.Fatalf("body length = %s", got)
 	}
 }
+
+// A request is called by what follows its command, not by the command: a command alone takes its name from
+// the description that follows.
+func TestARequestIsCalledByWhatFollowsItsCommand(t *testing.T) {
+	d := newLoopDesk(t, describingLoop())
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "u1", Text: "report bug: the printer jams"})
+	d.step(t, 11*time.Second)
+	d.step(t, 61*time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "u2", Text: "report bug"})
+	d.step(t, 11*time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "c-3", From: "u2", Text: "the scanner is offline\nsince Monday"})
+	d.step(t, 11*time.Second)
+	d.step(t, 61*time.Second)
+	if got := d.one(t, `SELECT string_agg(subject,'|' ORDER BY created_at) FROM conversations WHERE workspace_id=$1`); got != "the printer jams|the scanner is offline" {
+		t.Fatalf("subjects = %q", got)
+	}
+}

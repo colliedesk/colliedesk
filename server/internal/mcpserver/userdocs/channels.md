@@ -161,6 +161,8 @@ ones whole, so send them all.
   An OK written before the question is part of the request. A journal processed late (a paused channel
   resumed) keeps the times its messages came: a request whose customer was quiet longer than the question
   would have waited opens without one. A request of any length opens whole.
+- A conversation a command opens is called by the first line of what follows the command ("report bug: the
+  printer jams" is "the printer jams"); a command with nothing after it keeps the channel's subject.
 - A command with `ask_description` set, sent alone (no words after it, no file), is answered with that text
   instead and opens nothing until the customer describes it. `gather.expire_seconds` (0, the default, never)
   throws such a request away that long after the customer's last message: their next message is answered
