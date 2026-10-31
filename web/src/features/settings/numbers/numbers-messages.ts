@@ -20,6 +20,7 @@ export const numbersMessages = {
   nameTaken: 'A series has this name already.',
   format: 'Code format',
   formatHint: 'Letters, digits, # - _ / . with {n} once ({n:04} pads to 4 digits) and {yyyy} for the year it opens in.',
+  yearOnce: 'Use {yyyy} once at most.',
   formatBad: 'Use {n} once, and only letters, digits, # - _ / . and {yyyy} around it.',
   nextNumber: 'Next number',
   nextHint: (code: string) => `The next conversation will be ${code}. It can go up, never down.`,

@@ -92,3 +92,24 @@ test('an agent reads the series and changes nothing; a failed load says so with 
   expect(screen.getByText('Only admins change number series.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Change|Add a series/ })).toBeNull();
 });
+
+test('a code\'s year is the workspace\'s, not the agent\'s, and a format names the year once at most', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  // 31 December 12:00 UTC: already 2027 in Kiritimati (the agent), still 2026 in Pago Pago (the workspace).
+  vi.setSystemTime(new Date('2026-12-31T12:00:00Z'));
+  try {
+    api.me.mockResolvedValue({ ...me('admin'), timezone: 'Pacific/Kiritimati', workspace: { ...me('admin').workspace, timezone: 'Pacific/Pago_Pago' } });
+    show();
+    const list = await screen.findByRole('list', { name: 'Number series' });
+    expect(within(list).getByText('Next: CHD-2026-0143')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a series' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a number series' });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'web' } });
+    fireEvent.change(within(dialog).getByLabelText('Code format'), { target: { value: 'A-{yyyy}-{n:04}-{yyyy}' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByLabelText('Code format')).toHaveAccessibleDescription(/\{yyyy\} once at most/);
+    expect(numberSeriesApi.set).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});

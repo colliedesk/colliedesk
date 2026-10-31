@@ -13,9 +13,10 @@ const mocks = vi.hoisted(() => {
   class ConflictError extends InvalidRequestError {}
   const channelsApi = { setCredential: vi.fn(), threads: vi.fn(), senders: vi.fn(), update: vi.fn() };
   const numberSeriesApi = { list: vi.fn(), set: vi.fn() };
-  return { channelsApi, numberSeriesApi, InvalidRequestError, ConflictError };
+  const api = { me: vi.fn() };
+  return { channelsApi, numberSeriesApi, api, InvalidRequestError, ConflictError };
 });
-vi.mock('../../api/client', () => ({ InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError }));
+vi.mock('../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError }));
 vi.mock('../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
 vi.mock('../../api/number-series', async (actual) => ({ ...(await actual<typeof import('../../api/number-series')>()), numberSeriesApi: mocks.numberSeriesApi }));
 const { channelsApi } = mocks;
@@ -49,6 +50,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   channelsApi.threads.mockResolvedValue({ items: [], next_cursor: null });
   channelsApi.senders.mockResolvedValue({ items: [] });
+  mocks.api.me.mockResolvedValue({ timezone: 'UTC', workspace: { timezone: 'UTC' } });
   mocks.numberSeriesApi.list.mockResolvedValue({ items: [
     { series: 'default', format: '#{n}', next: 13, start: 1, start_year: null, updated_at: '2026-10-31T00:00:00Z' },
     { series: 'chd', format: 'CHD-{yyyy}-{n:04}', next: 143, start: 142, start_year: 2026, updated_at: '2026-10-31T00:00:00Z' },
@@ -424,4 +426,17 @@ test('the reopen notices are saved with the others, and the received notice says
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ reopen_not_found: 'Không tìm thấy {ref}.', reopen_legacy: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' });
+});
+
+test('references count the next code\'s year where the workspace is, not where the agent is', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-12-31T12:00:00Z'));
+  try {
+    mocks.api.me.mockResolvedValue({ timezone: 'Pacific/Kiritimati', workspace: { timezone: 'Pacific/Pago_Pago' } });
+    view(<Tabs.connection channel={channel({}, { effective_settings: { number_series: 'chd' } })} canManage timezone="Pacific/Kiritimati" />);
+    const select = await screen.findByLabelText('Number series');
+    await waitFor(() => expect(select).toHaveAccessibleDescription('Next reference: CHD-2026-0143'));
+  } finally {
+    vi.useRealTimers();
+  }
 });

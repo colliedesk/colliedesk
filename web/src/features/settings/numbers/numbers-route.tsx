@@ -15,6 +15,8 @@ import './numbers.css';
 // number. Admins add and change them; agents read them.
 
 const formatShape = /^[A-Za-z0-9#\-_/.]*(\{yyyy\}[A-Za-z0-9#\-_/.]*)?\{n(:0[2-8])?\}[A-Za-z0-9#\-_/.]*(\{yyyy\}[A-Za-z0-9#\-_/.]*)?$/;
+// {yyyy} names the year once at most, before or after {n}, as the server reads a format.
+const oneYear = (format: string) => format.split('{yyyy}').length <= 2;
 const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
 
 function fieldErrors(error: unknown): Record<string, string> {
@@ -27,7 +29,8 @@ export function NumbersRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const isAdmin = me.data?.agent.role === 'admin';
   const billingShown = useBillingShown(isAdmin);
-  const timezone = me.data?.timezone ?? 'UTC';
+  // A code's {yyyy} is the year where the workspace is, whatever the agent's own time zone.
+  const timezone = me.data?.workspace.timezone ?? 'UTC';
   const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: billingShown, importData: isAdmin, ai: true };
   const series = useQuery({ queryKey: ['number-series'], queryFn: numberSeriesApi.list });
   const [editing, setEditing] = useState<NumberSeries | 'new'>();
@@ -92,7 +95,7 @@ function SeriesDialog({ current, taken, year, onClose, onSaved }: { current?: Nu
   const least = current?.next ?? 1;
   const local = {
     name: current ? undefined : !name.trim() ? m.required : !seriesName.test(name.trim()) ? m.nameBad : taken.includes(name.trim()) ? m.nameTaken : undefined,
-    format: !format.trim() ? m.required : !formatShape.test(format.trim()) ? m.formatBad : undefined,
+    format: !format.trim() ? m.required : !formatShape.test(format.trim()) ? m.formatBad : !oneYear(format.trim()) ? m.yearOnce : undefined,
     next: !(whole(next) >= 1) ? m.wholeNumber : whole(next) < least ? m.nextLow(least) : undefined,
     start: start.trim() && !(whole(start) >= 1) ? m.wholeNumber : undefined,
     start_year: startYear.trim() && !(whole(startYear) >= 1970 && whole(startYear) <= 9999) ? m.yearBad : undefined,

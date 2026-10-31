@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ConflictError, InvalidRequestError } from '../../api/client';
+import { api, ConflictError, InvalidRequestError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
 import { codeOf, numberSeriesApi, yearIn } from '../../api/number-series';
 import type { ChannelDetail, ChatSender, ChatThread, ZaloConfig } from '../../api/channels';
@@ -167,8 +167,10 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
 
 // References: the number series the channel numbers what it opens in, and the code the next one gets.
 // The series themselves are the workspace's (Settings → Conversation numbers).
-function References({ channel, canManage, timezone }: ChannelPanelProps) {
+function References({ channel, canManage }: ChannelPanelProps) {
   const series = useQuery({ queryKey: ['number-series'], queryFn: numberSeriesApi.list });
+  // A code's {yyyy} is the year where the workspace is, not the agent's own time zone.
+  const workspaceZone = useQuery({ queryKey: ['me'], queryFn: api.me }).data?.workspace.timezone ?? 'UTC';
   const current = text(record(channel.effective_settings).number_series) || 'default';
   const [chosen, setChosen] = useState(current);
   useEffect(() => setChosen(current), [current]);
@@ -182,7 +184,7 @@ function References({ channel, canManage, timezone }: ChannelPanelProps) {
   const items = series.data?.items ?? [];
   const picked = items.find((item) => item.series === chosen);
   const label = (name: string) => (name === 'default' ? m.defaultSeries : name);
-  const next = picked ? codeOf(picked.format, picked.next, yearIn(timezone)) : undefined;
+  const next = picked ? codeOf(picked.format, picked.next, yearIn(workspaceZone)) : undefined;
   return <section className="zl-block" aria-labelledby={`${id}-refs`}><h3 id={`${id}-refs`}>{m.references}</h3>
     <p className="lead">{m.referencesLead}</p>
     {series.isError ? <p role="alert" className="error-copy">{m.seriesFailed} <button type="button" className="link-action" onClick={() => void series.refetch()}>{m.tryAgain}</button></p>
