@@ -193,8 +193,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   shows how many rows are selected and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
   **Tags** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
-- With a conversation of a chat in the selection (a Zalo OA, the help center chat), **Tell customers**
-  sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
+- With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
+  Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
   customer whose channel has words for the new status (see [Telling the customer](#telling-the-customer)).
   Untick it to change them quietly; the buttons' names say **Resolve quietly** and **Set status quietly**.
 - In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
@@ -349,7 +349,8 @@ See [Plan and billing](billing.md).
 ## Telling the customer
 
 - A conversation of a chat (a Zalo OA) tells its customer when its status is set to Pending, Resolved or
-  Closed, or reopened, if its channel has words for that status (a Zalo OA's **When a conversation's
+  Closed, or reopened, if its channel has words for that status (an email conversation a Zalo message was
+  moved into is told on that chat) (a Zalo OA's **When a conversation's
   status changes**, see [Zalo OA](zalo.md#when-the-status-of-a-conversation-changes)). The words come from the
   channel, as its own message, shown in the timeline as **Sent by the channel · not a reply**. Email and
   web form conversations are never told.

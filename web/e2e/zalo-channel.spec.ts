@@ -185,6 +185,7 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   await page.getByRole('tab', { name: 'Messages' }).click();
   const block = page.getByRole('region', { name: 'When a conversation’s status changes' });
   await block.getByLabel('When set to Resolved').fill('Yêu cầu {ref} đã được xử lý.');
+  await block.getByLabel('When set to Pending').fill('Yêu cầu {ref} đang chờ.');
   await block.getByLabel('Close resolved conversations after').fill('48');
   await expect(block.getByText('A conversation that stays resolved for 48 hours closes by itself, quietly: “When set to Closed” is empty.')).toBeVisible();
   await page.getByRole('button', { name: 'Save messages' }).click();
