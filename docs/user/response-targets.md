@@ -35,7 +35,8 @@ The inbox shows a conversation due soon or overdue: its row says "Due 1:15 PM" o
 priority (which clock, in business hours, in its tooltip), and counts its tags to stay one line; the
 header says the clock in full ("Reply by 1:15 PM", "Resolve overdue"); the details list both clocks under
 **Targets**, with the business time left or late, met or paused. Nothing shows while a clock is far from
-its target. Filter them with Targets (Overdue, Due soon) and sort by Due first; both are offered once a
+its target. Times are in your own time zone, named ("6:15 AM UTC") when it is not your browser's; an
+inbox left open reads again when a mark is due to change. Filter them with Targets (Overdue, Due soon) and sort by Due first; both are offered once a
 listed conversation has targets. For AI agents and the API: `sla` on each conversation (`state` overdue, due_soon, ok,
 paused, stopped or met; `first_response` and `resolution` with `due_at`, `warn_at`, `met_at`,
 `breached_at`, `due_soon`, `overdue` and `business_minutes_left`), `GET /api/v1/conversations?sla=overdue,due_soon`

@@ -37,7 +37,11 @@ function useSave() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (value: ResponseTargetsChange) => responseTargetsApi.set(value),
-    onSuccess: (saved) => { client.setQueryData(['response-targets'], saved); void client.invalidateQueries({ queryKey: ['conversations'] }); },
+    // A save answers the workspace's document; the reader's own email choice is not in it, so it is kept.
+    onSuccess: (saved) => {
+      client.setQueryData<ResponseTargets>(['response-targets'], (current) => ({ ...saved, my_alert_email: saved.my_alert_email ?? current?.my_alert_email }));
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+    },
   });
 }
 

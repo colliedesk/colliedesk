@@ -167,3 +167,39 @@ test('a refusal of the whole hours or holidays shows on its card', async () => {
   fireEvent.click(within(holidays).getByRole('button', { name: 'Add holiday' }));
   expect(await within(holidays).findByText('At most 100 holidays.')).toBeInTheDocument();
 });
+
+test('saving any card keeps the reader\'s own email choice, which the save does not send back', async () => {
+  responseTargetsApi.get.mockResolvedValue(doc({ my_alert_email: false }));
+  responseTargetsApi.set.mockImplementation(async (value: ResponseTargets) => { const { my_alert_email: _mine, ...rest } = { ...value, updated_at: '2026-10-31T01:00:00Z' } as ResponseTargets; return rest; });
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  expect(screen.getByRole('switch', { name: 'Email them to me' })).not.toBeChecked();
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
+  expect(screen.getByRole('switch', { name: 'Email them to me' })).not.toBeChecked();
+});
+
+test('a day open from 00:00 to 00:00 is open all day', async () => {
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '00:00' } });
+  fireEvent.change(within(hours).getByLabelText('Monday to'), { target: { value: '00:00' } });
+  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().hours[0]).toEqual({ day: 'mon', open: true, from: '00:00', to: '24:00' });
+  expect(within(hours).getByLabelText('Monday to')).toHaveValue('00:00');
+});
+
+test('saving one card leaves what is being typed in the others', async () => {
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  fireEvent.change(within(hours).getByLabelText('Tuesday to'), { target: { value: '18:30' } });
+  const holidays = screen.getByRole('region', { name: 'Holidays' });
+  fireEvent.change(within(holidays).getByLabelText('Name'), { target: { value: 'Tết' } });
+  const targets = screen.getByRole('region', { name: 'Targets' });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
+  expect(within(hours).getByLabelText('Tuesday to')).toHaveValue('18:30');
+  expect(within(holidays).getByLabelText('Name')).toHaveValue('Tết');
+});

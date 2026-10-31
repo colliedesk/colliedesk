@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
@@ -15,6 +15,7 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { useSLARefresh } from './sla-refresh';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
@@ -147,6 +148,9 @@ export function InboxRoute() {
   // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
   // row of the list, whose composer would send a reply to the wrong customer.
   const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
+  // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
+  const refreshTargets = useCallback(() => void client.invalidateQueries({ queryKey: ['conversations'] }), [client]);
+  useSLARefresh([...(conversations.data?.items ?? []), ...(opened.data ? [opened.data] : [])], refreshTargets);
   // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
   // they go out together with the list and the detail instead of after one of them. Without an address the id
   // is the first row of the list, which is the one thing that has to be waited for.
