@@ -55,7 +55,7 @@ test('business hours refuse a day that ends before it starts, copy Monday to the
   const hours = await screen.findByRole('region', { name: 'Business hours' });
   fireEvent.change(within(hours).getByLabelText('Monday to'), { target: { value: '07:00' } });
   fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
-  expect(within(hours).getByLabelText('Monday to')).toHaveAccessibleDescription('Ends before it starts.');
+  expect(within(hours).getByLabelText('Monday to')).toHaveAccessibleDescription(/^Ends before it starts\./);
   expect(responseTargetsApi.set).not.toHaveBeenCalled();
   fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '06:30' } });
   fireEvent.click(within(hours).getByRole('button', { name: 'Copy Monday to weekdays' }));
@@ -142,4 +142,28 @@ test('alerts: an admin turns the workspace\'s emails off; each person turns thei
   expect(sent()).not.toHaveProperty('my_alert_email');
   expect(await within(alerts).findByText(/The workspace sends none/)).toBeInTheDocument();
   expect(within(alerts).getByRole('switch', { name: 'Email them to me' })).toBeDisabled();
+});
+
+test('a day may close at midnight: 00:00 as its end is sent as 24:00, and 24:00 reads back as 00:00', async () => {
+  responseTargetsApi.get.mockResolvedValue(doc({ hours: week.map((day) => ({ day, open: day === 'mon', from: '08:00', to: day === 'mon' ? '24:00' : '17:00' })) }));
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  expect(within(hours).getByLabelText('Monday to')).toHaveValue('00:00');
+  expect(within(hours).getByLabelText('Monday to')).toHaveAccessibleDescription(/midnight/);
+  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().hours[0]).toEqual({ day: 'mon', open: true, from: '08:00', to: '24:00' });
+});
+
+test('a refusal of the whole hours or holidays shows on its card', async () => {
+  responseTargetsApi.set.mockRejectedValueOnce(new mocks.InvalidRequestError('Check the targets.', { fields: { hours: 'Give each day once.' } }))
+    .mockRejectedValueOnce(new mocks.InvalidRequestError('Check the targets.', { fields: { holidays: 'At most 100 holidays.' } }));
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  expect(await within(hours).findByText('Give each day once.')).toBeInTheDocument();
+  const holidays = screen.getByRole('region', { name: 'Holidays' });
+  fireEvent.change(within(holidays).getByLabelText('Date'), { target: { value: '2027-01-01' } });
+  fireEvent.click(within(holidays).getByRole('button', { name: 'Add holiday' }));
+  expect(await within(holidays).findByText('At most 100 holidays.')).toBeInTheDocument();
 });

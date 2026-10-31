@@ -107,7 +107,8 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
     feedback.touch();
     setHours((all) => weekdays.map((name) => (name === day ? { ...byDay(name), ...part } : all.find((item) => item.day === name) ?? byDay(name))));
   };
-  const bad = (day: Weekday) => { const item = byDay(day); return item.open && item.to <= item.from; };
+  // A day closing at midnight is 24:00 on the wire; the time field shows and takes 00:00 for it.
+  const bad = (day: Weekday) => { const item = byDay(day); return item.open && item.to !== '24:00' && item.to <= item.from; };
   if (!canManage) {
     return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}><dl className="tg-dl">
       <dt>{m.timezone}</dt><dd>{doc.timezone ?? m.workspaceZone(workspaceZone)}</dd>
@@ -123,6 +124,8 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
     }}>
       <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { feedback.touch(); setZone(next); }} />
       {server.timezone && <span className="error-copy field-note" role="alert">{server.timezone}</span>}
+      {server.hours && <p className="error-copy" role="alert">{server.hours}</p>}
+      <p className="muted-copy" id={`${id}-midnight`}>{m.midnight}</p>
       <div className="tg-days">
         {weekdays.map((day, index) => {
           const item = byDay(day);
@@ -133,7 +136,8 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
               ? <span className="tg-hours">
                   <input type="time" aria-label={m.from(m.days[day])} value={item.from} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${day}-error` : undefined} onChange={(event) => change(day, { from: event.target.value })} />
                   <span aria-hidden="true">–</span>
-                  <input type="time" aria-label={m.to(m.days[day])} value={item.to} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${day}-error` : undefined} onChange={(event) => change(day, { to: event.target.value })} />
+                  <input type="time" aria-label={m.to(m.days[day])} value={item.to === '24:00' ? '00:00' : item.to} aria-invalid={error ? true : undefined}
+                    aria-describedby={[error ? `${id}-${day}-error` : '', `${id}-midnight`].filter(Boolean).join(' ')} onChange={(event) => change(day, { to: event.target.value === '00:00' ? '24:00' : event.target.value })} />
                   {error && <span className="error-copy field-note" id={`${id}-${day}-error`}>{error}</span>}
                 </span>
               : <span className="tg-closed">{m.closed}</span>}

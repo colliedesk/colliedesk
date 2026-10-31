@@ -16,6 +16,7 @@ export const targetsMessages = {
   to: (day: string) => `${day} to`,
   closed: 'Closed',
   copyMonday: 'Copy Monday to weekdays',
+  midnight: 'A day that closes at 00:00 closes at midnight.',
   endsBefore: 'Ends before it starts.',
   saveHours: 'Save business hours',
   holidaysHeading: 'Holidays',
