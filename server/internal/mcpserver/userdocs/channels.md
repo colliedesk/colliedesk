@@ -130,6 +130,11 @@ a page a customer sees. Email and web forms have no places. For AI agents and th
 `colliedesk_conversation_chat_get`, `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items` and
 `colliedesk_channel_unresolved_items`.
 
+The people who wrote in a channel's places (customers and the team, never the channel itself) are listed
+once each, with the place and time they last wrote and the name the channel last gave them, most recent
+first, at most 200: every member of a group, not only its last writer (to pick a team member, for one).
+`GET /api/v1/channels/{id}/senders`, MCP `colliedesk_channel_senders`; the read tier is enough.
+
 ## Chat rules
 
 A chat channel's scopes (its one-to-one chats, its groups) can each set how a customer's messages become

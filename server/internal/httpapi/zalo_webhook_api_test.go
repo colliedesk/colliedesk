@@ -425,3 +425,89 @@ func TestAZaloChannelsProcessingIsPausedAndResumedThroughTheAPI(t *testing.T) {
 		t.Fatalf("history = %s", got)
 	}
 }
+
+// The people who wrote in a channel's chats, each once with where and when they last wrote, newest first:
+// every member of a group, not only its last writer. Another workspace's channel is not found.
+func TestAChannelListsEveryoneWhoWroteInItsChats(t *testing.T) {
+	zaloServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v3.0/oa/user/detail":
+			_, _ = w.Write([]byte(`{"error":-213}`))
+		case "/v3.0/oa/group/listmember":
+			_, _ = w.Write([]byte(`{"error":0,"data":{"total":2,"members":[{"user_id":"1110002","name":"Bao"},{"user_id":"1110009","name":"Lan"}]}}`))
+		}
+	}))
+	t.Cleanup(zaloServer.Close)
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+		config.Google = google.Config{Keys: keys}
+		config.Zalo = zalo.Config{MessageBase: zaloServer.URL, OAuthBase: zaloServer.URL, HTTP: zaloServer.Client(), Background: func(f func()) { f() }}
+	})
+	d := zaloDesk{api: api, pool: pool, oaA: fmt.Sprint(700000 + time.Now().UnixNano()%100000)}
+	d.adminA = createSession(t, api, service, "Zalo Senders", "admin@zalo-senders.example.com")
+	other := createSession(t, api, service, "Zalo Senders Other", "admin@zalo-senders-other.example.com")
+	d.channelA = d.connect(t, d.adminA, d.oaA, "oa-secret-a")
+	if response := request(t, api, http.MethodPut, "/api/v1/channels/"+d.channelA+"/credentials", map[string]any{"name": zalo.CredentialAccessToken, "value": "access-a"}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatal(response.Body.String())
+	}
+	journal := pipeline.New(store.New(pool).WithChannels(registry.New(registry.Config{Zalo: zalo.Config{MessageBase: zaloServer.URL}})), nil)
+	send := func(event, sender, recipient, id string) {
+		t.Helper()
+		timestamp := fmt.Sprint(time.Now().UnixMilli())
+		envelope := map[string]any{"app_id": "700001", "event_name": event, "timestamp": timestamp,
+			"sender": map[string]string{"id": sender}, "recipient": map[string]string{"id": recipient}, "message": map[string]string{"msg_id": id, "text": "hi"}}
+		if strings.Contains(event, "group") {
+			envelope["oa_id"] = d.oaA
+		}
+		body, _ := json.Marshal(envelope)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/zalo/webhook", bytes.NewReader(body))
+		req.Header.Set(zalo.SignatureHeader, "mac="+zalo.Sign("700001", body, timestamp, "oa-secret-a"))
+		if response := serve(api, req); response.Code != http.StatusOK {
+			t.Fatalf("delivery %s: %d", id, response.Code)
+		}
+		if _, err := journal.ProcessDue(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	send("user_send_text", "1110001", d.oaA, "s-1")
+	send("user_send_group_text", "1110002", "g-5", "s-2")
+	send("user_send_group_text", "1110009", "g-5", "s-3")
+	send("user_send_text", "1110001", d.oaA, "s-4")
+	response := request(t, api, http.MethodGet, "/api/v1/channels/"+d.channelA+"/senders", nil, d.adminA, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("senders: %d %s", response.Code, response.Body.String())
+	}
+	var page struct {
+		Items []struct {
+			Kind       string  `json:"kind"`
+			Value      string  `json:"value"`
+			Role       string  `json:"role"`
+			LastAt     string  `json:"last_at"`
+			ThreadID   string  `json:"thread_id"`
+			Name       *string `json:"name"`
+			ThreadName *string `json:"thread_name"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, item := range page.Items {
+		name := "-"
+		if item.Name != nil {
+			name = *item.Name
+		}
+		got = append(got, item.Value+"/"+name+"/"+item.Role)
+		if item.Kind != zalo.IdentityUser || item.ThreadID == "" || item.LastAt == "" {
+			t.Fatalf("item = %+v", item)
+		}
+	}
+	if strings.Join(got, ",") != "1110001/-/customer,1110009/Lan/customer,1110002/Bao/customer" {
+		t.Fatalf("senders = %s", strings.Join(got, ","))
+	}
+	if response := request(t, api, http.MethodGet, "/api/v1/channels/"+d.channelA+"/senders", nil, other, nil); response.Code != http.StatusNotFound {
+		t.Fatalf("another workspace read them: %d", response.Code)
+	}
+}
