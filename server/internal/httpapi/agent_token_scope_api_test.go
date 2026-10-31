@@ -184,6 +184,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/billing":                                              "admin",
 	"POST /api/v1/billing/checkout":                                    "approval",
 	"POST /api/v1/billing/portal":                                      "approval",
+	"POST /api/v1/billing/migration-request":                           "approval",
 	"GET /api/v1/export":                                               "approval",
 	"POST /api/v1/export/link":                                         "approval",
 	"GET /api/v1/channels/web-form":                                    "read",

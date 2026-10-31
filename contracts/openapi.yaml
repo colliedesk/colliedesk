@@ -3502,7 +3502,11 @@ paths:
         `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries
         the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`.
         A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server
-        cannot send mail; nothing is stored then.
+        cannot send mail; nothing is stored then. 502 `mail_failed` when the mail relay refuses it; nothing is
+        stored then either. A repeat with the same Idempotency-Key answers the first request's answer and sends
+        nothing.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -3525,13 +3529,15 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
-        '422': {description: '`validation_failed`, with `fields.freshdesk_address` or `fields.times`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {description: '`validation_failed`, with `fields.freshdesk_address` or `fields.times`; or `idempotency_key_reused`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '429':
           description: '`rate_limited`: the workspace asked 5 times in the last hour.'
           headers:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
+        '502': {description: '`mail_failed`: the mail relay did not take the message; nothing was stored, try again.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '503': {description: '`mail_unavailable`: this server cannot send mail; nothing was stored.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /api/v1/billing/portal:
     post:

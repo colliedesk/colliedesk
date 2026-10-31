@@ -2007,7 +2007,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. Only an admin may ask (an agent token's call waits for a person's approval). `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. */
+        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. Only an admin may ask (an agent token's call waits for a person's approval). `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. 502 `mail_failed` when the mail relay refuses it; nothing is stored then either. A repeat with the same Idempotency-Key answers the first request's answer and sends nothing. */
         post: operations["createMigrationRequest"];
         delete?: never;
         options?: never;
@@ -12533,7 +12533,10 @@ export interface operations {
     createMigrationRequest: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -12562,7 +12565,8 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description `validation_failed`, with `fields.freshdesk_address` or `fields.times`. */
+            409: components["responses"]["Conflict"];
+            /** @description `validation_failed`, with `fields.freshdesk_address` or `fields.times`; or `idempotency_key_reused`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -12582,6 +12586,15 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+            /** @description `mail_failed`: the mail relay did not take the message; nothing was stored, try again. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description `mail_unavailable`: this server cannot send mail; nothing was stored. */
             503: {
                 headers: {

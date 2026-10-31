@@ -75,16 +75,31 @@ func clearSessionCookie(response http.ResponseWriter) {
 	http.SetCookie(response, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 }
 
+// mePlan is the plan of GET /auth/me: the workspace's access, and for a non-admin person without a paid
+// plan the admins to ask.
+type mePlan struct {
+	domain.Access
+	Admins []string `json:"admins,omitempty"`
+}
+
 func (a *API) me(response http.ResponseWriter, request *http.Request) {
+	var err error
 	identity := principal(request)
 	effectiveTimezone := identity.Workspace.Timezone
 	if identity.Agent.TimezoneOverride != nil {
 		effectiveTimezone = *identity.Agent.TimezoneOverride
 	}
 	// plan is null without billing (self-hosted) so the client shows no trial or lock.
-	var plan *domain.Access
+	var plan *mePlan
 	if a.limits {
-		plan = &identity.Access
+		plan = &mePlan{Access: identity.Access}
+		// A person who is not an admin and cannot use the workspace for lack of a plan learns whom to ask.
+		if !identity.IsToken() && identity.Agent.Role != "admin" && (identity.Access.Plan == domain.PlanTrial || identity.Access.Plan == domain.PlanNone) {
+			if plan.Admins, err = a.store.AdminNames(request.Context(), identity.Workspace.ID); err != nil {
+				writeStoreError(response, err)
+				return
+			}
+		}
 	}
 	// scope is the tier of an agent token (custom for its own list) and null for a person's session.
 	var scope *string
