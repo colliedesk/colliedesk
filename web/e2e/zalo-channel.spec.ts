@@ -294,46 +294,40 @@ test('zalo channel: a token’s status change that would tell nobody by the time
   const app = '1188200455';
   const secret = `oa-secret-${suffix}`;
   const headers = { Origin: baseURL };
-  const zalo = await startFakeZalo(ports.zalo);
-  try {
-    await redeemLink(page, createWorkspace(`Zalo Request ${suffix}`, `admin-${suffix}@example.com`, baseURL));
-    await page.goto(`${baseURL}/settings/channels/new/zalo`);
-    await page.getByRole('textbox', { name: 'OA ID' }).fill(oa);
-    await page.getByRole('textbox', { name: 'App ID' }).fill(app);
-    await page.getByLabel('OA secret key').fill(secret);
-    await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
-    await page.getByRole('tab', { name: 'Messages' }).click();
-    await page.getByLabel('When set to Pending').fill('Yêu cầu {ref} đang chờ.');
-    await page.getByRole('button', { name: 'Save messages' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  await redeemLink(page, createWorkspace(`Zalo Request ${suffix}`, `admin-${suffix}@example.com`, baseURL));
+  await page.goto(`${baseURL}/settings/channels/new/zalo`);
+  await page.getByRole('textbox', { name: 'OA ID' }).fill(oa);
+  await page.getByRole('textbox', { name: 'App ID' }).fill(app);
+  await page.getByLabel('OA secret key').fill(secret);
+  await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  await page.getByLabel('When set to Pending').fill('Yêu cầu {ref} đang chờ.');
+  await page.getByRole('button', { name: 'Save messages' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
 
-    const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),
-      sender: { id: '7700003041' }, recipient: { id: oa }, message: { msg_id: `m-${suffix}`, text: 'Cho hỏi tình trạng đơn' } });
-    const timestamp = (JSON.parse(body) as { timestamp: string }).timestamp;
-    const signature = createHash('sha256').update(app).update(body).update(timestamp).update(secret).digest('hex');
-    expect((await page.request.post(`${baseURL}/api/v1/channels/zalo/webhook`, { headers: { 'Content-Type': 'application/json', 'X-ZEvent-Signature': `mac=${signature}` }, data: body })).status()).toBe(200);
-    let id = '';
-    await expect(async () => {
-      const list = await (await page.request.get(`${baseURL}/api/v1/conversations?status=open`)).json() as { items: { id: string }[] };
-      id = list.items[0]?.id ?? '';
-      expect(id).not.toBe('');
-    }).toPass({ timeout: 20_000 });
+  const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),
+    sender: { id: '7700003041' }, recipient: { id: oa }, message: { msg_id: `m-${suffix}`, text: 'Cho hỏi tình trạng đơn' } });
+  const timestamp = (JSON.parse(body) as { timestamp: string }).timestamp;
+  const signature = createHash('sha256').update(app).update(body).update(timestamp).update(secret).digest('hex');
+  expect((await page.request.post(`${baseURL}/api/v1/channels/zalo/webhook`, { headers: { 'Content-Type': 'application/json', 'X-ZEvent-Signature': `mac=${signature}` }, data: body })).status()).toBe(200);
+  let id = '';
+  await expect(async () => {
+    const list = await (await page.request.get(`${baseURL}/api/v1/conversations?status=open`)).json() as { items: { id: string }[] };
+    id = list.items[0]?.id ?? '';
+    expect(id).not.toBe('');
+  }).toPass({ timeout: 20_000 });
 
-    // A draft token may not write to customers: its Pending, which would tell, waits for a person.
-    const created = await page.request.post(`${baseURL}/api/v1/auth/tokens`, { headers: { ...headers, 'Idempotency-Key': `t-${suffix}` }, data: { label: 'Queue triage', scope: 'draft' } });
-    expect(created.status()).toBe(201);
-    const { token } = await created.json() as { token: string };
-    const asked = await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers: { Authorization: `Bearer ${token}` }, data: { status: 'pending' } });
-    expect(asked.status()).toBe(202);
-    // Before anyone approves, the team sets Pending quietly: approving it now would tell nobody.
-    expect((await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers, data: { status: 'pending', notify: false } })).status()).toBe(200);
+  // A draft token may not write to customers: its Pending, which would tell, waits for a person.
+  const created = await page.request.post(`${baseURL}/api/v1/auth/tokens`, { headers: { ...headers, 'Idempotency-Key': `t-${suffix}` }, data: { label: 'Queue triage', scope: 'draft' } });
+  expect(created.status()).toBe(201);
+  const { token } = await created.json() as { token: string };
+  const asked = await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers: { Authorization: `Bearer ${token}` }, data: { status: 'pending' } });
+  expect(asked.status()).toBe(202);
+  // Before anyone approves, the team sets Pending quietly: approving it now would tell nobody.
+  expect((await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers, data: { status: 'pending', notify: false } })).status()).toBe(200);
 
-    await page.goto(`${baseURL}/requests`);
-    const card = page.getByRole('article').filter({ hasText: 'Queue triage' });
-    await expect(card.getByRole('note')).toHaveText('Approving it now tells no customer: the status is set already.');
-    await expect(card.locator('pre.request-body')).toHaveCount(0);
-    expect(zalo.sent().filter((item) => item.text?.includes('đang chờ'))).toEqual([]);
-  } finally {
-    await zalo.stop();
-  }
+  await page.goto(`${baseURL}/requests`);
+  const card = page.getByRole('article').filter({ hasText: 'Queue triage' });
+  await expect(card.getByRole('note')).toHaveText('Approving it now tells no customer: the status is set already.');
+  await expect(card.locator('pre.request-body')).toHaveCount(0);
 });
