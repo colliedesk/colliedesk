@@ -982,3 +982,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .sort-field, .property-row select { appearance: auto; }
   .property-row::after { forced-color-adjust: auto; }
 }
+
+/* A tab strip (ui/tabs.tsx) that scrolls sideways fades at the edge that has more. Here, not in
+   ui/controls.css: the app's channel pages need it, the operator console's budget has no room for it. */
+.seg-tabs.fade-end { mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); }
+.seg-tabs.fade-start { mask-image: linear-gradient(to right, transparent, #000 var(--space-6)); }
+.seg-tabs.fade-start.fade-end { mask-image: linear-gradient(to right, transparent, #000 var(--space-6), #000 calc(100% - var(--space-6)), transparent); }
