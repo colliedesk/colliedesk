@@ -11248,6 +11248,14 @@ components:
           required: [config]
           properties:
             config: {$ref: '#/components/schemas/ChannelConfig'}
+            settings:
+              type: object
+              additionalProperties: true
+              description: 'The rules the channel stores over its type''s defaults (ChannelSettings), as a change of settings replaces them whole. Left out for a removed channel.'
+            effective_settings:
+              type: object
+              additionalProperties: true
+              description: 'The rules in force: the type''s defaults with the channel''s settings over them (ChannelSettings). Left out for a removed channel.'
     ChannelTypeInfo:
       type: object
       required: [type, available, count, default_channel_id]
