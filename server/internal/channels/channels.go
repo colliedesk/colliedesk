@@ -90,10 +90,24 @@ const (
 	ActionReopen = "reopen"
 )
 
+// Command matches.
+const (
+	// MatchFuzzy compares a message's first words folded (FoldText) and forgives one wrong letter of a
+	// phrase of five letters or more (the default).
+	MatchFuzzy = "fuzzy"
+	// MatchWords compares them folded and forgives no wrong letter, only a missing or doubled space
+	// between the words of the phrase.
+	MatchWords = "words"
+	// MatchExact compares the whole message, with its accents, in any case.
+	MatchExact = "exact"
+)
+
 // Command is a command customers type at the start of a message, as a workspace sets it up: its
 // phrases come only from the channel's settings, never from a list built into the server.
 type Command struct {
-	Action   string   `json:"action,omitempty"`
+	Action string `json:"action,omitempty"`
+	// Match is how its phrases are compared with a message (MatchFuzzy when empty).
+	Match    string   `json:"match,omitempty"`
 	Phrases  []string `json:"phrases,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Priority string   `json:"priority,omitempty"`

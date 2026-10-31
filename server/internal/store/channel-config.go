@@ -94,6 +94,12 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	if err != nil {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings": err.Error()}, Message: "Check the channel settings."}
 	}
+	for key, command := range merged.Commands {
+		if command.Match != "" && command.Match != channels.MatchFuzzy && command.Match != channels.MatchWords && command.Match != channels.MatchExact {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".match": "Use fuzzy, words or exact, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+	}
 	for key, scope := range merged.Scopes {
 		known := false
 		for _, declared := range definition.Scopes {

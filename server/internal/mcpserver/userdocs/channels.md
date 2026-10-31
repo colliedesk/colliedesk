@@ -144,6 +144,12 @@ requests, in the channel's settings (`settings.scopes.<scope>`, an admin's chang
   one request).
 - A cancel command (such as "Hủy") cancels only a batch of its sender that named a command; with none
   being collected it is an ordinary message.
+- How a command's phrases match (`settings.commands.<name>.match`): `fuzzy` (the default) compares the
+  message's first words without accents or case and forgives one wrong, missing, added or swapped letter
+  in a phrase of five letters or more; `words` compares them the same way but forgives no wrong letter,
+  only a missing or doubled space between the phrase's words ("báolỗi" is "Báo lỗi", "báo lỗix" is not);
+  `exact` is the whole message, accents kept, in any case ("Hủy" matches "hủy", never "huy" or "Hủy đi").
+  A phrase that starts with `#` or `/` keeps it: `/loi` matches "/loi …", not a message starting "lỗi".
 - `unmatched: join_open`, on a scope that opens conversations only on a command (`mode: commands`): a
   message that names no command joins the customer's open or pending conversation on the channel when
   they have exactly one. With none or several it is kept, unresolved, in the chat place: it shows in the
