@@ -119,6 +119,8 @@ Security fixes go to the latest release and to `edge` only.
 ## Migrate
 
 - [Migrate to Colliedesk Cloud](migrate-to-cloud.md)
+- [Import a bundle](import-bundle.md)
 
 To move from another helpdesk, see [import from Freshdesk](../user/import-freshdesk.md) and
-[import from Help Scout](../user/import-helpscout.md).
+[import from Help Scout](../user/import-helpscout.md); from any other system, prepare a
+[bundle](import-bundle.md).
