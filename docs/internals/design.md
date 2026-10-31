@@ -179,6 +179,7 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 
 - Controls are 32 px with a mouse and 44 px on touch (`--control` switches on `pointer: coarse`;
   rail links, status tabs and list rows also grow to 44 px below 44 rem).
+- A reference is an id: mono, `--text-3` in the list (`--text-2` in the header), never a fill (`.conv-ref`).
 - Three button shapes only: primary (`--accent`, ink), secondary (white with a light outline and a small
   shadow), danger (red text).
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
@@ -206,7 +207,10 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
   (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
-  only what the API returns: there are no SLA timers or ticket numbers because the backend has none.
+  only what the API returns. A conversation numbered in a series of its own (a channel's, such as
+  `CHD-2026-0142`) shows its code first in the row's meta and in the header with a copy button; the default
+  series' `#12` stays off both, so an inbox of email and web forms reads as before, and its code still finds
+  it (`?ref=`, search). There are no SLA timers yet.
 - Below 75 rem the details pane becomes a drawer opened by **Show details**; below 44 rem the
   rail becomes a top bar and the list and the conversation take turns (`data-view` on `.inbox-shell`):
   the list scrolls with the page, and a conversation opened by its address fills the screen under the
@@ -233,6 +237,7 @@ They are a gap finder, not a spec: where a list conflicts with a rule above, the
 | Conversation list and filters | Empty State, Filtering items, Search Results, Data Table |
 | Timeline and composer | Comments, Submitting a form, Showing input error |
 | Settings and email channel | Settings, Integrations, Saving changes |
+| Conversation numbers, a channel's References | Settings, Saving changes |
 | Sign-in, invites, sessions | Login, User Management |
 | Every screen | Accessibility, Loading, Toast, Drawer |
 

@@ -126,7 +126,7 @@ test('settings is split into your account and the workspace, with a link to ever
     ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
     ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'],
     ['Built-in AI', '/settings/ai'], ['Autofix', '/settings/autofix'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Channels', '/settings/channels'],
-    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
+    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'], ['Zalo OA', '/settings/channels/type/zalo'], ['Conversation numbers', '/settings/numbers'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
   // Built-in AI, Channels (with Email, Web form and Help chat) and the import have their own pages; every other link is a section of this one.
   for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();

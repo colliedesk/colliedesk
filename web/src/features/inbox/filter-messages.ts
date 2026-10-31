@@ -27,6 +27,7 @@ export const filterMessages = {
   deliveryFailed: 'Reply delivery failed',
   noDeliveryFailed: 'No failed delivery',
   organization: 'Organization',
+  reference: 'Reference',
   contact: 'Customer',
   created: 'Created',
   updated: 'Last activity',

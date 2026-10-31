@@ -70,3 +70,9 @@ test('a channel filter keeps channel ids only, goes to the API, and is saved in 
   expect(filtersOf({ status: 'all', channel_id: id })).toEqual({ channel_id: [id] });
   expect(queryOf({ channel_id: [id] })).toEqual({ status: 'all', channel_id: id });
 });
+
+test('a code in the address finds its conversation in every status', () => {
+  expect(inboxQueryFromSearch({ ref: ' CHD-2026-0142 ' })).toEqual({ ref: 'CHD-2026-0142', status: 'all' });
+  expect(apiQuery(inboxQueryFromSearch({ ref: 'CHD-2026-0142' }), 1)).toBe('ref=CHD-2026-0142&page=1&page_size=50');
+  expect(inboxQueryFromSearch({ ref: 'CHD-2026-0142', status: 'pending' })).toEqual({ ref: 'CHD-2026-0142', status: 'pending' });
+});

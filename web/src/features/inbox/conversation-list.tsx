@@ -7,6 +7,7 @@ import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
+import { ownRef } from './conversation-ref';
 import { presenceViewPart } from './presence-part';
 import { useListKeys } from './use-list-keys';
 
@@ -125,6 +126,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
               <span className="time-full">{full}</span>
             </time>
             <span className="conversation-meta">
+              {ownRef(item) && <span className="conv-ref">{ownRef(item)}</span>}
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
               {channelLabel?.(item) && <span className="channel-pill">{channelLabel(item)}</span>}

@@ -982,3 +982,17 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .sort-field, .property-row select { appearance: auto; }
   .property-row::after { forced-color-adjust: auto; }
 }
+
+/* A tab strip (ui/tabs.tsx) that scrolls sideways fades at the edge that has more. Here, not in
+   ui/controls.css: the app's channel pages need it, the operator console's budget has no room for it. */
+.seg-tabs.fade-end { mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); }
+.seg-tabs.fade-start { mask-image: linear-gradient(to right, transparent, #000 var(--space-6)); }
+.seg-tabs.fade-start.fade-end { mask-image: linear-gradient(to right, transparent, #000 var(--space-6), #000 calc(100% - var(--space-6)), transparent); }
+
+/* A conversation's code (CHD-2026-0142) is an id: mono, quiet, never a fill (docs/internals/design.md). */
+.conv-ref { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); font-variant-numeric: tabular-nums; letter-spacing: 0; white-space: nowrap; }
+.timeline-meta .conv-ref { color: var(--text-2); }
+.ref-copy { display: inline-flex; align-items: center; gap: 2px; }
+.ref-copy .icon-button { --control: 24px; min-height: 24px; width: 24px; }
+.ref-copy .icon-button svg { width: 13px; height: 13px; }
+@media (pointer: coarse) { .ref-copy .icon-button { --control: var(--touch); min-height: var(--touch); width: var(--touch); } }

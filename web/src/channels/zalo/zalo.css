@@ -1,0 +1,46 @@
+/* The Zalo OA channel's tabs (docs/internals/design.md: ink and paper, a hairline between blocks). */
+.zl-block { display: grid; gap: var(--space-3); }
+.zl-block + .zl-block { border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.zl-block h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.zl-block > p.lead { margin: 0; color: var(--text-2); font-size: var(--fs-small); }
+.zl-url { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.zl-url code { flex: 1 1 18rem; min-width: 0; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: 6px var(--space-3); font-family: var(--font-mono); font-size: var(--fs-small); }
+.zl-dl { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-1) var(--space-4); margin: 0; font-size: var(--fs-small); }
+.zl-dl dt { color: var(--text-3); }
+.zl-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.zl-block .mono, .zl-rows .mono, .zl-current .mono { font-family: var(--font-mono); font-size: var(--fs-small); }
+.zl-mono-input { font-family: var(--font-mono); }
+.zl-current { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: 0; }
+.zl-current svg { width: 14px; height: 14px; }
+/* Rows: secrets, groups, staff, commands. The grid of .ch-row; one column on a phone. */
+.zl-rows { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); }
+.zl-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); }
+.zl-row.zl-row-two { grid-template-columns: minmax(0, 1fr) auto; }
+.zl-row + .zl-row { border-top: 1px solid var(--line); }
+.zl-row > div { display: grid; gap: 2px; min-width: 0; }
+.zl-row strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.zl-row small { color: var(--text-3); font-size: var(--fs-label); overflow-wrap: anywhere; }
+.zl-row small.error-copy { color: var(--danger); }
+.zl-row .zl-actions { display: flex; gap: var(--space-2); justify-content: flex-end; flex-wrap: wrap; }
+.zl-row select { width: 100%; max-width: 18rem; }
+.zl-state { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: var(--fs-small); }
+.zl-state-warn { color: var(--warn); }
+.zl-muted { color: var(--text-3); }
+.zl-row > div.zl-phrases { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.zl-phrase { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 2px 0 8px; font-size: var(--fs-small); line-height: 24px; }
+.zl-phrase button { --control: 22px; min-height: 22px; width: 22px; padding: 0; border: 0; box-shadow: none; background: transparent; color: var(--text-3); }
+.zl-phrase-new input { width: 10rem; }
+.zl-pick { display: grid; gap: var(--space-1); border: 0; padding: 0; margin: 0; max-height: 16rem; overflow-y: auto; }
+@media (pointer: coarse) {
+  .zl-block .link-action, .zl-phrases .link-action { display: inline-flex; align-items: center; min-height: var(--touch); }
+  .zl-phrase button { --control: var(--touch); min-height: var(--touch); width: var(--touch); }
+}
+@media (max-width: 40rem) {
+  .zl-row, .zl-row.zl-row-two { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
+  .zl-row .zl-actions { justify-content: flex-start; }
+  .zl-row select { max-width: none; }
+  .zl-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .zl-dl dd + dt { margin-top: var(--space-2); }
+}
+/* A pick's radios keep their own size: the dialog stretches a field's inputs to its width. */
+.form-dialog .zl-pick input[type="radio"] { flex: none; width: auto; }

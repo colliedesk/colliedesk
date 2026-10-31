@@ -1,0 +1,16 @@
+/* Settings → Conversation numbers: one row a series, the grid of a channel row; one column on a phone. */
+.num-rows { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); }
+.num-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); }
+.num-row + .num-row { border-top: 1px solid var(--line); }
+.num-row > div { display: grid; gap: 2px; min-width: 0; }
+.num-row strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.num-row small { color: var(--text-3); font-size: var(--fs-label); overflow-wrap: anywhere; }
+.num-mono { font-family: var(--font-mono); font-size: var(--fs-small); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.num-actions { display: flex; justify-content: flex-end; }
+.num-pair { display: grid; grid-template-columns: minmax(0, 1fr) 9rem; gap: var(--space-3); align-items: start; }
+@media (max-width: 40rem) {
+  .num-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
+  .num-actions { justify-content: flex-start; }
+  .num-pair { grid-template-columns: minmax(0, 1fr); }
+}
+.num-loading { min-height: 6rem; }
