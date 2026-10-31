@@ -329,6 +329,7 @@ function Staff({ channel, canManage, timezone }: ChannelPanelProps) {
     {change.isError && <p role="alert" className="error-copy">{fieldErrors(change.error).staff_user_ids ?? refusal(change.error)}</p>}
     {done && <p className="notice notice-plain" role="status" tabIndex={-1} ref={doneNote}><span>{done}</span></p>}
     {adding && <StaffDialog channel={channel} people={known.filter((person) => !staff.includes(person.id))} timezone={timezone}
+      loading={senders.isPending} failed={senders.isError} onRetry={() => void senders.refetch()}
       onClose={() => setAdding(false)} onAdded={(id, name) => { setAdding(false); setDone(m.staffAdded(name ?? m.uid(id))); }} />}
     {removing && <Dialog alert title={m.removeStaffTitle(nameOf(removing))} closeLabel={m.close} onClose={() => setRemoving(undefined)}
       onSubmit={() => {
@@ -342,7 +343,8 @@ function Staff({ channel, canManage, timezone }: ChannelPanelProps) {
   </>;
 }
 
-function StaffDialog({ channel, people: candidates, timezone, onClose, onAdded }: { channel: ChannelDetail; people: Person[]; timezone: string; onClose: () => void; onAdded: (id: string, name: string | null) => void }) {
+function StaffDialog({ channel, people: candidates, timezone, loading, failed, onRetry, onClose, onAdded }: { channel: ChannelDetail; people: Person[]; timezone: string;
+  loading: boolean; failed: boolean; onRetry: () => void; onClose: () => void; onAdded: (id: string, name: string | null) => void }) {
   const config = configOf(channel);
   const [picked, setPicked] = useState<string>();
   const [pasted, setPasted] = useState('');
@@ -359,6 +361,8 @@ function StaffDialog({ channel, people: candidates, timezone, onClose, onAdded }
       change.mutate({ staff_user_ids: [...config.staff_user_ids, chosen] }, { onSuccess: () => onAdded(chosen, candidates.find((person) => person.id === chosen)?.name ?? null) });
     }}
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={change.isPending}>{change.isPending ? m.saving : m.addSave}</button></>}>
+    {loading && <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>}
+    {failed && <p role="alert" className="error-copy">{m.sendersFailed} <button type="button" className="link-action" onClick={onRetry}>{m.tryAgain}</button></p>}
     {candidates.length > 0 && <fieldset className="field zl-pick"><legend className="field-label">{m.recent}</legend>
       {candidates.map((person) => <label className="check-row" key={person.id}>
         <input type="radio" name={`${id}-uid`} checked={!pasted.trim() && picked === person.id} onChange={() => { change.reset(); setPasted(''); setPicked(person.id); }} />

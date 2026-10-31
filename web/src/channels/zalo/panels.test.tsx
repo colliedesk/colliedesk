@@ -210,6 +210,26 @@ test('people already on the staff list are not offered again, whatever their las
   expect(within(dialog).queryByRole('radio', { name: /Minh Trần/ })).toBeNull();
 });
 
+test('when the people who wrote cannot be loaded, the dialog says so, retries, and a pasted id still works', async () => {
+  channelsApi.senders.mockRejectedValueOnce(new Error('API 500')).mockResolvedValue({ items: [sender('7012003391', 'Long Bùi')] });
+  view(<Tabs.staff channel={channel()} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
+  const dialog = screen.getByRole('dialog', { name: 'Add staff account' });
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('The people who wrote could not be loaded.');
+  fireEvent.change(within(dialog).getByLabelText('Or paste a Zalo user id'), { target: { value: '9930004402' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+  expect(await within(dialog).findByRole('radio', { name: /Long Bùi/ })).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { config: { staff_user_ids: ['9930004402'] } }));
+});
+
+test('while the people who wrote load, the dialog says it is loading', async () => {
+  channelsApi.senders.mockReturnValue(new Promise(() => undefined));
+  view(<Tabs.staff channel={channel()} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
+  expect(within(screen.getByRole('dialog', { name: 'Add staff account' })).getByText('Loading…').closest('[aria-busy="true"]')).not.toBeNull();
+});
+
 test('a pasted user id that is not a number, or already staff, is refused before anything is sent', async () => {
   view(<Tabs.staff channel={channel({ staff_user_ids: ['9930004402'] })} canManage timezone="UTC" />);
   fireEvent.click(screen.getByRole('button', { name: 'Add staff account' }));
