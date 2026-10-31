@@ -397,7 +397,12 @@ const (
 		`"instructions":{"type":"string","maxLength":4000,"description":"The channel's own words added to the prompt."},` +
 		`"redact_keywords":{"type":"array","maxItems":100,"items":{"type":"string","minLength":1,"maxLength":80},"description":"Words that mark a secret in the channel's language."},` +
 		`"contact_labels":{"type":"object","additionalProperties":false,"description":"Words of the channel's language that name a bank account (account) or an identity document (id) before its number, which is masked.",` +
-		`"properties":{"account":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}},"id":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}}}}}}`
+		`"properties":{"account":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}},"id":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}}}},` +
+		`"redact_patterns":{"type":"array","maxItems":20,"description":"The channel's own shapes of an identifier no word names, in RE2 syntax, each masked as its kind.",` +
+		`"items":{"type":"object","additionalProperties":false,"required":["pattern","mask"],"properties":{"pattern":{"type":"string","minLength":1,"maxLength":200},` +
+		`"mask":{"type":"string","enum":["phone","id_number","account_number","hidden"]}}}},` +
+		`"gate_override":{"type":"array","maxItems":3,"items":{"type":"string","enum":["create","attach","ignore"]},"description":"Actions AI may take on its own before readiness shows it is ready; needs gate_override_reason."},` +
+		`"gate_override_reason":{"type":"string","maxLength":500,"description":"Why the gates were opened by hand."}}}`
 	channelAISchema = `{"type":"object","required":["channel_id","scopes"],"properties":{"channel_id":{"type":"string"},"scopes":{"type":"array","items":{"type":"object","required":["scope","slots"],` +
 		`"properties":{"scope":{"type":"string"},"slots":{"type":"array","items":{"type":"object","required":["slot","level","effective_level","source","off_reason"],"properties":{` +
 		`"slot":` + aiSlotName + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}],"description":"This scope's own level; null follows the channel, then the workspace."},` +
@@ -418,6 +423,54 @@ func channelAIGetSpec() Spec {
 		Output: `{"type":"object","required":["channel_ai"],"properties":{"channel_ai":` + channelAISchema + `}}`,
 		run:    channelAIGet,
 	}
+}
+
+const intakeReadinessSchema = `{"type":"object","required":["channel_id","scope","model","prompt_version","actions","applied","estimate"],"properties":{` +
+	`"channel_id":{"type":"string"},"scope":{"type":"string"},"model":{"type":"string"},"prompt_version":{"type":"string"},` +
+	`"actions":{"type":"array","items":{"type":"object","required":["action","gate","labels","correct","missing"],"properties":{"action":{"type":"string","enum":["create","attach","ignore"]},` +
+	`"gate":{"type":"string","enum":["open","closed","overridden"]},"labels":{"type":"integer"},"correct":{"type":"integer"},"wrong":{"type":"integer"},"severe":{"type":"integer"},` +
+	`"needed":{"type":"integer"},"accuracy_needed":{"type":"number"},"missing":{"type":"array","items":{"type":"string"}},"live":{"type":"object"},"evaluation":{"type":["object","null"]}}}},` +
+	`"applied":{"type":"object"},"estimate":{"type":"object"}}}`
+
+const intakeCountsInput = `{"type":"object","additionalProperties":false,"required":["labels","correct","severe","light"],"properties":{"labels":{"type":"integer","minimum":0},` +
+	`"correct":{"type":"integer","minimum":0},"severe":{"type":"integer","minimum":0},"light":{"type":"integer","minimum":0}}}`
+
+func channelAIIntakeReadinessSpec() Spec {
+	return Spec{
+		Name: "colliedesk_channel_ai_intake_readiness_get", Title: "Show whether intake's AI may act on its own",
+		Description: `Show, for a chat channel's scope, whether intake's AI may take each action (create, attach, ignore) on its own at auto: its gate (open, closed, overridden by an admin), ` +
+			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the model and prompt it runs), what keeps it closed (labels, accuracy, severe, junk), ` +
+			`how much of what AI did on its own people corrected, and what a month costs. A closed action stays a suggestion.` + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/channels/{id}/ai/intake/readiness"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id","scope"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
+		Output: `{"type":"object","required":["readiness"],"properties":{"readiness":` + intakeReadinessSchema + `}}`,
+		run:    channelAIIntakeReadiness,
+	}
+}
+
+func channelAIIntakeEvaluationsListSpec() Spec {
+	return Spec{
+		Name: "colliedesk_channel_ai_intake_evaluations_list", Title: "List intake's offline evaluations",
+		Description: `List the offline evaluations recorded for a chat channel's intake, newest first: the model and prompt version each ran, the dataset's SHA-256 and the counts per action. ` +
+			`Only a run of the model and prompt intake runs now counts towards readiness.` + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/channels/{id}/ai/intake/evaluations"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
+		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object"}}}}`,
+		run:    channelAIIntakeEvaluationsList,
+	}
+}
+
+func channelAIIntakeEvaluationRecordSpec() Spec {
+	return approvalSpec("colliedesk_channel_ai_intake_evaluation_record_request", "Ask to record an intake evaluation",
+		`Ask to record the counts of an offline evaluation of a chat channel's scope (run with collie intake-eval): model, prompt_version, dataset_sha256 and, per action, `+
+			`labels, correct, severe and light. It counts towards readiness only for that model and prompt version, and can open a gate.`,
+		[]string{"POST /api/v1/channels/{id}/ai/intake/evaluations"},
+		`{"type":"object","additionalProperties":false,"required":["channel_id","scope","model","prompt_version","dataset_sha256","counts"],"properties":{`+channelIDInput+`,`+
+			`"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"model":{"type":"string","minLength":1,"maxLength":200},"prompt_version":{"type":"string","minLength":1,"maxLength":80},`+
+			`"dataset_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"counts":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{`+
+			`"create":`+intakeCountsInput+`,"attach":`+intakeCountsInput+`,"ignore":`+intakeCountsInput+`}}}}`, channelAIIntakeEvaluationRecord)
 }
 
 func channelAISetSpec() Spec {

@@ -2239,6 +2239,79 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/AILevelNotAllowed'}
+  /api/v1/channels/{id}/ai/intake/readiness:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getIntakeReadiness
+      x-permission: access:read
+      description: >
+        Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach,
+        ignore), for the model intake runs and the prompt version of this server: people's explicit
+        labels of the last 30 days (a person following or correcting AI on a card or by moving its
+        messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action
+        opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for
+        attach and ignore, and at most one conversation opened for chatter a week for create; an admin may
+        open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on
+        its own and how much people corrected, and what the last 30 days say a month costs. Nothing here
+        calls a model.
+      parameters:
+        - {name: scope, in: query, required: true, schema: {type: string, pattern: '^[a-z_]{1,40}$'}, description: 'One of the scopes the channel''s type collects for intake.'}
+      responses:
+        '200':
+          description: The scope's readiness
+          content: {application/json: {schema: {$ref: '#/components/schemas/IntakeReadiness'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/ai/intake/evaluations:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listIntakeEvaluations
+      x-permission: access:read
+      description: The offline evaluations recorded for a chat channel's intake, newest first (at most 100); scope narrows them.
+      parameters:
+        - {name: scope, in: query, required: false, schema: {type: string, pattern: '^[a-z_]{1,40}$'}}
+      responses:
+        '200':
+          description: Recorded evaluations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/IntakeEvaluation'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: recordIntakeEvaluation
+      x-permission: access:write
+      description: >
+        Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and
+        prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got
+        right, and its severe and light errors. It counts towards readiness only for that model and prompt
+        version, and a newer run of the same dataset replaces it. Only admins; an agent token's record is
+        an agent request a person approves, since it can open a gate.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/IntakeEvaluationInput'}}}
+      responses:
+        '201':
+          description: The recorded evaluation
+          content: {application/json: {schema: {$ref: '#/components/schemas/IntakeEvaluation'}}}
+        '200':
+          description: The evaluation an earlier request with the same Idempotency-Key recorded; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/IntakeEvaluation'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/channels/{id}/threads:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -8095,6 +8168,24 @@ components:
           properties:
             account: {type: array, maxItems: 50, items: {type: string, minLength: 1, maxLength: 80}}
             id: {type: array, maxItems: 50, items: {type: string, minLength: 1, maxLength: 80}}
+        redact_patterns:
+          type: array
+          maxItems: 20
+          description: 'The channel''s own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs.'
+          items:
+            type: object
+            additionalProperties: false
+            required: [pattern, mask]
+            properties:
+              pattern: {type: string, minLength: 1, maxLength: 200}
+              mask: {type: string, enum: [phone, id_number, account_number, hidden]}
+        gate_override:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, enum: [create, attach, ignore]}
+          description: 'Actions AI may take on its own before readiness shows it is ready (an admin''s call); needs gate_override_reason. Adding one needs the approval raising AI needs.'
+        gate_override_reason: {type: string, maxLength: 500, description: 'Why the gates in gate_override were opened by hand.'}
     AIChannelLevel:
       type: object
       required: [channel_id, channel_name, scope, slot, level, effective_level, off_reason, options, updated_by, updated_at]
@@ -8135,6 +8226,13 @@ components:
                     source: {type: string, enum: [scope, channel, workspace], description: Where the level that runs is set.}
                     off_reason: {type: [string, 'null'], enum: [workspace_off, null]}
                     options: {anyOf: [{$ref: '#/components/schemas/IntakeOptions'}, {type: 'null'}], description: 'Intake only, with the defaults filled in.'}
+                    lowered:
+                      type: [object, 'null']
+                      required: [at, reason]
+                      description: 'The server''s last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider).'
+                      properties:
+                        at: {type: string, format: date-time}
+                        reason: {type: string, enum: [model_changed, recipient_changed]}
     ChatItem:
       type: object
       required: [id, thread_id, direction, role, sender, contact_id, agent_id, is_other_customer, body, external_id, quote_external_id, message_id, disposition, disposition_reason, occurred_at, files, linked, link_reason]
@@ -8262,6 +8360,106 @@ components:
             several_candidates, no_content],
           description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).'}
         created_at: {type: string, format: date-time}
+    IntakeCounts:
+      type: object
+      additionalProperties: false
+      required: [labels, correct, severe, light]
+      properties:
+        labels: {type: integer, minimum: 0}
+        correct: {type: integer, minimum: 0}
+        severe: {type: integer, minimum: 0, description: 'attach: a new request merged into an old conversation; ignore: a request set aside; create: none.'}
+        light: {type: integer, minimum: 0}
+    IntakeEvaluationInput:
+      type: object
+      additionalProperties: false
+      required: [scope, model, prompt_version, dataset_sha256, counts]
+      properties:
+        scope: {type: string, pattern: '^[a-z_]{1,40}$'}
+        model: {type: string, minLength: 1, maxLength: 200}
+        prompt_version: {type: string, minLength: 1, maxLength: 80}
+        dataset_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        counts:
+          type: object
+          additionalProperties: false
+          minProperties: 1
+          properties:
+            create: {$ref: '#/components/schemas/IntakeCounts'}
+            attach: {$ref: '#/components/schemas/IntakeCounts'}
+            ignore: {$ref: '#/components/schemas/IntakeCounts'}
+    IntakeEvaluation:
+      type: object
+      required: [id, channel_id, scope, model, prompt_version, dataset_sha256, counts, run_by_agent_id, via_token, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        channel_id: {type: string, format: uuid}
+        scope: {type: string}
+        model: {type: string}
+        prompt_version: {type: string}
+        dataset_sha256: {type: string}
+        counts: {type: object, additionalProperties: {$ref: '#/components/schemas/IntakeCounts'}}
+        run_by_agent_id: {type: [string, 'null'], format: uuid}
+        via_token: {type: boolean}
+        created_at: {type: string, format: date-time}
+    IntakeLabelCounts:
+      type: object
+      required: [labels, correct, wrong, severe]
+      properties:
+        labels: {type: integer}
+        correct: {type: integer}
+        wrong: {type: integer}
+        severe: {type: integer}
+    IntakeReadiness:
+      type: object
+      required: [channel_id, scope, model, prompt_version, actions, applied, estimate]
+      properties:
+        channel_id: {type: string, format: uuid}
+        scope: {type: string}
+        model: {type: string, description: 'The model intake runs; empty while intake is off (evaluations then count for nothing).'}
+        prompt_version: {type: string}
+        actions:
+          type: array
+          items:
+            type: object
+            required: [action, gate, labels, correct, wrong, severe, needed, accuracy_needed, missing, live, evaluation]
+            properties:
+              action: {type: string, enum: [create, attach, ignore]}
+              gate: {type: string, enum: [open, closed, overridden], description: 'open or overridden: AI takes the action on its own at auto; closed: it stays a suggestion.'}
+              labels: {type: integer}
+              correct: {type: integer}
+              wrong: {type: integer}
+              severe: {type: integer}
+              needed: {type: integer, description: Labels the action needs.}
+              accuracy_needed: {type: number}
+              missing: {type: array, items: {type: string, enum: [labels, accuracy, severe, junk]}, description: 'What keeps the gate closed: too few labels, too many wrong, a severe error, or (create) more than one conversation opened for chatter in a week.'}
+              live: {$ref: '#/components/schemas/IntakeLabelCounts'}
+              evaluation:
+                anyOf:
+                  - allOf:
+                      - {$ref: '#/components/schemas/IntakeLabelCounts'}
+                      - {type: object, required: [run_at], properties: {run_at: {type: string, format: date-time}}}
+                  - {type: 'null'}
+        applied:
+          type: object
+          required: [decisions, corrected, correction_rate]
+          description: What AI did on its own in the last 30 days, and how much people corrected.
+          properties:
+            decisions: {type: integer}
+            corrected: {type: integer}
+            correction_rate: {type: [number, 'null']}
+        estimate:
+          type: object
+          required: [days, cards, ai_calls, cost_per_call]
+          description: 'What the last days say: cards closed, how many AI would read at auto (the rules decided them only by default), and the average cost of a call.'
+          properties:
+            days: {type: integer}
+            cards: {type: integer}
+            ai_calls: {type: integer}
+            cost_per_call:
+              type: object
+              required: [micro_usd, provider_cost]
+              properties:
+                micro_usd: {type: [integer, 'null'], description: 'On the server''s provider: its price in millionths of a dollar.'}
+                provider_cost: {type: [number, 'null'], description: 'What the provider reported, in its own unit (OpenRouter credits).'}
     IntakeIgnoreReason: {type: string, enum: [chat, handled_in_chat, duplicate, other], description: 'chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.'}
     IntakeCandidate:
       type: object

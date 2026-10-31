@@ -127,6 +127,20 @@ type MessageMove struct {
 	UndoneByTokenID     *string         `json:"undone_by_token_id"`
 }
 
+// IntakeEvalRun is one recorded offline evaluation of a channel scope's intake.
+type IntakeEvalRun struct {
+	ID            string          `json:"id"`
+	ChannelID     string          `json:"channel_id"`
+	Scope         string          `json:"scope"`
+	Model         string          `json:"model"`
+	PromptVersion string          `json:"prompt_version"`
+	DatasetSHA256 string          `json:"dataset_sha256"`
+	Counts        json.RawMessage `json:"counts"`
+	RunByAgentID  *string         `json:"run_by_agent_id"`
+	RunByTokenID  *string         `json:"run_by_token_id"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
 // IntakeDecision is one time AI or a person decided a gathering, as it was.
 type IntakeDecision struct {
 	ID                     string          `json:"id"`
@@ -992,7 +1006,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -1037,6 +1051,7 @@ type Sink interface {
 	ConversationThreadItem(ConversationThreadItem) error
 	IntakeGathering(IntakeGathering) error
 	IntakeDecision(IntakeDecision) error
+	IntakeEvalRun(IntakeEvalRun) error
 	MessageMove(MessageMove) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

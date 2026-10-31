@@ -150,8 +150,8 @@ Email and web forms declare none, so their path gains no row and no query beyond
    and no database, so an evaluation replays the same text, and refuses an answer naming a conversation it
    was not offered (`target_invalid` after one more ask). Prompts and answers are not stored; the decision
    keeps the manifest (sources, counts, cuts, what was hidden) and `prompt_version`.
-3. **Every gate is closed.** `intake.Gate` decides whether AI may act on its own; until IN5 measures a
-   channel's readiness the default refuses every action (`gate_closed`). AI applies only at `auto`, on a
+3. **A gate per action.** `intake.Gate` decides whether AI may act on its own; the default opens an
+   action only when the scope's readiness does (13 below), else `gate_closed`. AI applies only at `auto`, on a
    card still `deciding`, through an open gate, at or above the scope's threshold, without a credential,
    with something to read, within `auto_max_age_seconds`, and for attach while the customer has one open
    conversation it could mean (`attach_requires_single_candidate`). Otherwise its decision is recorded
@@ -165,8 +165,8 @@ Email and web forms declare none, so their path gains no row and no query beyond
 5. **A task that ends without deciding hands the card to the rules.** When the worker cancels or fails an
    intake task (the day's `intake_per_day`, the feature off, a locked workspace, retries spent), it sets
    the card's `decide_by` to now, so the next sweep applies the rules instead of waiting two minutes.
-6. **People label AI.** A person's decision is compared with the card's newest unapplied AI decision (or
-   the one `follows_decision_id` names, which must be one of the card's): the same action and conversation
+6. **People label AI.** A person's decision is compared with the card's newest AI decision nobody labelled
+   yet, applied or not (or the one `follows_decision_id` names, which must be one of the card's): the same action and conversation
    follows it (`follows_decision_id`, taking its `reply_kind`), anything else corrects it
    (`corrects_decision_id`). These are the labels intake's evaluation reads.
 7. **A thank-you keeps resolved.** A decision's `reply_kind` travels with an attach (`IntakeApply.ReplyKind`):
@@ -176,9 +176,27 @@ Email and web forms declare none, so their path gains no row and no query beyond
    automatic draft. The AI's own label stays in `intake_decisions.reply_kind`. The rules never set it, so email keeps reopening on a thank-you as it always did.
 8. **A failing model is left alone.** Five failed calls in a row (provider errors or answers that are not
    a decision) pause a workspace's intake for ten minutes in the process (`intake_paused`): its cards go to
-   the rules at once. Pictures are not sent yet (`images` is `not_supported` in the manifest).
+   the rules at once. A refusal of what one card holds (`bad_request`, `too_large`) is that card's, not the
+   provider failing, and does not count.
 9. **Reasons go first.** AI's `reason` is written from what customers said; `PruneIntakeReasons` erases it
    after 90 days (daily, `PrivilegeIntakeReasonPrune`). The decision and its labels stay.
+10. **Pictures need three yeses.** The images source on, the workspace's `images` consent, and
+   `aiprovider.ImageTaker` saying the model and its fallback read pictures (Claude: always; OpenRouter:
+   `architecture.input_modalities` from the same hourly `/models` cache as reasoning). The bytes are the
+   files the frame fetched before the batch was held (`channel_inbound_files`, stored), at most four of
+   5 MB, typed by their bytes (`http.DetectContentType`), not by what the channel called them: a file that
+   is no PNG, JPEG, GIF or WebP is left out. The manifest says `consent`, `model_text_only`, `off` or `credential` when none went.
+11. **A channel's patterns run before the frame's phone numbers**, so a number of the channel's own shape
+   is named as its kind. They are checked when saved (RE2, at most 2000 instructions compiled, never the
+   empty match); one that no longer compiles masks nothing rather than failing the card.
+12. **The prompt's Version pins what it writes.** `TestThePromptVersionNamesWhatTheModelReads` hashes the
+   golden prompt: a change without a new `prompt.Version` fails, since an evaluation counts only for the
+   Version and the requested model (`run.Binding.Model`, not the id a provider answers with) it ran on.
+13. **Gates open on explicit labels only.** `readinessGate` (the default of `intake.New`) asks
+   `store.IntakeReadinessOf` for the scope, the model the binding asks for and `prompt.Version`: people's
+   follows and corrections of the last 30 days plus the newest run of each dataset of that model and prompt.
+   A decision nobody looked at is no label: at auto most cards go to the rules unseen, so silence would
+   read as accuracy. `gate_override` opens an action by hand.
 
 ## Chat threads
 
@@ -285,3 +303,8 @@ a database with two channels of a type, naming them.
   says `string` breaks the whole list, which typecheck does not catch (`api/schemas.test.ts`).
 - `channel_inbound_events` with an empty `EventIDs` array: compare with `COALESCE($n::text[],'{}')`;
   `ANY(NULL)` filters every row out.
+- Intake's redactor (`intake/prompt/redact.go`) hides what follows a secret's label only when it looks like
+  a secret: letters alone on the line after a label on its own (`mật khẩu`, then `abcdef`) stay, and after
+  `mật khẩu: abc def` only the first word goes. The trade-off keeps a sentence about a password readable.
+  A channel without `redact_keywords` in its language hides only after the English labels, so a
+  Vietnamese password there reaches the model (docs/user/ai.md says to add them).

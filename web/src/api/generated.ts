@@ -1356,6 +1356,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/ai/intake/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; an admin may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
+        get: operations["getIntakeReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/ai/intake/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The offline evaluations recorded for a chat channel's intake, newest first (at most 100); scope narrows them. */
+        get: operations["listIntakeEvaluations"];
+        put?: never;
+        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. Only admins; an agent token's record is an agent request a person approves, since it can open a gate. */
+        post: operations["recordIntakeEvaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/threads": {
         parameters: {
             query?: never;
@@ -4738,6 +4777,16 @@ export interface components {
                 account?: string[];
                 id?: string[];
             };
+            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs. */
+            redact_patterns?: {
+                pattern: string;
+                /** @enum {string} */
+                mask: "phone" | "id_number" | "account_number" | "hidden";
+            }[];
+            /** @description Actions AI may take on its own before readiness shows it is ready (an admin's call); needs gate_override_reason. Adding one needs the approval raising AI needs. */
+            gate_override?: ("create" | "attach" | "ignore")[];
+            /** @description Why the gates in gate_override were opened by hand. */
+            gate_override_reason?: string;
         };
         AIChannelLevel: {
             /** Format: uuid */
@@ -4781,6 +4830,13 @@ export interface components {
                     off_reason: "workspace_off" | null;
                     /** @description Intake only, with the defaults filled in. */
                     options: components["schemas"]["IntakeOptions"] | null;
+                    /** @description The server's last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider). */
+                    lowered?: {
+                        /** Format: date-time */
+                        at: string;
+                        /** @enum {string} */
+                        reason: "model_changed" | "recipient_changed";
+                    } | null;
                 }[];
             }[];
         };
@@ -4971,6 +5027,97 @@ export interface components {
             not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";
             /** Format: date-time */
             created_at: string;
+        };
+        IntakeCounts: {
+            labels: number;
+            correct: number;
+            /** @description attach: a new request merged into an old conversation; ignore: a request set aside; create: none. */
+            severe: number;
+            light: number;
+        };
+        IntakeEvaluationInput: {
+            scope: string;
+            model: string;
+            prompt_version: string;
+            dataset_sha256: string;
+            counts: {
+                create?: components["schemas"]["IntakeCounts"];
+                attach?: components["schemas"]["IntakeCounts"];
+                ignore?: components["schemas"]["IntakeCounts"];
+            };
+        };
+        IntakeEvaluation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            scope: string;
+            model: string;
+            prompt_version: string;
+            dataset_sha256: string;
+            counts: {
+                [key: string]: components["schemas"]["IntakeCounts"];
+            };
+            /** Format: uuid */
+            run_by_agent_id: string | null;
+            via_token: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IntakeLabelCounts: {
+            labels: number;
+            correct: number;
+            wrong: number;
+            severe: number;
+        };
+        IntakeReadiness: {
+            /** Format: uuid */
+            channel_id: string;
+            scope: string;
+            /** @description The model intake runs; empty while intake is off (evaluations then count for nothing). */
+            model: string;
+            prompt_version: string;
+            actions: {
+                /** @enum {string} */
+                action: "create" | "attach" | "ignore";
+                /**
+                 * @description open or overridden: AI takes the action on its own at auto; closed: it stays a suggestion.
+                 * @enum {string}
+                 */
+                gate: "open" | "closed" | "overridden";
+                labels: number;
+                correct: number;
+                wrong: number;
+                severe: number;
+                /** @description Labels the action needs. */
+                needed: number;
+                accuracy_needed: number;
+                /** @description What keeps the gate closed: too few labels, too many wrong, a severe error, or (create) more than one conversation opened for chatter in a week. */
+                missing: ("labels" | "accuracy" | "severe" | "junk")[];
+                live: components["schemas"]["IntakeLabelCounts"];
+                evaluation: (components["schemas"]["IntakeLabelCounts"] & {
+                    /** Format: date-time */
+                    run_at: string;
+                }) | null;
+            }[];
+            /** @description What AI did on its own in the last 30 days, and how much people corrected. */
+            applied: {
+                decisions: number;
+                corrected: number;
+                correction_rate: number | null;
+            };
+            /** @description What the last days say: cards closed, how many AI would read at auto (the rules decided them only by default), and the average cost of a call. */
+            estimate: {
+                days: number;
+                cards: number;
+                ai_calls: number;
+                cost_per_call: {
+                    /** @description On the server's provider: its price in millionths of a dollar. */
+                    micro_usd: number | null;
+                    /** @description What the provider reported, in its own unit (OpenRouter credits). */
+                    provider_cost: number | null;
+                };
+            };
         };
         /**
          * @description chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.
@@ -11898,6 +12045,108 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["AILevelNotAllowed"];
+        };
+    };
+    getIntakeReadiness: {
+        parameters: {
+            query: {
+                /** @description One of the scopes the channel's type collects for intake. */
+                scope: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scope's readiness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeReadiness"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIntakeEvaluations: {
+        parameters: {
+            query?: {
+                scope?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded evaluations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["IntakeEvaluation"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    recordIntakeEvaluation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeEvaluationInput"];
+            };
+        };
+        responses: {
+            /** @description The evaluation an earlier request with the same Idempotency-Key recorded; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeEvaluation"];
+                };
+            };
+            /** @description The recorded evaluation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeEvaluation"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listChannelThreads: {

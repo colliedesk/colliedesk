@@ -65,6 +65,22 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 	return slots, nil
 }
 
+// SlotModel is the model a feature runs now, "" while it is off.
+func (s *Service) SlotModel(ctx context.Context, workspaceID, slot string) (string, error) {
+	model := ""
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		slots, err := readSlots(ctx, tx, workspaceID, false)
+		if err != nil {
+			return err
+		}
+		if row, found := slots[slot]; found && s.view(slot, row, true).Active && row.model != nil {
+			model = *row.model
+		}
+		return nil
+	})
+	return model, err
+}
+
 // view turns a row (or its absence: off, nothing chosen) into what the API shows, with whether it
 // can run now. A slot on the server's provider stops when the operator removes it or the model.
 func (s *Service) view(slot string, row slotRow, found bool) Slot {

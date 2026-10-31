@@ -152,6 +152,33 @@ func TestOpenRouterGetsTheEffortOnlyForAModelThatReasonsAtIt(t *testing.T) {
 	}
 }
 
+// A model reads pictures when OpenRouter lists "image" among its inputs, a variant as its model does;
+// without the list nothing does. The same list answers reasoning and pictures, asked once.
+func TestOpenRouterSaysWhichModelsReadPictures(t *testing.T) {
+	models := `{"data":[
+ {"id":"google/gemini-2.5-flash","supported_parameters":["structured_outputs"],"architecture":{"input_modalities":["text","image","file"]}},
+ {"id":"openai/gpt-5","supported_parameters":["reasoning","structured_outputs"],"architecture":{"input_modalities":["text"]}}]}`
+	provider, fake := newOpenRouter(t, models, openAIReplyText, http.StatusOK)
+	taker := provider.(ImageTaker)
+	for model, want := range map[string]bool{"google/gemini-2.5-flash": true, "google/gemini-2.5-flash:floor": true, "openai/gpt-5": false, "unlisted/model": false} {
+		if got := taker.TakesImages(context.Background(), model); got != want {
+			t.Errorf("%s reads pictures = %v, want %v", model, got, want)
+		}
+	}
+	request := draftRequest()
+	request.Model = "openai/gpt-5"
+	if _, err := provider.Complete(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if fake.listed != 1 {
+		t.Fatalf("the models were asked %d times, want once", fake.listed)
+	}
+	broken, _ := newOpenRouter(t, `{}`, openAIReplyText, http.StatusServiceUnavailable)
+	if broken.(ImageTaker).TakesImages(context.Background(), "google/gemini-2.5-flash") {
+		t.Fatal("without the list a model reads pictures")
+	}
+}
+
 // When OpenRouter's model list cannot be read, the request goes without an effort, as before.
 func TestOpenRouterWithoutItsModelListSendsNoEffort(t *testing.T) {
 	provider, fake := newOpenRouter(t, `{}`, openAIReplyText, http.StatusServiceUnavailable)

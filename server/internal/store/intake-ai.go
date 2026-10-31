@@ -25,9 +25,9 @@ type AISuggestion struct {
 	ID, Action, TargetConversationID, ReplyKind string
 }
 
-// SuggestionToLabel is the AI suggestion a person's decision of a card follows or corrects: the one they
-// name (ErrNotASuggestion unless it is an unapplied AI decision of the card), else the newest; nil when
-// AI suggested nothing.
+// SuggestionToLabel is the AI decision a person's decision of a card follows or corrects: the one they
+// name (ErrNotASuggestion unless it is an AI decision of the card), else the newest people have not
+// labelled yet; nil when there is none.
 func (s *Store) SuggestionToLabel(ctx context.Context, workspaceID, gatheringID, decisionID string) (*AISuggestion, error) {
 	if decisionID != "" && !isID(decisionID) {
 		return nil, ErrNotASuggestion
@@ -37,9 +37,12 @@ func (s *Store) SuggestionToLabel(ctx context.Context, workspaceID, gatheringID,
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (*AISuggestion, error) {
 		var found AISuggestion
-		err := tx.QueryRow(ctx, `SELECT id::text,action,COALESCE(target_conversation_id::text,''),COALESCE(reply_kind,'') FROM intake_decisions
-			WHERE workspace_id=$1 AND gathering_id=$2::uuid AND decider='ai' AND NOT applied AND action<>'review' AND ($3='' OR id=NULLIF($3,'')::uuid)
-			ORDER BY created_at DESC,id DESC LIMIT 1`, workspaceID, gatheringID, decisionID).Scan(&found.ID, &found.Action, &found.TargetConversationID, &found.ReplyKind)
+		// An AI decision people already followed or corrected labels nothing more; one AI applied and a person
+		// took back (an ignore requeued) is corrected by what they decide then.
+		err := tx.QueryRow(ctx, `SELECT d.id::text,d.action,COALESCE(d.target_conversation_id::text,''),COALESCE(d.reply_kind,'') FROM intake_decisions d
+			WHERE d.workspace_id=$1 AND d.gathering_id=$2::uuid AND d.decider='ai' AND d.action<>'review' AND ($3='' OR d.id=NULLIF($3,'')::uuid)
+				AND ($3<>'' OR NOT EXISTS(SELECT 1 FROM intake_decisions p WHERE p.workspace_id=d.workspace_id AND (p.follows_decision_id=d.id OR p.corrects_decision_id=d.id)))
+			ORDER BY d.created_at DESC,d.id DESC LIMIT 1`, workspaceID, gatheringID, decisionID).Scan(&found.ID, &found.Action, &found.TargetConversationID, &found.ReplyKind)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows) && decisionID != "":
 			return nil, ErrNotASuggestion

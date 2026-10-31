@@ -255,12 +255,47 @@ Before intake's AI reads a chat, names become "Customer A" or "Team 1", password
 and phone numbers, email addresses, IBANs and the numbers after an English account or ID word ("account
 number", "passport") are masked. A channel in another language adds its own words in intake's settings:
 `redact_keywords` for the words that come before a password or a code, `contact_labels` (`account`, `id`)
-for those before a bank account or an identity document number. Taking a word out masks less, so it
-needs the approval raising AI needs.
+for those before a bank account or an identity document number, and `redact_patterns` for the shapes of
+an identifier no word names (a national ID number, a phone number written without its prefix): each a
+pattern in RE2 syntax with what it masks (`phone`, `id_number`, `account_number` or `hidden`), at most 20
+of 200 characters; a pattern that can match no character at all (an empty string, a word boundary alone), is too large or does not compile is refused.
+Taking a word or a pattern out masks less, so it needs the approval raising AI needs.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
 once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with
 `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
+on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
+on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at
+most 5 MB, never with messages that talk about a password or a code. A card that is only pictures is then
+decided like any other.
+
+## When AI acts on its own
+
+At **Auto**, intake's AI opens, joins or sets aside a card by itself only for an action its labels show it
+gets right on that channel's scope (it never writes to the customer: a conversation it opens sends the
+channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card and the rules decide
+at once. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
+otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
+the model intake runs and this server's prompt version (`collie intake-eval`, see
+[Score AI intake on your own cases](../self-host/intake-eval.md)). A decision nobody looked at counts for nothing: silence
+is not a label.
+
+| Action | Opens with | Never with |
+|---|---|---|
+| Open a conversation | 30 labels, 90 % right | more than one conversation opened for chatter in a week |
+| Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (in the last 30 days) |
+| Set aside | 30 labels, 95 % right | a request set aside (in the last 30 days) |
+
+People's labels count for 30 days; an evaluation counts only for the model and prompt version it ran, and
+a newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
+never reach a person: in practice a gate opens with an evaluation, or with an admin's override.
+An admin may open an action by hand before its labels do (`gate_override` with a `gate_override_reason`,
+which needs the approval raising AI needs). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
+(each action's gate, labels, what it misses, what AI did on its own and how much people corrected, and what
+a month costs) and the MCP tool `colliedesk_channel_ai_intake_readiness_get`; evaluations are
+`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record_request`,
+which always waits for a person, and `colliedesk_channel_ai_intake_evaluations_list`).
 
 ## When intake's model fails
 

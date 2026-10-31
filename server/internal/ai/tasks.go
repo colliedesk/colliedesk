@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -228,6 +229,39 @@ func (r *Run) Metered(ctx context.Context, request aiprovider.Request) (aiprovid
 	}
 	request.Model = fallback
 	return r.service.Metered(ctx, call, r.Binding.Provider, request)
+}
+
+// Ask sends one request of a feature on binding outside the task queue, metered like any call (an
+// operator's evaluation): asked by a person, never automatic.
+func (s *Service) Ask(ctx context.Context, binding Binding, feature string, request aiprovider.Request) (aiprovider.Response, error) {
+	if request.Model == "" {
+		request.Model = binding.Model
+	}
+	if request.Effort == "" {
+		request.Effort = binding.Effort
+	}
+	call := binding.call
+	call.Feature = feature
+	return s.Metered(ctx, call, binding.Provider, request)
+}
+
+// IntakeOptionsOf is a chat scope's intake options as the decider reads them (the scope's, else the
+// channel's), with the defaults filled in.
+func (s *Service) IntakeOptionsOf(ctx context.Context, workspaceID, channelID, scope string) (IntakeOptions, error) {
+	var options IntakeOptions
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var raw []byte
+		err := tx.QueryRow(ctx, `SELECT options FROM channel_ai_levels WHERE workspace_id=$1 AND channel_id=$2::uuid AND slot='intake' AND scope IN ($3,'')
+			ORDER BY scope=$3 DESC LIMIT 1`, workspaceID, channelID, scope).Scan(&raw)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(raw, &options)
+	})
+	return options.Effective(), err
 }
 
 // fallbackAfter is how long a request waits for the feature's model before its fallback model.

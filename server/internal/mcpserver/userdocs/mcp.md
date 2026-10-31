@@ -204,6 +204,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope; a raise waits for a person (admin token) | `admin` |
 | `colliedesk_ai_source_consent_request` | Asks to let AI intake send images, a contact's profile or an integration's data | `read` |
 | `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data (admin token) | `admin` |
+| `colliedesk_channel_ai_intake_readiness_get` | Shows, per action, whether intake's AI may act on its own on a chat scope, and what keeps it a suggestion | `read` |
+| `colliedesk_channel_ai_intake_evaluations_list` | Lists the offline evaluations recorded for a chat channel's intake | `read` |
+| `colliedesk_channel_ai_intake_evaluation_record_request` | Asks a person to record an offline evaluation of a chat scope's intake, which can open a gate | `read` |
 | `colliedesk_conversation_chat_get` | Reads what was said in the chat places a conversation came from, and which messages are its own | `read` |
 | `colliedesk_channel_threads_list` | Lists a chat channel's one-to-one chats and groups | `read` |
 | `colliedesk_channel_thread_items` | Reads everything said in one chat place | `read` |

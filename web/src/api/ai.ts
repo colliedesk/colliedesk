@@ -13,6 +13,8 @@ const intakeOptionsSchema = z.object({
   attach_requires_single_candidate: z.boolean().optional(), auto_max_age_seconds: z.number().int().optional(), reopen_window_days: z.number().int().optional(),
   sources: z.record(z.string(), z.boolean()).optional(), instructions: z.string().optional(), redact_keywords: z.array(z.string()).optional(),
   contact_labels: z.object({ account: z.array(z.string()).optional(), id: z.array(z.string()).optional() }).optional(),
+  redact_patterns: z.array(z.object({ pattern: z.string(), mask: z.enum(['phone', 'id_number', 'account_number', 'hidden']) })).optional(),
+  gate_override: z.array(z.enum(['create', 'attach', 'ignore'])).optional(), gate_override_reason: z.string().optional(),
 }) satisfies z.ZodType<Generated<'IntakeOptions'>>;
 const aiChannelLevelSchema = z.object({
   channel_id: z.string().uuid(), channel_name: z.string(), scope: z.string(), slot: aiSlotNameSchema, level: aiLevelSchema, effective_level: aiLevelSchema,
@@ -78,6 +80,8 @@ const channelAISchema = z.object({
     slots: z.array(z.object({
       slot: aiSlotNameSchema, level: aiLevelSchema.nullable(), effective_level: aiLevelSchema, source: z.enum(['scope', 'channel', 'workspace']),
       off_reason: z.enum(['workspace_off']).nullable(), options: intakeOptionsSchema.nullable(),
+      // The server's last lowering of the level; an older server sends nothing.
+      lowered: z.object({ at: z.string().datetime(), reason: z.enum(['model_changed', 'recipient_changed']) }).nullable().optional(),
     })),
   })),
 }) satisfies z.ZodType<JsonResponse<'getChannelAI', 200>>;

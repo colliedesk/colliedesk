@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
 	"time"
 
@@ -216,4 +218,60 @@ func snapshotQuoted(ctx context.Context, tx pgx.Tx, workspaceID, threadID string
 		quoted[*item.ExternalID] = item
 	}
 	return quoted, nil
+}
+
+// IntakeImage is a picture a customer sent with a card, as stored.
+type IntakeImage struct {
+	ContentType string
+	Data        []byte
+}
+
+// intakeImageTypes are the pictures every provider reads.
+var intakeImageTypes = []string{"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+// IntakeImagesOf reads up to limit pictures of a card's messages, in the order they came, each at most
+// maxBytes: the files fetched and stored with its journal events. A picture that cannot be read is
+// left out.
+func (s *Store) IntakeImagesOf(ctx context.Context, workspaceID, gatheringID string, limit int, maxBytes int64) ([]IntakeImage, error) {
+	if !isID(gatheringID) || s.objects == nil {
+		return nil, nil
+	}
+	type stored struct{ key, contentType string }
+	files, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]stored, error) {
+		rows, err := tx.Query(ctx, `SELECT f.storage_key,f.content_type FROM channel_inbound_files f
+			JOIN channel_inbound_events e ON e.workspace_id=f.workspace_id AND e.id=f.event_id
+			WHERE f.workspace_id=$1 AND e.gathering_id=$2::uuid AND f.status='stored' AND f.storage_key IS NOT NULL
+				AND f.content_type=ANY($3) AND f.size<=$4
+			ORDER BY e.received_at,e.id,f.idx LIMIT $5`, workspaceID, gatheringID, intakeImageTypes, maxBytes, limit)
+		if err != nil {
+			return nil, fmt.Errorf("read card's pictures: %w", err)
+		}
+		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (stored, error) {
+			var f stored
+			return f, row.Scan(&f.key, &f.contentType)
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	var images []IntakeImage
+	for _, f := range files {
+		body, err := s.objects.Open(ctx, f.key)
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
+		body.Close()
+		if err != nil || int64(len(data)) > maxBytes {
+			continue
+		}
+		// The type is what the bytes are, not what the channel called them: a provider refuses a picture
+		// that is none.
+		detected := http.DetectContentType(data)
+		if !slices.Contains(intakeImageTypes, detected) {
+			continue
+		}
+		images = append(images, IntakeImage{ContentType: detected, Data: data})
+	}
+	return images, nil
 }

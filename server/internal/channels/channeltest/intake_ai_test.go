@@ -3,6 +3,7 @@ package channeltest_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
+	"github.com/colliedesk/colliedesk/server/internal/intake/prompt"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -90,7 +92,7 @@ func TestAtAutoWithTheGateClosedAISuggestsAndTheRulesApplyAtOnce(t *testing.T) {
 	if got := d.decisions(t); got != "create/gate_closed" {
 		t.Fatalf("decisions = %s", got)
 	}
-	if got := d.one(t, `SELECT model||' '||prompt_version||' '||(manifest->'sources'->0->>'source') FROM intake_decisions WHERE workspace_id=$1`); got != "claude-haiku-5-5 intake-2026-10-26.1 incoming" {
+	if got := d.one(t, `SELECT model||' '||prompt_version||' '||(manifest->'sources'->0->>'source') FROM intake_decisions WHERE workspace_id=$1`); got != "claude-haiku-5-5 "+prompt.Version+" incoming" {
 		t.Fatalf("how it was made = %s", got)
 	}
 	// The prompt holds labels, not names.
@@ -430,6 +432,173 @@ func TestAScopeTurnedOffSendsNothingToTheModel(t *testing.T) {
 	}
 	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
 		t.Fatalf("sweep = %d, %v", n, err)
+	}
+}
+
+// A customer's picture reaches the model only when the workspace agreed to send pictures and the model
+// reads them; a card that is only pictures is then something AI can decide on, and one that talks about
+// a password keeps its pictures.
+func TestACardsPicturesReachAModelThatReadsThem(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	// A chat type serves pictures by link; the frame fetches them before the batch is held.
+	server, _ := mediaServer(t)
+	d.pipeline = guardedPipeline(d.loopDesk, server)
+	picture := []channeltest.LoopbackLink{{URL: server.URL + "/screen.png", Name: "screen.png", Type: "image/png"}}
+	imagesOf := func() (int, string) {
+		requests := d.fake.Requests()
+		last := requests[len(requests)-1]
+		return len(last.Messages[0].Images), d.one(t, `SELECT COALESCE(manifest->'sources'->4->>'skipped','')||'/'||(manifest->'sources'->4->>'items')
+			FROM intake_decisions WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 1`)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.5})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 0 || manifest != "consent/0" {
+		t.Fatalf("without consent: %d pictures, manifest %s", n, manifest)
+	}
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_source_consents(workspace_id,source_class) VALUES($1,'images')`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.5})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 0 || manifest != "model_text_only/0" {
+		t.Fatalf("a model that reads no pictures: %d pictures, manifest %s", n, manifest)
+	}
+	d.fake.ImageModels = []string{"claude-haiku-5-5"}
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Group: "g1", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.95})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 1 || manifest != "/1" {
+		t.Fatalf("with consent and a model that reads them: %d pictures, manifest %s", n, manifest)
+	}
+	if got := d.decisions(t); !strings.HasSuffix(got, ",create/applied") {
+		t.Fatalf("a card of pictures only = %s, want it decided", got)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "e-1", From: "e", Group: "g1", Text: "my password does not work", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Login", "confidence": 0.95})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 0 || manifest != "credential/0" {
+		t.Fatalf("pictures with talk of a password: %d pictures, manifest %s", n, manifest)
+	}
+}
+
+// With the readiness gate, AI acts on its own once the scope's labels open the action: an evaluation of
+// the model and prompt it runs opens ignore; people taking back what it set aside and opening it correct it.
+func TestReadinessOpensWhatAIDoesOnItsOwn(t *testing.T) {
+	d := newAIDesk(t, nil)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "ok thanks all"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.99})
+	d.runAI(t)
+	if got := d.decisions(t); got != "ignore/gate_closed" {
+		t.Fatalf("before any label: %s", got)
+	}
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO intake_eval_runs(workspace_id,channel_id,scope,model,prompt_version,dataset_sha256,counts)
+		VALUES($1,$2,'group','claude-haiku-5-5',$3,repeat('d',64),'{"ignore":{"labels":40,"correct":39,"severe":0,"light":1}}')`,
+		d.workspaceID, d.channel.ID, prompt.Version); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "haha nice"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.99})
+	d.runAI(t)
+	if got := d.decisions(t); got != "ignore/gate_closed,ignore/applied" {
+		t.Fatalf("after the evaluation: %s", got)
+	}
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND state='ignored'`)
+	actor := store.ChannelActor{AgentID: d.agentID}
+	if _, err := d.intake().Requeue(context.Background(), d.workspaceID, card, actor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, card, intake.Decision{Action: intake.Create, Subject: "Not chat"}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT p.action FROM intake_decisions p JOIN intake_decisions a ON a.id=p.corrects_decision_id
+		WHERE p.workspace_id=$1 AND a.decider='ai' AND a.applied`); got != "create" {
+		t.Fatalf("the person's decision corrects AI's ignore as %s", got)
+	}
+}
+
+// A file a chat type calls a picture but that is none never reaches the model, and a model refusing what
+// a card holds never pauses the workspace's intake: only the provider failing does.
+func TestBrokenPicturesNeitherReachTheModelNorPauseIntake(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	server, _ := mediaServer(t)
+	d.pipeline = guardedPipeline(d.loopDesk, server)
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_source_consents(workspace_id,source_class) VALUES($1,'images')`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.fake.ImageModels = []string{"claude-haiku-5-5"}
+	refused := 0
+	d.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
+		if len(request.Messages[0].Images) > 0 || strings.Contains(request.Messages[0].Text, "refuse me") {
+			refused++
+			return aiprovider.Response{}, &aiprovider.Error{Code: aiprovider.ErrorBadRequest}
+		}
+		raw := `{"action":"create","target":"","runner_up":"","runner_up_confidence":0,"command":"","subject":"S","reply_kind":"substantive","ignore_reason":"","confidence":0.5,"reason":"x"}`
+		return aiprovider.Response{Text: raw, JSON: raw, Stop: aiprovider.StopDone, Model: "claude-haiku-5-5"}, nil
+	}
+	notPicture := []channeltest.LoopbackLink{{URL: server.URL + "/ok.txt", Name: "screen.png", Type: "image/png"}}
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("p%d", i)
+		d.send(t, channeltest.LoopbackEvent{ID: id, From: id, Group: "g1", Text: "see the screen", Links: notPicture})
+		d.flush(t)
+		d.runAI(t)
+	}
+	if refused != 0 {
+		t.Fatalf("bytes that are no picture reached the model %d times", refused)
+	}
+	// Five cards the model refuses, then one more, all within the breaker's pause.
+	var events []channeltest.LoopbackEvent
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("r%d", i)
+		events = append(events, channeltest.LoopbackEvent{ID: id, From: id, Group: "g1", Text: "refuse me"})
+	}
+	events = append(events, channeltest.LoopbackEvent{ID: "z-1", From: "z", Group: "g1", Text: "the printer is off"})
+	d.send(t, events...)
+	d.flush(t)
+	before := len(d.fake.Requests())
+	for i := 0; i < 6; i++ {
+		d.runAI(t)
+	}
+	if got := len(d.fake.Requests()) - before; got != 6 {
+		t.Fatalf("after five refused cards: %d calls, want 6 (tasks %s)", got, d.tasks(t))
+	}
+}
+
+// Each customer's message in a group conversation says who wrote it, as the chat named them.
+func TestAGroupConversationNamesWhoWroteEachMessage(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan Nguyen", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.95})
+	d.runAI(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Name: "Minh Tran", Group: "g1", Text: "same here"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "attach", "target": "C1", "confidence": 0.95})
+	d.runAI(t)
+	conversation := d.one(t, `SELECT conversation_id::text FROM intake_gatherings WHERE workspace_id=$1 AND state='created'`)
+	messages, err := d.store.ListMessages(context.Background(), d.workspaceID, conversation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, message := range messages {
+		if message.Kind == "incoming" && message.AuthorName != nil {
+			names = append(names, *message.AuthorName)
+		}
+	}
+	if strings.Join(names, ",") != "Lan Nguyen,Minh Tran" {
+		t.Fatalf("authors = %v", names)
 	}
 }
 

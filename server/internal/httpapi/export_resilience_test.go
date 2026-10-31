@@ -234,6 +234,7 @@ func (s idleSink) ChannelThreadItem(export.ChannelThreadItem) error             
 func (s idleSink) ConversationThreadItem(export.ConversationThreadItem) error      { return nil }
 func (s idleSink) IntakeGathering(export.IntakeGathering) error                    { return nil }
 func (s idleSink) IntakeDecision(export.IntakeDecision) error                      { return nil }
+func (s idleSink) IntakeEvalRun(export.IntakeEvalRun) error                        { return nil }
 func (s idleSink) MessageMove(export.MessageMove) error                            { return nil }
 func (s idleSink) AISourceConsent(export.AISourceConsent) error                    { return nil }
 func (s idleSink) AIUsage(export.AIUsage) error                                    { return nil }

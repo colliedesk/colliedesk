@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,29 +18,48 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Gate says whether AI may act on its own on a channel's scope, for an action. Until readiness is
-// measured on a channel's own decisions, every gate is closed: at auto, AI suggests and the rules apply.
+// Gate says whether AI may act on its own on a channel's scope, for an action. A gate the scope's
+// readiness does not open keeps the action a suggestion: at auto, AI suggests and the rules apply.
 type Gate interface {
-	Open(ctx context.Context, workspaceID, channelID, scope, action string) bool
+	Open(ctx context.Context, q GateQuery) bool
+}
+
+// GateQuery is the action AI would take on a card of a scope, with the model it ran and the actions an
+// admin opened by hand.
+type GateQuery struct {
+	WorkspaceID, ChannelID, Scope, Action, Model string
+	Overrides                                    []string
 }
 
 type closedGate struct{}
 
-func (closedGate) Open(context.Context, string, string, string, string) bool { return false }
+func (closedGate) Open(context.Context, GateQuery) bool { return false }
 
 type openGate struct{}
 
-func (openGate) Open(context.Context, string, string, string, string) bool { return true }
+func (openGate) Open(context.Context, GateQuery) bool { return true }
 
 // OpenGate opens every gate: for tests and evaluation, never a default.
 var OpenGate Gate = openGate{}
 
-// WithGate returns the service deciding with gate; nil keeps every gate closed.
+// readinessGate opens an action's gate when the scope's readiness for the model and the prompt's
+// Version does (people's explicit labels and offline evaluations), or an admin opened it by hand.
+type readinessGate struct {
+	store *store.Store
+	now   func() time.Time
+}
+
+func (g readinessGate) Open(ctx context.Context, q GateQuery) bool {
+	readiness, err := g.store.IntakeReadinessOf(ctx, q.WorkspaceID, q.ChannelID, q.Scope, q.Model, prompt.Version, q.Overrides, g.now().UTC())
+	return err == nil && readiness.Open(q.Action)
+}
+
+// WithGate returns the service deciding with gate; nil opens a gate only when the scope's readiness does.
 func (s *Service) WithGate(gate Gate) *Service {
 	copied := *s
 	copied.gate = gate
 	if gate == nil {
-		copied.gate = closedGate{}
+		copied.gate = readinessGate{store: s.store, now: s.now}
 	}
 	return &copied
 }
@@ -79,7 +99,11 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 		return fmt.Errorf("read intake options: %w", err)
 	}
 	options = options.Effective()
-	built := prompt.Build(snapshotFor(snap, options))
+	images, skipped, err := s.cardImages(ctx, run, snap, options)
+	if err != nil {
+		return err
+	}
+	built := prompt.Build(snapshotFor(snap, options, images, skipped))
 	request := aiprovider.Request{System: built.System, Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: built.User, Images: built.Images}},
 		MaxOutput: prompt.MaxOutput, Schema: prompt.Schema}
 
@@ -92,9 +116,10 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	code := ""
 	for attempt := 0; attempt < 2; attempt++ {
 		if response, err = run.Metered(ctx, request); err != nil {
-			// Only the provider's own failures count: not a held allowance, not a stopping process.
+			// Only the provider failing counts: not a held allowance, not a stopping process, not a refusal of
+			// what this card holds (a request the provider will not take, too large).
 			var providerErr *aiprovider.Error
-			if errors.As(err, &providerErr) && ctx.Err() == nil {
+			if errors.As(err, &providerErr) && ctx.Err() == nil && providerErr.Code != aiprovider.ErrorBadRequest && providerErr.Code != aiprovider.ErrorTooLarge {
 				s.breaker.fail(workspaceID, s.now())
 			}
 			return err
@@ -119,8 +144,9 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	}
 	latency := int(s.now().Sub(started).Milliseconds())
 	manifest, _ := json.Marshal(map[string]any{"sources": built.Manifest, "images_sent": len(built.Images), "images_withheld": built.ImagesWithheld})
+	// The model asked for, as readiness matches it with evaluations (a provider may answer under another id).
 	detail := store.AIDecisionDetail{RunnerUpConversationID: answer.RunnerUpID, ErrorCode: code, Manifest: manifest, TaskID: run.Task.ID,
-		Model: response.Model, PromptVersion: prompt.Version, LatencyMS: &latency, ItemsSeen: snap.EventIDs}
+		Model: run.Binding.Model, PromptVersion: prompt.Version, LatencyMS: &latency, ItemsSeen: snap.EventIDs}
 	if detail.ItemsSeen == nil {
 		detail.ItemsSeen = []string{}
 	}
@@ -135,7 +161,7 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 		decision = Decision{Action: rules.Review, Reason: ""}
 	}
 
-	reason := s.notApplied(ctx, workspaceID, snap, options, built, decision, code)
+	reason := s.notApplied(ctx, workspaceID, run.Binding.Model, snap, options, built, decision, code)
 	if reason == "" {
 		applied, err := s.applyAI(ctx, workspaceID, gatheringID, decision, detail)
 		switch {
@@ -185,7 +211,7 @@ const (
 // waits for it, through an open gate, sure enough, about what it could read without a credential, soon
 // enough, and for attach the one conversation of the customer it could mean. Whether that conversation is
 // still one the card may join is checked when the decision is applied (store.ErrNotACandidate).
-func (s *Service) notApplied(ctx context.Context, workspaceID string, snap store.IntakeSnapshot, options ai.IntakeOptions, built prompt.Context, d Decision, code string) string {
+func (s *Service) notApplied(ctx context.Context, workspaceID, model string, snap store.IntakeSnapshot, options ai.IntakeOptions, built prompt.Context, d Decision, code string) string {
 	g := snap.Gathering
 	threshold := map[string]float64{prompt.ActionCreate: *options.CreateThreshold, prompt.ActionAttach: *options.AttachThreshold, prompt.ActionIgnore: *options.IgnoreThreshold}
 	switch {
@@ -199,7 +225,8 @@ func (s *Service) notApplied(ctx context.Context, workspaceID string, snap store
 		return "no_content"
 	case s.now().Sub(g.ClosedAt) > time.Duration(*options.AutoMaxAgeSeconds)*time.Second:
 		return "too_old"
-	case !s.gate.Open(ctx, workspaceID, g.ChannelID, g.Scope, d.Action):
+	case !s.gate.Open(ctx, GateQuery{WorkspaceID: workspaceID, ChannelID: g.ChannelID, Scope: g.Scope, Action: d.Action, Model: model,
+		Overrides: options.GateOverride}):
 		return "gate_closed"
 	case d.Confidence == nil || *d.Confidence < threshold[d.Action]:
 		return "below_threshold"
@@ -264,7 +291,7 @@ func deref(value *string) string {
 
 // snapshotFor turns what the store read into what the prompt builder reads: people by their identity on
 // the channel, the channel's options, what the workspace agreed to send.
-func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Snapshot {
+func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions, images []aiprovider.Image, imagesSkipped string) prompt.Snapshot {
 	location, err := time.LoadLocation(snap.Timezone)
 	if err != nil {
 		location = time.UTC
@@ -277,8 +304,8 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Sna
 		}
 		return false
 	}
-	out := prompt.Snapshot{Location: location, Sources: options.Sources, Skipped: map[string]string{}, RedactKeywords: options.RedactKeywords,
-		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID}, Instructions: *options.Instructions}
+	out := OptionsSnapshot(options)
+	out.Location, out.Skipped = location, map[string]string{}
 	g := snap.Gathering
 	if g.Place != nil {
 		out.Place = prompt.Place{OneToOne: g.Place.Kind != "group"}
@@ -319,15 +346,55 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Sna
 			out.Skipped[prompt.SourceContact] = "consent"
 		}
 	}
-	// Pictures are not sent yet: no model's input is known to take them.
-	out.Skipped[prompt.SourceImages] = "not_supported"
-	if !consented("images") {
-		out.Skipped[prompt.SourceImages] = "consent"
+	out.Images = images
+	if imagesSkipped != "" {
+		out.Skipped[prompt.SourceImages] = imagesSkipped
 	}
 	for _, command := range snap.Commands {
 		out.Commands = append(out.Commands, prompt.Command{Key: command})
 	}
 	return out
+}
+
+// OptionsSnapshot is what a channel scope's intake options put in every prompt: its sources, its words and
+// patterns to hide or mask, and its instructions. An offline evaluation starts from it too.
+func OptionsSnapshot(options ai.IntakeOptions) prompt.Snapshot {
+	options = options.Effective()
+	return prompt.Snapshot{Sources: options.Sources, RedactKeywords: options.RedactKeywords,
+		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID, Patterns: maskPatterns(options.RedactPatterns)},
+		Instructions:  *options.Instructions}
+}
+
+func maskPatterns(patterns []ai.IntakeRedactPattern) []prompt.MaskPattern {
+	out := make([]prompt.MaskPattern, len(patterns))
+	for i, p := range patterns {
+		out[i] = prompt.MaskPattern{Pattern: p.Pattern, Mask: p.Mask}
+	}
+	return out
+}
+
+// cardImages reads the card's pictures when AI may see them: the images source on, the workspace agreed
+// to send pictures, and the model (and its fallback) reads them. Otherwise it says why not.
+func (s *Service) cardImages(ctx context.Context, run *ai.Run, snap store.IntakeSnapshot, options ai.IntakeOptions) ([]aiprovider.Image, string, error) {
+	if !options.Sources[prompt.SourceImages] {
+		return nil, "", nil
+	}
+	if !slices.Contains(snap.Consents, "images") {
+		return nil, "consent", nil
+	}
+	taker, ok := run.Binding.Provider.(aiprovider.ImageTaker)
+	if !ok || !taker.TakesImages(ctx, run.Binding.Model) || run.Binding.FallbackModel != "" && !taker.TakesImages(ctx, run.Binding.FallbackModel) {
+		return nil, "model_text_only", nil
+	}
+	stored, err := s.store.IntakeImagesOf(ctx, run.Task.WorkspaceID, run.Task.GatheringID, aiprovider.MaxImages, aiprovider.MaxImageBytes)
+	if err != nil {
+		return nil, "", err
+	}
+	images := make([]aiprovider.Image, len(stored))
+	for i, image := range stored {
+		images[i] = aiprovider.Image{MediaType: image.ContentType, Data: image.Data}
+	}
+	return images, "", nil
 }
 
 // personOf is who wrote an item: a customer by their contact (so they are one person across the place)

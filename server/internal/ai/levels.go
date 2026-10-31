@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -112,6 +114,14 @@ type ChannelAISlot struct {
 	OffReason      *string `json:"off_reason"`
 	// Options are intake's settings on this scope, with the defaults filled in; null for other features.
 	Options *IntakeOptions `json:"options"`
+	// Lowered is the server's last lowering of this scope's level, while no person changed it since.
+	Lowered *Lowered `json:"lowered"`
+}
+
+// Lowered says when and why the server lowered a level: model_changed or recipient_changed.
+type Lowered struct {
+	At     time.Time `json:"at"`
+	Reason string    `json:"reason"`
 }
 
 // ChannelLevelInput sets one feature's level on a scope of a channel. A nil Level removes the
@@ -159,6 +169,69 @@ type IntakeOptions struct {
 	// ContactLabels are words of the channel's language that name a bank account or an identity
 	// document before its number, which is masked like the ones the frame's English words name.
 	ContactLabels *IntakeContactLabels `json:"contact_labels,omitempty"`
+	// RedactPatterns are the channel's own shapes of an identifier no label names (RE2 syntax), each
+	// masked as its kind before AI reads a message.
+	RedactPatterns []IntakeRedactPattern `json:"redact_patterns,omitempty"`
+	// GateOverride opens the gate of actions (create, attach, ignore) by hand, before readiness does,
+	// with GateOverrideReason saying why.
+	GateOverride       []string `json:"gate_override,omitempty"`
+	GateOverrideReason *string  `json:"gate_override_reason,omitempty"`
+}
+
+// maxOverrideReason bounds why an admin opened a gate by hand.
+const maxOverrideReason = 500
+
+// IntakeRedactPattern is one of a channel's patterns and what it masks: phone, id_number,
+// account_number or hidden.
+type IntakeRedactPattern struct {
+	Pattern string `json:"pattern"`
+	Mask    string `json:"mask"`
+}
+
+// Bounds of a channel's redact patterns: they run on every message intake reads.
+const (
+	maxRedactPatterns       = 20
+	maxRedactPatternRunes   = 200
+	maxRedactPatternProgram = 2000
+)
+
+var redactMasks = []string{"phone", "id_number", "account_number", "hidden"}
+
+// emptyMatchProbes hold each kind of character a message has: letters, digits, spaces, punctuation.
+var emptyMatchProbes = []string{"", "a", "1", " ", ".", "call me at 0912 345 678, ok?", "Ünïcödé đơn 12"}
+
+// checkRedactPattern refuses a pattern that does not compile, is too long or too large once compiled,
+// or matches the empty string (it would mask between every character). n is its place in the list, as the
+// settings page numbers it.
+func checkRedactPattern(n int, p IntakeRedactPattern) error {
+	if !slices.Contains(redactMasks, p.Mask) {
+		return invalid("Pattern %d is shown as phone, id_number, account_number or hidden.", n)
+	}
+	if runes := utf8.RuneCountInString(p.Pattern); runes == 0 || runes > maxRedactPatternRunes {
+		return invalid("Pattern %d is 1 to %d characters.", n, maxRedactPatternRunes)
+	}
+	parsed, err := syntax.Parse(p.Pattern, syntax.Perl)
+	if err != nil {
+		return invalid("Pattern %d is not a valid RE2 expression: %s", n, p.Pattern)
+	}
+	program, err := syntax.Compile(parsed.Simplify())
+	if err != nil || len(program.Inst) > maxRedactPatternProgram {
+		return invalid("Pattern %d is too large: %s", n, p.Pattern)
+	}
+	compiled, err := regexp.Compile(p.Pattern)
+	if err != nil {
+		return invalid("Pattern %d is not a valid RE2 expression: %s", n, p.Pattern)
+	}
+	// A pattern that can match no character at all (an empty string, a word boundary) would put its mask
+	// between letters: it is tried on texts of each kind of character.
+	for _, probe := range emptyMatchProbes {
+		for _, span := range compiled.FindAllStringIndex(probe, -1) {
+			if span[0] == span[1] {
+				return invalid("Pattern %d can match nothing at all, so it would mask between letters: %s", n, p.Pattern)
+			}
+		}
+	}
+	return nil
 }
 
 // IntakeContactLabels are the words that name a bank account (Account) or an identity document (ID).
@@ -219,6 +292,18 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	if keywords == nil {
 		keywords = []string{}
 	}
+	patterns := o.RedactPatterns
+	if patterns == nil {
+		patterns = []IntakeRedactPattern{}
+	}
+	override := o.GateOverride
+	if override == nil {
+		override = []string{}
+	}
+	reason := ""
+	if o.GateOverrideReason != nil {
+		reason = *o.GateOverrideReason
+	}
 	labels := IntakeContactLabels{Account: []string{}, ID: []string{}}
 	if o.ContactLabels != nil {
 		labels.Account = append(labels.Account, o.ContactLabels.Account...)
@@ -227,7 +312,8 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	return IntakeOptions{CreateThreshold: number(o.CreateThreshold, defaultCreateThreshold), AttachThreshold: number(o.AttachThreshold, defaultAttachThreshold),
 		IgnoreThreshold: number(o.IgnoreThreshold, defaultIgnoreThreshold), AttachRequiresSingleCandidate: &single,
 		AutoMaxAgeSeconds: whole(o.AutoMaxAgeSeconds, defaultAutoMaxAgeSeconds), ReopenWindowDays: whole(o.ReopenWindowDays, defaultReopenWindowDays),
-		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels}
+		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels, RedactPatterns: patterns,
+		GateOverride: override, GateOverrideReason: &reason}
 }
 
 var keywordPattern = regexp.MustCompile(`^\S(.{0,78}\S)?$`)
@@ -241,11 +327,12 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&options); err != nil {
-		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords and contact_labels.")
+		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords, contact_labels, redact_patterns, gate_override and gate_override_reason.")
 	}
-	for name, value := range map[string]*float64{"create_threshold": options.CreateThreshold, "attach_threshold": options.AttachThreshold, "ignore_threshold": options.IgnoreThreshold} {
+	// The settings page shows a refusal as it comes, so a threshold is named as the page names it.
+	for name, value := range map[string]*float64{"open a conversation": options.CreateThreshold, "add to a conversation": options.AttachThreshold, "set a message aside as not a request": options.IgnoreThreshold} {
 		if value != nil && (*value < 0.5 || *value > 0.99) {
-			return options, invalid("%s is between 0.5 and 0.99.", name)
+			return options, invalid("The threshold to %s is between 0.5 and 0.99.", name)
 		}
 	}
 	if value := options.AutoMaxAgeSeconds; value != nil && (*value < 60 || *value > 24*60*60) {
@@ -274,6 +361,29 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	for _, word := range options.RedactKeywords {
 		if !keywordPattern.MatchString(word) {
 			return options, invalid("Each of redact_keywords is 1 to 80 characters without spaces at its ends.")
+		}
+	}
+	for i, action := range options.GateOverride {
+		if !slices.Contains(store.IntakeActions, action) || slices.Contains(options.GateOverride[:i], action) {
+			return options, invalid("gate_override names actions once each: create, attach, ignore.")
+		}
+	}
+	reason := ""
+	if options.GateOverrideReason != nil {
+		reason = strings.TrimSpace(*options.GateOverrideReason)
+	}
+	if len(options.GateOverride) > 0 && reason == "" {
+		return options, invalid("Opening a gate by hand needs gate_override_reason: why AI may act before its labels show it is ready.")
+	}
+	if utf8.RuneCountInString(reason) > maxOverrideReason {
+		return options, invalid("gate_override_reason is at most %d characters.", maxOverrideReason)
+	}
+	if len(options.RedactPatterns) > maxRedactPatterns {
+		return options, invalid("At most %d patterns to mask.", maxRedactPatterns)
+	}
+	for i, pattern := range options.RedactPatterns {
+		if err := checkRedactPattern(i+1, pattern); err != nil {
+			return options, err
 		}
 	}
 	if labels := options.ContactLabels; labels != nil {
@@ -319,7 +429,7 @@ func sortedKeys(m map[string]bool) []string {
 
 // optionsLoosen says whether going from before to after lets intake do more by itself: a lower
 // threshold, attaching among several candidates, older batches, a longer reopen window, a source
-// turned on, fewer words redacted or masked, or other instructions. Only a change that tightens needs no approval.
+// turned on, fewer words redacted or masked, a gate opened by hand, or other instructions. Only a change that tightens needs no approval.
 func optionsLoosen(before, after IntakeOptions) bool {
 	b, a := before.Effective(), after.Effective()
 	if *a.CreateThreshold < *b.CreateThreshold || *a.AttachThreshold < *b.AttachThreshold || *a.IgnoreThreshold < *b.IgnoreThreshold {
@@ -348,6 +458,16 @@ func optionsLoosen(before, after IntakeOptions) bool {
 	}
 	for _, word := range b.ContactLabels.ID {
 		if !slices.Contains(a.ContactLabels.ID, word) {
+			return true
+		}
+	}
+	for _, pattern := range b.RedactPatterns {
+		if !slices.Contains(a.RedactPatterns, pattern) {
+			return true
+		}
+	}
+	for _, action := range a.GateOverride {
+		if !slices.Contains(b.GateOverride, action) {
 			return true
 		}
 	}
@@ -433,6 +553,10 @@ func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, 
 	if err != nil {
 		return result, err
 	}
+	lowered, err := lastLowerings(ctx, tx, workspaceID, channel.ID)
+	if err != nil {
+		return result, err
+	}
 	for _, scope := range channel.ScopesShown() {
 		entry := ChannelAIScope{Scope: scope, Slots: []ChannelAISlot{}}
 		for _, slot := range channel.SlotsOf(scope) {
@@ -451,6 +575,7 @@ func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, 
 				options := intakeOptionsOf(levels, scope).Effective()
 				item.Options = &options
 			}
+			item.Lowered = lowered[[2]string{scope, slot}]
 			entry.Slots = append(entry.Slots, item)
 		}
 		result.Scopes = append(result.Scopes, entry)
@@ -613,7 +738,7 @@ func normalJSON(raw json.RawMessage) []byte {
 }
 
 // recordChannelLevel writes a level change to the AI history and to the channel's. reason is empty
-// for a person's change, else why the server changed it (recipient_changed).
+// for a person's change, else why the server changed it (recipient_changed, model_changed).
 func recordChannelLevel(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, channel ChannelRef, scope, slot string, before, after any,
 	optionsChanged bool, reason string, now time.Time) error {
 	detail := map[string]any{"channel_id": channel.ID, "channel_name": channel.Name, "scope": scope, "slot": slot,
@@ -667,6 +792,31 @@ func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 		}
 	}
 	return nil
+}
+
+// lastLowerings is, per scope and feature of a channel, the server's lowering of its level when it is
+// the last change of it (a person's change since clears it).
+func lastLowerings(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (map[[2]string]*Lowered, error) {
+	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (detail->>'scope',detail->>'slot') detail->>'scope',detail->>'slot',detail->>'reason',created_at
+		FROM channel_events WHERE workspace_id=$1 AND channel_id=$2::uuid AND kind='ai_changed'
+		ORDER BY detail->>'scope',detail->>'slot',created_at DESC,id DESC`, workspaceID, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	lowered := map[[2]string]*Lowered{}
+	for rows.Next() {
+		var scope, slot string
+		var reason *string
+		var at time.Time
+		if err := rows.Scan(&scope, &slot, &reason, &at); err != nil {
+			return nil, err
+		}
+		if reason != nil && *reason != "" {
+			lowered[[2]string{scope, slot}] = &Lowered{At: at.UTC(), Reason: *reason}
+		}
+	}
+	return lowered, rows.Err()
 }
 
 // channelLevels lists the levels channels set, for Settings → Built-in AI.

@@ -16,11 +16,14 @@ import (
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
 // author_name is resolved on read: the stored name (imported messages) wins, then the authoring team
-// member's display name or email, then the conversation's contact name when the contact sent the email.
+// member's display name or email, then the conversation's contact name when the contact sent the email,
+// then for a chat message the name the chat gave its sender (a group conversation holds several customers).
 // A copied colleague who answers the thread is not the contact, so that message keeps no name.
 const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,
 	COALESCE(m.author_name,NULLIF(aa.display_name,''),aa.email,
-		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
+		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END,
+		CASE WHEN m.kind='incoming' AND m.channel_id IS NOT NULL THEN (SELECT NULLIF(i.sender_name,'') FROM channel_thread_items i
+			WHERE i.workspace_id=m.workspace_id AND i.message_id=m.id AND i.role='customer' ORDER BY i.occurred_at,i.id LIMIT 1) END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
 	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind

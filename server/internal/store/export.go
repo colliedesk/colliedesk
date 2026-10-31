@@ -1271,6 +1271,26 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	if err := rowsError("export intake decisions", decisions); err != nil {
 		return err
 	}
+	runs, err := tx.Query(ctx, `SELECT id::text,channel_id::text,scope,model,prompt_version,dataset_sha256,counts,run_by_agent_id::text,run_by_token_id::text,created_at
+		FROM intake_eval_runs WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export intake evaluations: %w", err)
+	}
+	for runs.Next() {
+		var r export.IntakeEvalRun
+		if err := runs.Scan(&r.ID, &r.ChannelID, &r.Scope, &r.Model, &r.PromptVersion, &r.DatasetSHA256, &r.Counts, &r.RunByAgentID, &r.RunByTokenID, &r.CreatedAt); err != nil {
+			runs.Close()
+			return fmt.Errorf("export intake evaluations: %w", err)
+		}
+		r.CreatedAt = domain.UTC(r.CreatedAt)
+		if err := sink.IntakeEvalRun(r); err != nil {
+			runs.Close()
+			return err
+		}
+	}
+	if err := rowsError("export intake evaluations", runs); err != nil {
+		return err
+	}
 	return exportMessageMoves(ctx, tx, workspaceID, sink)
 }
 
