@@ -44,7 +44,8 @@ func (e *ErrNumberSeries) Error() string { return e.Message }
 // ListNumberSeries lists the workspace's series, the default one first.
 func (s *Store) ListNumberSeries(ctx context.Context, workspaceID string) ([]NumberSeries, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]NumberSeries, error) {
-		if _, err := tx.Exec(ctx, `INSERT INTO conversation_number_series(workspace_id,series,format) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+		if _, err := tx.Exec(ctx, `WITH series AS (INSERT INTO conversation_number_series(workspace_id,series,format) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING 1)
+			INSERT INTO conversation_number_formats(workspace_id,series,format) SELECT $1,$2,$3 FROM series ON CONFLICT DO NOTHING`,
 			workspaceID, DefaultNumberSeries, domain.DefaultNumberFormat); err != nil {
 			return nil, fmt.Errorf("add the default number series: %w", err)
 		}
@@ -110,6 +111,11 @@ func (s *Store) SetNumberSeries(ctx context.Context, workspaceID, key string, in
 			if *input.Next < current.Next || *input.Next <= used {
 				return NumberSeries{}, &ErrNumberSeries{Field: "next", Message: fmt.Sprintf("The next number only counts on: use %d or more.", max(current.Next, used+1))}
 			}
+		}
+		// Every format the series has had reads the codes it gave (conversationsByCode).
+		if _, err := tx.Exec(ctx, `INSERT INTO conversation_number_formats(workspace_id,series,format) VALUES($1,$2,COALESCE($3,$4)) ON CONFLICT DO NOTHING`,
+			workspaceID, key, input.Format, current.Format); err != nil {
+			return NumberSeries{}, fmt.Errorf("keep the series' format: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE conversation_number_series SET format=COALESCE($3,format),next=COALESCE($4,next),start=COALESCE($5,start),
 			start_year=CASE WHEN $6::boolean THEN $7 ELSE start_year END,updated_at=now() WHERE workspace_id=$1 AND series=$2`,

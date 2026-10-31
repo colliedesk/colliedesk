@@ -1004,15 +1004,19 @@ type ConversationHead struct {
 	Number       int64  `json:"number"`
 	NumberYear   int    `json:"number_year"`
 	DisplayRef   string `json:"display_ref"`
+	// NumberFormat is the format its code was made with.
+	NumberFormat string `json:"number_format"`
 }
 
 // NumberSeries is a series conversations are numbered in.
 type NumberSeries struct {
-	Series    string    `json:"series"`
-	Format    string    `json:"format"`
-	Next      int64     `json:"next"`
-	Start     int64     `json:"start"`
-	StartYear *int      `json:"start_year"`
+	Series    string `json:"series"`
+	Format    string `json:"format"`
+	Next      int64  `json:"next"`
+	Start     int64  `json:"start"`
+	StartYear *int   `json:"start_year"`
+	// Formats are every format the series has had, which read the codes it gave.
+	Formats   []string  `json:"formats"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

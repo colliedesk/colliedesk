@@ -234,3 +234,71 @@ func TestTheDatabaseRendersAndReadsCodesLikeTheirFormat(t *testing.T) {
 		t.Fatalf("a dot in a format is a dot, not any character: %s", got)
 	}
 }
+
+// A conversation imported with its number moves the series past it, so the next one made never takes it:
+// in a series whose code shows the year, only a number of this year does (another year's is another
+// code); in one whose code does not, any number does. A code a customer was given stays theirs after the
+// series' format changes, and a code in the new format names only what was opened in it.
+func TestImportedNumbersAndFormatChangesKeepEveryCodeOne(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Imported Numbers", "admin@imported-numbers.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@imported-numbers.example.com"})
+	workspace := queryString(t, pool, `SELECT workspace_id::text FROM contacts WHERE id=$1`, contact)
+	year := time.Now().UTC().Year()
+	if response := request(t, api, http.MethodPut, "/api/v1/conversation-number-series/ref", map[string]any{"format": "REF-{yyyy}-{n:04}", "next": 170}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("series: %d %s", response.Code, response.Body.String())
+	}
+	imported := func(series string, number, numberYear int) {
+		t.Helper()
+		if _, err := pool.Exec(context.Background(), `INSERT INTO conversations(workspace_id,contact_id,subject,channel,number_series,number,number_year)
+			VALUES($1,$2,'Imported','imported',$3,$4,$5)`, workspace, contact, series, number, numberYear); err != nil {
+			t.Fatalf("import %s %d/%d: %v", series, number, numberYear, err)
+		}
+	}
+	next := func(series string) string {
+		return queryString(t, pool, `SELECT next::text FROM conversation_number_series WHERE workspace_id=$1 AND series=$2`, workspace, series)
+	}
+	imported("default", 1, year)
+	imported("default", 40, year-3)
+	imported("ref", 180, year)
+	imported("ref", 900, year-1)
+	if got := next("default") + "," + next("ref"); got != "41,181" {
+		t.Fatalf("next after the import = %s, want 41 (any year, its code shows none) and 181 (this year only)", got)
+	}
+	// Made after the import: numbered past it, never a duplicate.
+	id := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "New"})
+	if got := queryString(t, pool, `SELECT display_ref FROM conversations WHERE id=$1`, id); got != "#41" {
+		t.Fatalf("made after the import = %s", got)
+	}
+	// An import taking the number next would give is skipped over.
+	imported("default", 42, year)
+	id = create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Newer"})
+	if got := queryString(t, pool, `SELECT display_ref FROM conversations WHERE id=$1`, id); got != "#43" {
+		t.Fatalf("made after an import of the next number = %s", got)
+	}
+	// The format changes: the codes given keep finding their conversations; the new format names the new ones.
+	if response := request(t, api, http.MethodPut, "/api/v1/conversation-number-series/ref", map[string]any{"format": "T{n:03}"}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("format change: %d %s", response.Code, response.Body.String())
+	}
+	imported("ref", 181, year)
+	find := func(ref string) string {
+		t.Helper()
+		var page struct {
+			Items []numbered `json:"items"`
+		}
+		decode(t, request(t, api, http.MethodGet, "/api/v1/conversations?ref="+url.QueryEscape(ref), nil, admin, nil), &page)
+		var refs []string
+		for _, item := range page.Items {
+			refs = append(refs, item.DisplayRef)
+		}
+		return strings.Join(refs, ",")
+	}
+	for ref, want := range map[string]string{
+		fmt.Sprintf("REF-%d-0180", year): fmt.Sprintf("REF-%d-0180", year), fmt.Sprintf("ref-%d-180", year): fmt.Sprintf("REF-%d-0180", year),
+		"T180": "", "T181": "T181", fmt.Sprintf("REF-%d-0181", year): "", "#41": "#41", "#40": "#40",
+	} {
+		if got := find(ref); got != want {
+			t.Fatalf("?ref=%s = %q, want %q", ref, got, want)
+		}
+	}
+}

@@ -71,7 +71,19 @@ func TestACustomerReopensAConversationByItsCode(t *testing.T) {
 		code(123)+" was in the old system: this is "+code(172)+" now.|"+fmt.Sprintf("REF-%d-0999", year-1)+" was in the old system: this is "+code(173)+" now." {
 		t.Fatalf("legacy notices = %s", got)
 	}
-	if got := d.one(t, `SELECT count(*)::text FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id WHERE ct.workspace_id=$1 AND t.name='legacy-ref'`); got != "2" {
+	// After the series' format changes, a code of the system before in the old format is still one, and a
+	// code given in the old format still reopens its conversation.
+	if _, err := d.store.SetNumberSeries(ctx, d.workspaceID, "ref", store.NumberSeriesInput{Format: ptr("T{n:03}")}); err != nil {
+		t.Fatal(err)
+	}
+	*d.clock = d.clock.Add(time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-8", From: "u1", Text: "not fixed " + code(124)})
+	*d.clock = d.clock.Add(time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-9", From: "u1", Text: "not fixed " + code(170)})
+	if got := landed("r-8") + "," + landed("r-9"); got != "T174:open,"+code(170)+":open" {
+		t.Fatalf("after the format change = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id WHERE ct.workspace_id=$1 AND t.name='legacy-ref'`); got != "3" {
 		t.Fatalf("legacy-ref tags = %s", got)
 	}
 }

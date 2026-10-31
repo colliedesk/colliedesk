@@ -628,12 +628,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			if in.Place != nil && in.Place.Kind == channels.PlaceGroup {
 				group = in.Place.ExternalID
 			}
-			err := tx.QueryRow(ctx, `SELECT c.id::text FROM conversations c WHERE c.workspace_id=$1 AND (c.id::text=$2 OR `+refMatches("$2")+`)
+			named, err := conversationsByCode(ctx, tx, workspaceID, typed)
+			if err != nil {
+				return result, err
+			}
+			err = tx.QueryRow(ctx, `SELECT c.id::text FROM conversations c WHERE c.workspace_id=$1 AND (c.id::text=$2 OR c.id=ANY($6::uuid[]))
 				AND (c.contact_id=$3 OR ($4<>'' AND EXISTS(SELECT 1 FROM conversation_thread_items l
 					JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
 					JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
 					WHERE l.workspace_id=c.workspace_id AND l.conversation_id=c.id AND l.unlinked_at IS NULL AND t.channel_id=$5 AND t.external_id=$4)))
-				ORDER BY c.created_at DESC LIMIT 1`, workspaceID, typed, contactID, group, channel.ID).Scan(&facts.RefConversation)
+				ORDER BY c.created_at DESC LIMIT 1`, workspaceID, typed, contactID, group, channel.ID, named).Scan(&facts.RefConversation)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
 			}
@@ -815,8 +819,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 // LegacyRefTag marks a conversation a customer opened by naming a code of the system before.
 const LegacyRefTag = "legacy-ref"
 
-// legacyCode says whether a code is one of the system the channel's series was taken over from: in the
-// series' format, and below its start (in start_year, or any number of an earlier year).
+// legacyCode says whether a code is one of the system the channel's series was taken over from: in a
+// format the series has had, and below its start (in start_year, or any number of an earlier year).
 func legacyCode(ctx context.Context, tx pgx.Tx, workspaceID, series, typed string) (bool, error) {
 	if series == "" {
 		series = DefaultNumberSeries
@@ -824,7 +828,8 @@ func legacyCode(ctx context.Context, tx pgx.Tx, workspaceID, series, typed strin
 	var legacy bool
 	err := tx.QueryRow(ctx, `SELECT COALESCE(bool_or(CASE WHEN r.year IS NULL OR s.start_year IS NULL THEN r.n<s.start
 			ELSE r.year<s.start_year OR (r.year=s.start_year AND r.n<s.start) END),false)
-		FROM conversation_number_series s, LATERAL conversation_ref_read(s.format,$3) r WHERE s.workspace_id=$1 AND s.series=$2`,
+		FROM conversation_number_series s JOIN conversation_number_formats f ON f.workspace_id=s.workspace_id AND f.series=s.series
+			CROSS JOIN LATERAL conversation_ref_read(f.format,$3) r WHERE s.workspace_id=$1 AND s.series=$2`,
 		workspaceID, series, typed).Scan(&legacy)
 	if err != nil {
 		return false, fmt.Errorf("read a code of the system before: %w", err)
