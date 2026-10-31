@@ -38,17 +38,24 @@ The channel's page then has four tabs of its own, before AI and History:
    Zalo user id; **Remove** asks first, then their new messages count as a customer's.
 4. **Messages**: the **Commands** a customer can type (Open a request, Cancel, Reopen, Confirm, Help), each with its
    phrases and how they match (Allow one typo, Whole words, Exact; a command with no phrase is off), and
-   **What the OA says**: the notice sent when a conversation opens (`{ref}` becomes its code), the answer to
-   Help (**When a customer asks for help**, in a chat or a group; it opens nothing, and empty sends nothing;
-   **Answer help in one chat at most every** so many seconds, 0 every time), what Reopen
-   answers when it reopens a resolved or closed conversation (`{ref}`), when the conversation is still open
-   and the message joins it (`{ref}`), for a code it cannot find (`{ref}`: the code typed; a code of another
-   chat or group reads the same, since a code reopens only a conversation of its own group or of the
-   customer's own one-to-one chat) and for a code from before Colliedesk (`{old_ref}`, `{ref}`), and the reply to a one-to-one message
-   that is not a request, sent only where one-to-one messages open a conversation on a command and only
-   when **Answer such a message with this reply** is on, at most once in a chat every **Send the unmatched
-   reply in one chat at most every** seconds. The OA's own messages are not your team's first
-   reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")
+   **What the OA says**, each sent by the OA itself:
+   1. **When a conversation opens**: `{ref}` becomes its code.
+   2. **When a customer asks for help**: the answer to the Help command, in a chat or a group. It opens
+      nothing; left empty, nothing is sent. A chat gets it at most once in the time set in **Answer help in
+      one chat at most every** (300 seconds unless you change it; 0 answers every time).
+   3. **When Reopen reopens a resolved or closed conversation** and **When Reopen names a conversation still
+      open** (the message joins it): `{ref}` is its code.
+   4. **When Reopen names a code that is not found**: `{ref}` is the code typed. A code of another chat or
+      group reads the same, since a code reopens only a conversation of its own group or of the customer's
+      own one-to-one chat.
+   5. **When Reopen names a code from before Colliedesk**: `{old_ref}` is the code typed, `{ref}` the new
+      conversation's.
+   6. **Reply to a one-to-one message that is not a request**: it is sent only where one-to-one messages
+      open a conversation on a command and **Answer such a message with this reply** is on. A chat gets it
+      at most once in the time set in **Send the unmatched reply in one chat at most every** (300 seconds
+      unless you change it).
+
+   The OA's own messages are not your team's first reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")
    stops writing for **Wait for the customer to stop writing** seconds, the OA sends the **Question**;
    the Confirm command (say "OK", best matched exactly), as the answer to the latest question, opens the
    conversation at once, and so does silence for **Open anyway after** seconds; Cancel throws the request
