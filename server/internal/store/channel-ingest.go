@@ -726,6 +726,13 @@ func (s *Store) contactForIdentity(ctx context.Context, tx pgx.Tx, channel chann
 			channel.WorkspaceID, channel.ID, identity.Kind, identity.Value, sender.Name); err != nil {
 			return "", fmt.Errorf("update contact identity: %w", err)
 		}
+		// A contact still called by its id (made before the channel knew the name) takes the name now.
+		if sender.Name != "" {
+			if _, err := tx.Exec(ctx, `UPDATE contacts SET name=$3 WHERE workspace_id=$1 AND id=$2 AND name=$4`,
+				channel.WorkspaceID, contactID, sender.Name, identity.Value); err != nil {
+				return "", fmt.Errorf("name contact: %w", err)
+			}
+		}
 		return contactID, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {

@@ -339,6 +339,8 @@ type MessageDelivery struct {
 	LastError  *string    `json:"last_error"`
 	ReasonCode *string    `json:"reason_code"`
 	SentAt     *time.Time `json:"sent_at"`
+	// Retryable says a person's retry may succeed: a failed delivery that would not fail the same way again.
+	Retryable bool `json:"retryable"`
 }
 
 // Doors an inbound message can come through.

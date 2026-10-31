@@ -149,7 +149,7 @@ func (inbound) Parse(_ context.Context, channel channels.Channel, snap any, raw 
 		customer = e.Recipient.ID
 	}
 	in := channels.Inbound{ExternalID: e.id(), SentAt: e.sentAt(), Scope: ScopeDirect,
-		Sender: channels.Sender{Identity: channels.Identity{Kind: IdentityUser, Value: customer}}}
+		Sender: channels.Sender{Identity: channels.Identity{Kind: IdentityUser, Value: customer}, Name: s.names[customer]}}
 	key := "user:" + customer
 	in.Place = &channels.Place{Kind: channels.PlaceDirect, ExternalID: key, OpensConversations: true}
 	if e.inGroup() {
@@ -167,7 +167,7 @@ func (inbound) Parse(_ context.Context, channel channels.Channel, snap any, raw 
 	switch {
 	case e.fromOA():
 		in.Role = channels.RoleStaff
-		in.Sender.Identity = channels.Identity{Kind: "zalo_oa", Value: e.oa()}
+		in.Sender.Identity, in.Sender.Name = channels.Identity{Kind: "zalo_oa", Value: e.oa()}, ""
 	case s.staff[e.Sender.ID]:
 		in.Role = channels.RoleStaff
 	}

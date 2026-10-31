@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,8 +27,25 @@ const PartRunes = 2000
 const (
 	CodeNotConnected = "zalo_not_connected"
 	CodeRefused      = "zalo_refused"
+	// CodeNoFiles: a reply carries a file that is no picture; CodeFileTooLarge: a picture over MaxPicture.
 	CodeNoFiles      = "zalo_no_files"
+	CodeFileTooLarge = "zalo_file_too_large"
 )
+
+// notAPicture says why a file cannot go with a Zalo reply, and what to send instead.
+func notAPicture(name, kind string) string {
+	if strings.HasPrefix(strings.ToLower(kind), "image/gif") {
+		return name + ": GIF isn't supported yet. Send a JPEG or PNG picture instead."
+	}
+	return name + " isn't a JPEG or PNG picture, the only files a Zalo reply carries. Send it another way."
+}
+
+// MaxPicture is the largest picture a reply carries to Zalo.
+const MaxPicture = 1 << 20
+
+// pictureTypes are the pictures a reply carries: Zalo's image upload takes JPEG and PNG (a GIF has an
+// upload of its own, not used yet).
+var pictureTypes = map[string]bool{"image/jpeg": true, "image/png": true}
 
 // tokenRefused are the codes with which Zalo refuses an access token that expired or was replaced.
 var tokenRefused = map[int]bool{-216: true, -220: true, -124: true, -14: true}
@@ -43,17 +61,36 @@ type answer struct {
 	Error   int    `json:"error"`
 	Message string `json:"message"`
 	Data    struct {
-		MessageID string `json:"message_id"`
+		MessageID    string `json:"message_id"`
+		AttachmentID string `json:"attachment_id"`
 	} `json:"data"`
 }
 
 // Send delivers a reply or a notice: to the group it belongs to, or to the customer alone (quoting their
-// last message, once). A long text goes in parts of PartRunes; a retry sends only the parts that did not
-// go. An access token Zalo refuses is refreshed once and the part sent again.
+// last message, once). A long text goes in parts of PartRunes, then each picture as a message of its own;
+// a retry sends only the parts that did not go. An access token Zalo refuses is refreshed once and the
+// part sent again. A file that is no picture, or a picture over MaxPicture, is refused before anything
+// goes.
 func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.SendKit) channels.SendResult {
-	if len(out.Message.Files) > 0 {
-		return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles,
-			Reason: "Zalo replies cannot carry files yet: send the text without them."}
+	for _, file := range out.Message.Files {
+		switch {
+		case !pictureTypes[strings.ToLower(file.ContentType)]:
+			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles, Final: true, Reason: notAPicture(file.Name, file.ContentType)}
+		case file.Size > MaxPicture:
+			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeFileTooLarge, Final: true,
+				Reason: fmt.Sprintf("%s is over 1 MB, the largest picture a Zalo reply carries: send a smaller JPEG or PNG, or the file another way.", file.Name)}
+		}
+		// What the bytes are, not what the file was called.
+		reader, err := kit.OpenFile(ctx, file.StorageKey)
+		if err != nil {
+			return channels.Retry(err.Error())
+		}
+		head := make([]byte, 512)
+		n, _ := io.ReadFull(reader, head)
+		reader.Close()
+		if kind := http.DetectContentType(head[:n]); !pictureTypes[kind] {
+			return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNoFiles, Final: true, Reason: notAPicture(file.Name, kind)}
+		}
 	}
 	path, recipient := "/v3.0/oa/message/cs", map[string]string{}
 	quote := ""
@@ -81,7 +118,15 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 		return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNotConnected,
 			Reason: "The OA has no access token yet: add it in the channel's settings, then retry."}
 	}
-	parts := split(out.Message.Body, PartRunes)
+	parts := []map[string]any{}
+	if strings.TrimSpace(out.Message.Body) != "" || len(out.Message.Files) == 0 {
+		for _, text := range split(out.Message.Body, PartRunes) {
+			parts = append(parts, map[string]any{"text": text})
+		}
+	}
+	for i := range out.Message.Files {
+		parts = append(parts, map[string]any{"file": i})
+	}
 	var progress struct {
 		Sent  int    `json:"sent"`
 		First string `json:"first,omitempty"`
@@ -94,7 +139,7 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 	refreshed := false
 	// send delivers one part: a refused token is refreshed once for the whole reply, and a quote Zalo
 	// cannot make (a message too old, deleted) is dropped rather than saying nothing, after a refresh too.
-	send := func(message map[string]string) (answer, error) {
+	send := func(message map[string]any) (answer, error) {
 		for {
 			got, err := o.post(ctx, token, path, recipient, message)
 			switch {
@@ -105,7 +150,7 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 				if token, err = o.refresh(ctx, out, kit); err != nil {
 					return got, err
 				}
-			case got.Error != 0 && !tokenRefused[got.Error] && message["quote_message_id"] != "":
+			case got.Error != 0 && !tokenRefused[got.Error] && message["quote_message_id"] != nil:
 				delete(message, "quote_message_id")
 			default:
 				return got, nil
@@ -122,8 +167,20 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 		return r
 	}
 	for i := progress.Sent; i < len(parts); i++ {
-		message := map[string]string{"text": parts[i]}
-		if i == 0 && quote != "" {
+		message := parts[i]
+		if index, ok := message["file"].(int); ok {
+			// A picture goes up first, then as a message of its own.
+			attachment, err := o.upload(ctx, &token, &refreshed, out, kit, out.Message.Files[index])
+			if err != nil {
+				return result(channels.Retry(err.Error()), i)
+			}
+			if attachment.Error != 0 {
+				return result(channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeRefused,
+					Reason: fmt.Sprintf("Zalo refused the picture %s (%d: %s).", out.Message.Files[index].Name, attachment.Error, attachment.Message)}, i)
+			}
+			message = map[string]any{"attachment": map[string]any{"type": "template", "payload": map[string]any{"template_type": "media",
+				"elements": []map[string]string{{"media_type": "image", "attachment_id": attachment.Data.AttachmentID}}}}}
+		} else if i == 0 && quote != "" {
 			message["quote_message_id"] = quote
 		}
 		got, err := send(message)
@@ -141,7 +198,7 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 	return result(channels.Sent(""), len(parts))
 }
 
-func (o outbound) post(ctx context.Context, token, path string, recipient, message map[string]string) (answer, error) {
+func (o outbound) post(ctx context.Context, token, path string, recipient map[string]string, message map[string]any) (answer, error) {
 	body, _ := json.Marshal(map[string]any{"recipient": recipient, "message": message})
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, o.a.config.MessageBase+path, bytes.NewReader(body))
 	if err != nil {
@@ -150,6 +207,48 @@ func (o outbound) post(ctx context.Context, token, path string, recipient, messa
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("access_token", token)
 	return o.call(request)
+}
+
+// upload puts a picture of the reply at Zalo, which answers the id a message carries it by; a refused token
+// is refreshed once for the whole reply.
+func (o outbound) upload(ctx context.Context, token *string, refreshed *bool, out channels.Outbound, kit channels.SendKit, file channels.OutFile) (answer, error) {
+	for {
+		reader, err := kit.OpenFile(ctx, file.StorageKey)
+		if err != nil {
+			return answer{}, err
+		}
+		data, err := io.ReadAll(io.LimitReader(reader, MaxPicture+1))
+		reader.Close()
+		if err != nil {
+			return answer{}, err
+		}
+		var body bytes.Buffer
+		form := multipart.NewWriter(&body)
+		part, err := form.CreateFormFile("file", file.Name)
+		if err == nil {
+			_, err = part.Write(data)
+		}
+		if err != nil {
+			return answer{}, err
+		}
+		if err := form.Close(); err != nil {
+			return answer{}, err
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, o.a.config.MessageBase+"/v2.0/oa/upload/image", &body)
+		if err != nil {
+			return answer{}, err
+		}
+		request.Header.Set("Content-Type", form.FormDataContentType())
+		request.Header.Set("access_token", *token)
+		got, err := o.call(request)
+		if err != nil || !tokenRefused[got.Error] || *refreshed {
+			return got, err
+		}
+		*refreshed = true
+		if *token, err = o.refresh(ctx, out, kit); err != nil {
+			return got, err
+		}
+	}
 }
 
 func (o outbound) call(request *http.Request) (answer, error) {

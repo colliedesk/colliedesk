@@ -126,7 +126,7 @@ function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId
   return (
     <div className="message-envelope">
       <span className={`badge badge-delivery-${off || never ? 'queued' : status}`} title={lastError ?? undefined}>{off ? messages.deliverySavedNotSent : never ? messages.deliveryNotSent : messages.deliveryStatuses[status]}</span>
-      {status === 'failed' && !never && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
+      {status === 'failed' && !never && item.delivery.retryable !== false && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
       {/* A reply waiting because the server's mailbox credentials were refused, or its provider is switched off,
           says so: it may wait long. */}
       {(status === 'sent' || status === 'failed' || code === 'mailbox_server_config' || code === 'mailbox_switched_off' || code === 'mailbox_not_configured') && lastError && <span className="delivery-reason">{lastError}</span>}

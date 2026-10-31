@@ -112,6 +112,9 @@ type SendResult struct {
 	Code, Reason string
 	// Retryable makes a failure try again after a backoff; otherwise it waits for a person.
 	Retryable bool
+	// Final marks a failure the same reply meets however often it is tried (a file the channel cannot
+	// carry): a person's retry is refused, and the reply is written again instead.
+	Final bool
 	// RetryAt is when a deferred delivery is due again; deferring spends no attempt.
 	RetryAt time.Time
 	// HeldByPause marks a deferral because the workspace's sending is paused.
