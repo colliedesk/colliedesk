@@ -55,9 +55,12 @@ func TestInboxSearchLatencyBudget(t *testing.T) {
 		"status page": {"colliedesk_inbox_search", map[string]any{"status": "open", "limit": 50}},
 		"text search": {"colliedesk_inbox_search", map[string]any{"q": "budget-needle", "limit": 50}},
 		// Words that may be a code are read by every format first, then searched as words.
-		"code search":     {"colliedesk_inbox_search", map[string]any{"q": "#1234", "limit": 50}},
-		"no code":         {"colliedesk_inbox_search", map[string]any{"q": "#99999999", "limit": 50}},
-		"code lookup":     {"colliedesk_inbox_search", map[string]any{"ref": "#12", "limit": 50}},
+		"code search": {"colliedesk_inbox_search", map[string]any{"q": "#1234", "limit": 50}},
+		"no code":     {"colliedesk_inbox_search", map[string]any{"q": "#99999999", "limit": 50}},
+		"code lookup": {"colliedesk_inbox_search", map[string]any{"ref": "#12", "limit": 50}},
+		// Response targets: filtered and sorted by the times stored with each conversation.
+		"overdue":         {"colliedesk_inbox_search", map[string]any{"sla": "overdue", "limit": 50}},
+		"due first":       {"colliedesk_inbox_search", map[string]any{"sort": "due", "limit": 50}},
 		"read one thread": {"colliedesk_conversation_get", map[string]any{"conversation_id": oneConversation}},
 	} {
 		durations := make([]time.Duration, 50)
