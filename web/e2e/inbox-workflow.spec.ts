@@ -50,10 +50,14 @@ test('redeems a CLI pairing link and completes the inbox workflow', async ({ pag
   await expect(page.getByText('E2E private note')).toBeVisible();
 
   const details = page.getByRole('complementary', { name: 'Conversation details' });
-  const status = details.getByLabel('Status');
-  await status.selectOption('resolved');
+  // Status is a menu: a status is set only once it is chosen (arrow keys on a select would set each one).
+  const setStatus = async (name: string) => {
+    await details.locator('.status-pick summary').click();
+    await details.getByRole('group', { name: 'Status' }).getByRole('button', { name }).click();
+  };
+  await setStatus('Resolved');
   await expect.poll(async () => (await currentConversation()).status).toBe('resolved');
-  await status.selectOption('open');
+  await setStatus('Open');
   await expect.poll(async () => (await currentConversation()).status).toBe('open');
 
   // Send and resolve: the reply goes out first, then the conversation is resolved, without the details pane.

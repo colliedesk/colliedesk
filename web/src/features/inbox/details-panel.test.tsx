@@ -104,9 +104,19 @@ test('the menu says which statuses stay quiet, and ticks Tell the customer again
   expect(menu.getByRole('checkbox', { name: 'Tell the customer' })).toBeChecked();
 });
 
-test('email keeps the Status select', () => {
-  render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[]} onUpdate={vi.fn()} />);
-  expect(screen.getByRole('combobox', { name: 'Status' })).toBeInTheDocument();
+test('Status is a menu for email too: arrow keys change nothing, a chosen status sends one change, and asks nothing about telling', () => {
+  const onUpdate = vi.fn();
+  render(<DetailsPanel conversation={{ ...conversation(null), status: 'open' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+  const summary = screen.getByText('Open', { selector: '.status-pick summary *' }).closest('summary') as HTMLElement;
+  expect(summary).toHaveAccessibleName('Status Open');
+  for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowDown']) fireEvent.keyDown(summary, { key });
+  expect(onUpdate).not.toHaveBeenCalled();
+  const menu = within(screen.getByRole('group', { name: 'Status' }));
+  expect(menu.queryByRole('checkbox', { name: 'Tell the customer' })).not.toBeInTheDocument();
+  fireEvent.click(menu.getByRole('button', { name: 'Resolved' }));
+  expect(onUpdate).toHaveBeenCalledTimes(1);
+  expect(onUpdate).toHaveBeenCalledWith(conversation(null).id, { status: 'resolved' });
 });
 
 test('every chat conversation has the Status menu: notices unknown, none for the other statuses, or no channel known', () => {

@@ -401,7 +401,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   fireEvent.click(screen.getByRole('checkbox', { name: /gamma conversation/i }));
   const loadsBefore = api.conversations.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Resolved' }));
 
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' }));
   expect(await screen.findByText('Updated 2 conversations')).toHaveAttribute('aria-live', 'polite');
@@ -424,7 +424,7 @@ test('a refused bulk change reloads the list, so a conversation that is gone sto
   await screen.findByRole('button', { name: /alpha conversation/i });
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   const loadsBefore = api.conversations.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
 });
@@ -480,7 +480,7 @@ test('resolving the open conversation keeps it on screen although it left the Op
   api.updateConversation.mockImplementation(async () => { isResolved = true; return resolved; });
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(alpha.id));
   expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
 });
@@ -498,7 +498,7 @@ test('resolving the open conversation never swaps the screen to another one, so 
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer' } });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
   expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();

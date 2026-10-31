@@ -293,9 +293,10 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   the customer** (to add a note or fix a detail).
 
 In the details pane (**Show details** on a narrower screen):
-- **Status**: every status can be changed back, for example Resolved → Open to reopen. On a chat that
-  tells the customer, Status is a menu: **Tell the customer** comes first, ticked each time it opens, and
-  says which statuses its channel tells; untick it and the status you pick is set quietly.
+- **Status**: a menu; a status changes only once you choose it. Every status can be changed back, for
+  example Resolved → Open to reopen. On a conversation whose status may tell the customer, **Tell the
+  customer** comes first, ticked each time the menu opens, and says which statuses its channel tells;
+  untick it and the status you pick is set quietly.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
