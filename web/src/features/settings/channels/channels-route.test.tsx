@@ -858,7 +858,8 @@ const zalo = (change: Record<string, unknown> = {}) => ({ ...channel('email', { 
   config: zaloConfig, settings: {}, effective_settings: {} });
 
 test('a channel that can pause is paused from its page after a question, and only then', async () => {
-  channelsApi.get.mockResolvedValue(zalo());
+  // Running when the page opens; paused once Pause reloads it.
+  channelsApi.get.mockResolvedValueOnce(zalo()).mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 0 }));
   channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
   channelsApi.update.mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z' }));
   show(ZALO);
@@ -870,6 +871,9 @@ test('a channel that can pause is paused from its page after a question, and onl
   fireEvent.click(screen.getByRole('button', { name: 'Pause processing' }));
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Pause processing' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ZALO, { processing_paused: true }));
+  // The button that did it is gone (it reads Resume now): focus goes to what it did.
+  const note = (await screen.findByText(/Processing is paused since/)).closest('p');
+  await waitFor(() => expect(note).toHaveFocus());
 });
 
 test('a paused channel says so, since when, and resumes without a question', async () => {
