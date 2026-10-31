@@ -10,7 +10,9 @@ docker compose run --rm --no-deps -T server '/app/collie import bundle --workspa
 ```
 
 1. `--dry-run` reads and checks everything, writes it in a transaction it rolls back, and prints the same
-   report: run it first.
+   report: run it first. The outcome (`Status` and the counts) is printed before the report files are
+   written (`--report-dir`, the current directory by default), so a report that cannot be written never
+   hides an import that went in: the command then says it is imported.
 2. Everything goes in one transaction. The report reconciles each count three ways: what the system the
    bundle came from holds (`counts`), what the bundle carries, what was written. A single difference, or a
    file that does not read back as it was, is `FAILED`, and nothing stays.
@@ -80,7 +82,9 @@ conversation points at; they take space, nothing else.
    its customer is one of the channel's senders, a reply to it goes to that chat (a group's to the group),
    and a customer reopens it by its code from that chat only, as one opened in Colliedesk. A customer's
    message written by another member of a group carries `sender` (`kind`, `value` as the channel knows
-   them, `name`): its item in the chat is theirs, and they are one of the channel's senders.
+   them, `name`): its item in the chat is theirs, and they are one of the channel's senders. A reply a team
+   member wrote in the chat on the channel's own app carries `sender` too: its item came in and is the
+   team's. A note never has one. The chat shows each message's files.
 5. `number_series` (the series' key, in any case: `REF` is `ref`), `number` and `number_year` keep the
    code the customer has; without them the conversation takes the next number of its series. A number of this year or later in a series whose
    code shows the year (or any number in one whose code does not) moves the series' next number past it.

@@ -4964,7 +4964,7 @@ export interface components {
             disposition_reason: string | null;
             /** Format: date-time */
             occurred_at: string;
-            /** @description The files of an item that came in, as they were fetched; the conversation message it became has them as attachments. */
+            /** @description The files of an item that came in, as they were fetched (an imported item: the attachments of its message); the conversation message it became has them as attachments. */
             files: {
                 name: string;
                 content_type: string;
