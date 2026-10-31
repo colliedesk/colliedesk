@@ -170,11 +170,17 @@ type Notices struct {
 	ReopenNoted    string `json:"reopen_noted,omitempty"`
 	// Help answers a help command (NoticeHelp).
 	Help string `json:"help,omitempty"`
+	// HelpEverySeconds is the least time between two help notices of one chat; 0 answers each help.
+	// Merge fills in the default.
+	HelpEverySeconds *int `json:"help_every_seconds,omitempty"`
 }
 
 // DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
 // sets nothing.
 const DefaultUnmatchedEverySeconds = 300
+
+// DefaultHelpEverySeconds is how long a chat waits for its next help notice when the channel sets nothing.
+const DefaultHelpEverySeconds = 300
 
 // NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
 // sends the notice. A placeholder of no list is refused when the settings are saved.
@@ -310,6 +316,10 @@ func (s Settings) Merge(override json.RawMessage) (Settings, error) {
 	if merged.Notices.UnmatchedEverySeconds == nil {
 		every := DefaultUnmatchedEverySeconds
 		merged.Notices.UnmatchedEverySeconds = &every
+	}
+	if merged.Notices.HelpEverySeconds == nil {
+		every := DefaultHelpEverySeconds
+		merged.Notices.HelpEverySeconds = &every
 	}
 	return merged, nil
 }

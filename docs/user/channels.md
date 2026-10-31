@@ -154,8 +154,11 @@ ones whole, so send them all.
   being collected it is an ordinary message. With `settings.notices.cancelled` set, the channel says so.
 - A command with `action: help` (such as "help" or "/help", compared like any command) is answered with
   `settings.notices.help`, your guide to the commands, one-to-one and in groups. It opens nothing, is no
-  part of the request being written and does not hold back the next unmatched notice. A channel that is off
-  keeps it; opened later, it is not answered.
+  part of the request being written (asked while writing one, the guide comes and the request goes on as
+  it was) and does not hold back the next unmatched notice. A chat is answered once in
+  `settings.notices.help_every_seconds` (300 by default; 0 answers each), so a customer or a bot repeating
+  it gets the guide once; every help is still in the chat. A channel that is off keeps it; opened later, it
+  is not answered.
 - `gather.confirm_seconds` asks before a request written over several messages opens (a one-to-one chat):
   once the customer is quiet for `quiet_seconds`, the channel sends `settings.notices.ask_confirm` ("Is that
   all? Send OK…") and waits this long. A command with `action: confirm` (such as "OK", best with `match:

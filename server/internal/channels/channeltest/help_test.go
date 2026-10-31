@@ -103,10 +103,41 @@ func TestAChannelSetsUpAHelpCommand(t *testing.T) {
 	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: ok}, store.ChannelActor{AgentID: d.agentID}); err != nil {
 		t.Fatalf("a help command: %v", err)
 	}
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: json.RawMessage(`{"notices":{"help_every_seconds":86401}}`)},
+		store.ChannelActor{AgentID: d.agentID}); err == nil {
+		t.Fatal("help_every_seconds above a day was accepted")
+	}
 	wrong := json.RawMessage(`{"notices":{"help":"See {ref}."}}`)
 	var field *channels.FieldError
 	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: wrong}, store.ChannelActor{AgentID: d.agentID}); !errors.As(err, &field) ||
 		field.Fields["settings.notices.help"] == "" {
 		t.Fatalf("a help notice with {ref}: %v", err)
+	}
+}
+
+// A chat asking for help again and again is answered once in help_every_seconds (300 by default); the
+// messages are still recorded, and 0 answers each.
+func TestAHelpCommandIsAnsweredOnceInAWhilePerChat(t *testing.T) {
+	d := newLoopDesk(t, helpLoop())
+	for _, id := range []string{"r-1", "r-2", "r-3"} {
+		d.send(t, channeltest.LoopbackEvent{ID: id, From: "u1", Group: "g1", Text: "help"})
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "r-4", From: "u2", Group: "g2", Text: "help"})
+	if got := d.notices(t, channels.NoticeHelp) + "," + d.one(t, `SELECT count(*)::text FROM channel_thread_items WHERE workspace_id=$1 AND direction='in' AND disposition_reason='help'`); got != "2,4" {
+		t.Fatalf("notices,helps = %s, want one notice for each group and every help recorded", got)
+	}
+	d.step(t, 301*time.Second)
+	d.send(t, channeltest.LoopbackEvent{ID: "r-5", From: "u1", Group: "g1", Text: "help"})
+	if got := d.notices(t, channels.NoticeHelp); got != "3" {
+		t.Fatalf("after five minutes = %s, want 3", got)
+	}
+	every := 0
+	loop := helpLoop()
+	loop.Defaults.Notices.HelpEverySeconds = &every
+	each := newLoopDesk(t, loop)
+	each.send(t, channeltest.LoopbackEvent{ID: "e-1", From: "u1", Group: "g1", Text: "help"})
+	each.send(t, channeltest.LoopbackEvent{ID: "e-2", From: "u1", Group: "g1", Text: "help"})
+	if got := each.notices(t, channels.NoticeHelp); got != "2" {
+		t.Fatalf("with 0 = %s, want 2", got)
 	}
 }

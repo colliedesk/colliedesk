@@ -282,7 +282,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, err
 		}
 		if !request.Replay {
-			if err := queueThreadNotice(ctx, tx, &journal, journal.eventID, channels.NoticeHelp, channels.RenderNotice(channel.Settings.Notices.Help, nil), 0); err != nil {
+			// Once in a while per chat: a customer or a bot repeating it is not answered each time.
+			every := channels.DefaultHelpEverySeconds
+			if channel.Settings.Notices.HelpEverySeconds != nil {
+				every = *channel.Settings.Notices.HelpEverySeconds
+			}
+			if err := queueThreadNotice(ctx, tx, &journal, journal.eventID, channels.NoticeHelp, channels.RenderNotice(channel.Settings.Notices.Help, nil),
+				time.Duration(every)*time.Second); err != nil {
 				return result, err
 			}
 		}

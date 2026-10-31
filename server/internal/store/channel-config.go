@@ -120,6 +120,10 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.unmatched_every_seconds": "Use 0 to 86400 seconds."},
 			Message: "Check the channel settings."}
 	}
+	if every := merged.Notices.HelpEverySeconds; every != nil && (*every < 0 || *every > 86400) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.help_every_seconds": "Use 0 to 86400 seconds."},
+			Message: "Check the channel settings."}
+	}
 	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
 		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired,
 		channels.NoticeReopenNotFound: merged.Notices.ReopenNotFound, channels.NoticeReopenLegacy: merged.Notices.ReopenLegacy,
