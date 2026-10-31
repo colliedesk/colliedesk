@@ -302,7 +302,8 @@ export const api = {
   conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
   inboxActivity: (since?: string) => request(`/api/v1/inbox/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, inboxActivitySchema),
   createConversation: (contact_id: string, subject: string, key: string) => request('/api/v1/conversations', conversationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createConversation'>({ contact_id, subject }) }),
-  conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema),
+  // Read by id, a conversation says for sure which statuses would tell its customer: none is sent when none would.
+  conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema).then((read) => ({ ...read, status_notices: read.status_notices ?? [] })),
   updateConversation: (id: string, value: UpdateConversationRequest) => request(`/api/v1/conversations/${id}`, conversationSchema, { method: 'PATCH', body: json<'updateConversation'>(value) }),
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
