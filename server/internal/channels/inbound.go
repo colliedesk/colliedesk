@@ -265,6 +265,8 @@ const (
 	// DropExpired: a request left without its description past Gather.ExpireSeconds, and the message
 	// that found it expired.
 	DropExpired = "expired"
+	// DropRefNotFound: a reopen command whose code names no conversation of the customer's.
+	DropRefNotFound = "ref_not_found"
 )
 
 // Hold reasons.
