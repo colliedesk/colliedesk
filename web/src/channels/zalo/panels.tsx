@@ -441,6 +441,8 @@ interface Confirm { on: boolean; quiet: string; wait: string }
 const confirmLimit = 3600;
 const expireLimit = 1440;
 const everyLimit = 86_400;
+const autoCloseLimit = 720;
+interface StatusNotices { pending: string; resolved: string; closed: string }
 const seconds = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
 
 /** A notice box shows every line it holds, up to a dozen; longer ones scroll. */
@@ -448,7 +450,7 @@ function rowsFor(text: string) {
   return Math.min(12, Math.max(2, text.split('\n').length));
 }
 
-function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; reopenNotFound: string; reopenLegacy: string; reopened: string; reopenNoted: string; help: string; helpEvery: number; unmatchedEvery: number; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
+function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; reopenNotFound: string; reopenLegacy: string; reopened: string; reopenNoted: string; help: string; status: StatusNotices; autoCloseHours: number; helpEvery: number; unmatchedEvery: number; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
   const stored = record(channel.settings);
   const effective = record(channel.effective_settings);
   const commands = { ...(record(effective.commands) as Record<string, Command>) };
@@ -463,7 +465,10 @@ function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandA
   const next: Record<string, unknown> = { ...stored, commands, notices: { ...record(effective.notices), received: edits.received.trim(), unmatched: edits.unmatched.trim(),
     ask_confirm: edits.askConfirm.trim(), cancelled: edits.cancelled.trim(), expired: edits.expired.trim(),
     reopen_not_found: edits.reopenNotFound.trim(), reopen_legacy: edits.reopenLegacy.trim(), reopened: edits.reopened.trim(), reopen_noted: edits.reopenNoted.trim(), help: edits.help.trim(),
-    help_every_seconds: edits.helpEvery, unmatched_every_seconds: edits.unmatchedEvery } };
+    status_pending: edits.status.pending.trim(), status_resolved: edits.status.resolved.trim(), status_closed: edits.status.closed.trim(),
+    help_every_seconds: edits.helpEvery, unmatched_every_seconds: edits.unmatchedEvery },
+    // Empty is 0 (never): leaving the key out would keep the stored number, since the settings spread what is stored.
+    auto_close_hours: edits.autoCloseHours };
   if (edits.answer !== undefined || edits.confirm) {
     const direct = { ...record(record(effective.scopes).direct) };
     if (edits.answer !== undefined) direct.unmatched = edits.answer ? 'notice' : 'join_open';
@@ -519,11 +524,17 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const [unmatchedEvery, setUnmatchedEvery] = useState(every(notices.unmatched_every_seconds));
   const everyBad = (value: string) => !(seconds(value) >= 0 && seconds(value) <= everyLimit);
   const [reopenLegacy, setReopenLegacy] = useState(text(notices.reopen_legacy));
+  const [status, setStatus] = useState<StatusNotices>(() => ({ pending: text(notices.status_pending), resolved: text(notices.status_resolved), closed: text(notices.status_closed) }));
+  // Hours after which a resolved conversation closes by itself; empty and 0 are never.
+  const savedHours = Number(effective.auto_close_hours) > 0 ? Number(effective.auto_close_hours) : 0;
+  const [autoClose, setAutoClose] = useState(savedHours ? String(savedHours) : '');
+  const autoCloseHours = autoClose.trim() === '' ? 0 : seconds(autoClose);
+  const autoCloseBad = !(autoCloseHours >= 0 && autoCloseHours <= autoCloseLimit);
   const [confirmTouched, setConfirmTouched] = useState(false);
   const [checked, setChecked] = useState(false);
   const reload = useReload(channel.id);
   const save = useMutation({
-    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired, reopenNotFound, reopenLegacy, reopened, reopenNoted, help, helpEvery: seconds(helpEvery), unmatchedEvery: seconds(unmatchedEvery),
+    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired, reopenNotFound, reopenLegacy, reopened, reopenNoted, help, status, autoCloseHours, helpEvery: seconds(helpEvery), unmatchedEvery: seconds(unmatchedEvery),
       answer: onCommands && answer !== (direct.unmatched === 'notice') ? answer : undefined, confirm: confirmTouched ? confirm : undefined,
       expireSeconds: expireTouched ? seconds(expire) * 60 : undefined }) }),
     onSuccess: () => reload(),
@@ -558,6 +569,10 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         <ReadOnly label={m.unmatched} value={unmatched || m.none} />
         <ReadOnly label={m.helpNotice} value={help || m.none} />
         <ReadOnly label={m.reopened} value={reopened || m.none} />
+        <ReadOnly label={m.statusPending} value={status.pending || m.none} />
+        <ReadOnly label={m.statusResolved} value={status.resolved || m.none} />
+        <ReadOnly label={m.statusClosed} value={status.closed || m.none} />
+        <ReadOnly label={m.autoClose} value={savedHours ? m.hoursValue(savedHours) : m.autoCloseNever} />
         <ReadOnly label={m.reopenNoted} value={reopenNoted || m.none} />
         <ReadOnly label={m.reopenNotFound} value={reopenNotFound || m.none} />
         <ReadOnly label={m.reopenLegacy} value={reopenLegacy || m.none} />
@@ -570,7 +585,7 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </div>;
   }
   const edit = (action: CommandAction, change: Partial<Draft>) => { feedback.touch(); setCommands((all) => ({ ...all, [action]: { ...all[action], ...change } })); };
-  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad && !everyBad(helpEvery) && !everyBad(unmatchedEvery)) save.mutate(); }}>
+  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad && !everyBad(helpEvery) && !everyBad(unmatchedEvery) && !autoCloseBad) save.mutate(); }}>
     <section className="zl-block" aria-labelledby={`${id}-cmd`}><h3 id={`${id}-cmd`}>{m.commands}</h3>
       <p className="lead">{m.commandsLead}</p>
       <div className="zl-rows">
@@ -610,6 +625,15 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
       <Field id={`${id}-cnl`} label={m.cancelled} error={server['settings.notices.cancelled']} help={`${m.unmatchedHint} ${m.count(cancelled.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(cancelled)} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>
     </section>
+    <section className="zl-block" id="status-notices" aria-labelledby={`${id}-st`}><h3 id={`${id}-st`}>{m.statusHeading}</h3>
+      <p className="lead">{m.statusLead}</p>
+      {statusFields.map(([key, label, hint]) => <Field key={key} id={`${id}-st-${key}`} label={label} error={server[`settings.notices.status_${key}`]} help={`${hint} ${m.count(status[key].length, noticeMax)}`}>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(status[key])} maxLength={noticeMax} value={status[key]} onChange={(event) => { feedback.touch(); const value = event.target.value; setStatus((now) => ({ ...now, [key]: value })); }} />}</Field>)}
+      <Field id={`${id}-ac`} label={m.autoClose} error={(checked && autoCloseBad ? m.autoCloseRange : undefined) ?? server['settings.auto_close_hours']} help={m.autoCloseHint}>
+        {(props) => <span className="zl-hours"><input {...props} aria-describedby={autoCloseBad ? props['aria-describedby'] : `${props['aria-describedby'] ?? ''} ${id}-ac-now`.trim()} type="number" min={0} max={autoCloseLimit} step={1} inputMode="numeric"
+          value={autoClose} onChange={(event) => { feedback.touch(); setAutoClose(event.target.value); }} /><span aria-hidden="true">{m.hoursUnit}</span></span>}</Field>
+      {!autoCloseBad && <p className="muted-copy" id={`${id}-ac-now`}>{autoCloseSentence(autoCloseHours, savedHours, Boolean(status.closed.trim()))}</p>}
+    </section>
     <section className="zl-block" aria-labelledby={`${id}-ok`}><h3 id={`${id}-ok`}>{m.confirmHeading}</h3>
       <label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={confirm.on} aria-describedby={`${id}-ok-d`}
         onChange={(event) => changeConfirm({ on: event.target.checked })} /></span><span>{m.confirmOn}</span></label>
@@ -625,6 +649,17 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </section>
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveMessages)}</button>{feedback.status}</span>
   </form>;
+}
+
+const statusFields = [['pending', m.statusPending, m.statusHint], ['resolved', m.statusResolved, m.statusResolvedHint], ['closed', m.statusClosed, m.statusClosedHint]] as const;
+
+/** What the closing rule will do, as the hours and the Closed notice now being typed say. */
+function autoCloseSentence(hours: number, saved: number, told: boolean) {
+  if (hours === 0) return m.autoCloseOff;
+  let sentence = told ? m.autoCloseTold(hours) : m.autoCloseQuiet(hours);
+  // Turning it on starts its clock afresh; a new number while it is on also reaches what was resolved since.
+  if (saved > 0 && hours !== saved) sentence += m.autoCloseChanged + (hours < saved ? m.autoCloseFewer(hours, told) : '');
+  return sentence;
 }
 
 function ReadOnly({ label, value }: { label: string; value: ReactNode }) {

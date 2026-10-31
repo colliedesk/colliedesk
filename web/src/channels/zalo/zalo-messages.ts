@@ -4,6 +4,8 @@ export type SecretName = 'app_secret' | 'oa_secret_key' | 'access_token' | 'refr
 export type CommandAction = 'open' | 'cancel' | 'reopen' | 'confirm' | 'help';
 export type CommandMatch = 'fuzzy' | 'words' | 'exact';
 
+const hours = (n: number) => `${n.toLocaleString()} ${n === 1 ? 'hour' : 'hours'}`;
+
 export const zaloMessages = {
   // Connect
   name: 'Name',
@@ -136,8 +138,8 @@ export const zaloMessages = {
   everyHint: 'Seconds; 0 answers every time.',
   everyRange: 'From 0 to 86400 seconds.',
   helpNoticeHint: 'Sent for the Help command, in a chat or a group; say which commands open, cancel and reopen a request. Leave empty to send nothing.',
-  reopened: 'When Reopen reopens a resolved or closed conversation',
-  reopenedHint: '{ref} is its code. A code reopens only a conversation of the same place: its group, or the customer’s own one-to-one chat.',
+  reopened: 'When a resolved or closed conversation is reopened',
+  reopenedHint: '{ref} is its code. Sent when the customer’s Reopen command reopens it, and when your team does. A code reopens only a conversation of the same place: its group, or the customer’s own one-to-one chat.',
   reopenNoted: 'When Reopen names a conversation still open',
   reopenNotedHint: '{ref} is its code. The message joins it as the customer’s follow-up.',
   reopenNotFound: 'When Reopen names a code that is not found',
@@ -149,6 +151,25 @@ export const zaloMessages = {
   unmatchedAllOpen: 'One-to-one messages open a conversation each, so this reply is never sent.',
   count: (n: number, max: number) => `${n.toLocaleString()} / ${max.toLocaleString()}`,
   cancelled: 'When a request is cancelled',
+  statusHeading: 'When a conversation’s status changes',
+  statusLead: 'The OA sends these in the conversation’s chat, as a reply to the customer’s first message, when someone on your team, an AI agent or the rule below sets the status. An empty box sets that status quietly. Reopening is told with “When a resolved or closed conversation is reopened” above.',
+  statusPending: 'When set to Pending',
+  statusResolved: 'When set to Resolved',
+  statusClosed: 'When set to Closed',
+  statusHint: '{ref} is its code, {subject} its subject. Leave empty to send nothing.',
+  statusResolvedHint: '{ref} is its code, {subject} its subject. Also sent by Send and resolve. Leave empty to send nothing.',
+  statusClosedHint: '{ref} is its code, {subject} its subject. Also sent when a conversation closes by itself (below). Leave empty to send nothing.',
+  autoClose: 'Close resolved conversations after',
+  hoursUnit: 'hours',
+  autoCloseHint: 'Clock hours, not business hours, from the resolve or the customer’s last message, whichever is later. Applies to conversations resolved from the time you turn it on; earlier ones never close by themselves. Empty or 0: never; at most 720 (30 days).',
+  autoCloseOff: 'Resolved conversations stay resolved until someone closes them.',
+  autoCloseTold: (n: number) => `A conversation that stays resolved for ${hours(n)} closes by itself, and the customer is told with “When set to Closed”.`,
+  autoCloseQuiet: (n: number) => `A conversation that stays resolved for ${hours(n)} closes by itself, quietly: “When set to Closed” is empty.`,
+  autoCloseChanged: ' The new number also applies to conversations resolved since this was turned on.',
+  autoCloseFewer: (n: number, told: boolean) => ` Those already resolved for ${hours(n)} or more close${told ? ', and their customers are told,' : ''} within minutes of saving.`,
+  autoCloseRange: 'A whole number of hours, from 0 to 720.',
+  autoCloseNever: 'Never',
+  hoursValue: (n: number) => hours(n),
   confirmHeading: 'Ask before opening (one-to-one)',
   confirmOn: 'Ask the customer to confirm',
   confirmSentence: (quiet: number, wait: number) => `When a customer who named a command stops writing for ${quiet} ${quiet === 1 ? 'second' : 'seconds'}, the OA asks the question below. Confirm, as the answer to the latest question, opens the conversation at once, and so do ${wait} ${wait === 1 ? 'second' : 'seconds'} of silence; Cancel throws the request away. More messages join the request and the question comes again: a Confirm sent before it is asked again counts as words of the request, not as an answer.`,
