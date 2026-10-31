@@ -30,6 +30,7 @@ type Pipeline struct {
 	now    func() time.Time
 	logger *slog.Logger
 	fetch  *http.Client
+	wake   chan<- struct{}
 }
 
 // New returns the pipeline of st. now defaults to the wall clock in UTC.
@@ -113,6 +114,14 @@ func (p *Pipeline) ProcessDue(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if len(work) > 0 && p.wake != nil {
+		defer func() {
+			select {
+			case p.wake <- struct{}{}:
+			default:
+			}
+		}()
+	}
 	for _, item := range work {
 		if err := p.Process(ctx, item); err != nil {
 			errs = append(errs, err)
@@ -122,6 +131,14 @@ func (p *Pipeline) ProcessDue(ctx context.Context) (int, error) {
 		}
 	}
 	return len(work), errors.Join(errs...)
+}
+
+// WithWake returns the pipeline waking an outbox worker after a round that processed something: what it
+// queued (a notice, a question) goes out without waiting for the worker's interval.
+func (p *Pipeline) WithWake(wake chan<- struct{}) *Pipeline {
+	copy := *p
+	copy.wake = wake
+	return &copy
 }
 
 // Run processes the journal every interval until the context ends.

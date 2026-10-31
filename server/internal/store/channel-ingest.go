@@ -1012,6 +1012,16 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 	if priority == "" {
 		priority = "normal"
 	}
+	// A request is called by what follows its command ("report bug: the printer jams" is "the printer
+	// jams"); a command with nothing after it keeps the channel's subject.
+	if in.Intent.Kind == channels.IntentCommand {
+		if name, _, rest, ok := channels.MatchCommand(in.Text, settings.Commands); ok && name == in.Intent.Command {
+			line, _, _ := strings.Cut(strings.TrimSpace(rest), "\n")
+			if runes := []rune(strings.TrimSpace(line)); len(runes) > 0 {
+				in.Subject = string(runes[:min(len(runes), 80)])
+			}
+		}
+	}
 	// The scope its first message came in, which the AI levels of the channel are read by.
 	scope := ""
 	if adapter, ok := s.channels.Adapter(channel.Type); ok && slices.Contains(adapter.Definition().Scopes, in.Scope) {
