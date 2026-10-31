@@ -11,7 +11,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -271,6 +271,9 @@ export const api = {
   billing: () => request('/api/v1/billing', billingSchema),
   startCheckout: (plan: RequestBody<'createBillingCheckout'>['plan']) => request('/api/v1/billing/checkout', billingLinkSchema, { method: 'POST', body: json<'createBillingCheckout'>({ plan }) }),
   openBillingPortal: () => request('/api/v1/billing/portal', billingLinkSchema, { method: 'POST' }),
+  foundingSlots: () => request('/api/v1/founding', foundingSlotsSchema),
+  requestMigration: (input: RequestBody<'createMigrationRequest'>, key: string) => request('/api/v1/billing/migration-request', migrationRequestSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createMigrationRequest'>(input) }),
   exchangeCloudSession,
   signUpCloud,
   requestExportLink,

@@ -21,6 +21,14 @@ export function formatDay(value: string, timeZone: string): string {
   return format(new Date(value), timeZone, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// formatMonthDay is a day of the near future ("Nov 13"), such as a trial end; it carries the year only when
+// that is not this one.
+export function formatMonthDay(value: string, timeZone: string, now: Date = new Date()): string {
+  const date = new Date(value);
+  const year = (input: Date) => format(input, timeZone, { year: 'numeric' });
+  return format(date, timeZone, year(date) === year(now) ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 // Compact form for dense lists: the time for today, the day otherwise, the year only when it differs.
 // ICU may separate "1:05" and "PM" with a narrow no-break space; plain spaces keep it predictable.
 export function formatShortDate(value: string, timeZone: string, now = new Date()): string {

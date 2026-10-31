@@ -157,6 +157,7 @@ var requestTitles = map[string]string{
 	"POST /api/v1/export/link":                                   "Export all workspace data",
 	"POST /api/v1/billing/checkout":                              "Start a plan checkout",
 	"POST /api/v1/billing/portal":                                "Open the billing portal",
+	"POST /api/v1/billing/migration-request":                     "Ask Colliedesk to move your Freshdesk data",
 	"DELETE /api/v1/channels/email":                              "Disconnect the email channel",
 	"POST /api/v1/channels/email/secret":                         "Rotate the inbound email secret",
 	"POST " + gmailPath:                                          "Connect Gmail for sending replies",

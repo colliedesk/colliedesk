@@ -20,7 +20,7 @@ type Carry struct {
 	webForms, webFormClients            *webFormLimiter
 	domainChecks, providerChecks        *webFormLimiter
 	cursorCalls, problemReports         *webFormLimiter
-	testMessages                        *webFormLimiter
+	testMessages, migrationRequests     *webFormLimiter
 	helpCenterPages, helpCenterSearches *webFormLimiter
 	helpCenterHostLookups               *webFormLimiter
 	certificateNotes                    *webFormLimiter
@@ -56,12 +56,13 @@ func NewCarry(config Config) *Carry {
 	return &Carry{
 		exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(),
 		webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
-		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
-		cursorCalls:     newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
-		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
-		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
-		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
+		domainChecks:      newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
+		providerChecks:    newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		cursorCalls:       newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
+		problemReports:    newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
+		testMessages:      newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
+		migrationRequests: newWindowLimiter(migrationRequestsPerHour, webFormMaxKeys, time.Hour),
+		helpCenterPages:   newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
 		operatorSignIns:   newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),
 		operatorSignInIPs: newWindowLimiter(operatorSignInsPerAddressPerMinute, webFormMaxKeys, time.Minute),

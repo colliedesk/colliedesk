@@ -125,11 +125,13 @@ func workspaceExportRequestSpec() Spec {
 }
 
 func billingRequestSpec() Spec {
-	return approvalSpec("colliedesk_billing_request", "Ask a person to start a checkout or open billing",
-		`Ask for a plan checkout (action checkout, with a plan) or the billing portal (action portal) on the hosted cloud. The person who approves gets the payment page; nothing is paid by you.`,
-		[]string{"POST /api/v1/billing/checkout", "POST /api/v1/billing/portal"},
-		`{"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"type":"string","enum":["checkout","portal"]},`+
-			`"plan":{"type":"string","enum":["solo_monthly","solo_yearly","small_monthly","small_yearly","team_monthly","team_yearly","team25_monthly","team25_yearly","founding"],"description":"For checkout: the plan to buy."}}}`, billingRequest)
+	return approvalSpec("colliedesk_billing_request", "Ask a person to start a checkout, open billing or request a Freshdesk migration",
+		`Ask for a plan checkout (action checkout, with a plan), the billing portal (action portal) or a Freshdesk data migration (action migration_request, with freshdesk_address and optionally times) on the hosted cloud. The person who approves gets the payment page; nothing is paid by you. A migration request emails Colliedesk support with the workspace and the approving admin's address, and Plan and billing then shows when it was sent (migration_requested_at of colliedesk_billing_get).`,
+		[]string{"POST /api/v1/billing/checkout", "POST /api/v1/billing/portal", "POST /api/v1/billing/migration-request"},
+		`{"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"type":"string","enum":["checkout","portal","migration_request"]},`+
+			`"plan":{"type":"string","enum":["solo_monthly","solo_yearly","small_monthly","small_yearly","team_monthly","team_yearly","team25_monthly","team25_yearly","founding"],"description":"For checkout: the plan to buy."},`+
+			`"freshdesk_address":{"type":"string","maxLength":253,"description":"For migration_request: the Freshdesk address, like yourcompany.freshdesk.com."},`+
+			`"times":{"type":"string","maxLength":500,"description":"For migration_request: times that suit the admin for a call, with a time zone. Optional."}}}`, billingRequest)
 }
 
 func emailChannelDisconnectRequestSpec() Spec {

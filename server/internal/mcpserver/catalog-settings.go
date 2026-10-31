@@ -311,12 +311,12 @@ func billingGetSpec() Spec {
 		Title: "Show the plan and billing status",
 		Description: `Show the hosted cloud plan: trial end, whether the workspace is locked, the subscription status and period end, seats used and the limits. ` +
 			`Only an admin may read it, so with a token below admin Colliedesk files it as an agent request. On a self-hosted server there is no plan. ` +
-			`To buy a plan or open the billing portal, use colliedesk_billing_request.` + "\n\nTier: admin.",
+			`To buy a plan, open the billing portal or ask for a Freshdesk migration, use colliedesk_billing_request. migration_requested_at is when an admin last asked for one (null when none did).` + "\n\nTier: admin.",
 		Tier: "admin", ReadOnly: true,
 		REST:  []string{"GET /api/v1/billing"},
 		Input: noArguments,
 		Output: `{"type":"object","properties":{"billing":{"type":"object","properties":{"plan":{"type":"string"},"status":{"type":"string"},"locked":{"type":"boolean"},` +
-			`"trial_ends_at":{"type":"string"},"current_period_end":{"type":["string","null"]},"cancel_at_period_end":{"type":"boolean"},"limits":{"type":"object"},"usage":{"type":"object"}}},` +
+			`"trial_ends_at":{"type":"string"},"current_period_end":{"type":["string","null"]},"cancel_at_period_end":{"type":"boolean"},"migration_requested_at":{"type":["string","null"]},"limits":{"type":"object"},"usage":{"type":"object"}}},` +
 			`"agent_request":` + filedRequestSchema + `,"next":{"type":"string"}},"anyOf":[{"required":["billing"]},{"required":["agent_request","next"]}]}`,
 		run: billingGet,
 	}

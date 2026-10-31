@@ -1,140 +1,92 @@
+import { useState } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
-import { formatBytes } from '../../lib/format-bytes';
-import { formatDay } from '../../lib/format-date';
 import { messages } from '../../messages';
+import './purchase.css';
+import { BillingAlerts, isPaid } from './billing-alerts';
 import { billingMessages } from './billing-messages';
-import { MigrationCard } from './migration-card';
+import { TrialLine } from './billing-trial-line';
+import { MigrationDialog } from './migration-dialog';
+import type { MigrationPlan } from './migration-dialog';
+import { PaidBillingRows } from './paid-billing-rows';
+import { PaymentConfirming } from './payment-confirming';
 import type { PlanIntent } from './plan-intent';
 import { PlanPicker } from './plan-picker';
+import { priceOfPlan } from './plan-price-line';
 import { SettingsNav } from './settings-nav';
+import { formatDay } from '../../lib/format-date';
 
 interface BillingPageProps {
   billing: Billing;
   timezone: string;
-  // workspaceName names the workspace in the migration email's subject.
-  workspaceName: string;
   // importDone is true once the workspace has a finished Freshdesk import, false when it has none, and
-  // undefined while that is not known yet: the migration card waits for a false.
+  // undefined while that is not known yet: the migration row waits for it.
   importDone?: boolean;
+  // freshdeskAgents is the agent count of the Freshdesk account the workspace read, when it read one.
+  freshdeskAgents?: number;
+  // placesLeft is how many Founding places are free, when the server has counted them.
+  placesLeft?: number;
   // checkoutReturned is set when the browser comes back from a successful checkout: until the payment
-  // provider confirms the plan the buttons are off, and once it does the page welcomes the buyer.
+  // provider confirms the plan the page says so, and once it does a Founding or Team 25 buyer is welcomed.
   checkoutReturned?: boolean;
-  // failed is true for a generic failure, or the server's words when it said why (the provider refused the address).
-  failed?: boolean | string;
-  // busy is true while a checkout is starting or open; the plan buttons wait so a second click cannot open a second one.
-  busy?: boolean;
-  // preferredPlan is the plan the visitor came for on the website; its card comes first.
+  // pendingPlan is the plan this browser sent to the checkout, which names the order while it is confirmed.
+  pendingPlan?: CheckoutPlan;
+  // welcome is true until the welcome after paying was dismissed once; it only opens right after a checkout.
+  welcome?: boolean;
+  onWelcomeDone?: () => void;
+  // checkoutFailed is true for a generic failure (with Try again), or the server's words when it said why.
+  checkoutFailed?: boolean | string;
+  portalFailed?: boolean;
+  // starting is the plan whose checkout is opening.
+  starting?: CheckoutPlan;
+  // preferredPlan is the plan the visitor chose on the website; its card leads.
   preferredPlan?: PlanIntent;
   onCheckout: (plan: CheckoutPlan) => void;
+  onRetryCheckout?: () => void;
+  onCheckAgain?: () => void;
   onManage: () => void;
+  onRequestMigration: (input: { freshdesk_address: string; times: string }) => Promise<{ freshdesk_address: string; times: string; requested_at: string }>;
   // switchedOff: the operator switched billing off; the plan and the portal stay, nothing is offered.
   switchedOff?: boolean;
 }
 
-// periodNote says when the paid plan renews, or when it ends if it was cancelled.
-function periodNote(billing: Billing, timezone: string): string | null {
-  if (billing.complimentary) return null;
-  if (billing.plan === 'trial') return billingMessages.trialEndsOn(formatDay(billing.trial_ends_at, timezone));
-  if (billing.plan === 'none') return billingMessages.trialEnded(formatDay(billing.trial_ends_at, timezone));
-  if (!billing.current_period_end) return null;
-  const when = formatDay(billing.current_period_end, timezone);
-  return billing.cancel_at_period_end || billing.status === 'canceled' ? billingMessages.cancelsOn(when) : billingMessages.renewsOn(when);
-}
+const isMigrationPlan = (plan: Billing['plan']): plan is MigrationPlan => plan === 'founding' || plan === 'team25';
 
-const isPaid = (billing: Billing) => billing.plan !== 'trial' && billing.plan !== 'none';
-// The server names the plan with more storage it sells; without one the cap is raised by asking us.
-const paidStorageNext = (billing: Billing) =>
-  billing.storage_upgrade_plan ? billingMessages.storageUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : billingMessages.storageContactUs;
-const paidStorageWarningNext = (billing: Billing) =>
-  billing.storage_upgrade_plan ? billingMessages.storageWarningUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : billingMessages.storageContactUs;
-
-// StorageFull says what the cap does once it is reached, which differs by plan: on a paid plan customer
-// email is always stored, on the trial and when locked it is refused. Below the cap the 80% warning
-// of the page applies.
-function StorageFull({ billing }: { billing: Billing }) {
-  const limit = billing.limits.storage_bytes;
-  if (limit === null || billing.usage.storage_bytes < limit) return null;
+export function BillingPage({ billing, timezone, importDone, freshdeskAgents, placesLeft, checkoutReturned = false, pendingPlan, welcome = false, onWelcomeDone, checkoutFailed = false,
+  portalFailed = false, starting, preferredPlan, onCheckout, onRetryCheckout, onCheckAgain, onManage, onRequestMigration, switchedOff = false }: BillingPageProps) {
+  const [requesting, setRequesting] = useState(false);
+  const [welcomed, setWelcomed] = useState(false);
   const paid = isPaid(billing);
-  const upgrade = paid ? paidStorageNext(billing) : billingMessages.storageUpgradeTrial;
-  return <p role="alert" aria-label="Attachment storage" className="error-copy">
-    {paid ? billingMessages.storageFullPaid(upgrade) : billingMessages.storageFullTrial(upgrade)}</p>;
-}
-
-// Usage shows its number and a bar; the bar turns amber from 80% so a nearly full limit stands out.
-function Usage({ label, text, used, limit }: { label: string; text: string; used: number; limit: number }) {
-  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  return (
-    <div className="usage">
-      <span>{text}</span>
-      <div className="usage-bar" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={limit} aria-valuenow={used}
-        data-level={percent >= 80 ? 'high' : 'ok'}><span style={{ width: `${percent}%` }} /></div>
-    </div>
-  );
-}
-
-export function BillingPage({ billing, timezone, workspaceName, importDone, checkoutReturned = false, failed = false, busy = false, preferredPlan, onCheckout, onManage, switchedOff = false }: BillingPageProps) {
-  // While billing is switched off no trial ends and nothing locks: only a paid period is worth a line.
-  const note = switchedOff && (billing.plan === 'trial' || billing.plan === 'none') ? null : periodNote(billing, timezone);
-  const storageLimit = billing.limits.storage_bytes;
-  const warnAt = billing.limits.storage_warn_bytes;
-  const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt && !(storageLimit !== null && billing.usage.storage_bytes >= storageLimit);
-  const manage = billing.status !== 'none' && !billing.complimentary;
-  const confirming = checkoutReturned && !isPaid(billing);
-  const welcome = checkoutReturned && isPaid(billing);
-  // Founding and Team 25 come with their Freshdesk data moved; a complimentary plan was not bought.
-  const migrationPlan = (billing.plan === 'founding' || billing.plan === 'team25') && !billing.complimentary ? billing.plan : undefined;
-  const migration = migrationPlan && importDone === false ? <MigrationCard plan={migrationPlan} workspaceName={workspaceName} /> : null;
+  const migrationPlan = isMigrationPlan(billing.plan) && !billing.complimentary ? billing.plan : undefined;
+  const price = migrationPlan ? priceOfPlan(migrationPlan, pendingPlan) : undefined;
+  const periodEnd = billing.current_period_end ? formatDay(billing.current_period_end, timezone) : undefined;
+  const welcoming = checkoutReturned && paid && welcome && !welcomed && migrationPlan !== undefined && periodEnd !== undefined;
+  const dialogOpen = welcoming || (requesting && migrationPlan !== undefined);
+  const confirming = checkoutReturned && !paid;
+  const dismiss = () => { setRequesting(false); setWelcomed(true); onWelcomeDone?.(); };
+  const checkoutError = checkoutFailed === true ? billingMessages.checkoutFailed : checkoutFailed || undefined;
   return (
     <main className="settings-page panel billing-page">
       <header><h1>{billingMessages.billingHeading}</h1><p>{billingMessages.billingDescription}</p></header>
       <div className="settings-layout">
         {/* Only admins reach this page, and an admin sees every settings section. */}
         <SettingsNav page="/settings/billing" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true }} />
-        <div className="settings-sections">
-          {switchedOff && <p role="note" className="warning-note">{billingMessages.billingSwitchedOff}</p>}
-          {failed && <p role="alert" className="error-copy">{typeof failed === 'string' ? failed : messages.billingActionFailed}</p>}
-          {confirming && <p role="status">{billingMessages.checkoutConfirming}</p>}
-          {welcome && <p role="status">{billingMessages.checkoutConfirmed(messages.plans[billing.plan])}</p>}
-          {welcome && migration}
-          {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{billingMessages.duplicateSubscriptions}</p>}
-          {billing.status === 'past_due' && <p role="alert" className="error-copy">{billingMessages.pastDueNotice}</p>}
-          {isPaid(billing) && billing.usage.agents > billing.limits.agents && <p role="alert" aria-label={billingMessages.usageAgents} className="error-copy">
-            {messages.agentsOverPlan(billing.usage.agents - billing.limits.agents, messages.plans[billing.plan])}</p>}
-          <section className="current-plan-card" aria-labelledby="current-plan-heading">
-            <div className="current-plan">
-              <h2 className="settings-group-label" id="current-plan-heading">{billingMessages.currentPlan}</h2>
-              <p className="current-plan-name">{billing.complimentary
-                ? billingMessages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDay(billing.complimentary_until, timezone) : null)
-                : messages.plans[billing.plan]}</p>
-              {note && <p className="muted-copy">{note}</p>}
-              {manage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}
-              {manage && <small className="muted-copy">{billingMessages.manageBillingHelp}</small>}
-            </div>
-            <div className="usage-list">
-              {storageNearlyFull && storageLimit !== null && <p role="status" className="warning-note">
-                {(() => {
-                  const percent = Math.floor((billing.usage.storage_bytes / storageLimit) * 100);
-                  const used = formatBytes(billing.usage.storage_bytes);
-                  return isPaid(billing)
-                    ? billingMessages.storageWarningPaid(percent, used, formatBytes(storageLimit), paidStorageWarningNext(billing))
-                    : messages.storageWarning(percent, used, formatBytes(storageLimit));
-                })()}</p>}
-              <StorageFull billing={billing} />
-              <Usage label={billingMessages.usageAgents} text={billingMessages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}
-                used={billing.usage.agents + billing.usage.pending_invites} limit={billing.limits.agents} />
-              {storageLimit !== null && <Usage label={billingMessages.usageStorage} text={billingMessages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}
-                used={billing.usage.storage_bytes} limit={storageLimit} />}
-              {billing.limits.replies_per_24h !== null && <Usage label={billingMessages.usageReplies} text={billingMessages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}
-                used={billing.usage.replies_last_24h} limit={billing.limits.replies_per_24h} />}
-            </div>
-          </section>
-          {!welcome && migration}
-          {!switchedOff && (billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
-            <div className="section-heading"><h2 id="upgrade-heading">{billingMessages.upgradeHeading}</h2><p>{billingMessages.upgradeHelp}</p></div>
-            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} disabled={confirming} preferredPlan={preferredPlan} onChoose={onCheckout} /></div>
-          </section>}
+        <div className="settings-sections purchase-stack">
+          <BillingAlerts billing={billing} switchedOff={switchedOff} portalFailed={portalFailed} />
+          {checkoutReturned && paid && !welcoming && <p role="status">{billingMessages.checkoutConfirmed(messages.plans[billing.plan])}</p>}
+          {paid
+            ? <PaidBillingRows billing={billing} timezone={timezone} remembered={pendingPlan} dialogOpen={dialogOpen} onManage={onManage} onRequestMigration={() => setRequesting(true)}
+              migration={migrationPlan && importDone !== undefined ? { requestedAt: billing.migration_requested_at, done: importDone } : undefined} />
+            : <>
+              <TrialLine billing={billing} timezone={timezone} />
+              {confirming && <PaymentConfirming plan={pendingPlan} onCheckAgain={onCheckAgain ?? (() => undefined)} />}
+              {!confirming && !switchedOff && <PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} seats={billing.usage.agents + billing.usage.pending_invites}
+                freshdeskAgents={freshdeskAgents} placesLeft={placesLeft} starting={starting} preferredPlan={preferredPlan} error={checkoutError}
+                onRetry={checkoutFailed === true ? onRetryCheckout : undefined} onChoose={onCheckout} />}
+            </>}
         </div>
       </div>
+      {dialogOpen && migrationPlan && <MigrationDialog plan={migrationPlan} onSend={onRequestMigration} onDismiss={dismiss}
+        welcome={welcoming && periodEnd ? { plan: migrationPlan, summary: price?.name ? `${price.name} · ${price.detail}` : messages.plans[migrationPlan], nextCharge: billingMessages.nextCharge(periodEnd, price?.amount) } : undefined} />}
     </main>
   );
 }

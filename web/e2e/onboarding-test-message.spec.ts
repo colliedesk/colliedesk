@@ -19,7 +19,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
   const support = `support-${suffix}@acme.example`;
   expect((await signUp(page, provider, adminEmail, `Test Message Desk ${suffix}`)).status()).toBe(201);
   await page.goto(baseURL);
-  await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
+  await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
 
   await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Receive customer email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(support);

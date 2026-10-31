@@ -306,6 +306,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/billing":                                     {path: "/api/v1/billing", token: admin, status: 200},
 		"POST /api/v1/billing/checkout":                           {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
 		"POST /api/v1/billing/portal":                             {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
+		"POST /api/v1/billing/migration-request":                  {path: "/api/v1/billing/migration-request", body: map[string]any{"freshdesk_address": "contract.freshdesk.com"}, token: admin, status: 200},
 		"POST " + webhookPath:                                     {path: webhookPath, raw: f.webhookBody, status: 200},
 		"POST " + resendWebhookPath:                               {path: resendWebhookPath, raw: string(resendEvent("email.delivered", "Desk <support@contract-all.example.com>", []string{"contact@contract-all.example.com"}, "", time.Now())), status: 200},
 		"GET /api/v1/founding":                                    {path: "/api/v1/founding", status: 200},

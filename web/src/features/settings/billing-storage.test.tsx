@@ -6,18 +6,18 @@ import { BillingPage } from './billing-page';
 const GiB = 1024 ** 3;
 const founding = (used: number): Billing => ({
   plan: 'founding', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2027-10-01T00:00:00Z',
-  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: 'team', checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_refusals: [], migration_requested_at: null, storage_upgrade_plan: 'team', checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 20 * GiB, storage_warn_bytes: 16 * GiB },
   usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: used },
 });
 
 function show(billing: Billing) {
-  render(<BillingPage workspaceName="Birch Desk" billing={billing} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  return render(<BillingPage billing={billing} timezone="UTC" importDone={false} onCheckout={vi.fn()} onManage={vi.fn()} onRequestMigration={vi.fn()} />);
 }
 
 test('a founding workspace sees its attachment usage against the 20 GiB cap', () => {
   show(founding(5 * GiB));
-  expect(screen.getByText('Attachment storage: 5.0 GiB of 20.0 GiB')).toBeInTheDocument();
+  expect(screen.getByText('5 of 20 GiB')).toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
@@ -45,11 +45,11 @@ test('over the cap the page says uploads and imports are refused, mail is still 
 test('at or near the cap the notice names the upgrade the server says is on sale', () => {
   const small = (plan: 'solo' | 'small', limit: number, used: number, upgrade: Billing['storage_upgrade_plan']): Billing => ({ ...founding(used), plan,
     storage_upgrade_plan: upgrade, limits: { agents: plan === 'solo' ? 1 : 3, replies_per_24h: null, storage_bytes: limit, storage_warn_bytes: limit * 0.8 } });
-  const { unmount } = render(<BillingPage workspaceName="Birch Desk" billing={small('solo', 10 * GiB, 10 * GiB, 'small')} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent('Upgrade to the Small plan under Manage billing for a higher limit.');
+  const { unmount } = show(small('solo', 10 * GiB, 10 * GiB, 'small'));
+  expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent('Upgrade to the Small plan in the billing portal for a higher limit.');
   unmount();
-  const next = render(<BillingPage workspaceName="Birch Desk" billing={small('small', 30 * GiB, 24 * GiB, 'team25')} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByRole('status')).toHaveTextContent('To raise the limit, upgrade to Team 25 under Manage billing.');
+  const next = show(small('small', 30 * GiB, 24 * GiB, 'team25'));
+  expect(screen.getByRole('status')).toHaveTextContent('To raise the limit, upgrade to Team 25 in the billing portal.');
   next.unmount();
   show(small('solo', 10 * GiB, 10 * GiB, null));
   expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent('Contact us for more storage.');
@@ -58,7 +58,7 @@ test('at or near the cap the notice names the upgrade the server says is on sale
 test('a trial workspace is warned at 80% of its 2 GiB too', () => {
   show({ ...founding(1.7 * GiB), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
     limits: { agents: 10, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
-  expect(screen.getByText(/Attachment storage: 1\.7 GiB of 2\.0 GiB/)).toBeInTheDocument();
+  expect(screen.getByText(/1\.7 of 2 GiB/)).toBeInTheDocument();
   expect(screen.getByRole('status')).toBeInTheDocument();
 });
 
@@ -71,7 +71,7 @@ const teamPlan = (plan: 'team' | 'team25', used: number): Billing => ({
 
 test('a team workspace sees its usage against the 100 GiB cap and no warning below 80%', () => {
   show(teamPlan('team', 50 * GiB));
-  expect(screen.getByText('Attachment storage: 50.0 GiB of 100.0 GiB')).toBeInTheDocument();
+  expect(screen.getByText('50 of 100 GiB')).toBeInTheDocument();
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
@@ -115,7 +115,7 @@ test('a locked workspace at the cap gets the trial wording too', () => {
 test('usage just under the limit never reads as full', () => {
   show({ ...founding(2147000000), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
     limits: { agents: 10, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
-  expect(screen.getByText('Attachment storage: 1.9 GiB of 2.0 GiB')).toBeInTheDocument();
+  expect(screen.getByText('1.9 of 2 GiB')).toBeInTheDocument();
 });
 
 test('a founding workspace nearing the limit is told its mail is safe and how to remove the limit', () => {
@@ -125,7 +125,7 @@ test('a founding workspace nearing the limit is told its mail is safe and how to
   expect(warning).toHaveTextContent(/20\.0 GiB/);
   expect(warning).toHaveTextContent(/customer email is always kept/i);
   expect(warning).toHaveTextContent(/uploads and new imports stop/i);
-  expect(warning).toHaveTextContent(/upgrade to team under manage billing/i);
+  expect(warning).toHaveTextContent(/upgrade to team in the billing portal/i);
   // A paying workspace is never told to choose a plan.
   expect(warning).not.toHaveTextContent(/choose a plan/i);
 });

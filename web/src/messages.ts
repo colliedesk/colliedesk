@@ -241,7 +241,11 @@ export const messages = {
   channelRemoved: (name: string) => `Replies to this conversation cannot be sent: ${name} was removed.`,
   repliesNotConnected: 'Replies to this conversation are not emailed until you connect your support email.',
   planNotices: 'Plan notices',
-  trialDaysLeft: (days: number) => `Trial: ${days} ${days === 1 ? 'day' : 'days'} left`,
+  // The trial strip: the end as a date (the right day in the agent's timezone), and what it means near the end.
+  trialEnds: (when: string) => `Trial ends ${when}`,
+  trialLocks: 'Then the workspace locks. Nothing is deleted.',
+  trialAskAdmin: 'Ask an admin to choose a plan.',
+  buyPlan: (plan: string) => `Buy ${plan}`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',
   choosePlan: 'Choose a plan',
   storageWarning: (percent: number, used: string, limit: string) =>
@@ -261,7 +265,7 @@ export const messages = {
   buyingFoundingOffer: '$99 every 3 months · up to 10 agents · 30-day money-back guarantee',
   billing: 'Billing',
   plans: { trial: 'Free trial', none: 'Trial ended', solo: 'Solo', small: 'Small', team: 'Team', team25: 'Team 25', founding: 'Founding' },
-  agentsOverPlan: (over: number, plan: string) => `This workspace has ${over === 1 ? '1 agent' : `${over} agents`} more than the ${plan} plan allows. The ${over === 1 ? 'most recently added one' : `${over} most recently added`} cannot work until you deactivate agents in Settings > Team or upgrade under Manage billing.`,
+  agentsOverPlan: (over: number, plan: string) => `This workspace has ${over === 1 ? '1 agent' : `${over} agents`} more than the ${plan} plan allows. The ${over === 1 ? 'most recently added one' : `${over} most recently added`} cannot work until you deactivate agents in Settings > Team or upgrade in the billing portal.`,
   seatPausedTitle: 'Your access is paused',
   seatPausedExplain: (plan: string) => `This workspace's ${plan} plan has more agents than it allows, so the most recently added agents are paused. Nothing was deleted. A workspace admin can deactivate agents or upgrade the plan to let you back in.`,
   linkPlanLimited: 'This workspace has reached the agent limit of its plan, so the link cannot add you yet. Ask a workspace admin to upgrade, then use this link again before it expires, or ask for a new link.',

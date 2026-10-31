@@ -133,18 +133,24 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		var usage domain.BillingUsage
 		var trialEndsAt time.Time
 		var storedBytes int64
+		var migrationRequestedAt *time.Time
 		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
 			(`+pendingSeatEmails+`),
 			(SELECT trial_ends_at FROM workspaces WHERE id=$1),
 			(`+ownStorageBytes+`),
-			(`+storedStorageBytes+`)`,
+			(`+storedStorageBytes+`),
+			(SELECT max(requested_at) FROM workspace_migration_requests WHERE workspace_id=$1)`,
 			workspaceID, now).
-			Scan(&usage.Agents, &usage.PendingInvites, &trialEndsAt, &usage.StorageBytes, &storedBytes)
+			Scan(&usage.Agents, &usage.PendingInvites, &trialEndsAt, &usage.StorageBytes, &storedBytes, &migrationRequestedAt)
 		if err != nil {
 			return domain.Billing{}, err
 		}
 		billing := domain.NewBilling(subscriptions, trialEndsAt, usage, now)
+		if migrationRequestedAt != nil {
+			asked := migrationRequestedAt.UTC()
+			billing.MigrationRequestedAt = &asked
+		}
 		if domain.StorageCountsImports(billing.Plan) {
 			billing.Usage.StorageBytes = storedBytes
 			billing.Limits = domain.LimitsForStorage(billing.Plan, s.accessStorageCap(domain.NewAccess(subscriptions, trialEndsAt, now)))

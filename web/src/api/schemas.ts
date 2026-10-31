@@ -52,10 +52,13 @@ export const billingSchema = z.object({
   complimentary: z.boolean(), complimentary_until: nullableDate, checkout_plans: z.array(checkoutPlanSchema),
   checkout_refusals: z.array(z.object({ plan: checkoutPlanSchema, reason: z.string() })),
   storage_upgrade_plan: z.enum(['solo', 'small', 'team', 'team25', 'founding']).nullable(),
+  migration_requested_at: nullableDate,
   limits: z.object({ agents: z.number().int(), replies_per_24h: z.number().int().nullable(), storage_bytes: z.number().int().nullable(), storage_warn_bytes: z.number().int().nullable() }),
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int(), storage_bytes: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
 export const exportLinkSchema = z.object({ url: z.string().min(1), expires_in_seconds: z.number().int() }) satisfies z.ZodType<Generated<'ExportLink'>>;
+export const migrationRequestSchema = z.object({ freshdesk_address: z.string(), times: z.string(), requested_at: z.string().datetime() }) satisfies z.ZodType<Generated<'MigrationRequest'>>;
+export const foundingSlotsSchema = z.object({ slots: z.number().int(), taken: z.number().int().nullable(), open: z.boolean() }) satisfies z.ZodType<Generated<'FoundingSlots'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
 export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
@@ -221,7 +224,7 @@ export const meSchema = z.object({
   setup_guide_hidden: z.boolean().catch(false),
   // An older server offers no AI feature.
   ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
-  plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
+  plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean(), admins: z.array(z.string()).optional() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
 // The raw token is in this answer only; the client keeps it in no cache. A repeat of the same press (200)
