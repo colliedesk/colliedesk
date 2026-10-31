@@ -123,7 +123,7 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
 		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired,
 		channels.NoticeReopenNotFound: merged.Notices.ReopenNotFound, channels.NoticeReopenLegacy: merged.Notices.ReopenLegacy,
-		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted} {
+		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted, channels.NoticeHelp: merged.Notices.Help} {
 		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
 				Message: "Check the channel settings."}
@@ -131,8 +131,8 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	}
 	for key, command := range merged.Commands {
 		if command.Action != "" && command.Action != channels.ActionOpen && command.Action != channels.ActionCancel && command.Action != channels.ActionReopen &&
-			command.Action != channels.ActionConfirm {
-			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".action": "Use open, cancel, reopen or confirm."},
+			command.Action != channels.ActionConfirm && command.Action != channels.ActionHelp {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".action": "Use open, cancel, reopen, confirm or help."},
 				Message: "Check the channel settings."}
 		}
 		if placeholder := channels.UnknownPlaceholder(channels.NoticeAskDescription, command.AskDescription); placeholder != "" {

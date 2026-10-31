@@ -95,6 +95,9 @@ const (
 	// ActionConfirm sends what the customer is writing now, where a scope asks before it opens
 	// (Gather.ConfirmSeconds); with nothing being written it is an ordinary message.
 	ActionConfirm = "confirm"
+	// ActionHelp answers with the channel's guide (Notices.Help): it opens nothing and is no part of a
+	// request being written.
+	ActionHelp = "help"
 )
 
 // Command matches.
@@ -141,6 +144,8 @@ const (
 	// closed, it opened again; still open or pending, it took the message.
 	NoticeReopened    = "reopened"
 	NoticeReopenNoted = "reopen_noted"
+	// NoticeHelp answers a help command with the channel's guide.
+	NoticeHelp = "help"
 )
 
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
@@ -163,6 +168,8 @@ type Notices struct {
 	ReopenLegacy   string `json:"reopen_legacy,omitempty"`
 	Reopened       string `json:"reopened,omitempty"`
 	ReopenNoted    string `json:"reopen_noted,omitempty"`
+	// Help answers a help command (NoticeHelp).
+	Help string `json:"help,omitempty"`
 }
 
 // DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
@@ -173,7 +180,7 @@ const DefaultUnmatchedEverySeconds = 300
 // sends the notice. A placeholder of no list is refused when the settings are saved.
 var NoticePlaceholders = map[string][]string{NoticeReceived: {"ref"}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
 	NoticeAskDescription: {}, NoticeExpired: {}, NoticeReopenNotFound: {"ref"}, NoticeReopenLegacy: {"ref", "old_ref"},
-	NoticeReopened: {"ref"}, NoticeReopenNoted: {"ref"}}
+	NoticeReopened: {"ref"}, NoticeReopenNoted: {"ref"}, NoticeHelp: {}}
 
 // noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
 var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)

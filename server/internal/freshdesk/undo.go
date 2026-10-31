@@ -54,6 +54,7 @@ const targetExists = `CASE i.entity
 	WHEN 'inline_image' THEN EXISTS(SELECT 1 FROM attachments x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'time_entry' THEN EXISTS(SELECT 1 FROM time_entries x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'contact' THEN EXISTS(SELECT 1 FROM contacts x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'identity' THEN EXISTS(SELECT 1 FROM contact_identities x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'tag' THEN EXISTS(SELECT 1 FROM tags x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'saved_reply' THEN EXISTS(SELECT 1 FROM saved_replies x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'kb_category' THEN EXISTS(SELECT 1 FROM kb_collections x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
@@ -64,7 +65,7 @@ const targetExists = `CASE i.entity
 	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
 
-// Undo removes what one import (Freshdesk or Help Scout: both write the same ledger entities, a
+// Undo removes what one import (Freshdesk, Help Scout or a bundle: all write the same ledger entities, a
 // Help Scout thread being "thread") created in a workspace: its conversations
 // (with their messages, attachments and time entries), and the contacts and
 // tags it created that nothing else uses. A conversation that gained a
@@ -145,7 +146,7 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 }
 
 func undoSource(ctx context.Context, tx pgx.Tx, workspaceID, requested string) (string, error) {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT source FROM import_items WHERE workspace_id=$1 AND (source LIKE 'freshdesk:%' OR source LIKE 'helpscout:%') ORDER BY 1`, workspaceID)
+	rows, err := tx.Query(ctx, `SELECT DISTINCT source FROM import_items WHERE workspace_id=$1 AND (source LIKE 'freshdesk:%' OR source LIKE 'helpscout:%' OR source LIKE 'bundle:%') ORDER BY 1`, workspaceID)
 	if err != nil {
 		return "", fmt.Errorf("list imports: %w", err)
 	}
@@ -198,6 +199,11 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	}{
 		{&result.Conversations, `DELETE FROM conversations c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket'
 			AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND i.source_id <> ALL($3)`, []any{workspaceID, source, result.KeptConversationTickets}},
+		// A bundle's identities it added to a contact that stays (one known before, or kept) go too, unless
+		// a conversation that stays came through them.
+		{new(int), `DELETE FROM contact_identities x USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='identity'
+			AND (i.meta->>'created')::boolean AND x.workspace_id=i.workspace_id AND x.id=i.target_id
+			AND NOT EXISTS (SELECT 1 FROM conversations v WHERE v.workspace_id=x.workspace_id AND v.contact_id=x.contact_id AND v.channel_id=x.channel_id)`, []any{workspaceID, source}},
 		{&result.Contacts, `DELETE FROM contacts c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='contact'
 			AND (i.meta->>'created')::boolean AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND c.merged_into_id IS NULL
 			AND NOT EXISTS (SELECT 1 FROM conversations v WHERE v.workspace_id=c.workspace_id AND v.contact_id=c.id)`, []any{workspaceID, source}},
