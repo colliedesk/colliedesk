@@ -181,13 +181,16 @@ func RenderNotice(text string, values map[string]string) string {
 
 // Settings are a channel's rules for what arrives and what leaves. They never hold a secret.
 type Settings struct {
-	JoinPolicy        JoinPolicy         `json:"join_policy"`
-	DefaultTags       []string           `json:"default_tags,omitempty"`
-	DefaultPriority   string             `json:"default_priority,omitempty"`
-	DefaultAssigneeID string             `json:"default_assignee_id,omitempty"`
-	RateLimits        RateLimits         `json:"rate_limits"`
-	Commands          map[string]Command `json:"commands,omitempty"`
-	Notices           Notices            `json:"notices,omitempty"`
+	JoinPolicy        JoinPolicy `json:"join_policy"`
+	DefaultTags       []string   `json:"default_tags,omitempty"`
+	DefaultPriority   string     `json:"default_priority,omitempty"`
+	DefaultAssigneeID string     `json:"default_assignee_id,omitempty"`
+	// NumberSeries is the series of the workspace the conversations it opens are numbered in (empty: the
+	// default one, "#n").
+	NumberSeries string             `json:"number_series,omitempty"`
+	RateLimits   RateLimits         `json:"rate_limits"`
+	Commands     map[string]Command `json:"commands,omitempty"`
+	Notices      Notices            `json:"notices,omitempty"`
 	// Review holds a collected message that named no command for a person to decide (hold_reason review).
 	Review bool `json:"review,omitempty"`
 	// Scopes change these rules for one kind of conversation of the type (a chat's one-to-one messages

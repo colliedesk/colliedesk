@@ -1030,9 +1030,13 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 		scope = in.Scope
 	}
 	var conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id)
-		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid)) RETURNING id::text`,
-		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID).Scan(&conversationID); err != nil {
+	series := settings.NumberSeries
+	if series == "" {
+		series = DefaultNumberSeries
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series)
+		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10) RETURNING id::text`,
+		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {

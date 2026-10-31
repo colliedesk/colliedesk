@@ -102,6 +102,12 @@ func conversationFilterFromQuery(query url.Values, channels []string) (store.Con
 	if filter.Sort, err = one("sort", conversationSorts...); err != nil {
 		return filter, err
 	}
+	if ref := strings.TrimSpace(query.Get("ref")); ref != "" {
+		if len(ref) > 60 {
+			return filter, filterError("ref is a conversation's code, 60 characters at most.")
+		}
+		filter.Ref = ref
+	}
 	if contact := strings.ToLower(query.Get("contact")); contact != "" {
 		if !contactIDPattern.MatchString(contact) {
 			return filter, filterError("contact must be a contact id.")

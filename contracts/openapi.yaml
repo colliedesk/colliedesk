@@ -1323,6 +1323,13 @@ paths:
           in: query
           description: 'any (default): a conversation with one of the tags. all: with every tag.'
           schema: {type: string, enum: [any, all], default: any}
+        - name: ref
+          in: query
+          description: >-
+            The conversation with this code (`display_ref`), as a person types it: another case, surrounding
+            spaces or more or fewer leading zeros match; a code naming another year does not. A code of no
+            series of the workspace returns no rows.
+          schema: {type: string, maxLength: 60, example: '#12'}
         - name: contact
           in: query
           description: >-
@@ -3391,6 +3398,60 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/NameNotAllowed'}
+  /api/v1/conversation-number-series:
+    get:
+      operationId: listConversationNumberSeries
+      x-permission: conversations:read
+      description: >
+        The series the workspace's conversations are numbered in, the default one ("#{n}") first: each
+        with its code format, the number the next conversation takes, and where this server took it over.
+      responses:
+        '200':
+          description: The series
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ConversationNumberSeries'}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/conversation-number-series/{series}:
+    parameters:
+      - {name: series, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_-]{0,19}$'}}
+    put:
+      operationId: setConversationNumberSeries
+      x-permission: access:write
+      description: >
+        Add a series, or change its format, next number or start. A channel numbers the conversations it
+        opens in the series its settings name (number_series). The next number only counts on: never below
+        what it was, nor below a number the series gave. A code below start (in start_year or before) that is
+        not here belongs to the system the series was taken over from. A new series needs its format: letters,
+        digits, # - _ / . and {n} once, {n:04} to pad (2 to 8 digits), {yyyy} for the year it was opened in
+        the workspace's timezone. Changing the format changes the codes of conversations opened afterwards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                format: {type: string, minLength: 3, maxLength: 40}
+                next: {type: integer, minimum: 1}
+                start: {type: integer, minimum: 1}
+                start_year: {type: integer, minimum: 1970, maximum: 9999}
+      responses:
+        '200':
+          description: The series
+          content: {application/json: {schema: {$ref: '#/components/schemas/ConversationNumberSeries'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/workspace/slug:
     patch:
       operationId: updateWorkspaceSlug
@@ -10565,6 +10626,16 @@ components:
         required: {type: number}
         passes: {type: boolean}
         suggestion: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Null when it passes: else the nearest color for field that passes every pair of that field.'}
+    ConversationNumberSeries:
+      type: object
+      required: [series, format, next, start, start_year, updated_at]
+      properties:
+        series: {type: string}
+        format: {type: string, example: '#{n}'}
+        next: {type: integer, minimum: 1, description: The number the next conversation of the series takes.}
+        start: {type: integer, minimum: 1}
+        start_year: {type: [integer, 'null']}
+        updated_at: {type: string, format: date-time}
     SavedReplyText:
       type: object
       required: [title, body, updated_at]
@@ -10577,6 +10648,9 @@ components:
       required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at, latest_reply_number]
       properties:
         latest_reply_number: {type: integer, minimum: 0, description: 'The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply.'}
+        number: {type: integer, minimum: 1, description: 'Its number in number_series, which counts on and never restarts.'}
+        number_series: {type: string, description: 'The series it is numbered in: default, or the one its channel names (settings.number_series).'}
+        display_ref: {type: string, description: 'The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=.'}
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
         contact_name: {type: string}
@@ -11386,7 +11460,7 @@ components:
       type: object
       description: >-
         The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days
-        (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits`
+        (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits`
         {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
         {action: open, cancel, reopen or confirm; match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
