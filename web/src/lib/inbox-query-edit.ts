@@ -20,7 +20,8 @@ export function filtersOf(query: InboxQuery): ConversationFilters {
   const status = query.status ?? defaultStatus;
   if (status !== allStatuses) filters.status = split(status);
   for (const key of listKeys) if (key !== 'status' && query[key]) filters[key] = split(query[key]);
-  for (const key of textKeys) if (query[key] && key !== 'result') filters[key] = query[key];
+  // A result's snapshot and a conversation's code name rows, not a view: neither is saved.
+  for (const key of textKeys) if (query[key] && key !== 'result' && key !== 'ref') filters[key] = query[key];
   for (const key of flagKeys) if (query[key] !== undefined) filters[key] = query[key];
   return filters as ConversationFilters;
 }
@@ -34,7 +35,7 @@ export function queryOf(filters: ConversationFilters): InboxQuery {
   }
   if (!query.status) query.status = allStatuses;
   for (const key of textKeys) {
-    const value = key === 'result' ? undefined : filters[key];
+    const value = key === 'result' || key === 'ref' ? undefined : filters[key];
     if (value) query[key] = value;
   }
   for (const key of flagKeys) {

@@ -74,6 +74,7 @@ export const messages = {
   webFormNav: 'Web form',
   helpChatNav: 'Help chat',
   zaloNav: 'Zalo OA',
+  conversationNumbers: 'Conversation numbers',
   connectAIAgent: 'Connect an AI agent',
   mcpURL: 'https://colliedesk.com/docs/mcp',
   conversationList: 'Conversation list',
@@ -142,6 +143,10 @@ export const messages = {
   useOtherTabDraft: 'Use it',
   keepMyDraft: 'Keep mine',
   replyMode: 'Reply',
+  copyReference: (ref: string) => `Copy reference ${ref}`,
+  // CopyButton's words, shared by every page that copies (features/settings/copy-button.tsx).
+  copyDone: 'Copied',
+  copyFailed: 'Could not copy. Select the text and copy it yourself.',
   incoming: 'Incoming',
   noteMode: 'Private note',
   attachments: 'Attachments',

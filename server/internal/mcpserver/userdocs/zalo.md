@@ -27,6 +27,9 @@ The channel's page then has four tabs of its own, before AI and History:
    takes the access and the refresh token together and saves the refresh token first: if only it got in,
    the dialog asks for the access token alone. The tokens show no last four characters, since they
    change each time they are renewed.
+   **References** picks the [number series](inbox.md#conversation-numbers) the OA's conversations are
+   numbered in and shows the code the next one gets (`CHD-2026-0143`); the series themselves are changed in
+   Settings → Conversation numbers.
 2. **Groups**: every group that wrote to the OA (and every group linked before it did). **Link…** files the
    group under an organization, written as your contacts' organization is: a conversation of that group
    then names it. **Unlink** stops that for new conversations; earlier ones keep their organization.
@@ -35,7 +38,9 @@ The channel's page then has four tabs of its own, before AI and History:
    Zalo user id; **Remove** asks first, then their new messages count as a customer's.
 4. **Messages**: the **Commands** a customer can type (Open a request, Cancel, Reopen), each with its
    phrases and how they match (Allow one typo, Whole words, Exact; a command with no phrase is off), and
-   **What the OA says**: the notice sent when a conversation opens, and the reply to a one-to-one message
+   **What the OA says**: the notice sent when a conversation opens (`{ref}` becomes its code), what Reopen
+   answers for a code it cannot find (`{ref}`: the code typed) and for a code from before Colliedesk
+   (`{old_ref}`, `{ref}`), and the reply to a one-to-one message
    that is not a request (sent only where one-to-one messages open a conversation on a command, and only
    when **Answer such a message with this reply** is on). The OA's own messages are not your team's first
    reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")

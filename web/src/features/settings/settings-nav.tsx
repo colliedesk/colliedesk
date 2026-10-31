@@ -7,7 +7,7 @@ import { autofixPreviewOn } from '../autofix/autofix-preview';
 
 export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels'
   | '/settings/channels/type/email' | '/settings/channels/type/web_form' | '/settings/channels/type/help_chat'
-  | '/settings/channels/type/zalo';
+  | '/settings/channels/type/zalo' | '/settings/numbers';
 // sub: the pages under an item, listed below it (Channels: one per channel type).
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean; sub?: NavItem[] }
 interface NavGroup { label: string; items: NavItem[] }
@@ -55,6 +55,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
         { label: messages.helpChatNav, to: '/settings/channels/type/help_chat' as const, current: page === '/settings/channels/type/help_chat' },
         { label: messages.zaloNav, to: '/settings/channels/type/zalo' as const, current: page === '/settings/channels/type/zalo' },
       ] }] : []),
+      ...(shown.channels ? [{ label: messages.conversationNumbers, to: '/settings/numbers' as const, current: page === '/settings/numbers' }] : []),
       ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
       ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
       ...section(messages.exportHeading, 'export-heading', shown.exportData),

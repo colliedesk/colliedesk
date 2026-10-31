@@ -6,7 +6,7 @@ import { conversationSortSchema, knownChannels, prioritySchema, statusSchema } f
 // number of the results page counts) is never saved in a view: its snapshot is replaced.
 
 export const listKeys = ['status', 'priority', 'assignee', 'tag', 'channel', 'channel_id'] as const;
-export const textKeys = ['tag_match', 'contact', 'organization', 'awaiting', 'source', 'created_after', 'created_before', 'updated_after', 'updated_before', 'sort', 'search', 'result'] as const;
+export const textKeys = ['tag_match', 'contact', 'organization', 'ref', 'awaiting', 'source', 'created_after', 'created_before', 'updated_after', 'updated_before', 'sort', 'search', 'result'] as const;
 export const flagKeys = ['has_pending_draft', 'delivery_failed'] as const;
 
 type ListKey = (typeof listKeys)[number];
@@ -40,6 +40,8 @@ function known(key: InboxQueryKey, item: string): boolean {
   if (key === 'assignee') return uuid.test(item) || ['me', 'unassigned', 'anyone'].includes(item);
   if (/_(after|before)$/.test(key)) return instant.test(item) && !Number.isNaN(Date.parse(item));
   if (key === 'result') return resultPattern.test(item);
+  // A conversation's code, as a person types it; the server reads it.
+  if (key === 'ref') return item.length > 0 && item.length <= 60;
   const allowed = words[key];
   return !allowed || allowed.includes(item);
 }
@@ -53,12 +55,14 @@ export function inboxQueryFromSearch(search: Record<string, unknown>): InboxQuer
       if (value === true || value === 'true') query[key] = true;
       else if (value === false || value === 'false') query[key] = false;
     } else if ((isList(key) || isText(key)) && (typeof value === 'string' || typeof value === 'number')) {
-      const text = String(value);
+      const text = key === 'ref' ? String(value).trim() : String(value);
       const kept = key === 'status' && text === allStatuses ? text
         : isList(key) ? text.split(',').filter((item) => known(key, item)).join(',') : known(key, text) ? text : '';
       if (kept) query[key] = kept;
     }
   }
+  // A code names one conversation, whatever its status.
+  if (query.ref && query.status === undefined) query.status = allStatuses;
   return query;
 }
 

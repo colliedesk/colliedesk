@@ -243,3 +243,14 @@ test('without an email channel the get-started guide offers no test message', ()
   render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} />);
   expect(screen.queryByRole('button', { name: 'Send yourself a test message' })).not.toBeInTheDocument();
 });
+
+test('a conversation numbered in a series of its own shows its code first; one of the default series shows none', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const zalo = { ...row('2026-10-15T09:05:00Z'), id: '33333333-3333-4333-8333-333333333333', number: 142, number_series: 'chd', display_ref: 'CHD-2026-0142' };
+  const email = { ...row('2026-10-15T09:00:00Z'), number: 12, number_series: 'default', display_ref: '#12' };
+  render(<ConversationList items={[zalo, email]} timezone="UTC" page={1} hasNextPage={false} />);
+  const code = screen.getByText('CHD-2026-0142');
+  expect(code).toHaveClass('conv-ref');
+  expect(code.parentElement?.firstElementChild).toBe(code);
+  expect(screen.queryByText('#12')).toBeNull();
+});

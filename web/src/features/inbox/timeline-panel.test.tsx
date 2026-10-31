@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, expect, test, vi } from 'vitest';
-import type { Message } from '../../api/schemas';
+import type { Conversation, Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
@@ -194,4 +194,16 @@ test('a help chat conversation says its sender is unverified and links the chat 
 test('another conversation shows neither', () => {
   render(<TimelinePanel conversation={thread} items={[]} timezone="UTC" />);
   expect(screen.queryByText('Unverified sender (Help chat)')).not.toBeInTheDocument();
+});
+
+test('the header shows a numbered conversation\'s code with a way to copy it; the default series shows none', () => {
+  const conversation = (series: string, ref: string) => ({ id: base.conversation_id, subject: 'Máy in', status: 'open', priority: 'normal', contact_id: '88888888-8888-4888-8888-888888888888',
+    contact_name: 'Nguyễn Văn A', tags: [], channel: 'zalo', number: 142, number_series: series, display_ref: ref }) as unknown as Conversation;
+  const { unmount } = render(<TimelinePanel conversation={conversation('chd', 'CHD-2026-0142')} items={[]} timezone="UTC" />);
+  expect(screen.getByText('CHD-2026-0142')).toHaveClass('conv-ref');
+  expect(screen.getByRole('button', { name: 'Copy reference CHD-2026-0142' })).toBeInTheDocument();
+  unmount();
+  render(<TimelinePanel conversation={conversation('default', '#12')} items={[]} timezone="UTC" />);
+  expect(screen.queryByText('#12')).toBeNull();
+  expect(screen.queryByRole('button', { name: /Copy reference/ })).toBeNull();
 });

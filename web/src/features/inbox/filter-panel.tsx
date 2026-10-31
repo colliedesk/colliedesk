@@ -231,6 +231,7 @@ export function FilterChips(props: FilterPartProps) {
     ...listOf(query, 'channel_id').map((value) => ({ key: 'channel_id' as const, value, label: `${text.channel}: ${channelName(value)}` })),
     ...(query.source === 'imported' || query.source === 'native' ? [{ key: 'source' as const, label: `${text.source}: ${text.sources[query.source]}` }] : []),
     ...(query.organization ? [{ key: 'organization' as const, label: `${text.organization}: ${query.organization}` }] : []),
+    ...(query.ref ? [{ key: 'ref' as const, label: `${text.reference}: ${query.ref}` }] : []),
     ...(query.result ? [{ key: 'result' as const, label: resultLabel(query.result, results.data, timezone) }] : []),
     ...dateFilters.flatMap(([name, after, before]) => (query[after] || query[before]
       ? [{ key: after, label: `${text[name]}: ${text.dateRange(query[after] ? zonedDay(query[after], timezone) : undefined, query[before] ? lastDay(query[before], timezone) : undefined)}` }]

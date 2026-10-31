@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ConflictError, InvalidRequestError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
+import { codeOf, numberSeriesApi, yearIn } from '../../api/number-series';
 import type { ChannelDetail, ChatSender, ChatThread, ZaloConfig } from '../../api/channels';
 import { CopyButton } from '../../features/settings/copy-button';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
@@ -153,6 +154,7 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
       </div>
       {done && <p className="notice notice-plain" role="status" tabIndex={-1} ref={doneNote}><span>{done}</span></p>}
     </section>
+    <References channel={channel} canManage={canManage} timezone={timezone} />
     <section className="zl-block" aria-labelledby={`${channel.id}-processing`}><h3 id={`${channel.id}-processing`}>{m.processing}</h3>
       <p className="zl-state">{channel.processing_paused_at ? m.pausedSince(formatDate(channel.processing_paused_at, timezone), channel.paused_count) : m.running}</p>
       <p className="muted-copy">{m.processingHelp}</p>
@@ -161,6 +163,40 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
     {editing && editing !== 'tokens' && <SecretDialog channel={channel} name={editing} hint={credential(editing)?.hint ?? null} replace={Boolean(credential(editing)?.set_at)}
       onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); setDone(m.secretSaved(m.secretLabel[editing])); }} />}
   </div>;
+}
+
+// References: the number series the channel numbers what it opens in, and the code the next one gets.
+// The series themselves are the workspace's (Settings → Conversation numbers).
+function References({ channel, canManage, timezone }: ChannelPanelProps) {
+  const series = useQuery({ queryKey: ['number-series'], queryFn: numberSeriesApi.list });
+  const current = text(record(channel.effective_settings).number_series) || 'default';
+  const [chosen, setChosen] = useState(current);
+  useEffect(() => setChosen(current), [current]);
+  const reload = useReload(channel.id);
+  const save = useMutation({
+    mutationFn: () => channelsApi.update(channel.id, { settings: { ...record(channel.settings), number_series: chosen } }),
+    onSuccess: () => reload(),
+  });
+  const feedback = useSaveFeedback(saveState(save));
+  const id = useId();
+  const items = series.data?.items ?? [];
+  const picked = items.find((item) => item.series === chosen);
+  const label = (name: string) => (name === 'default' ? m.defaultSeries : name);
+  const next = picked ? codeOf(picked.format, picked.next, yearIn(timezone)) : undefined;
+  return <section className="zl-block" aria-labelledby={`${id}-refs`}><h3 id={`${id}-refs`}>{m.references}</h3>
+    <p className="lead">{m.referencesLead}</p>
+    {series.isError ? <p role="alert" className="error-copy">{m.seriesFailed} <button type="button" className="link-action" onClick={() => void series.refetch()}>{m.tryAgain}</button></p>
+      : canManage ? <form className="zl-series" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending && chosen !== current) save.mutate(); }}>
+          <Field id={`${id}-series`} label={m.series} error={fieldErrors(save.error)['settings.number_series']} help={next ? m.nextReference(next) : undefined}>
+            {(props) => <select {...props} value={chosen} disabled={series.isPending} onChange={(event) => { feedback.touch(); setChosen(event.target.value); }}>
+              {(items.some((item) => item.series === current) ? items : [...items, { series: current, format: '' }]).map((item) =>
+                <option key={item.series} value={item.series}>{item.format ? `${label(item.series)} (${item.format})` : label(item.series)}</option>)}
+            </select>}</Field>
+          <span className="button-row"><button type="submit" disabled={feedback.pending || chosen === current}>{feedback.saveLabel(m.saveSeries)}</button>{feedback.status}</span>
+        </form>
+      : <dl className="zl-dl"><dt>{m.series}</dt><dd>{label(current)}{next ? <> · <span className="mono">{m.nextReference(next)}</span></> : null}</dd></dl>}
+    <p className="muted-copy"><a href="/settings/numbers">{m.manageSeries}</a></p>
+  </section>;
 }
 
 function SecretDialog({ channel, name, hint, replace, onClose, onSaved }: { channel: ChannelDetail; name: 'app_secret' | 'oa_secret_key'; hint: string | null; replace: boolean; onClose: () => void; onSaved: () => void }) {
@@ -404,7 +440,7 @@ const confirmLimit = 3600;
 const expireLimit = 1440;
 const seconds = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN);
 
-function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
+function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandAction, Draft>; received: string; unmatched: string; askConfirm: string; cancelled: string; expired: string; reopenNotFound: string; reopenLegacy: string; answer?: boolean; confirm?: Confirm; expireSeconds?: number }) {
   const stored = record(channel.settings);
   const effective = record(channel.effective_settings);
   const commands = { ...(record(effective.commands) as Record<string, Command>) };
@@ -417,7 +453,8 @@ function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandA
     }
   }
   const next: Record<string, unknown> = { ...stored, commands, notices: { ...record(effective.notices), received: edits.received.trim(), unmatched: edits.unmatched.trim(),
-    ask_confirm: edits.askConfirm.trim(), cancelled: edits.cancelled.trim(), expired: edits.expired.trim() } };
+    ask_confirm: edits.askConfirm.trim(), cancelled: edits.cancelled.trim(), expired: edits.expired.trim(),
+    reopen_not_found: edits.reopenNotFound.trim(), reopen_legacy: edits.reopenLegacy.trim() } };
   if (edits.answer !== undefined || edits.confirm) {
     const direct = { ...record(record(effective.scopes).direct) };
     if (edits.answer !== undefined) direct.unmatched = edits.answer ? 'notice' : 'join_open';
@@ -463,11 +500,13 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const [expire, setExpire] = useState(String(Math.round(directExpire / 60)));
   const [expireTouched, setExpireTouched] = useState(false);
   const [expired, setExpired] = useState(text(notices.expired));
+  const [reopenNotFound, setReopenNotFound] = useState(text(notices.reopen_not_found));
+  const [reopenLegacy, setReopenLegacy] = useState(text(notices.reopen_legacy));
   const [confirmTouched, setConfirmTouched] = useState(false);
   const [checked, setChecked] = useState(false);
   const reload = useReload(channel.id);
   const save = useMutation({
-    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired,
+    mutationFn: () => channelsApi.update(channel.id, { settings: nextSettings(channel, { commands, received, unmatched, askConfirm, cancelled, expired, reopenNotFound, reopenLegacy,
       answer: onCommands && answer !== (direct.unmatched === 'notice') ? answer : undefined, confirm: confirmTouched ? confirm : undefined,
       expireSeconds: expireTouched ? seconds(expire) * 60 : undefined }) }),
     onSuccess: () => reload(),
@@ -500,6 +539,8 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         {actions.map((action) => <ReadOnly key={action} label={m.action[action]} value={commands[action].phrases.length ? `${commands[action].phrases.join(' · ')} (${m.match[commands[action].match]})` : m.noPhrase} />)}
         <ReadOnly label={m.received} value={received || m.none} />
         <ReadOnly label={m.unmatched} value={unmatched || m.none} />
+        <ReadOnly label={m.reopenNotFound} value={reopenNotFound || m.none} />
+        <ReadOnly label={m.reopenLegacy} value={reopenLegacy || m.none} />
         <ReadOnly label={m.confirmHeading} value={confirm.on ? m.confirmSentence(seconds(confirm.quiet), seconds(confirm.wait)) : m.confirmOff} />
         <ReadOnly label={m.question} value={askConfirm || m.none} />
         <ReadOnly label={m.cancelled} value={cancelled || m.none} />
@@ -526,11 +567,15 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </section>
     <section className="zl-block" aria-labelledby={`${id}-ntc`}><h3 id={`${id}-ntc`}>{m.notices}</h3>
       <p className="lead">{m.noticesLead}</p>
-      <Field id={`${id}-rcv`} label={m.received} error={server['settings.notices.received']} help={`${m.unmatchedHint} ${m.count(received.length, noticeMax)}`}>
+      <Field id={`${id}-rcv`} label={m.received} error={server['settings.notices.received']} help={`${m.receivedHint} ${m.unmatchedHint} ${m.count(received.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={received} onChange={(event) => { feedback.touch(); setReceived(event.target.value); }} />}</Field>
       <Field id={`${id}-unm`} label={m.unmatched} error={server['settings.notices.unmatched'] ?? server['settings.scopes.direct.unmatched']}
         help={`${onCommands ? m.unmatchedHint : m.unmatchedAllOpen} ${m.count(unmatched.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</Field>
+      <Field id={`${id}-rnf`} label={m.reopenNotFound} error={server['settings.notices.reopen_not_found']} help={`${m.reopenNotFoundHint} ${m.unmatchedHint} ${m.count(reopenNotFound.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenNotFound} onChange={(event) => { feedback.touch(); setReopenNotFound(event.target.value); }} />}</Field>
+      <Field id={`${id}-rlg`} label={m.reopenLegacy} error={server['settings.notices.reopen_legacy']} help={`${m.reopenLegacyHint} ${m.count(reopenLegacy.length, noticeMax)}`}>
+        {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={reopenLegacy} onChange={(event) => { feedback.touch(); setReopenLegacy(event.target.value); }} />}</Field>
       {onCommands && <label className="field-inline"><input type="checkbox" checked={answer} onChange={(event) => { feedback.touch(); setAnswer(event.target.checked); }} /><span>{m.unmatchedOn}</span></label>}
       <Field id={`${id}-cnl`} label={m.cancelled} error={server['settings.notices.cancelled']} help={`${m.unmatchedHint} ${m.count(cancelled.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>

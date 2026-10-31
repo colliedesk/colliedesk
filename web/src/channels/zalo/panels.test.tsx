@@ -12,10 +12,12 @@ const mocks = vi.hoisted(() => {
   }
   class ConflictError extends InvalidRequestError {}
   const channelsApi = { setCredential: vi.fn(), threads: vi.fn(), senders: vi.fn(), update: vi.fn() };
-  return { channelsApi, InvalidRequestError, ConflictError };
+  const numberSeriesApi = { list: vi.fn(), set: vi.fn() };
+  return { channelsApi, numberSeriesApi, InvalidRequestError, ConflictError };
 });
 vi.mock('../../api/client', () => ({ InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError }));
 vi.mock('../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
+vi.mock('../../api/number-series', async (actual) => ({ ...(await actual<typeof import('../../api/number-series')>()), numberSeriesApi: mocks.numberSeriesApi }));
 const { channelsApi } = mocks;
 const { Connect, Tabs } = await import('./panels');
 
@@ -47,6 +49,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   channelsApi.threads.mockResolvedValue({ items: [], next_cursor: null });
   channelsApi.senders.mockResolvedValue({ items: [] });
+  mocks.numberSeriesApi.list.mockResolvedValue({ items: [
+    { series: 'default', format: '#{n}', next: 13, start: 1, start_year: null, updated_at: '2026-10-31T00:00:00Z' },
+    { series: 'chd', format: 'CHD-{yyyy}-{n:04}', next: 143, start: 142, start_year: 2026, updated_at: '2026-10-31T00:00:00Z' },
+  ] });
   channelsApi.update.mockResolvedValue(channel());
   channelsApi.setCredential.mockResolvedValue({ name: 'x', hint: 'abcd' });
 });
@@ -262,7 +268,7 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
     commands: { open: { action: 'open', match: 'exact', phrases: ['tạo phiếu'], tags: ['zalo'] }, cancel: { action: 'cancel', match: 'fuzzy', phrases: ['hủy'] } },
-    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '' },
+    notices: { received: 'Đã nhận.', unmatched: 'Gõ “tạo phiếu” để tạo yêu cầu.', ask_confirm: '', cancelled: '', expired: '', reopen_not_found: '', reopen_legacy: '' },
     scopes: { direct: { mode: 'commands', unmatched: 'notice' } },
   } });
 });
@@ -396,4 +402,26 @@ test('an agent reads the channel and changes nothing', async () => {
 test('once the tokens are set, Connection no longer says what to do first', () => {
   view(<Tabs.connection channel={channel({ credentials: credentials({ app_secret: 'a1f9', oa_secret_key: '7c20', access_token: 'aaaa', refresh_token: 'rrrr' }) })} canManage timezone="UTC" />);
   expect(screen.queryByText(/Paste this webhook URL/)).toBeNull();
+});
+
+test('references: the channel picks its number series, sees the next code, and saves it into its settings whole', async () => {
+  const year = Number(new Intl.DateTimeFormat('en', { timeZone: 'UTC', year: 'numeric' }).format(new Date()));
+  view(<Tabs.connection channel={channel({}, { settings: { join_policy: { kind: 'never' } }, effective_settings: { number_series: 'default' } })} canManage timezone="UTC" />);
+  const select = await screen.findByLabelText('Number series');
+  await waitFor(() => expect(select).toHaveAccessibleDescription('Next reference: #13'));
+  fireEvent.change(select, { target: { value: 'chd' } });
+  expect(select).toHaveAccessibleDescription(`Next reference: CHD-${year}-0143`);
+  fireEvent.click(screen.getByRole('button', { name: 'Save series' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: { join_policy: { kind: 'never' }, number_series: 'chd' } }));
+  expect(screen.getByRole('link', { name: /Settings → Conversation numbers/ })).toHaveAttribute('href', '/settings/numbers');
+});
+
+test('the reopen notices are saved with the others, and the received notice says what {ref} becomes', async () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: {} })} canManage timezone="UTC" />);
+  expect(screen.getByLabelText('When a conversation opens')).toHaveAccessibleDescription(/\{ref\} becomes the conversation’s code/);
+  fireEvent.change(screen.getByLabelText('When Reopen names a code that is not found'), { target: { value: 'Không tìm thấy {ref}.' } });
+  fireEvent.change(screen.getByLabelText('When Reopen names a code from before Colliedesk'), { target: { value: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ reopen_not_found: 'Không tìm thấy {ref}.', reopen_legacy: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' });
 });
