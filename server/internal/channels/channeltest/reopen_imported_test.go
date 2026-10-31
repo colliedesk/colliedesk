@@ -48,7 +48,7 @@ func TestAnImportedConversationIsReopenedByItsCodeFromItsPlace(t *testing.T) {
 			{ID: "t2", Contact: "u3", Subject: "Scanner", Status: "open", Priority: "normal", ChannelID: d.channel.ID, NumberSeries: "ref", Number: 121, NumberYear: year,
 				Place: &bundle.Place{Kind: "group", ExternalID: "group:g1", Name: "Branch one"}, ThreadKeys: []string{"group:g1"}, CreatedAt: at, UpdatedAt: at,
 				Messages: []bundle.Message{{ID: "m4", Kind: "incoming", Body: "the scanner is offline", CreatedAt: at},
-					{ID: "m5", Kind: "incoming", Body: "here too", AuthorName: "Nine", CreatedAt: at.Add(time.Minute),
+					{ID: "m5", Kind: "incoming", Body: "here too", CreatedAt: at.Add(time.Minute),
 						Sender: &bundle.Sender{Kind: channeltest.LoopbackIdentity, Value: "u9", Name: "Nine"}}}},
 		},
 		Counts: bundle.Counts{Contacts: 2, Identities: 2, Conversations: 2, Incoming: 3, Outgoing: 1, Notes: 2, ThreadKeys: 2},
@@ -87,6 +87,10 @@ func TestAnImportedConversationIsReopenedByItsCodeFromItsPlace(t *testing.T) {
 	// A group member who is not the conversation's customer is named as they wrote it, and is no contact.
 	if got := d.one(t, `SELECT COALESCE(sender_name,'')||':'||(contact_id IS NULL)::text FROM channel_thread_items WHERE workspace_id=$1 AND external_id='bundle:chat:m5'`); got != "Nine:true" {
 		t.Fatalf("another member's item = %s", got)
+	}
+	// Their message, which names no author, is theirs on the timeline: the sender's name.
+	if got := d.one(t, `SELECT COALESCE(author_name,'') FROM messages WHERE workspace_id=$1 AND body='here too'`); got != "Nine" {
+		t.Fatalf("another member's message is by %q", got)
 	}
 	// A reply goes to the chat the conversation is in: the group's to the group, never one to one.
 	for _, number := range []int{120, 121} {

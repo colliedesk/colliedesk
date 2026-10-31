@@ -96,6 +96,7 @@ conversation points at; they take space, nothing else.
 7. `sla_applies` gives the conversation response targets (the workspace's, counted from its own times).
 8. `status`, `priority` and `kind` take the values of the API (open, pending, resolved, closed; low,
    normal, high, urgent; incoming, outgoing, note). `author_email` of a reply or a note names a teammate;
-   otherwise `author_name` is kept as written.
+   otherwise `author_name` is kept as written. The timeline names a message by, in order: `author_name`; for
+   a message with `sender` (not a note) `sender.name`; then the teammate of `author_email`.
 9. Every time is RFC 3339 and stored in UTC. Each file's `size` and `sha256` are checked when the archive
    is read and again once stored.
