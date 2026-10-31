@@ -3,6 +3,7 @@ package channeltest_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/bundle"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
+	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -119,6 +121,11 @@ func TestAStatusChangeTellsTheCustomer(t *testing.T) {
 	}
 	if item.LastStatusChange == nil || item.LastStatusChange.To != "pending" || item.LastStatusChange.By != "agent" || fmt.Sprint(item.StatusNotices) != "[open resolved closed]" {
 		t.Fatalf("last change = %+v, notices = %v", item.LastStatusChange, item.StatusNotices)
+	}
+	// A team member with no name set is named by their email.
+	email := d.one(t, `UPDATE agents SET display_name='' WHERE workspace_id=$1 AND id=$2 RETURNING email`, d.agentID)
+	if named, err := d.store.GetConversation(ctx, d.workspaceID, id); err != nil || named.LastStatusChange == nil || named.LastStatusChange.Name == nil || *named.LastStatusChange.Name != email {
+		t.Fatalf("named = %+v %v, want %s", named.LastStatusChange, err, email)
 	}
 	if none, err := d.store.GetConversation(ctx, d.workspaceID, started); err != nil || len(none.StatusNotices) != 0 || none.MayTellCustomer || !item.MayTellCustomer {
 		t.Fatalf("a conversation of no chat would tell %v (%v)", none.StatusNotices, err)
@@ -397,5 +404,100 @@ func TestARemovedChannelTellsNothing(t *testing.T) {
 	}
 	if read, err := d.store.GetConversation(ctx, d.workspaceID, item.ID); err != nil || len(read.StatusNotices) != 0 || read.MayTellCustomer {
 		t.Fatalf("status notices = %v %v", read.StatusNotices, err)
+	}
+}
+
+// A conversation imported resolved, untouched here since, closes by itself as the desk it came from would
+// have: its hours after its resolve there and the customer's last message, whenever auto-close was turned
+// on, and quietly (that desk told the customer). Resolved three days before, it closes on the next round;
+// resolved an hour before, 47 hours later.
+func TestAnImportedResolvedConversationClosesAsItsDeskWould(t *testing.T) {
+	d := newLoopDesk(t, statusLoop())
+	ctx := context.Background()
+	at := time.Now()
+	imported := func(id string, resolved time.Time) bundle.Conversation {
+		return bundle.Conversation{ID: id, Contact: "x", Subject: "Imported " + id, Status: "resolved", Priority: "normal", ChannelID: d.channel.ID,
+			CreatedAt: resolved.Add(-time.Hour), UpdatedAt: resolved,
+			StatusChanges: []bundle.StatusChange{{From: "open", To: "resolved", At: resolved}},
+			Messages:      []bundle.Message{{ID: id + "m", Kind: "incoming", Body: "old", CreatedAt: resolved.Add(-time.Hour)}}}
+	}
+	importInto(t, d, bundle.Bundle{Format: bundle.Format, Source: "old", Contacts: []bundle.Contact{{ID: "x", Name: "Old"}},
+		Conversations: []bundle.Conversation{imported("long", at.Add(-72*time.Hour)), imported("recent", at.Add(-time.Hour))},
+		Counts:        bundle.Counts{Contacts: 1, Conversations: 2, Incoming: 2, StatusChanges: 2}}, nil)
+	statuses := func(when time.Time) string {
+		t.Helper()
+		if _, err := (autoclose.Worker{Store: d.store}).RunOnce(ctx, when); err != nil {
+			t.Fatal(err)
+		}
+		return d.one(t, `SELECT string_agg(subject||'='||status,',' ORDER BY subject) FROM conversations WHERE workspace_id=$1`)
+	}
+	if got := statuses(at.Add(time.Minute)); got != "Imported long=closed,Imported recent=resolved" {
+		t.Fatalf("next round = %s", got)
+	}
+	if got := statuses(at.Add(46 * time.Hour)); got != "Imported long=closed,Imported recent=resolved" {
+		t.Fatalf("46 hours on = %s", got)
+	}
+	if got := statuses(at.Add(47*time.Hour + time.Minute)); got != "Imported long=closed,Imported recent=closed" {
+		t.Fatalf("47 hours on = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND notice_kind IS NOT NULL`); got != "0" {
+		t.Fatalf("imported conversations told the customer: %s", got)
+	}
+}
+
+// A channel turned off tells nothing either: no notice, no token asking a person, nothing a status
+// would tell. One whose processing is paused keeps the notice and sends it once when it resumes.
+func TestAChannelTurnedOffTellsNothingAndAPausedOneLater(t *testing.T) {
+	loop := statusLoop()
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "o-1", From: "u1", Text: "the printer jams"})
+	id := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='loopback:o-1'`)
+	set := func(input store.ChannelInput) {
+		t.Helper()
+		if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, input, store.ChannelActor{AgentID: d.agentID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status := func(to string) {
+		t.Helper()
+		if _, err := d.store.UpdateConversation(ctx, d.workspaceID, id, store.ConversationUpdate{Status: &to, ActorID: d.agentID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	off, on, paused, resumed := false, true, true, false
+	set(store.ChannelInput{Enabled: &off})
+	if would, err := d.store.StatusNoticeWouldSend(ctx, d.workspaceID, []string{id}, "resolved"); err != nil || would {
+		t.Fatalf("would send on a channel turned off = %v %v", would, err)
+	}
+	if item, err := d.store.GetConversation(ctx, d.workspaceID, id); err != nil || item.MayTellCustomer || len(item.StatusNotices) != 0 {
+		t.Fatalf("a channel turned off would tell: %+v %v", item.StatusNotices, err)
+	}
+	status("resolved")
+	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND notice_kind LIKE 'status_%'`); got != "0" {
+		t.Fatalf("a channel turned off told %s", got)
+	}
+	set(store.ChannelInput{Enabled: &on, ProcessingPaused: &paused})
+	status("pending")
+	worker := outbox.New(d.store, outbox.Options{Now: func() time.Time { return time.Now().UTC().Add(time.Minute) }})
+	sent := func() int {
+		t.Helper()
+		if _, err := worker.ProcessDue(ctx); err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for _, message := range loop.Endpoint.Sent() {
+			if strings.Contains(message.Text, "we need more from you") {
+				count++
+			}
+		}
+		return count
+	}
+	if got := sent(); got != 0 {
+		t.Fatalf("a paused channel sent %d", got)
+	}
+	set(store.ChannelInput{ProcessingPaused: &resumed})
+	if first, again := sent(), sent(); first != 1 || again != 1 {
+		t.Fatalf("after resuming sent %d, then %d", first, again)
 	}
 }

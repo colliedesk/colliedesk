@@ -80,7 +80,9 @@ type restMessage struct {
 	AuthorName    *string   `json:"author_name"`
 	CreatedAt     time.Time `json:"created_at"`
 	ReplyNumber   *int      `json:"reply_number"`
-	AgentToken    *struct {
+	// NoticeKind names a message the channel sent by itself (a received or status notice).
+	NoticeKind *string `json:"notice_kind"`
+	AgentToken *struct {
 		Label string `json:"label"`
 		Scope string `json:"scope"`
 	} `json:"agent_token"`

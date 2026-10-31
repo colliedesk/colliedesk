@@ -11,7 +11,7 @@ import (
 )
 
 // attachStatusChanges gives each conversation its last status change and who made it, in one query: a
-// team member by name, a token by its label (and the person who approved its request, when another than
+// team member by name (their email when they set none), a token by its label (and the person who approved its request, when another than
 // its owner did), the customer, the channel and an import by none.
 func attachStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string, items []domain.Conversation) error {
 	if len(items) == 0 {
@@ -23,9 +23,9 @@ func attachStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string, ite
 		ids[index], at[item.ID] = item.ID, index
 	}
 	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (h.conversation_id) h.conversation_id::text,h.to_status,h.changed_at,h.cause,
-			CASE h.cause WHEN 'agent' THEN NULLIF(a.display_name,'')
-				WHEN 'token' THEN CASE WHEN s.id IS NULL THEN NULLIF(a.display_name,'')
-					WHEN h.actor_agent_id IS DISTINCT FROM s.agent_id AND a.display_name<>'' THEN s.label||' · approved by '||a.display_name
+			CASE h.cause WHEN 'agent' THEN COALESCE(NULLIF(a.display_name,''),a.email)
+				WHEN 'token' THEN CASE WHEN s.id IS NULL THEN COALESCE(NULLIF(a.display_name,''),a.email)
+					WHEN h.actor_agent_id IS DISTINCT FROM s.agent_id AND a.id IS NOT NULL THEN s.label||' · approved by '||COALESCE(NULLIF(a.display_name,''),a.email)
 					ELSE s.label END END
 		FROM conversation_status_changes h
 		LEFT JOIN agents a ON a.workspace_id=h.workspace_id AND a.id=h.actor_agent_id
@@ -68,9 +68,9 @@ func (s *Store) attachStatusNotices(ctx context.Context, tx pgx.Tx, workspaceID 
 }
 
 // mayTell says setting a conversation of status to another status may tell its customer through its chat
-// channel: live, with words for one of them (as StatusNoticeWouldSend and attachStatusNotices read it).
+// channel: live and on, with words for one of them (as StatusNoticeWouldSend and attachStatusNotices read it).
 func mayTell(channel *channels.Channel, status string) bool {
-	if channel == nil || !channel.Live() {
+	if channel == nil || !telling(*channel) {
 		return false
 	}
 	for _, other := range conversationStatuses {

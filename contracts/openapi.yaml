@@ -10863,7 +10863,7 @@ components:
           type: boolean
           description: >-
             true when a status the team sets now may tell its customer: the chat it is in (a chat message moved
-            into it included) has a live channel with a notice for a status other than its own. In lists too,
+            into it included) has a channel live and on with a notice for a status other than its own. In lists too,
             so a bulk change can offer to tell; status_notices on the detail names which statuses.
         number: {type: integer, minimum: 1, description: 'Its number in number_series, which counts on and never restarts.'}
         number_series: {type: string, description: 'The series it is numbered in: default, or the one its channel names (settings.number_series).'}
@@ -11706,7 +11706,7 @@ components:
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
         pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, status_pending, status_resolved, status_closed (what the team setting that status tells the customer; reopened for open), help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat),
         unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of
-        one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation resolved after it was turned on closes by itself that long after its resolve and the customer's last message, telling the customer with status_closed, quietly for one resolved quietly or imported resolved and untouched since; one resolved before it was turned on never closes by itself, and changing the hours keeps when it was turned on). Never a secret.
+        one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation resolved after it was turned on closes by itself that long after its resolve and the customer's last message, telling the customer with status_closed, quietly for one resolved quietly; one imported resolved and untouched since closes that long after its resolve in the source, quietly, whenever it was turned on; any other resolved before it was turned on never closes by itself, and changing the hours keeps when it was turned on). Never a secret.
       additionalProperties: true
     ChannelCreate:
       type: object

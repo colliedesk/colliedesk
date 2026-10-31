@@ -28,7 +28,7 @@ func statusNotice(settings channels.Settings, status string) (kind, text string)
 }
 
 // chatChannel is the live chat channel a conversation is in (an item of it linked). ok is false for a
-// conversation of no chat (an email, one the team started) or one whose channel was removed.
+// conversation of no chat (an email, one the team started) or one whose channel was removed or turned off.
 func (s *Store) chatChannel(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) (channels.Channel, bool, error) {
 	var channelID string
 	err := tx.QueryRow(ctx, `SELECT i.channel_id::text FROM conversation_thread_items l
@@ -48,7 +48,7 @@ func (s *Store) chatChannel(ctx context.Context, tx pgx.Tx, workspaceID, convers
 	if err != nil {
 		return channels.Channel{}, false, err
 	}
-	return channel, channel.Live(), nil
+	return channel, telling(channel), nil
 }
 
 // sendStatusNotices tells the customer of each conversation whose status changed to status, in its chat,
@@ -97,9 +97,9 @@ func (s *Store) sendStatusNotices(ctx context.Context, tx pgx.Tx, workspaceID st
 			}
 			loaded[item.channel] = channel
 		}
-		// A removed channel cannot send: it is as quiet as one with no words for the status.
+		// A removed or turned off channel sends nothing: it is as quiet as one with no words for the status.
 		kind, text := statusNotice(channel.Settings, status)
-		if text == "" || !channel.Live() {
+		if text == "" || !telling(channel) {
 			continue
 		}
 		if _, err := s.createMessage(ctx, tx, workspaceID, item.conversation, Actor{NoticeKind: kind}, "outgoing",
@@ -160,7 +160,7 @@ func (s *Store) statusNoticePreview(ctx context.Context, tx pgx.Tx, workspaceID 
 			return nil, err
 		}
 		_, text := statusNotice(channel.Settings, status)
-		if err != nil || text == "" || !channel.Live() {
+		if err != nil || text == "" || !telling(channel) {
 			skip[item.Channel] = true
 			continue
 		}
@@ -216,6 +216,12 @@ func (s *Store) SendDueStatusNotices(ctx context.Context, limit int) (int, error
 		}
 	}
 	return taken, failed
+}
+
+// telling says a channel tells its customers: live and on. A paused one keeps its notices for when it
+// resumes (the outbox holds them).
+func telling(channel channels.Channel) bool {
+	return channel.Live() && channel.Enabled
 }
 
 // statusesBefore reads, under lock, the status of each conversation about to change.

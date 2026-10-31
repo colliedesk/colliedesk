@@ -21,11 +21,15 @@ type AutoCloseCandidate struct {
 // autoCloseDue is the condition, on the conversation c, that it closes now ($1): resolved since the channel
 // began closing by itself (since: when auto_close_hours was turned on), and hours (the current setting)
 // after the later of that resolve and the customer's last message. A conversation resolved before it was
-// turned on never closes by itself: turning it on never closes and tells a backlog. AutoCloseDue lists by
-// it and AutoClose closes by it again, so a conversation resolved again or written to in between waits.
+// turned on never closes by itself: turning it on never closes and tells a backlog. One imported resolved
+// and untouched here since closes as the desk it came from would have, its hours after its resolve there,
+// quietly (AutoClose). AutoCloseDue lists by it and AutoClose closes by it again, so a conversation
+// resolved again or written to in between waits.
 func autoCloseDue(hours, since string) string {
-	resolved := `(SELECT max(h.changed_at) FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id AND h.to_status='resolved')`
-	return `c.status='resolved' AND ` + resolved + ` >= ` + since + ` AND GREATEST(` + resolved + `,
+	resolved := `COALESCE((SELECT max(h.changed_at) FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id AND h.to_status='resolved'),c.updated_at)`
+	untouched := `NOT EXISTS(SELECT 1 FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id AND h.source='colliedesk')`
+	imported := `c.origin IS NOT NULL AND ` + untouched
+	return `c.status='resolved' AND (` + resolved + ` >= ` + since + ` OR (` + imported + `)) AND GREATEST(` + resolved + `,
 		COALESCE((SELECT max(m.created_at) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming'), '-infinity'::timestamptz)
 	) + make_interval(hours => ` + hours + `) <= $1`
 }

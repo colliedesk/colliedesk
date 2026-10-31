@@ -224,7 +224,8 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   the customer wrote first one to one, and changes neither the status nor the response clocks. Empty texts
   (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
   MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
-  the team started) or of a removed channel is told nothing. A change of several conversations at once tells
+  the team started) or of a channel removed or turned off is told nothing; a channel whose processing is paused
+  sends it once it resumes. A change of several conversations at once tells
   each customer a few seconds after it is saved; a conversation whose status changes again before then is
   told only that later change. An AI agent's token below the send tier asks a person first when its change
   would tell a customer: the request says what each channel would send. A conversation shows its last status
@@ -234,8 +235,9 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   on, that long after its resolve and the customer's last message, and tells the customer with
   `status_closed`. A conversation resolved before it was turned on never closes by itself (close it by hand),
   so turning it on never closes a backlog at once; changing the hours keeps when it was turned on, and
-  turning it off and on again starts again. One resolved quietly closes quietly, and one imported resolved
-  and untouched here since closes quietly (the system before had told them). A customer writing again
+  turning it off and on again starts again. One resolved quietly closes quietly. One imported resolved and
+  untouched here since closes as the system before would have, that long after its resolve there and the
+  customer's last message, whenever auto-close was turned on, and quietly (that system had told them). A customer writing again
   before then opens it, as always.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
