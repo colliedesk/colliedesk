@@ -425,7 +425,7 @@ function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandA
       const gather = record(direct.gather);
       direct.gather = edits.confirm.on
         ? { ...gather, quiet_seconds: seconds(edits.confirm.quiet), confirm_seconds: seconds(edits.confirm.wait) }
-        : { ...gather, confirm_seconds: 0 };
+        : { ...gather, quiet_seconds: seconds(edits.confirm.quiet), confirm_seconds: 0 };
     }
     next.scopes = { ...record(stored.scopes), direct };
   }
@@ -475,7 +475,9 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const feedback = useSaveFeedback(saveState(save));
   const id = useId();
   const server = fieldErrors(save.error);
-  const quietBad = confirm.on && !(seconds(confirm.quiet) >= 0);
+  // The quiet wait comes before the question and before asking for a description: it shows while either is used.
+  const quietShown = confirm.on || Boolean(commands.open.askDescription.trim());
+  const quietBad = quietShown && !(seconds(confirm.quiet) >= 0);
   const waitBad = confirm.on && !(seconds(confirm.wait) >= 1 && seconds(confirm.wait) <= confirmLimit);
   const expireBad = expireTouched && !(seconds(expire) >= 0 && seconds(expire) <= expireLimit);
   // The server asks nothing without the question's words.
@@ -537,11 +539,11 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
       <label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={confirm.on} aria-describedby={`${id}-ok-d`}
         onChange={(event) => changeConfirm({ on: event.target.checked })} /></span><span>{m.confirmOn}</span></label>
       <p className="lead" id={`${id}-ok-d`}>{confirm.on && !quietBad && !waitBad ? m.confirmSentence(seconds(confirm.quiet), seconds(confirm.wait)) : m.confirmOff}{onCommands ? '' : ` ${m.confirmNeedsCommand}`}</p>
-      {confirm.on && <div className="zl-numbers">
+      {quietShown && <div className="zl-numbers">
         <Field id={`${id}-q`} label={m.askAfter} error={checked && quietBad ? m.wholeSeconds : undefined} help={m.secondsOfSilence}>
           {(props) => <input {...props} type="number" min={0} step={1} inputMode="numeric" value={confirm.quiet} onChange={(event) => changeConfirm({ quiet: event.target.value })} />}</Field>
-        <Field id={`${id}-w`} label={m.openAnyway} error={(checked && waitBad ? m.waitRange : undefined) ?? server[`settings.scopes.direct.gather.confirm_seconds`]} help={m.secondsUnit}>
-          {(props) => <input {...props} type="number" min={1} max={confirmLimit} step={1} inputMode="numeric" value={confirm.wait} onChange={(event) => changeConfirm({ wait: event.target.value })} />}</Field>
+        {confirm.on && <Field id={`${id}-w`} label={m.openAnyway} error={(checked && waitBad ? m.waitRange : undefined) ?? server[`settings.scopes.direct.gather.confirm_seconds`]} help={m.secondsUnit}>
+          {(props) => <input {...props} type="number" min={1} max={confirmLimit} step={1} inputMode="numeric" value={confirm.wait} onChange={(event) => changeConfirm({ wait: event.target.value })} />}</Field>}
       </div>}
       <Field id={`${id}-ask`} label={m.question} error={(checked && questionBad ? m.questionRequired : undefined) ?? server['settings.notices.ask_confirm']} help={`${m.questionHint} ${m.count(askConfirm.length, noticeMax)}`}>
         {(props) => <textarea {...props} rows={2} maxLength={noticeMax} value={askConfirm} onChange={(event) => { feedback.touch(); setAskConfirm(event.target.value); }} />}</Field>

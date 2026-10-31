@@ -275,7 +275,7 @@ test('asking before a one-to-one request opens sets the wait, the question and t
   };
   view(<Tabs.messages channel={channel({}, { settings: {}, effective_settings: rules })} canManage timezone="UTC" />);
   fireEvent.click(screen.getByRole('switch', { name: 'Ask the customer to confirm' }));
-  expect(screen.getByLabelText('Ask after')).toHaveValue(10);
+  expect(screen.getByLabelText('Wait for the customer to stop writing')).toHaveValue(10);
   expect(screen.getByLabelText('Open anyway after')).toHaveValue(60);
   fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '0' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
@@ -333,6 +333,30 @@ test('a wait in seconds that is not whole minutes is shown as it is', () => {
   const rules = { scopes: { direct: { mode: 'commands', gather: { expire_seconds: 90 } }, group: { mode: 'commands', gather: { expire_seconds: 90 } } } };
   view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
   expect(screen.getByLabelText('Forget a request still waiting for its description after')).toHaveAccessibleDescription(/90 seconds now/);
+});
+
+test('turned off and on again, the question keeps the waits set in the form', () => {
+  const rules = { scopes: { direct: { mode: 'commands', gather: { quiet_seconds: 0 } } } };
+  view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
+  const ask = screen.getByRole('switch', { name: 'Ask the customer to confirm' });
+  fireEvent.click(ask);
+  fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '20' } });
+  fireEvent.click(ask);
+  fireEvent.click(ask);
+  expect(screen.getByLabelText('Open anyway after')).toHaveValue(20);
+});
+
+test('the quiet wait shows while a description is asked for, even with the question off, and says it serves both', async () => {
+  const rules = { commands: { open: { action: 'open', phrases: ['tạo phiếu'] } }, scopes: { direct: { mode: 'commands', gather: { quiet_seconds: 10 } } } };
+  view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
+  expect(screen.queryByLabelText('Wait for the customer to stop writing')).toBeNull();
+  fireEvent.change(screen.getByLabelText('When a customer sends only the command'), { target: { value: 'Mô tả giúp?' } });
+  const quiet = screen.getByLabelText('Wait for the customer to stop writing');
+  expect(quiet).toHaveAccessibleDescription(/before the question and before asking for a description/i);
+  fireEvent.change(quiet, { target: { value: '5' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update.mock.calls[0][1].settings.scopes.direct).toEqual({ mode: 'commands', gather: { quiet_seconds: 5, confirm_seconds: 0 } });
 });
 
 test('turning the question off keeps the gathering and sets its wait to 0', async () => {

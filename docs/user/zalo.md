@@ -39,21 +39,29 @@ The channel's page then has four tabs of its own, before AI and History:
    that is not a request (sent only where one-to-one messages open a conversation on a command, and only
    when **Answer such a message with this reply** is on). The OA's own messages are not your team's first
    reply. **Ask before opening (one-to-one)**: once a customer who named a command (say "tạo phiếu")
-   stops writing for **Ask after** seconds, the OA sends the **Question**; the Confirm command (say "OK",
-   best matched exactly) opens the conversation at once, and so does silence for **Open anyway after**
-   seconds; Cancel throws the request away and sends **When a request is cancelled**. On, the
-   **Question** must be written: without it the OA asks nothing. Off, nothing is asked. **When a customer
-   sends only the command** asks what the request is about when "Open a request" comes with nothing
-   before it; a request still waiting for its description after **Forget a request still waiting for its
-   description after** minutes (0: never; one-to-one chats and groups alike) is thrown away with **When a
-   request waiting for its description is forgotten**. **Save messages** saves the whole tab.
+   stops writing for **Wait for the customer to stop writing** seconds, the OA sends the **Question**;
+   the Confirm command (say "OK", best matched exactly), as the answer to the latest question, opens the
+   conversation at once, and so does silence for **Open anyway after** seconds; Cancel throws the request
+   away and sends **When a request is cancelled**. More messages join the request and the question comes
+   again: an OK sent before it is asked again counts as words of the request, and the customer is asked
+   again. On, the **Question** must be written: without it the OA asks nothing. Off, nothing is asked.
+   **When a customer sends only the command** asks what the request is about when "Open a request" comes
+   with nothing before it, after the same quiet wait (the field shows while either is used); a request
+   still waiting for its description after **Forget a request still waiting for its description after**
+   minutes (0: never; one-to-one chats and groups alike) is thrown away with **When a request waiting for
+   its description is forgotten**. **Save messages** saves the whole tab.
+   These apply where one-to-one messages open a conversation on a command (`settings.scopes.direct.mode:
+   commands`); the page does not change that mode: set it with the API (`PATCH /api/v1/channels/{id}`
+   with the whole `settings`). Where every one-to-one message opens a conversation, the tab says nothing
+   is asked.
 
 Agents see the same tabs and change nothing.
 
 **Pause processing**, at the top of the channel's page (admins), asks first, then keeps every message
 Zalo delivers and opens nothing, adds nothing and sends nothing until **Resume processing**: what arrived
 is then handled in order by the channel's rules. While paused the channel reads **Processing paused**,
-here and in **Channels**, with since when and how many messages wait. Pause is not the same as turning the channel off (its messages
+here and in **Channels**, with since when and how many messages wait (counted again every 20 seconds
+while the page is open). Agents see the same and are told an admin resumes it. Pause is not the same as turning the channel off (its messages
 then wait under Held for someone to open or discard): a channel that is paused and off says to turn it on
 first, and stays paused when you do.
 
