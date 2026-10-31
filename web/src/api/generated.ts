@@ -2085,6 +2085,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/me/sla-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turn your own reminder and overdue emails of response targets on or off (my_alert_email of GET /api/v1/response-targets). */
+        patch: operations["setMySLAAlerts"];
+        trace?: never;
+    };
     "/api/v1/response-targets": {
         parameters: {
             query?: never;
@@ -7359,6 +7376,23 @@ export interface components {
             first_response: components["schemas"]["SLAClock"] | null;
             /** @description Null when its priority has no resolution target. */
             resolution: components["schemas"]["SLAClock"] | null;
+            /** @description The reminder and overdue emails its clocks sent, oldest first. */
+            alerts?: {
+                /** @enum {string} */
+                clock: "first_response" | "resolution";
+                /** @enum {string} */
+                threshold: "reminder" | "overdue";
+                /** Format: date-time */
+                due_at: string;
+                /**
+                 * @description nobody: no recipient gets these emails.
+                 * @enum {string}
+                 */
+                status: "sending" | "sent" | "rejected" | "nobody";
+                recipients: number;
+                /** Format: date-time */
+                at: string;
+            }[];
         };
         SLAClock: {
             /**
@@ -7430,6 +7464,8 @@ export interface components {
              * @description When they were last turned on: conversations opened before have no target.
              */
             enabled_at: string | null;
+            /** @description Whether you get the reminder and overdue emails (PATCH /api/v1/agents/me/sla-alerts). */
+            my_alert_email?: boolean;
             /** Format: date-time */
             updated_at: string | null;
         };
@@ -13737,6 +13773,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationNumberSeries"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setMySLAAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Your setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        email: boolean;
+                    };
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

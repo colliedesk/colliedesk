@@ -158,8 +158,18 @@ func (s *Store) attachSLA(ctx context.Context, tx pgx.Tx, workspaceID string, it
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	alerts, err := readSLAAlerts(ctx, tx, workspaceID, ids)
+	if err != nil {
+		return err
+	}
 	for index := range items {
-		items[index].SLA = clocks[items[index].ID]
+		if sla := clocks[items[index].ID]; sla != nil {
+			sla.Alerts = alerts[items[index].ID]
+			if sla.Alerts == nil {
+				sla.Alerts = []domain.SLAAlertRecord{}
+			}
+			items[index].SLA = sla
+		}
 	}
 	return nil
 }

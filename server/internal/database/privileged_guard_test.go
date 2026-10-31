@@ -62,6 +62,7 @@ var privilegedCallSites = []string{
 	"internal/store/results-sharing.go: PrivilegeResultsShareToken",
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/store/server-secrets.go: PrivilegeServerSecret",
+	"internal/store/sla-alerts.go: PrivilegeSLAClaim",
 	"internal/store/sla.go: PrivilegeSLAClaim",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
 	"internal/trialreminder/trialreminder.go: PrivilegeTrialReminder",
