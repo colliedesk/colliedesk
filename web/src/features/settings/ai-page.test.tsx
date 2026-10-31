@@ -9,7 +9,7 @@ import { refusal } from './ai-route';
 const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
-  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, automatic: false, auto_parts: [], active: false, off_reason: null,
+  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, default_level: 'off', automatic: false, auto_parts: [], active: false, off_reason: null,
     consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null, ...change };
 }
 
@@ -22,7 +22,7 @@ function provider(change: Partial<AIProvider> = {}): AIProvider {
 function settings(change: Partial<AISettings> = {}): AISettings {
   return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
     allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null }, allowance: null,
-    auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, ...change };
+    auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, channels: [], source_consents: [], ...change };
 }
 
 function page(props: Partial<AIPageProps> = {}) {

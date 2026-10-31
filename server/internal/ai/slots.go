@@ -12,19 +12,19 @@ import (
 )
 
 type slotRow struct {
-	slot        string
-	usesServer  bool
-	providerID  *string
-	model       *string
-	effort      string
-	enabled     bool
-	automatic   bool
-	autoParts   []string
-	consentedBy *string
-	consentedAt *time.Time
-	updatedBy   *string
-	updatedAt   *time.Time
-	monthlyCap  *int64
+	slot         string
+	usesServer   bool
+	providerID   *string
+	model        *string
+	effort       string
+	enabled      bool
+	defaultLevel string
+	autoParts    []string
+	consentedBy  *string
+	consentedAt  *time.Time
+	updatedBy    *string
+	updatedAt    *time.Time
+	monthlyCap   *int64
 }
 
 func (r slotRow) source() string {
@@ -38,7 +38,7 @@ func (r slotRow) source() string {
 }
 
 func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
-	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 		monthly_cap_micro_usd FROM ai_slots WHERE workspace_id=$1`
 	if lock {
 		query += ` FOR UPDATE`
@@ -49,7 +49,7 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (slotRow, error) {
 		var r slotRow
-		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.automatic, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt,
+		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.defaultLevel, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt,
 			&r.monthlyCap)
 		return r, err
 	})
@@ -66,12 +66,12 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 // view turns a row (or its absence: off, nothing chosen) into what the API shows, with whether it
 // can run now. A slot on the server's provider stops when the operator removes it or the model.
 func (s *Service) view(slot string, row slotRow, found bool) Slot {
-	view := Slot{Slot: slot, Source: SourceNone, Effort: string(aiprovider.EffortLow), AutoParts: []string{}}
+	view := Slot{Slot: slot, Source: SourceNone, Effort: string(aiprovider.EffortLow), DefaultLevel: LevelOff, AutoParts: []string{}}
 	if !found {
 		return view
 	}
 	view.Source, view.ProviderID, view.Model, view.Effort, view.Enabled = row.source(), row.providerID, row.model, row.effort, row.enabled
-	view.Automatic, view.AutoParts = row.automatic, orderedParts(row.autoParts)
+	view.DefaultLevel, view.Automatic, view.AutoParts = row.defaultLevel, legacyAutomatic(slot, row.defaultLevel), orderedParts(row.autoParts)
 	view.ConsentedBy, view.ConsentedAt, view.UpdatedBy, view.UpdatedAt = row.consentedBy, utcPointer(row.consentedAt), row.updatedBy, utcPointer(row.updatedAt)
 	view.MonthlyCap = row.monthlyCap
 	view.Active = row.enabled
@@ -131,6 +131,12 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 				}
 			}
 		}
+		if settings.Channels, err = channelLevels(ctx, tx, workspaceID, slots); err != nil {
+			return err
+		}
+		if settings.SourceConsents, err = sourceConsents(ctx, tx, workspaceID); err != nil {
+			return err
+		}
 		if settings.Automatic, _, err = s.automaticLimits(ctx, tx, workspaceID); err != nil {
 			return err
 		}
@@ -168,6 +174,12 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 	}
 	if settings.Events == nil {
 		settings.Events = []Event{}
+	}
+	if settings.Channels == nil {
+		settings.Channels = []ChannelLevel{}
+	}
+	if settings.SourceConsents == nil {
+		settings.SourceConsents = []SourceConsent{}
 	}
 	return settings, err
 }
@@ -268,10 +280,11 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		current, found := slots[slot]
 		sameRecipient := found && current.usesServer == next.usesServer && equalPointer(current.providerID, next.providerID)
 		next.consentedBy, next.consentedAt = current.consentedBy, current.consentedAt
-		if next.enabled && !(found && current.enabled && sameRecipient) {
+		renewed := next.enabled && !(found && current.enabled && sameRecipient)
+		if renewed {
 			next.consentedBy, next.consentedAt = stringPointer(actor.AgentID), &now
 		}
-		if err := nextAutomatic(slot, &next, current, found && sameRecipient, input); err != nil {
+		if err := nextLevel(slot, &next, current, found && !renewed, input); err != nil {
 			return err
 		}
 		next.monthlyCap = current.monthlyCap
@@ -285,20 +298,32 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 			}
 			return invalid("This server has no price for %s, so it cannot count what AI chat spends. Ask its operator to add one to the setting ai.server.prices.", *next.model)
 		}
+		switch {
+		case renewed:
+			// What channels let the feature do by itself was agreed for another recipient.
+			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "recipient_changed", now); err != nil {
+				return err
+			}
+		case slot == SlotIntake && found && current.enabled && next.enabled && !equalPointer(current.model, next.model):
+			// Intake's gate was passed with this model's labels; another model starts over at suggest.
+			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "model_changed", now); err != nil {
+				return err
+			}
+		}
 		updatedBy := nullable(actor.AgentID)
 		var row slotRow
-		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,automatic,auto_parts,consented_by,consented_at,updated_by,updated_at,
+		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,default_level,auto_parts,consented_by,consented_at,updated_by,updated_at,
 				monthly_cap_micro_usd)
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 			ON CONFLICT (workspace_id,slot) DO UPDATE SET uses_server=EXCLUDED.uses_server,provider_id=EXCLUDED.provider_id,model=EXCLUDED.model,
-				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,automatic=EXCLUDED.automatic,auto_parts=EXCLUDED.auto_parts,
+				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,default_level=EXCLUDED.default_level,auto_parts=EXCLUDED.auto_parts,
 				consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at,
 				monthly_cap_micro_usd=EXCLUDED.monthly_cap_micro_usd
-			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 				monthly_cap_micro_usd`,
-			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.automatic, next.autoParts, next.consentedBy, next.consentedAt, updatedBy, now,
+			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.defaultLevel, next.autoParts, next.consentedBy, next.consentedAt, updatedBy, now,
 			next.monthlyCap).
-			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.automatic, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt,
+			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.defaultLevel, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt,
 				&row.monthlyCap)
 		if err != nil {
 			return err
@@ -322,7 +347,9 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 }
 
 func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string, row slotRow) map[string]any {
-	detail := map[string]any{"enabled": row.enabled, "source": row.source(), "effort": row.effort, "automatic": row.automatic}
+	detail := map[string]any{"enabled": row.enabled, "source": row.source(), "effort": row.effort, "default_level": row.defaultLevel,
+		// The older switch, which history written before default_level reads.
+		"automatic": legacyAutomatic(row.slot, row.defaultLevel)}
 	if row.monthlyCap != nil {
 		detail["monthly_cap_micro_usd"] = *row.monthlyCap
 	}
@@ -361,14 +388,18 @@ func orderedParts(parts []string) []string {
 	return ordered
 }
 
-// nextAutomatic decides the automatic mode of a slot being set: kept when the request does not name
-// it, off with the feature, and off when the feature moves to another provider (its consent is the
-// admin's again) unless the same request turns it on.
-func nextAutomatic(slot string, next *slotRow, current slotRow, sameRecipient bool, input SlotInput) error {
-	next.automatic, next.autoParts = current.automatic && sameRecipient, current.autoParts
-	if input.Automatic != nil {
-		next.automatic = *input.Automatic
-	}
+// legacyAutomatic is the older "runs by itself" switch a level means: triage applying by itself,
+// drafts written when a customer writes.
+func legacyAutomatic(slot, level string) bool {
+	return (slot == SlotTriage && level == LevelAuto) || (slot == SlotDraft && level == LevelSuggest)
+}
+
+// nextLevel decides the default level of a slot being set. kept says the admin's consent stands (the
+// same recipient, on before and after): then a request that names no level keeps it. Otherwise the
+// feature starts where turning it on always started: triage suggests, drafts wait to be asked for.
+// A request may name default_level, or the older automatic, which maps onto it.
+func nextLevel(slot string, next *slotRow, current slotRow, kept bool, input SlotInput) error {
+	next.autoParts = current.autoParts
 	if input.AutoParts != nil {
 		for _, part := range input.AutoParts {
 			if !slices.Contains(AutoParts, part) {
@@ -383,16 +414,36 @@ func nextAutomatic(slot string, next *slotRow, current slotRow, sameRecipient bo
 	if slot != SlotTriage && len(next.autoParts) > 0 {
 		return invalid("auto_parts is for triage only.")
 	}
-	if next.automatic && !next.enabled {
-		if input.Automatic != nil {
-			return invalid("Turn the feature on before it runs by itself.")
+	level := LevelOff
+	switch {
+	case kept:
+		level = current.defaultLevel
+	case slot == SlotTriage:
+		level = LevelSuggest
+	}
+	switch {
+	case input.DefaultLevel != nil:
+		level = *input.DefaultLevel
+		if !levelAllowed(slot, level, false) {
+			return ErrLevelNotAllowed
 		}
-		next.automatic = false
+	case input.Automatic != nil && slot == SlotTriage && *input.Automatic:
+		level = LevelAuto
+	case input.Automatic != nil && slot == SlotTriage && level == LevelAuto:
+		level = LevelSuggest
+	case input.Automatic != nil && slot == SlotDraft:
+		level = map[bool]string{true: LevelSuggest, false: LevelOff}[*input.Automatic]
+	case input.Automatic != nil && *input.Automatic:
+		return ErrLevelNotAllowed
 	}
 	if !next.enabled {
-		next.automatic = false
+		if level != LevelOff && (input.DefaultLevel != nil || (input.Automatic != nil && *input.Automatic)) {
+			return invalid("Turn the feature on before it runs by itself.")
+		}
+		level = LevelOff
 	}
-	if next.automatic && slot == SlotTriage && len(next.autoParts) == 0 {
+	next.defaultLevel = level
+	if level == LevelAuto && slot == SlotTriage && len(next.autoParts) == 0 {
 		if input.AutoParts != nil {
 			return invalid("Pick at least one of tags, priority and assignee to apply by itself.")
 		}

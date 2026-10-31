@@ -1932,6 +1932,55 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/ai:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getChannelAI
+      x-permission: access:read
+      description: >
+        What each AI feature does by itself on the channel and on each scope of its type (a chat's
+        one-to-one messages and groups; `""` is the whole channel): the scope's own level (null when it
+        follows the channel, then the workspace's default), the level that runs, and why it is off
+        (`workspace_off`: the workspace has not turned the feature on). Triage and drafts are on every
+        channel; intake only on the scopes a chat type declares, never on email or a web form.
+      responses:
+        '200':
+          description: The channel's AI levels
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelAI'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/ai/{slot}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/AISlotName'}}
+    put:
+      operationId: setChannelAI
+      x-permission: access:read
+      description: >
+        Sets what one AI feature does by itself on a scope of the channel (`level`: off, suggest, auto, or
+        null to follow the channel and the workspace). Drafts go up to suggest (AI never sends); intake
+        exists only on a chat type's intake scopes (422 `intake_not_supported` with `available_slots`
+        otherwise) and takes `options`. A level decides only the AI's own work; people can ask by hand
+        while the workspace has the feature on. An agent token lowers a level with `ai_settings:update`;
+        a change that lets AI do more by itself (a higher level of any scope it reaches, a lower
+        threshold, a source turned on, other instructions) is an agent request a person approves,
+        whatever the token holds. Only admins change a level (403 for another role). Every change is in
+        the AI history and in the channel's.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelAIInput'}}}
+      responses:
+        '200':
+          description: The channel's AI levels after the change
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelAI'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/AILevelNotAllowed'}
   /api/v1/channels/{id}/email:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -3877,9 +3926,11 @@ paths:
       description: >
         The workspace's AI settings: the server's provider (set by the operator; null when the server has
         none), the providers the workspace added (never a key, only its last four characters), each
-        feature ("slot": `triage`, `draft`) with its provider, model and whether it is on and can run,
-        and the newest 50 changes. Every feature starts off; turning one on is an admin's consent to
-        send that feature's ticket data to its provider. Agents can read this; only admins change it.
+        feature ("slot": `triage`, `draft`, `intake`) with its provider, model, whether it is on and can
+        run and what it does by itself by default (`default_level`), the levels channels set apart from it
+        (`channels`), the kinds of extra context intake may send (`source_consents`), and the newest 50
+        changes. Every feature starts off; turning one on is an admin's consent to send that feature's
+        ticket data to its provider. Agents can read this; only admins change it.
       responses:
         '200':
           description: AI settings
@@ -4048,9 +4099,12 @@ paths:
       x-permission: access:write
       description: >
         Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model
-        (the provider's first when left out), effort, and on or off. Turning a feature on, or moving it to
-        another provider while it is on, records the person's consent: that feature's ticket data goes to
-        that provider from now on. Every agent token's call becomes an agent request a person approves.
+        (the provider's first when left out), effort, on or off, and what it does by itself where no
+        channel sets a level (`default_level`). Turning a feature on, or moving it to another provider
+        while it is on, records the person's consent: that feature's ticket data goes to that provider
+        from now on, and what channels let it do by itself goes down a level (auto to suggest; a draft
+        written by itself to one asked for). Every agent token's call becomes an agent request a person
+        approves.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/AISlotInput'}}}
@@ -4064,6 +4118,40 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/AILevelNotAllowed'}
+  /api/v1/ai/source-consents/{class}:
+    parameters:
+      - {name: class, in: path, required: true, schema: {$ref: '#/components/schemas/AISourceClass'}}
+    put:
+      operationId: setAISourceConsent
+      x-permission: access:write
+      description: >
+        Records an admin's consent that AI intake may send this kind of context to its provider besides
+        the conversation's text (which the feature's own consent covers): `images` customers sent, the
+        `contact_profile`, or an integration's data (`external:<name>`). Giving it again changes nothing.
+        Every agent token's call becomes an agent request a person approves.
+      responses:
+        '200':
+          description: The consent
+          content: {application/json: {schema: {$ref: '#/components/schemas/AISourceConsent'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: removeAISourceConsent
+      x-permission: access:write
+      description: >
+        Takes the consent back: intake leaves that kind of context out from its next decision. `removed`
+        is false when there was none.
+      responses:
+        '200':
+          description: Whether there was a consent
+          content: {application/json: {schema: {type: object, required: [removed], properties: {removed: {type: boolean}}}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/results:
     get:
       operationId: getResults
@@ -7208,6 +7296,9 @@ components:
     AICheckFailed:
       description: The provider check failed; nothing was saved or changed. `check_error_code` says why.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    AILevelNotAllowed:
+      description: 'The feature cannot run at that level there: ai_level_not_allowed (drafts never reach auto; intake reaches auto only on a channel''s scope), or intake_not_supported (the scope has no intake; available_slots lists what it has).'
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     AIChecksRateLimited:
       description: The workspace ran 10 provider checks in the last minute; try again shortly.
       headers:
@@ -7645,7 +7736,81 @@ components:
       required: [enabled]
       properties:
         enabled: {type: boolean}
-    AISlotName: {type: string, enum: [triage, draft, chat], description: '`chat`: the AI that answers end users in the help center''s chat (docs/user/ai-chat.md).'}
+    AISlotName: {type: string, enum: [triage, draft, chat, intake], description: '`chat`: the AI that answers end users in the help center''s chat (docs/user/ai-chat.md); intake decides whether a chat message opens a conversation, joins one, or is not a request; it runs only on chat channels.'}
+    AILevel: {type: string, enum: ['off', suggest, auto], description: 'What a feature does by itself: off (only when someone asks), suggest (it writes a suggestion or a draft for a person), auto (triage applies its auto_parts; intake on a chat channel''s scope decides). Drafts never reach auto.'}
+    AISourceClass: {type: string, pattern: '^(images|contact_profile|external:[a-z0-9_]{1,40})$'}
+    AISourceConsent:
+      type: object
+      required: [source_class, consented_by, consented_at]
+      properties:
+        source_class: {$ref: '#/components/schemas/AISourceClass'}
+        consented_by: {type: [string, 'null'], format: uuid}
+        consented_at: {type: string, format: date-time}
+    IntakeOptions:
+      type: object
+      additionalProperties: false
+      description: 'Intake''s settings on a chat channel''s scope; a field left out keeps its default. At most 16 KiB.'
+      properties:
+        create_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to open a conversation by itself. Default 0.85.'}
+        attach_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to add a message to an open conversation by itself; a wrong one hides a new request. Default 0.90.'}
+        ignore_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to set a message aside as not a request. Default 0.95.'}
+        attach_requires_single_candidate: {type: boolean, description: 'Never attach by itself while the customer has two or more open conversations it hesitates between. Default true.'}
+        auto_max_age_seconds: {type: integer, minimum: 60, maximum: 86400, description: 'A batch older than this when decided is only suggested. Default 7200.'}
+        reopen_window_days: {type: integer, minimum: 0, maximum: 90, description: 'How long after its last change a resolved conversation is a candidate. Default 7.'}
+        sources:
+          type: object
+          description: 'Context sources on or off: incoming (always on), thread_window, open_conversations, corrections (off by default), contact, kb, images. A source left out keeps its default; one that needs a consent (images, contact) is left out without it.'
+          additionalProperties: {type: boolean}
+        instructions: {type: string, maxLength: 4000, description: 'The channel''s own words added to the prompt.'}
+        redact_keywords: {type: array, maxItems: 100, items: {type: string, minLength: 1, maxLength: 80}, description: 'Words that mark a secret in the channel''s language (a password, a code).'}
+    AIChannelLevel:
+      type: object
+      required: [channel_id, channel_name, scope, slot, level, effective_level, off_reason, options, updated_by, updated_at]
+      properties:
+        channel_id: {type: string, format: uuid}
+        channel_name: {type: string}
+        scope: {type: string, description: "'' for the whole channel, or a scope of its type."}
+        slot: {$ref: '#/components/schemas/AISlotName'}
+        level: {$ref: '#/components/schemas/AILevel'}
+        effective_level: {$ref: '#/components/schemas/AILevel'}
+        off_reason: {type: [string, 'null'], enum: [workspace_off, null], description: 'workspace_off: the workspace has not turned the feature on, so nothing runs.'}
+        options: {anyOf: [{$ref: '#/components/schemas/IntakeOptions'}, {type: 'null'}], description: Intake only.}
+        updated_by: {type: [string, 'null'], format: uuid}
+        updated_at: {type: string, format: date-time}
+    ChannelAI:
+      type: object
+      required: [channel_id, scopes]
+      properties:
+        channel_id: {type: string, format: uuid}
+        scopes:
+          type: array
+          description: "The whole channel ('') first, then each scope of its type."
+          items:
+            type: object
+            required: [scope, slots]
+            properties:
+              scope: {type: string}
+              slots:
+                type: array
+                description: 'The features the scope has: triage and draft everywhere, intake only on a chat type''s intake scopes.'
+                items:
+                  type: object
+                  required: [slot, level, effective_level, source, off_reason, options]
+                  properties:
+                    slot: {$ref: '#/components/schemas/AISlotName'}
+                    level: {anyOf: [{$ref: '#/components/schemas/AILevel'}, {type: 'null'}], description: 'This scope''s own level; null follows the channel, then the workspace.'}
+                    effective_level: {$ref: '#/components/schemas/AILevel'}
+                    source: {type: string, enum: [scope, channel, workspace], description: Where the level that runs is set.}
+                    off_reason: {type: [string, 'null'], enum: [workspace_off, null]}
+                    options: {anyOf: [{$ref: '#/components/schemas/IntakeOptions'}, {type: 'null'}], description: 'Intake only, with the defaults filled in.'}
+    ChannelAIInput:
+      type: object
+      additionalProperties: false
+      required: [scope, level]
+      properties:
+        scope: {type: string, pattern: '^[a-z_]{0,40}$', description: "'' for the whole channel, or one of its type's scopes."}
+        level: {anyOf: [{$ref: '#/components/schemas/AILevel'}, {type: 'null'}], description: 'null removes the scope''s own level.'}
+        options: {$ref: '#/components/schemas/IntakeOptions'}
     AIProviderKind: {type: string, enum: [anthropic, openai_compatible]}
     AIProvider:
       type: object
@@ -7667,7 +7832,7 @@ components:
         used_by: {type: array, items: {$ref: '#/components/schemas/AISlotName'}, description: 'The features set to this provider, on or off.'}
     AISlot:
       type: object
-      required: [slot, source, provider_id, model, effort, enabled, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at, monthly_cap_micro_usd]
+      required: [slot, source, provider_id, model, effort, enabled, default_level, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at, monthly_cap_micro_usd]
       properties:
         slot: {$ref: '#/components/schemas/AISlotName'}
         monthly_cap_micro_usd: {type: [integer, 'null'], description: 'AI chat only: the most it may spend a UTC calendar month, in millionths of a US dollar, on the workspace''s own provider or a server without plan limits; null is no limit. The cloud''s own provider has its plan''s limits.'}
@@ -7676,7 +7841,8 @@ components:
         model: {type: [string, 'null']}
         effort: {type: string, enum: [low, medium, high]}
         enabled: {type: boolean}
-        automatic: {type: boolean, description: 'The feature runs by itself: triage suggestions of new tickets apply their auto_parts, filling only what nobody set; drafts are written for every customer message (never sent). Off unless an admin turns it on; off with the feature and when it moves to another provider.'}
+        default_level: {$ref: '#/components/schemas/AILevel'}
+        automatic: {type: boolean, deprecated: true, description: 'Read from default_level for older clients: triage auto, drafts suggest.'}
         auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only: what applies by itself.'}
         active: {type: boolean, description: 'On, and its provider and model are still there: the feature runs.'}
         off_reason: {type: [string, 'null'], enum: [server_provider_missing, server_provider_off, model_not_offered, null], description: 'Why a feature that is on cannot run. `server_provider_off`: the operator switched the server''s provider off; it runs again once it is on.'}
@@ -7689,14 +7855,14 @@ components:
       required: [id, kind, actor_agent_id, actor_name, via_token, provider_id, provider_label, slot, detail, created_at]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [provider_added, provider_changed, provider_key_changed, provider_removed, slot_changed, automatic_limits_changed, chat_deleted]}
+        kind: {type: string, enum: [provider_added, provider_changed, provider_key_changed, provider_removed, slot_changed, automatic_limits_changed, chat_deleted, channel_level_changed, source_consent_changed]}
         actor_agent_id: {type: [string, 'null'], format: uuid}
         actor_name: {type: [string, 'null']}
         via_token: {type: boolean, description: True when an agent token made the change.}
         provider_id: {type: [string, 'null'], format: uuid}
         provider_label: {type: [string, 'null'], description: The provider's name at the time; kept after it is deleted.}
         slot: {anyOf: [{$ref: '#/components/schemas/AISlotName'}, {type: 'null'}]}
-        detail: {type: object, additionalProperties: true, description: 'What changed: from and to for a feature, from_hint and to_hint for a key, turned_off for a deleted provider. Never a key.'}
+        detail: {type: object, additionalProperties: true, description: 'What changed: from and to for a feature, from_hint and to_hint for a key, turned_off for a deleted provider; channel_id, channel_name, scope, slot, before, after, options_changed (and reason recipient_changed when the server lowered it) for a channel''s level; source_class and consented for a source consent. Never a key.'}
         created_at: {type: string, format: date-time}
     AIAutomaticLimits:
       type: object
@@ -8083,7 +8249,7 @@ components:
             type: object
             required: [feature, billed_to, provider_label, calls, failed, automatic, input_tokens, output_tokens, cost_micro_usd]
             properties:
-              feature: {type: string, enum: [check, triage, draft, chat]}
+              feature: {type: string, enum: [check, triage, draft, chat, intake]}
               billed_to: {type: string, enum: [server, workspace_key]}
               provider_label: {type: string}
               calls: {type: integer}
@@ -8198,7 +8364,7 @@ components:
         assignee_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
-      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate]
+      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate, channels, source_consents]
       properties:
         server:
           description: The server's provider, set by the operator in the operator console → AI (ai.server.*); null when the server has none.
@@ -8215,6 +8381,8 @@ components:
                   additionalProperties: {type: array, items: {type: string}}
         providers: {type: array, items: {$ref: '#/components/schemas/AIProvider'}}
         slots: {type: array, items: {$ref: '#/components/schemas/AISlot'}}
+        channels: {type: array, items: {$ref: '#/components/schemas/AIChannelLevel'}, description: 'The levels live channels set apart from the workspace''s default, by channel name.'}
+        source_consents: {type: array, items: {$ref: '#/components/schemas/AISourceConsent'}}
         events: {type: array, items: {$ref: '#/components/schemas/AIEvent'}, description: 'The newest 50 changes, newest first.'}
         provider_limit: {type: integer}
         can_store_keys: {type: boolean, description: False while the server has no MAILBOX_TOKEN_KEYS; no key can be added.}
@@ -8274,8 +8442,9 @@ components:
         model: {type: string, maxLength: 200}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
-        automatic: {type: boolean, description: 'Left out: kept as it is (off when the feature turns off or moves to another provider).'}
-        auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only. Left out: kept; tags and priority when automatic turns on with none.'}
+        default_level: {$ref: '#/components/schemas/AILevel'}
+        automatic: {type: boolean, deprecated: true, description: 'The older switch: true is default_level auto for triage and suggest for drafts; false takes it back to suggest (triage) or off (drafts). Left out with default_level: kept as it is (off when the feature turns off; suggest for triage and off for drafts when it turns on or moves to another provider).'}
+        auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only. Left out: kept; tags and priority when it applies by itself with none.'}
         monthly_cap_micro_usd: {type: [integer, 'null'], minimum: 1, description: 'AI chat only. Left out: kept; null removes the limit.'}
     ExportLink:
       type: object
@@ -10315,7 +10484,7 @@ components:
         at: {type: string, format: date-time}
         kind:
           type: string
-          enum: [added, renamed, enabled, disabled, config_changed, credential_changed, removed, held_replayed, held_discarded, default_changed]
+          enum: [added, renamed, enabled, disabled, config_changed, credential_changed, removed, held_replayed, held_discarded, default_changed, ai_changed]
         channel_id: {type: string, format: uuid}
         channel_name: {type: string}
         channel_type: {type: string}
@@ -10329,7 +10498,7 @@ components:
         fields:
           type: array
           items: {type: string}
-          description: 'config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). Never a value. Empty for other kinds.'
+          description: 'config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). ai_changed: the AI feature whose level changed (triage, draft, intake); the levels are in the AI history. Never a value. Empty for other kinds.'
         count: {type: [integer, 'null'], description: 'held_replayed and held_discarded: how many messages were opened or discarded.'}
     ChannelEventPage:
       type: object
@@ -10842,6 +11011,7 @@ components:
             check_error_code: {type: string, description: 'Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…).'}
             offset: {type: integer, description: 'Only on upload_offset_mismatch: where the upload stands; send the part that starts there.'}
             held_count: {type: integer, description: 'Only on channel_has_held: how many messages the channel holds; open or discard them before removing it.'}
+            available_slots: {type: array, items: {$ref: '#/components/schemas/AISlotName'}, description: 'Only on intake_not_supported: the AI features the scope has.'}
             conflict:
               type: object
               required: [channel_id, channel_name]

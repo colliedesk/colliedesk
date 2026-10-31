@@ -190,7 +190,8 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
     </section>}
     <section className="panel ai-slots" aria-label={m.features}>
       <div className="ai-slot-head" aria-hidden="true"><span>{m.columnFeature}</span><span>{m.columnProvider}</span><span>{m.columnModel}</span><span>{m.columnAutomatic}</span><span>{m.columnOn}</span></div>
-      {settings.slots.map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
+      {/* Intake runs only on chat channels; its row comes with them. */}
+      {settings.slots.filter((slot) => slot.slot !== 'intake').map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
     </section>
     <div className="panel ai-sends"><InfoIcon /><span><span className="ai-long">{m.sends} </span><b>{m.sendsStrong}</b></span></div>
   </div>;

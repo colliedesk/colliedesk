@@ -19,7 +19,7 @@ and asks again whenever the feature moves to another provider. Turn a feature of
 
 ## Where a feature runs
 
-Each feature (**Triage suggestions**, **Reply drafts**) picks one of:
+Each feature (**Triage suggestions**, **Reply drafts**, and **Chat intake** for chat channels) picks one of:
 
 1. **The server's provider.** Set by the server operator for every workspace. On Colliedesk Cloud it
    is **Colliedesk AI**: Anthropic's Claude models, run for HC Labs and included in your plan. On your
@@ -195,6 +195,45 @@ is kept, and the card says so. **Apply again** applies it once more, filling onl
 empty. A teammate AI assigns gets the "Assigned to you by AI" notification. It costs nothing more: it
 uses the suggestion already made. Settings shows how many suggestions AI applied and how many were
 undone in the last 30 days. Restoring a workspace from a backup turns the automatic mode off.
+
+## What AI does by itself, per channel
+
+Each feature has a level: what it does without anyone asking.
+
+| Feature | Off | Suggest | Auto |
+|---|---|---|---|
+| Triage | Only when someone presses **Suggest** | Suggests for every new conversation | Applies the picked parts by itself (above), with **Undo** |
+| Reply drafts | Only **Draft with AI** | Writes a draft when a customer writes | Never: AI never sends |
+| Intake (chat channels only) | The channel's rules decide | The rules decide; AI leaves a suggestion for review | AI decides what is clear enough; otherwise the rules decide |
+
+The workspace's level is the default: **Apply suggestions automatically** is triage's Auto, **Write a
+draft when a customer writes** is drafts' Suggest, and triage turned on without it is Suggest. A
+channel can set its own level for a feature, and a chat channel for each of its scopes (one-to-one
+messages, groups), for example triage Auto on the support mailbox and Off on the sales one. A scope
+without its own level follows the channel, and the channel follows the workspace. A level never goes
+past what the workspace allows: while a feature is off for the workspace, it is off on every channel,
+whatever the channel says. People can always ask by hand (**Suggest**, **Draft with AI**) while the
+feature is on.
+
+Email and web forms have no intake: every message or form sent is a conversation, as the channel's
+rules always made it, and triage and drafts run after it is created. Intake is for chat channels,
+where many short messages arrive and some are not requests.
+
+When a feature moves to another provider, or is turned on again, its consent is new: every channel
+that ran it by itself goes a step down (Auto to Suggest; drafts written by themselves to drafts asked
+for), and the history says why. Intake also goes back to Suggest on a channel when it moves to
+another model, since what it was checked on was the old model's decisions. Restoring a workspace from
+a backup does the same.
+
+Admins set a channel's levels with `PUT /api/v1/channels/{id}/ai/{slot}` or the MCP tool
+`colliedesk_channel_ai_set`, and read them with `colliedesk_channel_ai_get`; **Settings → Built-in
+AI** lists the channels that set a level of their own. Every change is in the AI history and in the
+channel's history. An AI agent lowers a level with an admin token; raising one (or loosening intake's
+settings) always becomes a [request a person approves](agent-requests.md).
+
+Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
+once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with
+`colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 
 ## Limits
 

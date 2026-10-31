@@ -65,3 +65,40 @@ func TestAnAdminTokenManagesAIProvidersThroughTheTools(t *testing.T) {
 		t.Fatalf("check a deleted provider: %q", message)
 	}
 }
+
+// An agent reads a channel's AI levels, lowers one at once, and a raise waits for a person; email and
+// web forms have no intake, and the tool says so as the route does.
+func TestAnAgentSetsAChannelsAILevelsThroughTheTools(t *testing.T) {
+	fake := &aiprovider.Fake{}
+	e := newEnvWith(t, func(config *httpapi.Config) {
+		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+		config.Google = google.Config{Keys: keys}
+		config.AI = ai.Config{Build: func(ai.Spec) (aiprovider.Provider, error) { return fake, nil }}
+	})
+	w := e.newWorkspace("AI Levels Desk", "admin@ai-levels.example.com")
+	admin := e.connect(w.adminTier, "")
+	created := e.ok(admin, "colliedesk_channels_create", map[string]any{"type": "web_form", "config": map[string]any{"allowed_origins": []string{}}})
+	channel := at(t, created, "channel", "id").(string)
+
+	levels := e.ok(admin, "colliedesk_channel_ai_get", map[string]any{"channel_id": channel})
+	if scopes := at(t, levels, "channel_ai", "scopes").([]any); len(scopes) != 1 || len(scopes[0].(map[string]any)["slots"].([]any)) != 2 {
+		t.Fatalf("levels = %v", levels)
+	}
+	lowered := e.ok(admin, "colliedesk_channel_ai_set", map[string]any{"channel_id": channel, "slot": "draft", "scope": "", "level": "off"})
+	if !strings.Contains(stringify(lowered), `"level":"off"`) {
+		t.Fatalf("lowered = %v", lowered)
+	}
+	raised := e.ok(admin, "colliedesk_channel_ai_set", map[string]any{"channel_id": channel, "slot": "triage", "scope": "", "level": "auto"})
+	if at(t, raised, "agent_request", "status") != "pending" {
+		t.Fatalf("raise = %v", raised)
+	}
+	if message := e.fails(admin, "colliedesk_channel_ai_set", map[string]any{"channel_id": channel, "slot": "intake", "scope": "", "level": "suggest"}); !strings.Contains(message, "Intake runs only on chat channels") {
+		t.Fatalf("intake on a web form: %q", message)
+	}
+	if filed := e.ok(admin, "colliedesk_ai_source_consent_request", map[string]any{"source_class": "images"}); at(t, filed, "agent_request", "status") != "pending" {
+		t.Fatalf("consent request = %v", filed)
+	}
+	if removed := e.ok(admin, "colliedesk_ai_source_consent_remove", map[string]any{"source_class": "images"}); removed["removed"] != false {
+		t.Fatalf("removed = %v", removed)
+	}
+}

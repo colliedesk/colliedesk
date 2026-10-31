@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -592,10 +593,15 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 	if priority == "" {
 		priority = "normal"
 	}
+	// The scope its first message came in, which the AI levels of the channel are read by.
+	scope := ""
+	if adapter, ok := s.channels.Adapter(channel.Type); ok && slices.Contains(adapter.Definition().Scopes, in.Scope) {
+		scope = in.Scope
+	}
 	var conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,priority,assignee_id)
-		VALUES($1,$2,$3,$4,$4,$5,$6,$7,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($8,'')::uuid)) RETURNING id::text`,
-		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, priority, settings.DefaultAssigneeID).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id)
+		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid)) RETURNING id::text`,
+		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	for _, name := range tags {

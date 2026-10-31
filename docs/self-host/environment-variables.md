@@ -150,7 +150,7 @@ docker compose exec -T server /app/collie config set-secret ai.server.api_key < 
 # openai_compatible: also ai.server.base_url, with the version path, e.g. http://ollama:11434/v1
 ```
 
-`ai.server.models` lists, per feature (`triage`, `draft`, `chat`), the models a workspace may pick, separated
+`ai.server.models` lists, per feature (`triage`, `draft`, `chat`, `intake`), the models a workspace may pick, separated
 by `|`; the first is the default. A feature left out cannot use the server's provider. A change that
 sets some of these settings but not all that are needed is refused and says which are missing. The server's provider can reach any address, your own network included: you chose it. No
 workspace uses it until one of its admins turns a feature on.

@@ -14,11 +14,15 @@ const (
 		`"models":{"type":"array","items":{"type":"string"},"description":"The first is the one a check uses."},` +
 		`"check_status":{"type":"string","enum":["ok","failing"]},"check_error_code":{"type":["string","null"]},"checked_at":{"type":"string"},` +
 		`"created_by":{"type":["string","null"]},"created_at":{"type":"string"},"updated_at":{"type":"string"},` +
-		`"used_by":{"type":"array","items":{"type":"string","enum":["triage","draft","chat"]}}}}`
+		`"used_by":{"type":"array","items":` + aiSlotName + `}}}`
 
-	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","active"],"properties":{"slot":{"type":"string","enum":["triage","draft","chat"]},` +
+	aiSlotName  = `{"type":"string","enum":["triage","draft","chat","intake"]}`
+	aiLevelName = `{"type":"string","enum":["off","suggest","auto"]}`
+
+	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","default_level","active"],"properties":{"slot":` + aiSlotName + `,` +
 		`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":["string","null"]},"model":{"type":["string","null"]},` +
 		`"effort":{"type":"string","enum":["low","medium","high"]},"enabled":{"type":"boolean"},` +
+		`"default_level":` + aiLevelName + `,"automatic":{"type":"boolean","description":"Deprecated: default_level auto (triage) or suggest (drafts)."},` +
 		`"active":{"type":"boolean","description":"On, and its provider and model are still there: the feature runs."},` +
 		`"off_reason":{"type":["string","null"],"description":"Why a feature that is on cannot run: server_provider_missing, model_not_offered."},` +
 		`"consented_by":{"type":["string","null"]},"consented_at":{"type":["string","null"]},"updated_by":{"type":["string","null"]},"updated_at":{"type":["string","null"]},` +
@@ -35,8 +39,9 @@ func aiSettingsGetSpec() Spec {
 		Name:  "colliedesk_ai_settings_get",
 		Title: "Show the AI settings",
 		Description: `Show the workspace's AI settings: the server's provider (null when the server has none), the providers the workspace added ` +
-			`(never a key, only its last four characters), each feature (triage suggestions, reply drafts) with its provider, model and whether it is on ` +
-			`and can run, and the newest 50 changes with who made them. Every feature starts off.` +
+			`(never a key, only its last four characters), each feature (triage suggestions, reply drafts, intake of chat messages) with its provider, model, ` +
+			`whether it is on and can run, and what it does by itself where no channel says otherwise (default_level), the levels channels set apart from it (channels), ` +
+			`the kinds of extra context intake may send (source_consents), and the newest 50 changes with who made them. Every feature starts off.` +
 			"\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:  []string{"GET /api/v1/ai"},
@@ -142,21 +147,23 @@ func aiProviderRemoveSpec() Spec {
 		Tier: "admin", Destructive: true,
 		REST:   []string{"DELETE /api/v1/ai/providers/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
-		Output: `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":{"type":"string","enum":["triage","draft","chat"]}}}}`,
+		Output: `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":` + aiSlotName + `}}}`,
 		run:    aiProviderRemove,
 	}
 }
 
 func aiSlotSetRequestSpec() Spec {
 	return approvalSpec("colliedesk_ai_slot_set_request", "Ask to set an AI feature",
-		`Ask to set one AI feature (triage suggestions, reply drafts, or AI chat on the help center): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
-			`automatic lets the feature run by itself: triage suggestions apply the auto_parts (tags, priority, assignee), filling only what nobody set; drafts are written for every customer message, never sent. Left out, it stays as it is. `+
+		`Ask to set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
+			`default_level is what it does by itself where no channel says otherwise: off (only when someone asks), suggest (triage suggests for every new conversation; drafts are written when a customer writes, never sent; intake suggests in Review) `+
+			`or auto (triage only: suggestions apply the auto_parts, filling only what nobody set). Left out, it stays as it is; turned on, or moved to another provider, the feature starts at suggest (triage) or off. `+
 			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets, so a person always decides.`,
 		[]string{"PUT /api/v1/ai/slots/{slot}"},
-		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":{"type":"string","enum":["triage","draft","chat"]},`+
+		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":`+aiSlotName+`,`+
 			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},`+
-			`"automatic":{"type":"boolean","description":"The feature runs by itself. Off with the feature and when it moves to another provider."},`+
+			`"default_level":`+aiLevelName+`,`+
+			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},`+
 			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."},`+
 			`"monthly_cap_micro_usd":{"type":["integer","null"],"minimum":1,"description":"AI chat only: the most it may spend a UTC month in millionths of a US dollar on the workspace's own provider. Left out: kept; null removes it."}}}`, aiSlotSetRequest)
 }
@@ -362,5 +369,79 @@ func aiTriageDismissSpec() Spec {
 		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `}}`,
 		Output: aiTriageOutput,
 		run:    aiTriageDismiss,
+	}
+}
+
+const (
+	channelAIScopeInput = `"scope":{"type":"string","pattern":"^[a-z_]{0,40}$","description":"'' for the whole channel, or one of its type's scopes (a chat's direct, group): colliedesk_channel_ai_get lists them."}`
+	intakeOptionsInput  = `"options":{"type":"object","additionalProperties":false,"description":"Intake only; a field left out keeps its default.","properties":{` +
+		`"create_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.85."},"attach_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.90."},` +
+		`"ignore_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.95."},` +
+		`"attach_requires_single_candidate":{"type":"boolean","description":"Never attach by itself while the customer has two or more open conversations it hesitates between. Default true."},` +
+		`"auto_max_age_seconds":{"type":"integer","minimum":60,"maximum":86400,"description":"Older batches are only suggested. Default 7200."},` +
+		`"reopen_window_days":{"type":"integer","minimum":0,"maximum":90,"description":"How long a resolved conversation stays a candidate. Default 7."},` +
+		`"sources":{"type":"object","additionalProperties":{"type":"boolean"},"description":"Context sources on or off: incoming, thread_window, open_conversations, corrections (off by default), contact, kb, images."},` +
+		`"instructions":{"type":"string","maxLength":4000,"description":"The channel's own words added to the prompt."},` +
+		`"redact_keywords":{"type":"array","maxItems":100,"items":{"type":"string","minLength":1,"maxLength":80},"description":"Words that mark a secret in the channel's language."}}}`
+	channelAISchema = `{"type":"object","required":["channel_id","scopes"],"properties":{"channel_id":{"type":"string"},"scopes":{"type":"array","items":{"type":"object","required":["scope","slots"],` +
+		`"properties":{"scope":{"type":"string"},"slots":{"type":"array","items":{"type":"object","required":["slot","level","effective_level","source","off_reason"],"properties":{` +
+		`"slot":` + aiSlotName + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}],"description":"This scope's own level; null follows the channel, then the workspace."},` +
+		`"effective_level":` + aiLevelName + `,"source":{"type":"string","enum":["scope","channel","workspace"]},` +
+		`"off_reason":{"type":["string","null"],"description":"workspace_off: the workspace has not turned the feature on, so nothing runs."},"options":{"type":["object","null"]}}}}}}}}}`
+)
+
+func channelAIGetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_channel_ai_get",
+		Title: "Show a channel's AI levels",
+		Description: `Show what each AI feature does by itself on a channel and on each scope of its type (a chat's one-to-one messages and groups): ` +
+			`its own level (null: it follows the channel, then the workspace's default), the level that runs, and why it is off (workspace_off when the workspace has not turned the feature on). ` +
+			`Triage and drafts are on every channel; intake only on a chat channel's scopes, never on email or a web form.` + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/channels/{id}/ai"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output: `{"type":"object","required":["channel_ai"],"properties":{"channel_ai":` + channelAISchema + `}}`,
+		run:    channelAIGet,
+	}
+}
+
+func channelAISetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_channel_ai_set",
+		Title: "Set a channel's AI level",
+		Description: `Set what one AI feature (triage, draft, intake) does by itself on a channel or one of its scopes: off, suggest, auto, or null to follow the channel and the workspace. ` +
+			`Drafts go up to suggest (AI never sends); intake exists only on a chat channel's scopes (intake_not_supported otherwise) and takes options. ` +
+			`A level only decides the AI's own work; people can still ask by hand while the workspace has the feature on. ` +
+			`Lowering a level or tightening intake's options runs at once; a change that lets AI do more by itself (a higher level, a lower threshold, a source turned on, other instructions) ` +
+			`is filed as an agent request a person approves, whatever the token holds.` + "\n\nTier: admin (a raise always waits for a person).",
+		Tier: "admin", Idempotent: true,
+		REST: []string{"PUT /api/v1/channels/{id}/ai/{slot}"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","slot","scope","level"],"properties":{` + channelIDInput + `,"slot":` + aiSlotName + `,` +
+			channelAIScopeInput + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}]},` + intakeOptionsInput + `}}`,
+		Output: `{"type":"object","properties":{"channel_ai":` + channelAISchema + `,"agent_request":` + filedRequestSchema + `,"next":{"type":"string"}},` +
+			`"anyOf":[{"required":["channel_ai"]},{"required":["agent_request","next"]}]}`,
+		run: channelAISet,
+	}
+}
+
+func aiSourceConsentRequestSpec() Spec {
+	return approvalSpec("colliedesk_ai_source_consent_request", "Ask to let intake send more data",
+		`Ask for an admin's consent that AI intake may send one more kind of context to its provider besides the conversation's text: images (pictures customers sent), `+
+			`contact_profile (the customer's name, company and open conversations), or external:<name> (an integration's data). Without it intake leaves that source out.`,
+		[]string{"PUT /api/v1/ai/source-consents/{class}"},
+		`{"type":"object","additionalProperties":false,"required":["source_class"],"properties":{"source_class":{"type":"string","pattern":"^(images|contact_profile|external:[a-z0-9_]{1,40})$"}}}`, aiSourceConsentRequest)
+}
+
+func aiSourceConsentRemoveSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_source_consent_remove",
+		Title: "Stop intake sending some data",
+		Description: `Take back the consent that AI intake may send a kind of context (images, contact_profile, external:<name>); intake leaves it out from its next decision. ` +
+			`removed is false when there was no consent. Giving it again needs colliedesk_ai_source_consent_request.` + "\n\nTier: admin.",
+		Tier: "admin", Idempotent: true,
+		REST:   []string{"DELETE /api/v1/ai/source-consents/{class}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["source_class"],"properties":{"source_class":{"type":"string","pattern":"^(images|contact_profile|external:[a-z0-9_]{1,40})$"}}}`,
+		Output: `{"type":"object","required":["removed"],"properties":{"removed":{"type":"boolean"}}}`,
+		run:    aiSourceConsentRemove,
 	}
 }

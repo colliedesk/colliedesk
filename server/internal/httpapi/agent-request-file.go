@@ -139,6 +139,9 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 var requestTitles = map[string]string{
 	"PATCH /api/v1/conversations":                                "Change several conversations",
 	"POST /api/v1/conversations":                                 "Open a conversation",
+	"PUT " + channelAIRoute:                                      "Set an AI level of a channel",
+	"PUT /api/v1/ai/source-consents/{class}":                     "Let AI intake send more data",
+	"DELETE /api/v1/ai/source-consents/{class}":                  "Stop AI intake sending some data",
 	"PATCH /api/v1/conversations/{id}":                           "Change a conversation",
 	"PUT /api/v1/conversations/{id}/tags/{tagId}":                "Tag a conversation",
 	"DELETE /api/v1/conversations/{id}/tags/{tagId}":             "Remove a tag from a conversation",

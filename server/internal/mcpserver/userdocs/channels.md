@@ -117,6 +117,12 @@ turned on or off, changed (which settings: the support address, the sender name,
 made the default or removed a channel, replaced one of its secrets (never its value), and how many held messages were
 opened or discarded.
 
+## AI on a channel
+
+A channel can set what each AI feature does by itself on it (triage, drafts, and on chat channels
+intake), apart from the workspace's default; see [AI per channel](ai.md#what-ai-does-by-itself-per-channel).
+A change shows in the channel's history as "changed what AI triage does by itself".
+
 ## For AI agents and the API
 
 Everything above is available through `GET/POST /api/v1/channels` (`include_removed=true` lists
@@ -127,4 +133,5 @@ has is a 409 with `conflict` naming that channel), `/api/v1/channels/{id}/held/r
 rules (`settings`: how messages join conversations, default tags and priority, rate limits) can be
 changed there only, not in Settings yet. Removing a channel and discarding held messages are, for an
 agent token, requests a person approves. Storing a channel's secret needs an admin token; a lower
-token is refused, so a secret never waits in a request.
+token is refused, so a secret never waits in a request. A channel's AI levels are `GET /api/v1/channels/{id}/ai` and
+`PUT /api/v1/channels/{id}/ai/{slot}` (`colliedesk_channel_ai_get`, `colliedesk_channel_ai_set`).
