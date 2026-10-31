@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SLA } from '../../api/schemas';
 import { nextChange } from '../../lib/sla';
 
@@ -37,4 +37,19 @@ export function useSLARefresh(items: { sla?: SLA | null }[], refresh: () => void
     const timer = setTimeout(() => { refresh(); setRetry({ ...retry, next: retry.next + 1 }); }, retries[retry.next]);
     return () => clearTimeout(timer);
   }, [retry, seen, refresh]);
+}
+
+// The server counts a first reply or a new status into the clocks a moment after it answers the request.
+const settle = 3_000;
+
+// useSettleTargets reads the list now and once more when the server has counted what was just done (a reply
+// sent, a status changed), so a met or stopped clock does not stay "Overdue" on screen. Cleared with the inbox.
+export function useSettleTargets(refresh: () => void): () => void {
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return useCallback(() => {
+    refresh();
+    clearTimeout(timer.current);
+    timer.current = setTimeout(refresh, settle);
+  }, [refresh]);
 }

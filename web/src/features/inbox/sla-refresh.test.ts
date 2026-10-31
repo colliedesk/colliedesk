@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SLA } from '../../api/schemas';
-import { useSLARefresh } from './sla-refresh';
+import { useSettleTargets, useSLARefresh } from './sla-refresh';
 
 const clock = (due_at: string, warn_at: string) => ({ state: 'running' as const, due_at, warn_at, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: 60 });
 const sla = (due: string, warn: string): SLA => ({ state: 'ok', first_response: clock(due, warn), resolution: null });
@@ -45,5 +45,18 @@ test('a browser clock ahead of the server reads again a little later, a few time
   act(() => vi.advanceTimersByTime(15_000));
   expect(refresh).toHaveBeenCalledTimes(3);
   act(() => vi.advanceTimersByTime(60_000));
+  expect(refresh).toHaveBeenCalledTimes(3);
+});
+
+test('after a reply or a status change, the list is read at once and again once the server has counted it', () => {
+  const refresh = vi.fn();
+  const { result, unmount } = renderHook(() => useSettleTargets(refresh));
+  act(() => result.current());
+  expect(refresh).toHaveBeenCalledTimes(1);
+  act(() => vi.advanceTimersByTime(3_000));
+  expect(refresh).toHaveBeenCalledTimes(2);
+  act(() => result.current());
+  unmount();
+  act(() => vi.advanceTimersByTime(10_000));
   expect(refresh).toHaveBeenCalledTimes(3);
 });
