@@ -30,7 +30,8 @@ export function filtersOf(query: InboxQuery): ConversationFilters {
 export function queryOf(filters: ConversationFilters): InboxQuery {
   const query: InboxQuery = {};
   for (const key of listKeys) {
-    const values = filters[key];
+    // A view may name a filter the generated type does not know yet (sla); it reads as any other list.
+    const values = (filters as Partial<Record<string, string[]>>)[key];
     if (values && values.length > 0) query[key] = values.join(',');
   }
   if (!query.status) query.status = allStatuses;

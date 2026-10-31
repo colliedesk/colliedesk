@@ -7,7 +7,7 @@ import { autofixPreviewOn } from '../autofix/autofix-preview';
 
 export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels'
   | '/settings/channels/type/email' | '/settings/channels/type/web_form' | '/settings/channels/type/help_chat'
-  | '/settings/channels/type/zalo' | '/settings/numbers';
+  | '/settings/channels/type/zalo' | '/settings/numbers' | '/settings/targets';
 // sub: the pages under an item, listed below it (Channels: one per channel type).
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean; sub?: NavItem[] }
 interface NavGroup { label: string; items: NavItem[] }
@@ -44,6 +44,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.team, 'team-heading', shown.team),
       ...section(messages.invites, 'invites-heading'),
       ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
+      ...(shown.channels ? [{ label: messages.responseTargets, to: '/settings/targets' as const, current: page === '/settings/targets' }] : []),
       // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
       // While in preview it shows only in a browser that turned it on (autofix-preview.ts).
       ...(shown.autofix !== false && autofixPreviewOn() ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),

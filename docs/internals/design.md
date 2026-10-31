@@ -180,6 +180,7 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Controls are 32 px with a mouse and 44 px on touch (`--control` switches on `pointer: coarse`;
   rail links, status tabs and list rows also grow to 44 px below 44 rem).
 - A reference is an id: mono, `--text-3` in the list (`--text-2` in the header), never a fill (`.conv-ref`).
+- A response target is a clock mark and words: `--warn` due soon, `--danger` overdue, never a fill (`.sla-mark`).
 - Three button shapes only: primary (`--accent`, ink), secondary (white with a light outline and a small
   shadow), danger (red text).
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
@@ -210,7 +211,11 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   only what the API returns. A conversation numbered in a series of its own (a channel's, such as
   `CHD-2026-0142`) shows its code first in the row's meta and in the header with a copy button; the default
   series' `#12` stays off both, so an inbox of email and web forms reads as before, and its code still finds
-  it (`?ref=`, search). There are no SLA timers yet.
+  it (`?ref=`, search). A response target shows on a row only when it is due soon or late, after the
+  priority, as a clock mark and an absolute time ("Due 1:15 PM", "Overdue"; never a countdown, nothing on a
+  row ticks); its accessible name and tooltip say which clock and that it counts business hours. A row with
+  a mark counts its tags ("2 tags") so the meta stays one line; the code and the mark are never cut. The
+  header says the clock in full ("Reply overdue"); the details list both clocks under Targets.
 - Below 75 rem the details pane becomes a drawer opened by **Show details**; below 44 rem the
   rail becomes a top bar and the list and the conversation take turns (`data-view` on `.inbox-shell`):
   the list scrolls with the page, and a conversation opened by its address fills the screen under the
@@ -238,6 +243,7 @@ They are a gap finder, not a spec: where a list conflicts with a rule above, the
 | Timeline and composer | Comments, Submitting a form, Showing input error |
 | Settings and email channel | Settings, Integrations, Saving changes |
 | Conversation numbers, a channel's References | Settings, Saving changes |
+| Response targets | Settings, Saving changes |
 | Sign-in, invites, sessions | Login, User Management |
 | Every screen | Accessibility, Loading, Toast, Drawer |
 

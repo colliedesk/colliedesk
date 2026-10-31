@@ -1,0 +1,42 @@
+/* Settings → Response targets. */
+.tg-loading { min-height: 10rem; }
+.tg-days { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.tg-day { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); }
+.tg-day + .tg-day { border-top: 1px solid var(--line); }
+.tg-day .field-inline { font-size: var(--fs-small); font-weight: 500; }
+.tg-hours { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; color: var(--text-3); font-size: var(--fs-small); }
+.tg-hours input { width: 7.5rem; }
+.tg-hours .field-note { flex-basis: 100%; }
+.tg-closed { color: var(--text-3); font-size: var(--fs-small); }
+.tg-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tg-table th, .tg-table td { padding: var(--space-2) var(--space-3); text-align: left; vertical-align: middle; }
+.tg-table thead th { color: var(--text-2); font-size: var(--fs-label); font-weight: 500; border-bottom: 1px solid var(--line); }
+.tg-table tbody tr + tr > * { border-top: 1px solid var(--line); }
+.tg-table thead th:first-child { width: 8rem; }
+.tg-table tbody th { font-size: var(--fs-small); font-weight: 500; }
+.tg-cell { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.tg-cell input { width: 6rem; }
+.tg-cell > span { color: var(--text-3); font-size: var(--fs-label); }
+.tg-holidays { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.tg-holidays li { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.tg-holidays li + li { border-top: 1px solid var(--line); }
+.tg-holidays li > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tg-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tg-add { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; }
+.tg-add .field { flex: 1 1 10rem; }
+.tg-add .field-note { flex-basis: 100%; }
+.tg-dl { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-1) var(--space-4); margin: 0; font-size: var(--fs-small); }
+.tg-dl dt { color: var(--text-3); }
+.tg-dl dd { margin: 0; }
+.tg-channels { display: grid; gap: var(--space-1); border: 0; padding: 0; margin: 0; }
+@media (pointer: coarse) { .tg-days .link-action, .settings-body > .stacked-form .link-action { display: inline-flex; align-items: center; min-height: var(--touch); } }
+@media (max-width: 40rem) {
+  .tg-day { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .tg-table thead { display: none; }
+  .tg-table, .tg-table tbody, .tg-table tr, .tg-table th, .tg-table td { display: block; width: 100%; }
+  .tg-table tr { padding: var(--space-2) 0; }
+  .tg-table tbody tr + tr > * { border-top: 0; }
+  .tg-table tbody tr + tr { border-top: 1px solid var(--line); }
+  .tg-table td::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--text-3); font-size: var(--fs-label); }
+  .tg-dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}

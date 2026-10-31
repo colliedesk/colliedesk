@@ -996,3 +996,22 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .ref-copy .icon-button { --control: 24px; min-height: 24px; width: 24px; }
 .ref-copy .icon-button svg { width: 13px; height: 13px; }
 @media (pointer: coarse) { .ref-copy .icon-button { --control: var(--touch); min-height: var(--touch); width: var(--touch); } }
+
+/* A response target due soon or late: a clock mark and words, never a fill (docs/internals/design.md). */
+.sla-mark { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sla-mark svg { width: 12px; height: 12px; flex: none; }
+.sla-soon { color: var(--warn); font-weight: 500; }
+.sla-late { color: var(--danger); font-weight: 500; }
+.tag-pill.tag-count::before { content: none; }
+/* Details · Targets: read-only rows with the 84 px label column of Properties. */
+.target-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; min-height: 32px; padding: 6px 0; }
+.target-row > span:first-child { color: var(--text-3); font-size: var(--fs-small); }
+.target-value { display: grid; gap: 2px; font-size: var(--fs-small); }
+.target-value > span { display: inline-flex; align-items: center; gap: 4px; }
+.target-value svg { width: 12px; height: 12px; }
+.target-value small { color: var(--text-3); font-size: var(--fs-label); }
+.target-soon { color: var(--warn); }
+.target-late { color: var(--danger); }
+.target-met { color: var(--ok); }
+.target-quiet { color: var(--text-3); }
+.targets-foot { margin: var(--space-2) 0 0; color: var(--text-3); font-size: var(--fs-label); }

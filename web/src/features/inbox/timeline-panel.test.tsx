@@ -207,3 +207,11 @@ test('the header shows a numbered conversation\'s code with a way to copy it; th
   expect(screen.queryByText('#12')).toBeNull();
   expect(screen.queryByRole('button', { name: /Copy reference/ })).toBeNull();
 });
+
+test('the header says which clock is due or late in full words', () => {
+  const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+  const conversation = { id: base.conversation_id, subject: 'Máy in', status: 'open', priority: 'urgent', contact_id: '88888888-8888-4888-8888-888888888888', contact_name: 'A', tags: [], channel: 'zalo',
+    sla: { state: 'overdue', first_response: { ...clock, state: 'met', met_at: '2026-11-02T02:00:00Z' }, resolution: { ...clock, due_at: '2026-11-02T04:10:00Z', overdue: true } } } as unknown as Conversation;
+  render(<TimelinePanel conversation={conversation} items={[]} timezone="UTC" />);
+  expect(screen.getByText('Resolve overdue')).toHaveClass('sla-late');
+});

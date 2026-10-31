@@ -45,3 +45,27 @@ test('the details narrow the list to the conversation\'s customer', () => {
   fireEvent.click(screen.getByRole('button', { name: 'All conversations of Mai Linh' }));
   expect(onShow).toHaveBeenCalledWith('55555555-5555-4555-8555-555555555555');
 });
+
+test('targets list each clock in full, read only, with the business time left or late; an admin can edit them', () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  try {
+    const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+    const sla = { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true, business_minutes_left: -80 }, resolution: null };
+    const withTargets = { ...conversation(null), sla } as unknown as Conversation;
+    render(<DetailsPanel conversation={withTargets} agents={[]} tags={[]} timezone="UTC" canManage />);
+    const targets = screen.getByRole('region', { name: 'Targets' });
+    expect(targets).toHaveTextContent('First reply');
+    expect(targets).toHaveTextContent('Overdue since 4:10 AM');
+    expect(targets).toHaveTextContent('1 h 20 min of business time late');
+    expect(targets).toHaveTextContent('No target');
+    expect(within(targets).getByRole('link', { name: 'Edit targets' })).toHaveAttribute('href', '/settings/targets');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a conversation without targets shows no Targets section', () => {
+  render(<DetailsPanel conversation={{ ...conversation(null), sla: null } as unknown as Conversation} agents={[]} tags={[]} timezone="UTC" />);
+  expect(screen.queryByRole('region', { name: 'Targets' })).toBeNull();
+});

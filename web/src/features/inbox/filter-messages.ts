@@ -6,7 +6,7 @@ export const filterMessages = {
   // How a conversation started without a channel; a channel type's label is its registry entry's (channelLabel).
   origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' } as Record<string, string>,
   // The Sort menu offers the first three; the others are named only while a link sets them.
-  sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first' },
+  sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', due: 'Due first' },
   priority: 'Priority',
   assignee: 'Assignee',
   anyoneAssigned: 'Assigned to anyone',
@@ -27,6 +27,8 @@ export const filterMessages = {
   deliveryFailed: 'Reply delivery failed',
   noDeliveryFailed: 'No failed delivery',
   organization: 'Organization',
+  targets: 'Targets',
+  targetStates: { overdue: 'Overdue', due_soon: 'Due soon' } as Record<'overdue' | 'due_soon', string>,
   reference: 'Reference',
   contact: 'Customer',
   created: 'Created',

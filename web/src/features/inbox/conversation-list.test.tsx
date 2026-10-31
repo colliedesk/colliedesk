@@ -254,3 +254,20 @@ test('a conversation numbered in a series of its own shows its code first; one o
   expect(code.parentElement?.firstElementChild).toBe(code);
   expect(screen.queryByText('#12')).toBeNull();
 });
+
+test('a row draws a target only when it is due soon or late, with the clock and business hours in its name; its tags then count', () => {
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+  const tags = [{ id: '44444444-4444-4444-8444-444444444444', name: 'printer' }, { id: '55555555-5555-4555-8555-555555555555', name: 'warehouse' }];
+  const late = { ...row('2026-11-02T05:00:00Z'), id: '33333333-3333-4333-8333-333333333333', subject: 'Late one', tags,
+    sla: { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true }, resolution: null } };
+  const calm = { ...row('2026-11-02T04:00:00Z'), subject: 'Calm one', tags, sla: { state: 'ok', first_response: { ...clock, due_at: '2026-11-02T09:00:00Z' }, resolution: null } };
+  render(<ConversationList items={[late, calm] as unknown as Conversation[]} timezone="UTC" page={1} hasNextPage={false} />);
+  const mark = screen.getByText('Overdue');
+  expect(mark).toHaveClass('sla-mark', 'sla-late');
+  expect(mark).toHaveAccessibleName('First reply overdue since 4:10 AM, counted in business hours');
+  expect(screen.getByText('2 tags')).toHaveAttribute('data-tip', 'printer, warehouse');
+  const calmRow = screen.getByRole('button', { name: /Calm one/ });
+  expect(within(calmRow).queryByText(/Due|Overdue/)).toBeNull();
+  expect(within(calmRow).getByText('printer')).toBeInTheDocument();
+});

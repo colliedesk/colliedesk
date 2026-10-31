@@ -5,7 +5,7 @@ import { conversationSortSchema, knownChannels, prioritySchema, statusSchema } f
 // view (what still needs an answer), and status=all is every status. `result` (the conversations a
 // number of the results page counts) is never saved in a view: its snapshot is replaced.
 
-export const listKeys = ['status', 'priority', 'assignee', 'tag', 'channel', 'channel_id'] as const;
+export const listKeys = ['status', 'priority', 'assignee', 'tag', 'channel', 'channel_id', 'sla'] as const;
 export const textKeys = ['tag_match', 'contact', 'organization', 'ref', 'awaiting', 'source', 'created_after', 'created_before', 'updated_after', 'updated_before', 'sort', 'search', 'result'] as const;
 export const flagKeys = ['has_pending_draft', 'delivery_failed'] as const;
 
@@ -29,7 +29,7 @@ const isFlag = (key: string): key is FlagKey => (flagKeys as readonly string[]).
 // list with a 400. The server still checks everything.
 const words: Partial<Record<InboxQueryKey, readonly string[]>> = {
   status: statusSchema.options, priority: prioritySchema.options, channel: knownChannels, sort: conversationSortSchema.options,
-  awaiting: ['team', 'customer'], source: ['imported', 'native'], tag_match: ['any', 'all'],
+  awaiting: ['team', 'customer'], sla: ['overdue', 'due_soon'], source: ['imported', 'native'], tag_match: ['any', 'all'],
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const resultPattern = /^[0-9a-f-]{36}:(30d|7d)\.[a-z_]+$/;
