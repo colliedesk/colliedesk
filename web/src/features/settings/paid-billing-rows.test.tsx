@@ -90,6 +90,8 @@ test('the Plan row states the price of the plan it was bought as, with the charg
 test('a yearly Team 25 never reads as monthly, and a monthly one never as yearly', () => {
   const { unmount } = show({ ...team25, purchased_plan: 'team25_yearly' });
   expect(row('Plan')).not.toHaveTextContent('a month');
+  // A plan already paid states what it costs, not the discount that sold it.
+  expect(row('Plan')).not.toHaveTextContent('2 months free');
   expect(row('Plan')).not.toHaveTextContent('$149');
   unmount();
   show(team25);

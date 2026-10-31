@@ -1,4 +1,5 @@
 import type { CheckoutPlan } from '../../api/schemas';
+import { billingMessages } from './billing-messages';
 import { planCardsFor } from './plan-options';
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
@@ -19,5 +20,7 @@ export function purchasedPrice(plan: CheckoutPlan): PurchasedPrice | undefined {
   const price = card?.prices[0];
   if (!card || !price) return undefined;
   const text = `${price.amount} ${price.per}${price.note ? `, ${lowerFirst(price.note)}` : ''}`;
-  return { name: card.name, amount: price.amount, text, detail: `${price.amount} ${price.per}${price.note ? ` · ${lowerFirst(price.note)}` : ''}` };
+  // The receipt line keeps a lasting term ("price locked for life") but not the discount that sold the plan.
+  const lasting = price.note && price.note !== billingMessages.twoMonthsFree ? price.note : undefined;
+  return { name: card.name, amount: price.amount, text, detail: `${price.amount} ${price.per}${lasting ? ` · ${lowerFirst(lasting)}` : ''}` };
 }
