@@ -156,3 +156,77 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await expect(page.getByRole('list', { name: 'Active filters' })).toContainText(`Reference: ${code}`);
   await expect(page.locator('.conversation-row')).toHaveCount(1);
 });
+
+test('zalo channel: words for Resolved make the header say it tells, the quiet way resolves without a word, at phone width too', async ({ page }) => {
+  test.setTimeout(90_000);
+  const suffix = uniqueSuffix();
+  const oa = `45${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const app = '1188200455';
+  const secret = `oa-secret-${suffix}`;
+  await redeemLink(page, createWorkspace(`Zalo Status ${suffix}`, `admin-${suffix}@example.com`, baseURL));
+  await page.goto(`${baseURL}/settings/channels/new/zalo`);
+  await page.getByRole('textbox', { name: 'OA ID' }).fill(oa);
+  await page.getByRole('textbox', { name: 'App ID' }).fill(app);
+  await page.getByLabel('OA secret key').fill(secret);
+  await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
+
+  // Messages: the words for Resolved, and closing after 48 hours (said under the box before saving).
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  const block = page.getByRole('region', { name: 'When a conversation’s status changes' });
+  await block.getByLabel('When set to Resolved').fill('Yêu cầu {ref} đã được xử lý.');
+  await block.getByLabel('Close resolved conversations after').fill('48');
+  await expect(block.getByText('A conversation that stays resolved for 48 hours closes by itself, quietly: “When set to Closed” is empty.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save messages' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  await expect(page.getByLabel('When set to Resolved')).toHaveValue('Yêu cầu {ref} đã được xử lý.');
+  await expect(page.getByLabel('Close resolved conversations after')).toHaveValue('48');
+
+  // A customer writes one to one; the conversation's header says Resolve tells them.
+  const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),
+    sender: { id: '7700002031' }, recipient: { id: oa }, message: { msg_id: `m-${suffix}`, text: 'Cần hỗ trợ đổi mật khẩu' } });
+  const timestamp = (JSON.parse(body) as { timestamp: string }).timestamp;
+  const signature = createHash('sha256').update(app).update(body).update(timestamp).update(secret).digest('hex');
+  expect((await page.request.post(`${baseURL}/api/v1/channels/zalo/webhook`, { headers: { 'Content-Type': 'application/json', 'X-ZEvent-Signature': `mac=${signature}` }, data: body })).status()).toBe(200);
+  await page.goto(`${baseURL}/`);
+  await expect(async () => {
+    await page.reload();
+    await page.locator('.conversation-row').first().click({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  const resolve = page.getByRole('button', { name: /^Resolve and tell the customer on / });
+  await expect(resolve).toHaveText('Resolve and tell');
+
+  // At 390 px nothing scrolls sideways, the quiet menu open or closed.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sideways = () => page.evaluate(() => [document.documentElement, ...Array.from(document.querySelectorAll('.timeline-actions, .details-panel'))]
+    .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName));
+  expect(await sideways()).toEqual([]);
+  await page.locator('summary[aria-label="More ways to resolve"]').click();
+  const quiet = page.getByRole('button', { name: 'Resolve without telling the customer' });
+  await expect(quiet).toBeInViewport({ ratio: 1 });
+  expect(await sideways()).toEqual([]);
+
+  // The quiet way resolves it and the channel sends nothing: no notice joins the timeline.
+  await quiet.click();
+  await expect(page.getByRole('button', { name: /^Reopen/ })).toBeVisible();
+  await page.waitForTimeout(6000); // longer than the notice worker's 5 s round
+  await page.reload();
+  await expect(page.locator('.plain-text-body', { hasText: 'Cần hỗ trợ đổi mật khẩu' })).toBeVisible();
+  await expect(page.getByText(/đã được xử lý/)).toHaveCount(0);
+
+  // The bulk bar and the Messages tab fit a phone too, Tell customers on the first line of the bar.
+  // Measured without the hidden tooltips (data-tip), which every icon control has in the layout.
+  const fits = async (selector: string) => (await page.addStyleTag({ content: '[data-tip]::after { display: none !important; }' }), page.evaluate((sel) => [document.documentElement, ...Array.from(document.querySelectorAll(sel))]
+    .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName), selector));
+  await page.goto(`${baseURL}/`);
+  await page.getByRole('radio', { name: 'Resolved' }).check();
+  await page.locator('.row-check input').first().check();
+  await expect(page.getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
+  expect(await fits('.bulk-bar')).toEqual([]);
+  await page.goto(`${baseURL}/settings/channels`);
+  await page.getByRole('link', { name: /Zalo OA/ }).first().click();
+  await page.getByRole('tab', { name: 'Messages' }).click();
+  await expect(page.getByLabel('When set to Resolved')).toBeVisible();
+  expect(await fits('#status-notices')).toEqual([]);
+});

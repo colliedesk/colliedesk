@@ -634,6 +634,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Tell customers: between the count and the icons (DOM order = reading order), pushing the icons right. */
 .bulk-tell { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: var(--control); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
 .bulk-tell input { margin: 0; }
+/* Its tip is a sentence: it hangs from the right edge and wraps, inside a phone's width. */
+.bulk-tell[data-tip]::after { left: auto; right: 0; translate: 0 0; width: max-content; max-width: min(18rem, calc(100vw - 2 * var(--space-4))); white-space: normal; }
 .bulk-tell + .bulk-actions { margin-left: 0; }
 @media (pointer: coarse), (max-width: 30rem) { .bulk-tell { min-height: var(--touch); } }
 /* Narrow: the count and Tell customers on the first line, the icons on the second, right-aligned. */
