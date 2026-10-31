@@ -60,13 +60,18 @@ year; its next number can be raised, never lowered. When you move to Colliedesk 
 numbered its own way, set the series' next number (and `start`, `start_year`) to where that system
 stopped: codes below it that are not here belong to the system before.
 
-In the web app, a conversation numbered in a series of its own shows its code first on its row and in
-its header, with a button that copies it; the default series' `#12` is not shown, so an inbox of email and
-web forms reads as before. **Settings → Conversation numbers** lists the series with the code the next
-conversation gets; admins change a series' format (codes already given keep theirs and still find their conversations) or next number (it only goes up: a lower one is refused
-before anything is sent), set where it was taken over (**Taken over at**, **In the year**), and add a
-series. A channel picks its series on its page (Zalo OA: Connection → References). A link with `?ref=`
-opens the list on that conversation, in every status, with a **Reference** chip that removes it.
+In the web app:
+
+1. A conversation numbered in a series of its own shows its code first on its row and in its header,
+   with a button that copies it. The default series' `#12` is not shown, so an inbox of email and web
+   forms reads as before.
+2. **Settings → Conversation numbers** lists the series with the code the next conversation gets.
+   Admins add a series and change one: its format (codes already given keep theirs and still find their
+   conversations), its next number (it only goes up: a lower one is refused before anything is sent),
+   and where it was taken over (**Taken over at**, **In the year**). Agents read the page.
+3. A channel picks its series on its own page (Zalo OA: Connection → References).
+4. A link with `?ref=` opens the list on that conversation, in every status, with a **Reference** chip
+   that removes it.
 
 `GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
 adds or changes one (admins; an agent token asks a person first). MCP: `colliedesk_number_series_list`,
