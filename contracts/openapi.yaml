@@ -1309,6 +1309,13 @@ paths:
           in: query
           description: 'One priority or several, comma-separated: high,urgent.'
           schema: {type: string, example: 'high,urgent'}
+        - name: sla
+          in: query
+          description: >-
+            overdue (a running response target is past), due_soon (one is within warn_before_minutes of its
+            target), or both comma-separated. While the response targets are off nothing matches. A
+            conversation changed in the last seconds may be a round of the server behind.
+          schema: {type: string, example: 'overdue,due_soon'}
         - name: assignee
           in: query
           description: >-
@@ -1379,7 +1386,8 @@ paths:
           description: >-
             updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first,
             then the most recently updated), waiting_longest (conversations awaiting the team, the
-            oldest customer message first, then every other conversation by last update).
+            oldest customer message first, then every other conversation by last update), due (the earliest
+            running response target first, then the rest by last update).
           schema: {$ref: '#/components/schemas/ConversationSort'}
         - name: search
           in: query
@@ -3450,6 +3458,88 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/ConversationNumberSeries'}}}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/agents/me/sla-alerts:
+    patch:
+      operationId: setMySLAAlerts
+      x-permission: authenticated
+      description: Turn your own reminder and overdue emails of response targets on or off (my_alert_email of GET /api/v1/response-targets).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: {type: boolean}
+      responses:
+        '200':
+          description: Your setting
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email]
+                properties:
+                  email: {type: boolean}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/response-targets:
+    get:
+      operationId: getResponseTargets
+      x-permission: conversations:read
+      description: >
+        The workspace's response targets: business hours in a timezone, holidays, first-response and
+        resolution targets by priority in business minutes, how long before a target a conversation is due
+        soon, the channels they apply to and whether reminder emails go out. Never set, they are off with
+        no hours and no targets.
+      responses:
+        '200':
+          description: The response targets
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResponseTargets'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    put:
+      operationId: setResponseTargets
+      x-permission: access:write
+      description: >
+        Replace the response targets with this document. Turning them on measures the conversations opened
+        from then on; turning them off hides every target and keeps what was measured. A wrong part answers
+        400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes,
+        timezone, channel_ids.0). Send updated_at as you read it to save only if nobody saved since: 409
+        changed_elsewhere otherwise, with the stored document as current, and nothing changes. Without it the
+        last save wins.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ResponseTargetsInput'}}}
+      responses:
+        '200':
+          description: The response targets
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResponseTargets'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409':
+          description: Someone saved the response targets after you read them (changed_elsewhere); nothing changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, current]
+                properties:
+                  error:
+                    type: object
+                    required: [code, message]
+                    properties:
+                      code: {type: string, enum: [changed_elsewhere]}
+                      message: {type: string}
+                      request_id: {type: string}
+                  current: {$ref: '#/components/schemas/ResponseTargets'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/workspace/slug:
@@ -9521,7 +9611,7 @@ components:
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
         also writes agent. problem_report: an agent's Report a problem.
-    ConversationSort: {type: string, enum: [updated_desc, updated_asc, created_desc, created_asc, priority, waiting_longest], default: updated_desc}
+    ConversationSort: {type: string, enum: [updated_desc, updated_asc, created_desc, created_asc, priority, waiting_longest, due], default: updated_desc}
     ConversationFilters:
       type: object
       additionalProperties: false
@@ -9557,6 +9647,7 @@ components:
         updated_before: {type: string, format: date-time}
         sort: {$ref: '#/components/schemas/ConversationSort'}
         search: {type: string, minLength: 1, maxLength: 200}
+        sla: {type: array, maxItems: 2, uniqueItems: true, items: {type: string, enum: [overdue, due_soon]}, description: 'overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target).'}
     SavedViewScope: {type: string, enum: [personal, shared]}
     SavedViewInput:
       type: object
@@ -10626,6 +10717,88 @@ components:
         required: {type: number}
         passes: {type: boolean}
         suggestion: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Null when it passes: else the nearest color for field that passes every pair of that field.'}
+    ConversationSLA:
+      type: object
+      required: [state, first_response, resolution]
+      properties:
+        state: {type: string, enum: [overdue, due_soon, ok, paused, stopped, met], description: 'The most pressing of its clocks.'}
+        first_response: {oneOf: [{$ref: '#/components/schemas/SLAClock'}, {type: 'null'}], description: 'Null when its priority has no first-response target.'}
+        resolution: {oneOf: [{$ref: '#/components/schemas/SLAClock'}, {type: 'null'}], description: 'Null when its priority has no resolution target.'}
+        alerts:
+          type: array
+          description: The reminder and overdue emails its clocks sent, oldest first.
+          items:
+            type: object
+            required: [clock, threshold, due_at, status, recipients, at]
+            properties:
+              clock: {type: string, enum: [first_response, resolution]}
+              threshold: {type: string, enum: [reminder, overdue]}
+              due_at: {type: string, format: date-time}
+              status: {type: string, enum: [sending, sent, rejected, nobody], description: 'nobody: no recipient gets these emails.'}
+              recipients: {type: integer, minimum: 0}
+              at: {type: string, format: date-time}
+    SLAClock:
+      type: object
+      required: [state, due_at, warn_at, met_at, breached_at, due_soon, overdue, business_minutes_left]
+      properties:
+        state: {type: string, enum: [running, paused, stopped, met], description: 'running while it is open; paused while pending; stopped once resolved or closed; met by the first reply.'}
+        due_at: {type: [string, 'null'], format: date-time}
+        warn_at: {type: [string, 'null'], format: date-time, description: 'When it is due soon: warn_before_minutes of business time before due_at.'}
+        met_at: {type: [string, 'null'], format: date-time}
+        breached_at: {type: [string, 'null'], format: date-time, description: 'due_at, once a running clock passed it.'}
+        due_soon: {type: boolean}
+        overdue: {type: boolean}
+        business_minutes_left: {type: [integer, 'null'], description: 'Business minutes to due_at at the time of the request; negative once late; null unless running.'}
+    BusinessDay:
+      type: object
+      required: [day, open]
+      properties:
+        day: {type: string, enum: [mon, tue, wed, thu, fri, sat, sun]}
+        open: {type: boolean}
+        from: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 'Opening time, as 08:00, when open.'}
+        to: {type: string, pattern: '^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$', description: 'Closing time, after from; 24:00 for midnight.'}
+    TargetMinutes:
+      type: object
+      properties:
+        first_response_minutes: {type: [integer, 'null'], minimum: 1, maximum: 525600, description: 'Business minutes to the first reply; null is no target.'}
+        resolution_minutes: {type: [integer, 'null'], minimum: 1, maximum: 525600, description: 'Business minutes to resolve; null is no target.'}
+    ResponseTargetsInput:
+      type: object
+      required: [enabled, hours, targets]
+      properties:
+        enabled: {type: boolean}
+        timezone: {type: [string, 'null'], description: 'IANA timezone the hours are in; null is the workspace timezone.'}
+        hours: {type: array, maxItems: 7, items: {$ref: '#/components/schemas/BusinessDay'}, description: 'A weekday left out is closed.'}
+        holidays:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [date, name]
+            properties:
+              date: {type: string, format: date}
+              name: {type: string, maxLength: 100}
+        targets:
+          type: object
+          additionalProperties: false
+          properties:
+            urgent: {$ref: '#/components/schemas/TargetMinutes'}
+            high: {$ref: '#/components/schemas/TargetMinutes'}
+            normal: {$ref: '#/components/schemas/TargetMinutes'}
+            low: {$ref: '#/components/schemas/TargetMinutes'}
+        warn_before_minutes: {type: integer, minimum: 0, maximum: 10080, description: 'Business minutes before a target a conversation is due soon (and its reminder goes).'}
+        channel_ids: {type: [array, 'null'], items: {type: string, format: uuid}, description: 'The channels whose conversations have targets; null is every channel.'}
+        alert_email: {type: boolean, description: 'Whether reminder and overdue emails go out (each teammate can turn theirs off).'}
+        updated_at: {type: [string, 'null'], format: date-time, description: 'As you read it: save only if nobody saved since (409 changed_elsewhere otherwise).'}
+    ResponseTargets:
+      allOf:
+        - {$ref: '#/components/schemas/ResponseTargetsInput'}
+        - type: object
+          required: [timezone, holidays, warn_before_minutes, channel_ids, alert_email, enabled_at, updated_at]
+          properties:
+            enabled_at: {type: [string, 'null'], format: date-time, description: 'When they were last turned on: conversations opened before have no target.'}
+            my_alert_email: {type: boolean, description: 'Whether you get the reminder and overdue emails (PATCH /api/v1/agents/me/sla-alerts).'}
+            updated_at: {type: [string, 'null'], format: date-time}
     ConversationNumberSeries:
       type: object
       required: [series, format, next, start, start_year, updated_at]
@@ -10651,6 +10824,9 @@ components:
         number: {type: integer, minimum: 1, description: 'Its number in number_series, which counts on and never restarts.'}
         number_series: {type: string, description: 'The series it is numbered in: default, or the one its channel names (settings.number_series).'}
         display_ref: {type: string, description: 'The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=.'}
+        sla:
+          oneOf: [{$ref: '#/components/schemas/ConversationSLA'}, {type: 'null'}]
+          description: Its response clocks; null while the response targets are off or none applies to it (opened before they were on, on a channel they leave out, imported).
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
         contact_name: {type: string}

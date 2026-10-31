@@ -158,6 +158,40 @@ type Conversation struct {
 	Number       int64  `json:"number"`
 	NumberSeries string `json:"number_series"`
 	DisplayRef   string `json:"display_ref"`
+	// SLA is its response clocks; nil while the workspace's targets are off or none applies to it.
+	SLA *ConversationSLA `json:"sla"`
+}
+
+// ConversationSLA is a conversation's response clocks and the most pressing of their states: overdue,
+// due_soon, ok (running), paused, stopped or met.
+type ConversationSLA struct {
+	State         string        `json:"state"`
+	FirstResponse *SLAClockView `json:"first_response"`
+	Resolution    *SLAClockView `json:"resolution"`
+	// Alerts are the reminder and overdue emails its clocks sent, oldest first.
+	Alerts []SLAAlertRecord `json:"alerts"`
+}
+
+// SLAAlertRecord is one reminder or overdue email of a conversation's clock.
+type SLAAlertRecord struct {
+	Clock      string    `json:"clock"`
+	Threshold  string    `json:"threshold"`
+	DueAt      time.Time `json:"due_at"`
+	Status     string    `json:"status"`
+	Recipients int       `json:"recipients"`
+	At         time.Time `json:"at"`
+}
+
+// SLAClockView is one clock as the API shows it, read at the time of the request.
+type SLAClockView struct {
+	State               string     `json:"state"`
+	DueAt               *time.Time `json:"due_at"`
+	WarnAt              *time.Time `json:"warn_at"`
+	MetAt               *time.Time `json:"met_at"`
+	BreachedAt          *time.Time `json:"breached_at"`
+	DueSoon             bool       `json:"due_soon"`
+	Overdue             bool       `json:"overdue"`
+	BusinessMinutesLeft *int       `json:"business_minutes_left"`
 }
 
 // ChannelRef names a conversation's channel and the one its replies leave through.

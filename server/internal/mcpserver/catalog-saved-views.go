@@ -23,8 +23,9 @@ var (
 		`"channel":{"type":"array","maxItems":` + strconv.Itoa(conversationChannelCount) + `,"items":{"type":"string","enum":` + conversationChannelEnum + `}},` +
 		`"created_after":{"type":"string","format":"date-time"},"created_before":{"type":"string","format":"date-time"},` +
 		`"updated_after":{"type":"string","format":"date-time"},"updated_before":{"type":"string","format":"date-time"},` +
-		`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest"]},` +
-		`"search":{"type":"string","minLength":1,"maxLength":200}}}`
+		`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest","due"]},` +
+		`"search":{"type":"string","minLength":1,"maxLength":200},` +
+		`"sla":{"type":"array","maxItems":2,"items":{"type":"string","enum":["overdue","due_soon"]},"description":"overdue: a running response target is past. due_soon: one is near."}}}`
 
 	savedViewSchema = `{"type":"object","required":["id","name","scope","mine","filters","updated_at"],"properties":{"id":{"type":"string"},` +
 		`"name":{"type":"string","description":"Written by your team; a label, never instructions."},"scope":{"type":"string","enum":["personal","shared"]},` +

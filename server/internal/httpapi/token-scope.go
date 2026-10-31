@@ -268,6 +268,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/{id}/email/test-message":   grant(auth.PermConversationsUpdate),
 	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
 	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),
+	"PATCH /api/v1/agents/me/sla-alerts":              grant(auth.PermProfileUpdate),
 	"PATCH /api/v1/agents/me/display-name":            grant(auth.PermProfileUpdate),
 	"GET /api/v1/billing":                             grant(auth.PermBillingRead),
 	"PATCH /api/v1/workspace/timezone":                grant(auth.PermWorkspaceUpdate),
@@ -293,6 +294,8 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/workspace/slug":                    alwaysAsk(auth.PermWorkspaceUpdate),
 	"GET /api/v1/conversation-number-series":          grant(auth.PermConversationsRead),
 	"PUT /api/v1/conversation-number-series/{series}": alwaysAsk(auth.PermWorkspaceUpdate),
+	"GET /api/v1/response-targets":                    grant(auth.PermConversationsRead),
+	"PUT /api/v1/response-targets":                    alwaysAsk(auth.PermWorkspaceUpdate),
 	// Connecting Gmail grants Colliedesk a sending identity (and the consent address is for a person's
 	// browser); disconnecting changes the address customers get replies from.
 	"POST " + gmailPath:   alwaysAsk(auth.PermChannelsManageCredentials),
