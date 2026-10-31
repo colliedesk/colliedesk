@@ -192,7 +192,11 @@ func (d desk) connect(t *testing.T, workspaceID string, config string) channels.
 
 // event is a delivery as Zalo sends it, with neutral ids.
 func event(name, oa, sender, recipient, id, text string, attachments ...map[string]any) channels.Raw {
-	body := map[string]any{"app_id": "700001", "event_name": name, "timestamp": fmt.Sprint(time.Now().UnixMilli()),
+	return eventAt(time.Now(), name, oa, sender, recipient, id, text, attachments...)
+}
+
+func eventAt(at time.Time, name, oa, sender, recipient, id, text string, attachments ...map[string]any) channels.Raw {
+	body := map[string]any{"app_id": "700001", "event_name": name, "timestamp": fmt.Sprint(at.UnixMilli()),
 		"sender": map[string]string{"id": sender}, "recipient": map[string]string{"id": recipient},
 		"message": map[string]any{"msg_id": id, "text": text, "attachments": attachments}}
 	if strings.Contains(name, "group") {
@@ -480,5 +484,38 @@ func TestAReplyCarriesItsPicturesAndRefusesOtherFiles(t *testing.T) {
 		if after := len(a.zalo.sends()); after != before {
 			t.Fatalf("%s: %d calls to Zalo, want none", c.name, after-before)
 		}
+	}
+}
+
+// The channel's received notice quotes the message that opened the conversation, not one the customer
+// sent after it; a picture or a file without words says what it is.
+func TestTheReceivedNoticeQuotesTheOpeningMessageAndAFileSaysWhatItIs(t *testing.T) {
+	a := newAt(t)
+	oa := a.channel.ExternalAccount
+	if _, err := a.store.UpdateChannel(context.Background(), a.workspaceID, a.channel.ID, store.ChannelInput{Settings: []byte(`{"notices":{"received":"Got it."}}`)},
+		store.ChannelActor{AgentID: a.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	channel, err := a.store.GetChannel(context.Background(), a.workspaceID, a.channel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.channel = channel
+	now := time.Now()
+	a.receive(t, eventAt(now.Add(-time.Minute), "user_send_text", oa, "1110002", oa, "m-open", "The invoice is wrong"))
+	a.receive(t, eventAt(now.Add(-30*time.Second), "user_send_image", oa, "1110002", oa, "m-pic", "",
+		map[string]any{"type": "image", "payload": map[string]any{"url": a.media.URL + "/picture", "name": ""}}))
+	a.deliver(t)
+	var notice map[string]any
+	for _, c := range a.zalo.sends() {
+		if message, _ := c.Body["message"].(map[string]any); message["text"] == "Got it." {
+			notice = message
+		}
+	}
+	if notice == nil || notice["quote_message_id"] != "m-open" {
+		t.Fatalf("notice = %v, want it to quote m-open", notice)
+	}
+	if got := a.one(t, `SELECT body FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-pic'`); got != "[picture]" {
+		t.Fatalf("a picture without words = %q", got)
 	}
 }
