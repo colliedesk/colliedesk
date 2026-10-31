@@ -99,6 +99,7 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
         : isSavedReplyRequest(current) ? <SavedReplyProposal item={current} />
           : autofixRoute(current.route) ? <Part part={autofixPart} failed={<PartUnavailable />} render={(autofix) => <autofix.AutofixRequestDetail item={current} result={outcome?.result}
             onApprove={consent && canApprove && current.status === 'pending' && !current.requested_by.token_revoked ? approve : undefined} busy={busy} />} />
+            : current.notices && current.notices.length === 0 && current.status !== 'pending' ? <p className="muted-copy">{requestsMessages.noticeNoneSent}</p>
             : current.notices?.length ? <StatusNotices notices={current.notices} single={current.route === '/api/v1/conversations/{id}'}
                 when={current.status === 'pending' ? 'now' : current.status === 'approved' ? 'done' : 'never'} />
               : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}

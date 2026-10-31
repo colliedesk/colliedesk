@@ -241,3 +241,12 @@ test('a bulk change shows one example per channel, filled in, and how many more 
   expect(screen.queryByText(/OA four/)).not.toBeInTheDocument();
   expect(screen.getByText('And 2 more channels.')).toBeInTheDocument();
 });
+
+test('an approved status change that told nobody says so; a call of another kind shows its body', () => {
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  const { unmount } = render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices: [] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText(/No customer was told/)).toBeInTheDocument();
+  unmount();
+  render(<RequestCard item={agentRequest({ notices: null })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText(/"status": "pending"/)).toBeInTheDocument();
+});

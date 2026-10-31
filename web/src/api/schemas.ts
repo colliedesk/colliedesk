@@ -331,7 +331,7 @@ export const agentRequestSchema = z.object({
   approvable_by: z.enum(['agent', 'admin', 'owner']), summary: z.string(),
   conversation_id: z.string().uuid().nullable(),
   // What approving a status change would tell customers, one per chat channel.
-  notices: z.array(z.object({ channel_id: z.string().uuid(), channel_name: z.string(), example_ref: z.string(), text: z.string(), told: z.number().int() })).optional(),
+  notices: z.array(z.object({ channel_id: z.string().uuid(), channel_name: z.string(), example_ref: z.string(), text: z.string(), told: z.number().int() })).nullable().optional(),
   saved_reply: z.object({
     id: z.string().uuid(),
     before: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime() }).nullable(),
