@@ -1,4 +1,6 @@
 // Strings of the agent requests page; they load with that page, not with the first screen.
+export type NoticeWhen = 'now' | 'done' | 'never';
+
 export const requestsMessages = {
   requestsDescription: 'What AI agents asked to do and could not do alone: an action above their token\'s tier, or one that always needs a person (new tokens, export, billing, the email channel, the workspace address). Approving runs it as you, with your permissions. A request expires after seven days.',
   requestsPending: 'Waiting',
@@ -23,8 +25,12 @@ export const requestsMessages = {
   openResult: (url: string) => `Open ${url}`,
   editedBy: (person: string) => `Edited by ${person} before sending`,
   // What approving a status change would tell customers, one block per chat channel.
-  noticeWillSend: (channel: string) => `${channel} will send`,
-  noticeEach: (channel: string, told: number, ref: string) => (told === 1 ? `${channel} tells 1 customer:` : `${channel} tells ${told} customers, each with their own code. For example, ${ref}:`),
+  // when: the request still waits (now), was approved (done), or never ran (never).
+  noticeSends: (channel: string, when: NoticeWhen) => `${channel} ${when === 'now' ? 'will send' : when === 'done' ? 'sent' : 'would have sent'}`,
+  noticeEach: (channel: string, told: number, ref: string, when: NoticeWhen) => {
+    const verb = when === 'now' ? 'tells' : when === 'done' ? 'told' : 'would have told';
+    return told === 1 ? `${channel} ${verb} 1 customer:` : `${channel} ${verb} ${told} customers, each with their own code. For example, ${ref}:`;
+  },
   noticeMoreChannels: (count: number) => `And ${count} more ${count === 1 ? 'channel' : 'channels'}.`,
   onlyAdminApproves: 'Only an admin can approve this.',
   onlyOwnerApproves: 'Only the person who owns this token can approve it: it changes their own settings.',

@@ -223,6 +223,16 @@ test('a status change that would tell a customer shows the words their channel w
   expect(screen.queryByText(/"status"/)).not.toBeInTheDocument();
 });
 
+test('once decided, the card keeps the words: sent when approved, would have sent when rejected', () => {
+  const notices = [notice('Hảo Đạt OA', 1, 'CHD-2026-0142', 'Đã xử lý CHD-2026-0142.')];
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  const { unmount } = render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Hảo Đạt OA sent')).toBeInTheDocument();
+  unmount();
+  render(<RequestCard item={agentRequest({ ...decided, status: 'rejected', notices })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Hảo Đạt OA would have sent')).toBeInTheDocument();
+});
+
 test('a bulk change shows one example per channel, filled in, and how many more channels', () => {
   const notices = [notice('OA one', 8, 'CHD-1', 'Đóng CHD-1.'), notice('OA two', 1, 'CHD-2', 'Đóng CHD-2.'), notice('OA three', 2, 'CHD-3', 'x'), notice('OA four', 2, 'CHD-4', 'y'), notice('OA five', 2, 'CHD-5', 'z')];
   render(<RequestCard item={agentRequest({ path: '/api/v1/conversations', route: '/api/v1/conversations', body: { ids: [], changes: { status: 'closed' } }, notices })} timezone="UTC" {...actions()} />);

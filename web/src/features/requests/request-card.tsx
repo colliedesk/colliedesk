@@ -6,6 +6,7 @@ import { track } from '../../lib/product-analytics';
 import { permissionLabel } from '../settings/token-permissions';
 import { messages } from '../../messages';
 import { requestsMessages } from './requests-messages';
+import type { NoticeWhen } from './requests-messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { autofixPart } from '../autofix/autofix-part';
 import { gmailPart } from '../settings/gmail-part';
@@ -98,7 +99,8 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
         : isSavedReplyRequest(current) ? <SavedReplyProposal item={current} />
           : autofixRoute(current.route) ? <Part part={autofixPart} failed={<PartUnavailable />} render={(autofix) => <autofix.AutofixRequestDetail item={current} result={outcome?.result}
             onApprove={consent && canApprove && current.status === 'pending' && !current.requested_by.token_revoked ? approve : undefined} busy={busy} />} />
-            : current.notices?.length ? <StatusNotices notices={current.notices} single={current.route === '/api/v1/conversations/{id}'} />
+            : current.notices?.length ? <StatusNotices notices={current.notices} single={current.route === '/api/v1/conversations/{id}'}
+                when={current.status === 'pending' ? 'now' : current.status === 'approved' ? 'done' : 'never'} />
               : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
       {edited && <>
         <p className="muted-copy">{requestsMessages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
@@ -132,10 +134,10 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
 
 // A status change that would tell customers in their chat: the words each channel would send, filled in for
 // one of its conversations; three channels at most, then how many more.
-function StatusNotices({ notices, single }: { notices: NonNullable<AgentRequest['notices']>; single: boolean }) {
+function StatusNotices({ notices, single, when }: { notices: NonNullable<AgentRequest['notices']>; single: boolean; when: NoticeWhen }) {
   return <>
     {notices.slice(0, 3).map((notice) => <div className="request-notice" key={notice.channel_id}>
-      <span>{single ? requestsMessages.noticeWillSend(notice.channel_name) : requestsMessages.noticeEach(notice.channel_name, notice.told, notice.example_ref)}</span>
+      <span>{single ? requestsMessages.noticeSends(notice.channel_name, when) : requestsMessages.noticeEach(notice.channel_name, notice.told, notice.example_ref, when)}</span>
       <p className="request-body reply-draft-text">{notice.text}</p></div>)}
     {notices.length > 3 && <p className="muted-copy">{requestsMessages.noticeMoreChannels(notices.length - 3)}</p>}
   </>;
