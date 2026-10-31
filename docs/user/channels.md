@@ -146,7 +146,20 @@ ones whole, so send them all.
   starts its own batch; off, a second command joins the batch being written (a one-to-one chat composing
   one request).
 - A cancel command (such as "Hủy") cancels only a batch of its sender that named a command; with none
-  being collected it is an ordinary message.
+  being collected it is an ordinary message. With `settings.notices.cancelled` set, the channel says so.
+- `gather.confirm_seconds` asks before a request written over several messages opens (a one-to-one chat):
+  once the customer is quiet for `quiet_seconds`, the channel sends `settings.notices.ask_confirm` ("Is that
+  all? Send OK…") and waits this long. A command with `action: confirm` (such as "OK", best with `match:
+  exact`) opens it at once and is no part of it; more messages join it and the question is asked again once
+  the customer is quiet; silence opens it; a cancel throws it away. A confirm with nothing being written is
+  an ordinary message. 0 (the default) asks nothing.
+  An OK written before the question is part of the request. A journal processed late (a paused channel
+  resumed) keeps the times its messages came: a request whose customer was quiet longer than the question
+  would have waited opens without one. A request of any length opens whole.
+- A command with `ask_description` set, sent alone (no words after it, no file), is answered with that text
+  instead and opens nothing until the customer describes it. `gather.expire_seconds` (0, the default, never)
+  throws such a request away that long after the customer's last message: their next message is answered
+  with `settings.notices.expired`, unless it is a new command, which starts a new request.
 - How a command's phrases match (`settings.commands.<name>.match`): `fuzzy` (the default) compares the
   message's first words without accents or case and forgives one wrong, missing, added or swapped letter
   in a phrase of five letters or more; `words` compares them the same way but forgives no wrong letter,

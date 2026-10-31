@@ -99,13 +99,23 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.unmatched_every_seconds": "Use 0 to 86400 seconds."},
 			Message: "Check the channel settings."}
 	}
-	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched} {
+	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
+		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired} {
 		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
 				Message: "Check the channel settings."}
 		}
 	}
 	for key, command := range merged.Commands {
+		if command.Action != "" && command.Action != channels.ActionOpen && command.Action != channels.ActionCancel && command.Action != channels.ActionReopen &&
+			command.Action != channels.ActionConfirm {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".action": "Use open, cancel, reopen or confirm."},
+				Message: "Check the channel settings."}
+		}
+		if placeholder := channels.UnknownPlaceholder(channels.NoticeAskDescription, command.AskDescription); placeholder != "" {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".ask_description": "This notice cannot fill " + placeholder + "."},
+				Message: "Check the channel settings."}
+		}
 		if command.Match != "" && command.Match != channels.MatchFuzzy && command.Match != channels.MatchWords && command.Match != channels.MatchExact {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".match": "Use fuzzy, words or exact, or leave it out."},
 				Message: "Check the channel settings."}
@@ -135,6 +145,14 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 		}
 		if scope.Gather != nil && (scope.Gather.PreCommandSeconds < 0 || scope.Gather.PreCommandSeconds > 3600) {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.pre_command_seconds": "Use 0 to 3600 seconds."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Gather != nil && (scope.Gather.ConfirmSeconds < 0 || scope.Gather.ConfirmSeconds > 3600) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.confirm_seconds": "Use 0 to 3600 seconds."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Gather != nil && (scope.Gather.ExpireSeconds < 0 || scope.Gather.ExpireSeconds > 86400) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.expire_seconds": "Use 0 to 86400 seconds."},
 				Message: "Check the channel settings."}
 		}
 	}

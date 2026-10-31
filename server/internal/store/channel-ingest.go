@@ -114,6 +114,22 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			result.Status = ResultSkipped
 			return result, nil
 		}
+		// A batch listed by another worker as well may have been asked about since: it waits for its time.
+		// One that took a message since it was listed (a paused channel resumed) is left to the next round,
+		// which lists it whole.
+		if request.Flushing {
+			var due bool
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(bool_and(e.state='pending') AND max(e.flush_at)<=$3,false)
+				AND NOT EXISTS(SELECT 1 FROM channel_inbound_events o WHERE o.workspace_id=$1 AND o.channel_id=$4 AND o.state='pending'
+					AND o.aggregate_key=(SELECT aggregate_key FROM channel_inbound_events WHERE workspace_id=$1 AND id::text=$5) AND NOT (o.id::text=ANY($2)))
+				FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.id::text=ANY($2)`, workspaceID, request.EventIDs, now, channel.ID, request.EventIDs[0]).Scan(&due); err != nil {
+				return result, fmt.Errorf("check collected messages are due: %w", err)
+			}
+			if !due {
+				result.Status = ResultSkipped
+				return result, nil
+			}
+		}
 	}
 	// A decision of a gathering applies only while it is undecided and holds exactly these events.
 	var pending pendingGathering
@@ -226,6 +242,21 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		result.Status = channels.ResultArchived
 		return finish(result)
 	}
+	// A batch's command is the one its messages were collected with (the journal's), not whichever of its
+	// messages last looked like one: an OK written before the question is part of the request.
+	if request.Flushing && len(request.EventIDs) > 0 && in.Intent.Kind == channels.IntentCommand {
+		var named *string
+		if err := tx.QueryRow(ctx, `SELECT command FROM channel_inbound_events WHERE workspace_id=$1 AND id::text=ANY($2) AND command IS NOT NULL
+			ORDER BY received_at,id LIMIT 1`, workspaceID, request.EventIDs).Scan(&named); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return result, fmt.Errorf("read the command of collected messages: %w", err)
+		}
+		switch {
+		case named == nil:
+			in.Intent = channels.Intent{}
+		case *named != in.Intent.Command:
+			in.Intent = channels.Intent{Kind: channels.IntentCommand, Command: *named}
+		}
+	}
 	command, commanded := channel.Settings.Commands[in.Intent.Command]
 	commanded = commanded && in.Intent.Kind == channels.IntentCommand
 	// A team member writing in a chat place on the channel's own app is context of the place: kept, never
@@ -239,6 +270,76 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 		result.Status = channels.ResultArchived
 		return finish(result)
+	}
+	// The message's own time: a journal processed late (a paused channel resumed) keeps the clocks of when
+	// its messages came.
+	received := now
+	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Flushing {
+		if err := tx.QueryRow(ctx, `SELECT received_at FROM channel_inbound_events WHERE workspace_id=$1 AND id::text=$2`,
+			workspaceID, request.EventIDs[0]).Scan(&received); err != nil {
+			return result, fmt.Errorf("read when the message came: %w", err)
+		}
+		received = received.UTC()
+	}
+	// A request left waiting for its description past ExpireSeconds is thrown away by its sender's next
+	// message, which is told so unless it starts a new request.
+	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Flushing && !request.Replay && scope.Gather != nil && scope.Gather.ExpireSeconds > 0 {
+		var expired bool
+		if err := tx.QueryRow(ctx, `WITH stale AS (
+				SELECT id FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3
+					AND NOT (id::text=ANY($4))
+					AND EXISTS(SELECT 1 FROM channel_inbound_events d WHERE d.workspace_id=$1 AND d.channel_id=$2 AND d.state='pending' AND d.aggregate_key=$3 AND d.description_asked_at IS NOT NULL)
+					AND (SELECT max(received_at) FROM channel_inbound_events m WHERE m.workspace_id=$1 AND m.channel_id=$2 AND m.state='pending' AND m.aggregate_key=$3
+						AND NOT (m.id::text=ANY($4))) < $5),
+			expired AS (UPDATE channel_inbound_events e SET state='dropped',drop_reason=$6,flush_at=NULL,processed_at=$7 FROM stale WHERE e.workspace_id=$1 AND e.id=stale.id RETURNING e.id),
+			items AS (UPDATE channel_thread_items SET disposition='not_request',disposition_reason=$6 WHERE workspace_id=$1 AND inbound_event_id IN (SELECT id FROM expired) RETURNING 1)
+			SELECT EXISTS(SELECT 1 FROM expired)`,
+			workspaceID, channel.ID, in.Aggregate.Key, request.EventIDs, received.Add(-time.Duration(scope.Gather.ExpireSeconds)*time.Second), channels.DropExpired, now).Scan(&expired); err != nil {
+			return result, fmt.Errorf("expire a request: %w", err)
+		}
+		if expired && !(commanded && (command.Action == "" || command.Action == channels.ActionOpen)) {
+			if err := journal.write(ctx, "dropped", journalDetail{dropReason: channels.DropExpired}); err != nil {
+				return result, err
+			}
+			if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemNotRequest, reason: channels.DropExpired}); err != nil {
+				return result, err
+			}
+			if err := queueThreadNotice(ctx, tx, &journal, journal.eventID, channels.NoticeExpired, channels.RenderNotice(channel.Settings.Notices.Expired, nil), 0); err != nil {
+				return result, err
+			}
+			reason := channels.DropExpired
+			result.Status, result.Reason = channels.ResultDropped, &reason
+			return finish(result)
+		}
+	}
+	if commanded && command.Action == channels.ActionConfirm {
+		// Where a request being written is asked about, a confirm sends it now; the confirm itself is no part
+		// of it. Before the question, or with nothing being written, it is an ordinary message.
+		var sent bool
+		asks := scope.Gather != nil && scope.Gather.ConfirmSeconds > 0 && channel.Settings.Notices.AskConfirm != ""
+		if in.Aggregate != nil {
+			tag, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET flush_at=$5 WHERE workspace_id=$1 AND channel_id=$2 AND state='pending'
+				AND aggregate_key=$3 AND NOT (id::text=ANY(COALESCE($4::text[],'{}')))
+				AND EXISTS(SELECT 1 FROM channel_inbound_events c WHERE c.workspace_id=$1 AND c.channel_id=$2 AND c.state='pending' AND c.aggregate_key=$3 AND c.command IS NOT NULL)
+				AND (NOT $6 OR EXISTS(SELECT 1 FROM channel_inbound_events q WHERE q.workspace_id=$1 AND q.channel_id=$2 AND q.state='pending' AND q.aggregate_key=$3 AND q.confirm_asked_at IS NOT NULL))`,
+				workspaceID, channel.ID, in.Aggregate.Key, request.EventIDs, now, asks)
+			if err != nil {
+				return result, fmt.Errorf("send a confirmed request: %w", err)
+			}
+			sent = tag.RowsAffected() > 0
+		}
+		if sent {
+			if err := journal.write(ctx, "dropped", journalDetail{dropReason: channels.DropConfirmed}); err != nil {
+				return result, err
+			}
+			if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemNotRequest, reason: channels.DropConfirmed}); err != nil {
+				return result, err
+			}
+			reason := channels.DropConfirmed
+			result.Status, result.Reason = channels.ResultDropped, &reason
+			return finish(result)
+		}
+		in.Intent, commanded, command = channels.Intent{}, false, channels.Command{}
 	}
 	if commanded && command.Action == channels.ActionCancel {
 		// Where messages are collected, a cancel command cancels only what its sender is collecting with a
@@ -275,6 +376,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemNotRequest, reason: channels.DropCancelled}); err != nil {
 			return result, err
+		}
+		if in.Aggregate != nil && channel.Settings.Notices.Cancelled != "" {
+			if err := queueThreadNotice(ctx, tx, &journal, journal.eventID, channels.NoticeCancelled, channels.RenderNotice(channel.Settings.Notices.Cancelled, nil), 0); err != nil {
+				return result, err
+			}
 		}
 		reason := channels.DropCancelled
 		result.Status, result.Reason = channels.ResultDropped, &reason
@@ -328,7 +434,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			AND state='pending' AND aggregate_key=$3`, workspaceID, channel.ID, in.Aggregate.Key).Scan(&first); err != nil {
 			return result, fmt.Errorf("load collected messages: %w", err)
 		}
-		flush := now.Add(in.Aggregate.Quiet)
+		flush := received.Add(in.Aggregate.Quiet)
 		if first != nil && in.Aggregate.Max > 0 && first.Add(in.Aggregate.Max).Before(flush) {
 			flush = first.Add(in.Aggregate.Max)
 		}
@@ -353,6 +459,51 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return finish(result)
 	}
 
+	// A request written over several messages, where the scope asks before it opens: once the customer is
+	// quiet the channel asks, and the batch waits ConfirmSeconds more (a confirm, or more messages, end the
+	// wait); a batch asked about already opens. More messages since the question ask it again.
+	// A command alone (no words after it, no file) asks for a description instead, and waits for one.
+	if request.Flushing && commanded && command.AskDescription != "" && len(in.Files) == 0 && len(request.EventIDs) > 0 {
+		if _, _, rest, ok := channels.MatchCommand(in.Text, channel.Settings.Commands); ok && strings.TrimSpace(rest) == "" && !strings.Contains(strings.TrimSpace(in.Text), "\n") {
+			var asked bool
+			if err := tx.QueryRow(ctx, `SELECT bool_or(description_asked_at IS NOT NULL) FROM channel_inbound_events WHERE workspace_id=$1 AND id::text=ANY($2)`,
+				workspaceID, request.EventIDs).Scan(&asked); err != nil {
+				return result, fmt.Errorf("read the description asked of a request: %w", err)
+			}
+			if !asked {
+				if err := queueThreadNotice(ctx, tx, &journal, request.EventIDs[len(request.EventIDs)-1], channels.NoticeAskDescription, channels.RenderNotice(command.AskDescription, nil), 0); err != nil {
+					return result, err
+				}
+			}
+			if _, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET description_asked_at=COALESCE(description_asked_at,$3),flush_at='infinity' WHERE workspace_id=$1 AND id::text=ANY($2)`,
+				workspaceID, request.EventIDs, now); err != nil {
+				return result, fmt.Errorf("wait for a description: %w", err)
+			}
+			result.Status = channels.ResultPending
+			return finish(result)
+		}
+	}
+	if request.Flushing && commanded && scope.Gather != nil && scope.Gather.ConfirmSeconds > 0 && channel.Settings.Notices.AskConfirm != "" && len(request.EventIDs) > 0 {
+		// asked: every message was asked about; or the customer went quiet longer than the question would
+		// have waited (a journal processed late): it opens without one.
+		var asked bool
+		if err := tx.QueryRow(ctx, `SELECT bool_and(confirm_asked_at IS NOT NULL) OR max(received_at)<=$3 FROM channel_inbound_events WHERE workspace_id=$1 AND id::text=ANY($2)`,
+			workspaceID, request.EventIDs, now.Add(-time.Duration(scope.Gather.QuietSeconds+scope.Gather.ConfirmSeconds)*time.Second)).Scan(&asked); err != nil {
+			return result, fmt.Errorf("read the question of a request: %w", err)
+		}
+		if !asked {
+			newest := request.EventIDs[len(request.EventIDs)-1]
+			if err := queueThreadNotice(ctx, tx, &journal, newest, channels.NoticeAskConfirm, channels.RenderNotice(channel.Settings.Notices.AskConfirm, nil), 0); err != nil {
+				return result, err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET confirm_asked_at=$3,flush_at=$4 WHERE workspace_id=$1 AND id::text=ANY($2)`,
+				workspaceID, request.EventIDs, now, now.Add(time.Duration(scope.Gather.ConfirmSeconds)*time.Second)); err != nil {
+				return result, fmt.Errorf("wait for a confirmation: %w", err)
+			}
+			result.Status = channels.ResultPending
+			return finish(result)
+		}
+	}
 	// The channel's rules decide what the message is (intake/rules). Facts are read in the order the
 	// rules use them, so chatter the scope keeps without a conversation never creates a contact.
 	facts := rules.Facts{Commanded: commanded, CommandAction: command.Action, IntoConversation: request.IntoConversation, Replay: request.Replay,
@@ -399,7 +550,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			if channel.Settings.Notices.UnmatchedEverySeconds != nil {
 				every = *channel.Settings.Notices.UnmatchedEverySeconds
 			}
-			if err := queueThreadNotice(ctx, tx, &journal, channels.NoticeUnmatched, channels.RenderNotice(channel.Settings.Notices.Unmatched, nil),
+			if err := queueThreadNotice(ctx, tx, &journal, journal.eventID, channels.NoticeUnmatched, channels.RenderNotice(channel.Settings.Notices.Unmatched, nil),
 				time.Duration(every)*time.Second); err != nil {
 				return result, err
 			}
