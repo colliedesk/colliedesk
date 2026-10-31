@@ -67,9 +67,11 @@ type LoopbackFile struct {
 // Sent is a reply the loopback sender handed to its endpoint.
 type Sent struct {
 	ChannelID, To, Text, ExternalID string
-	References                      []string
-	Files                           []string
-	Token                           string
+	// Place is the chat it went to (out.Place), "" when the delivery named none.
+	Place      string
+	References []string
+	Files      []string
+	Token      string
 }
 
 // Endpoint is the outside world of loopback: what it sent, and what the next sends do.
@@ -404,7 +406,10 @@ func (o loopbackOutbound) Send(ctx context.Context, out channels.Outbound, kit c
 		return result
 	}
 	endpoint.mu.Unlock()
-	to := ""
+	to, place := "", ""
+	if out.Place != nil {
+		place = out.Place.ExternalID
+	}
 	for _, identity := range out.Recipient.Identities {
 		if identity.Kind == LoopbackIdentity {
 			to = identity.Value
@@ -461,7 +466,7 @@ func (o loopbackOutbound) Send(ctx context.Context, out channels.Outbound, kit c
 		id := fmt.Sprintf("part-%d-%s", i+1, out.Message.ID)
 		ids = append(ids, id)
 		endpoint.sent = append(endpoint.sent, Sent{ChannelID: out.Channel.ID, To: to, Text: parts[i], ExternalID: id,
-			References: out.References, Files: files, Token: token})
+			References: out.References, Files: files, Token: token, Place: place})
 	}
 	meta, _ := json.Marshal(map[string]int{"sent": len(parts)})
 	result := channels.Sent("")

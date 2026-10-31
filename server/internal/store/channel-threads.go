@@ -154,6 +154,12 @@ func recordSender(ctx context.Context, tx pgx.Tx, channel channels.Channel, thre
 	return nil
 }
 
+// RecordImportedSender keeps who wrote an item an import wrote in a chat (a bundle), as recordSender does
+// for what a channel receives.
+func RecordImportedSender(ctx context.Context, tx pgx.Tx, workspaceID, channelID, threadID, role string, sender channels.Sender, at time.Time) error {
+	return recordSender(ctx, tx, channels.Channel{WorkspaceID: workspaceID, ID: channelID}, threadID, role, sender, at)
+}
+
 // recordSentItem writes the item of a reply or a notice a chat channel sent, in the thread its
 // conversation's items are in, as the team's or the channel's own.
 func recordSentItem(ctx context.Context, tx pgx.Tx, claim OutboxClaim, externalID string, now time.Time) error {

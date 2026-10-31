@@ -78,6 +78,7 @@ var poolFiles = []string{
 	"cmd/collie/email.go",
 	"cmd/collie/generation.go",
 	"cmd/collie/import.go",
+	"cmd/collie/import_bundle.go",
 	"cmd/collie/import_helpscout.go",
 	"cmd/collie/operator.go",
 	"cmd/collie/plan.go",
@@ -86,6 +87,7 @@ var poolFiles = []string{
 	"cmd/collie/trial.go",
 	"cmd/collie/undo.go",
 	"internal/auth/service.go",
+	"internal/bundle/run.go",
 	"internal/database/databasetest/databasetest.go", // tests only: clones and drops test databases
 	"internal/database/migrate.go",
 	"internal/database/scope.go",
