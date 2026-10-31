@@ -565,7 +565,8 @@ func buildAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []s
 }
 
 // buildAIConversations replaces the rows of the conversations: the subject, the first customer
-// message and the last reply of each resolved or closed one, masked. Private notes never count. One
+// message and the team's last reply of each resolved or closed one (never the channel's own notice),
+// masked. Private notes never count. One
 // without a customer message yet (an import writes messages after the conversation) waits for it:
 // the message queues the conversation again.
 func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) error {
@@ -586,7 +587,7 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 				WHERE f.workspace_id=c.workspace_id AND f.kind='organization' AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
 			c.updated_at,
 			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND m.detached_at IS NULL ORDER BY m.created_at, m.id LIMIT 1),
-			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' ORDER BY m.created_at DESC, m.id DESC LIMIT 1)
+			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' AND m.notice_kind IS NULL ORDER BY m.created_at DESC, m.id DESC LIMIT 1)
 		FROM conversations c
 		WHERE c.workspace_id=$1 AND c.id=ANY($2::uuid[]) AND c.status IN ('resolved','closed')`, workspaceID, ids)
 	if err != nil {

@@ -55,7 +55,7 @@ func claimUsage(ctx context.Context, db *database.DB, cloud bool) (usage, bool, 
 		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM workspaces),
 			(SELECT count(DISTINCT (workspace_id, agent_id)) FROM sessions WHERE last_seen_at >= now() - interval '30 days'),
-			(SELECT count(*) FROM messages WHERE kind = 'outgoing' AND origin IS NULL AND created_at >= now() - interval '30 days'),
+			(SELECT count(*) FROM messages WHERE kind = 'outgoing' AND origin IS NULL AND notice_kind IS NULL AND created_at >= now() - interval '30 days'),
 			EXISTS (SELECT 1 FROM email_channels),
 			EXISTS (SELECT 1 FROM web_form_channels f JOIN channels c ON c.workspace_id=f.workspace_id AND c.id=f.channel_id WHERE c.enabled),
 			EXISTS (SELECT 1 FROM import_items WHERE source LIKE 'freshdesk:%')`).

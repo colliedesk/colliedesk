@@ -7439,6 +7439,8 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
+            /** @description A reply the channel sent by itself (received: its received notice), which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. Null for a reply of the team. */
+            notice_kind?: string | null;
             /**
              * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
              * @enum {string|null}

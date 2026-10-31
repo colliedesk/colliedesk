@@ -128,6 +128,7 @@ came in, or `null`), `other_contact_id` (the customer whose conversation it was 
 another customer's, or `null`), `detached_at` and `detached_by_agent_id` (a chat message taken back to the
 intake queue: out of the timeline, never deleted), `intake_reply_kind` (`acknowledgement` when intake said a
 chat message only thanked or acknowledged and kept a resolved conversation resolved, `substantive`, or `null`),
+`notice_kind` (`received` for the channel's received notice, a reply it sent by itself; `null` for the team's),
 `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 

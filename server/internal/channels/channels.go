@@ -113,6 +113,9 @@ type Command struct {
 	Priority string   `json:"priority,omitempty"`
 }
 
+// NoticeReceived is the notice_kind of the received notice, as its message is marked.
+const NoticeReceived = "received"
+
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
 type Notices struct {
 	// Received answers the first message of a new conversation.
