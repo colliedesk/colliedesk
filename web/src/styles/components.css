@@ -749,6 +749,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .request-call { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; color: var(--text-3); font-size: var(--fs-small); }
 .request-call dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .request-body { max-height: 12rem; overflow: auto; margin: 0; border-radius: var(--radius-sm); background: var(--surface-2); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The words a status change would send, per chat channel. */
+.request-notice { display: grid; gap: var(--space-1); }
+.request-notice > span { color: var(--text-3); font-size: var(--fs-label); }
+.request-notice .reply-draft-text { margin: 0; }
 .request-result { display: grid; gap: var(--space-2); border-left: 3px solid var(--accent); padding-left: var(--space-3); }
 .request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .request-reason { display: flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }

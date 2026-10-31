@@ -22,6 +22,10 @@ export const requestsMessages = {
   requestResultOnce: 'The answer, shown only now. Copy what you need: it is not kept.',
   openResult: (url: string) => `Open ${url}`,
   editedBy: (person: string) => `Edited by ${person} before sending`,
+  // What approving a status change would tell customers, one block per chat channel.
+  noticeWillSend: (channel: string) => `${channel} will send`,
+  noticeEach: (channel: string, told: number, ref: string) => (told === 1 ? `${channel} tells 1 customer:` : `${channel} tells ${told} customers, each with their own code. For example, ${ref}:`),
+  noticeMoreChannels: (count: number) => `And ${count} more ${count === 1 ? 'channel' : 'channels'}.`,
   onlyAdminApproves: 'Only an admin can approve this.',
   onlyOwnerApproves: 'Only the person who owns this token can approve it: it changes their own settings.',
 } as const;

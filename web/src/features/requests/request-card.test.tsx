@@ -214,3 +214,20 @@ test('turning a coding agent on has no Approve on the card: it is in the request
   expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
 });
+
+const notice = (channel_name: string, told: number, example_ref: string, text: string) => ({ channel_id: crypto.randomUUID(), channel_name, example_ref, text, told });
+test('a status change that would tell a customer shows the words their channel will send, not the call body', () => {
+  render(<RequestCard item={agentRequest({ body: { status: 'resolved' }, notices: [notice('Hảo Đạt OA', 1, 'CHD-2026-0142', 'Đã xử lý CHD-2026-0142.')] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Hảo Đạt OA will send')).toBeInTheDocument();
+  expect(screen.getByText('Đã xử lý CHD-2026-0142.')).toHaveClass('reply-draft-text');
+  expect(screen.queryByText(/"status"/)).not.toBeInTheDocument();
+});
+
+test('a bulk change shows one example per channel, filled in, and how many more channels', () => {
+  const notices = [notice('OA one', 8, 'CHD-1', 'Đóng CHD-1.'), notice('OA two', 1, 'CHD-2', 'Đóng CHD-2.'), notice('OA three', 2, 'CHD-3', 'x'), notice('OA four', 2, 'CHD-4', 'y'), notice('OA five', 2, 'CHD-5', 'z')];
+  render(<RequestCard item={agentRequest({ path: '/api/v1/conversations', route: '/api/v1/conversations', body: { ids: [], changes: { status: 'closed' } }, notices })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('OA one tells 8 customers, each with their own code. For example, CHD-1:')).toBeInTheDocument();
+  expect(screen.getByText('OA two tells 1 customer:')).toBeInTheDocument();
+  expect(screen.queryByText(/OA four/)).not.toBeInTheDocument();
+  expect(screen.getByText('And 2 more channels.')).toBeInTheDocument();
+});

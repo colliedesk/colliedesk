@@ -98,7 +98,8 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
         : isSavedReplyRequest(current) ? <SavedReplyProposal item={current} />
           : autofixRoute(current.route) ? <Part part={autofixPart} failed={<PartUnavailable />} render={(autofix) => <autofix.AutofixRequestDetail item={current} result={outcome?.result}
             onApprove={consent && canApprove && current.status === 'pending' && !current.requested_by.token_revoked ? approve : undefined} busy={busy} />} />
-            : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
+            : current.notices?.length ? <StatusNotices notices={current.notices} single={current.route === '/api/v1/conversations/{id}'} />
+              : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
       {edited && <>
         <p className="muted-copy">{requestsMessages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
         <p className="request-body reply-draft-text">{edited.text}</p>
@@ -127,4 +128,15 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
       </div>}
     </article>
   );
+}
+
+// A status change that would tell customers in their chat: the words each channel would send, filled in for
+// one of its conversations; three channels at most, then how many more.
+function StatusNotices({ notices, single }: { notices: NonNullable<AgentRequest['notices']>; single: boolean }) {
+  return <>
+    {notices.slice(0, 3).map((notice) => <div className="request-notice" key={notice.channel_id}>
+      <span>{single ? requestsMessages.noticeWillSend(notice.channel_name) : requestsMessages.noticeEach(notice.channel_name, notice.told, notice.example_ref)}</span>
+      <p className="request-body reply-draft-text">{notice.text}</p></div>)}
+    {notices.length > 3 && <p className="muted-copy">{requestsMessages.noticeMoreChannels(notices.length - 3)}</p>}
+  </>;
 }
