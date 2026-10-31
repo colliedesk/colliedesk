@@ -8,12 +8,37 @@ import (
 )
 
 func (a *API) getResponseTargets(response http.ResponseWriter, request *http.Request) {
-	targets, err := a.store.GetResponseTargets(request.Context(), principal(request).Workspace.ID)
+	identity := principal(request)
+	targets, err := a.store.GetResponseTargets(request.Context(), identity.Workspace.ID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
+	if identity.Agent.ID != "" {
+		mine, err := a.store.MySLAAlertEmail(request.Context(), identity.Workspace.ID, identity.Agent.ID)
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		targets.MyAlertEmail = &mine
+	}
 	writeJSON(response, http.StatusOK, targets)
+}
+
+func (a *API) setMySLAAlerts(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Email *bool `json:"email"`
+	}
+	if err := decodeJSON(request, &input); err != nil || input.Email == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send email: true or false.")
+		return
+	}
+	identity := principal(request)
+	if err := a.store.SetMySLAAlertEmail(request.Context(), identity.Workspace.ID, identity.Agent.ID, *input.Email); err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]bool{"email": *input.Email})
 }
 
 func (a *API) setResponseTargets(response http.ResponseWriter, request *http.Request) {
