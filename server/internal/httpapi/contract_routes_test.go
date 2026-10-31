@@ -339,6 +339,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/conversations/{id}/chat":                {path: "/api/v1/conversations/" + f.conversationID + "/chat", token: admin, status: 200},
 		"GET /api/v1/channels/{id}/threads":                  {path: "/api/v1/channels/" + f.webFormChannelID + "/threads", token: admin, status: 200},
 		"GET /api/v1/channels/{id}/threads/{threadId}/items": {path: "/api/v1/channels/" + f.webFormChannelID + "/threads/00000000-0000-4000-8000-000000000000/items", token: admin, status: 404},
+		"GET /api/v1/channels/{id}/senders":                  {path: "/api/v1/channels/" + f.webFormChannelID + "/senders", token: admin, status: 200},
 		"GET /api/v1/channel-thread-items":                   {path: "/api/v1/channel-thread-items?older_than=900", token: admin, status: 200},
 		"GET /api/v1/intake/gatherings":                      {path: "/api/v1/intake/gatherings?state=decided", token: admin, status: 200},
 		"GET /api/v1/intake/gatherings/{id}":                 {path: "/api/v1/intake/gatherings/" + f.intakeCardID, token: admin, status: 200},
