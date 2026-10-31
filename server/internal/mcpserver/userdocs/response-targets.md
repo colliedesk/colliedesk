@@ -6,10 +6,10 @@ sets them under Settings → Response targets; every teammate sees them.
 1. **Business hours**: a timezone (the workspace's unless you pick another), the hours each weekday is open
    (a day not open is closed; 00:00 to 24:00 is the whole day), and holidays. Time outside them does not
    count. Turned on, they need an open day that is no holiday within the next two years. A day that
-   closes at 00:00 on the page closes at midnight (`24:00` in the API).
+   closes at 00:00 on the page closes at midnight (`24:00` in the API). **Copy Monday to weekdays** fills
+   Tuesday to Friday with Monday's hours.
 2. **Targets by priority**: business time to the first reply and to resolving, for urgent, high, normal
    and low, in hours on the page (in half hours; minutes in the API); leave one empty for no target.
-   **Copy Monday to weekdays** fills Tuesday to Friday with Monday's hours.
 3. **Due soon**: how long before a target a conversation is due soon, when its reminder goes.
 4. **Applies to**: the channels whose conversations have targets (every channel unless you pick some).
 5. **Alerts**: whether reminder and overdue emails go out (an admin), and whether they reach you (each
