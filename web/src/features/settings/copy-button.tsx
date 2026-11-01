@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { agentTokenMessages as text } from './agent-tokens-messages';
+import { messages } from '../../messages';
 
 // CopyButton puts value on the clipboard and says so next to itself for two seconds. A browser that
 // gives the page no clipboard (a server on plain http) or refuses it gets the failure said, not silence.
@@ -8,7 +8,7 @@ import { agentTokenMessages as text } from './agent-tokens-messages';
 // message shows at a time on the page: a newer copy clears what an earlier button said.
 const said = new Set<() => void>();
 
-export function CopyButton({ value, label, className, children, copiedText = text.copied }: { value: string; label?: string; className?: string; children: ReactNode; copiedText?: string }) {
+export function CopyButton({ value, label, className, children, copiedText = messages.copyDone }: { value: string; label?: string; className?: string; children: ReactNode; copiedText?: string }) {
   const [state, setState] = useState<'copied' | 'failed' | null>(null);
   useEffect(() => {
     if (!state) return undefined;
@@ -30,6 +30,6 @@ export function CopyButton({ value, label, className, children, copiedText = tex
   };
   return <>
     <button type="button" className={className} aria-label={label} onClick={copy}>{children}</button>
-    {state && <span role="status" className={state === 'failed' ? 'error-copy' : 'copied'}>{state === 'copied' ? copiedText : text.copyFailed}</span>}
+    {state && <span role="status" className={state === 'failed' ? 'error-copy' : 'copied'}>{state === 'copied' ? copiedText : messages.copyFailed}</span>}
   </>;
 }

@@ -60,6 +60,8 @@ interface ReplyComposerProps {
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
   // calls it only after the reply was accepted. A private note never resolves.
   onResolve?: () => Promise<unknown>;
+  // The chat channel that tells the customer when it is resolved, said in Send and resolve's tooltip.
+  resolveTells?: string;
   // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
   draftKey?: string;
 }
@@ -90,7 +92,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, findSent }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent }: ReplyComposerProps) {
   // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
@@ -421,7 +423,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
           )}
           {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
-            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)`} onClick={() => submit(true)}>
+            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
             {messages.sendAndResolve}</button>}
           <button className="primary-action" type="button" disabled={disabled || cannotSend} onClick={() => submit()}>
             {kind === 'note' ? messages.privateNote : messages.reply}

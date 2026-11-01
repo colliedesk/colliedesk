@@ -60,6 +60,19 @@ year; its next number can be raised, never lowered. When you move to Colliedesk 
 numbered its own way, set the series' next number (and `start`, `start_year`) to where that system
 stopped: codes below it that are not here belong to the system before.
 
+In the web app:
+
+1. A conversation numbered in a series of its own shows its code first on its row and in its header,
+   with a button that copies it. The default series' `#12` is not shown, so an inbox of email and web
+   forms reads as before.
+2. **Settings → Conversation numbers** lists the series with the code the next conversation gets.
+   Admins add a series and change one: its format (codes already given keep theirs and still find their
+   conversations), its next number (it only goes up: a lower one is refused before anything is sent),
+   and where it was taken over (**Taken over at**, **In the year**). Agents read the page.
+3. A channel picks its series on its own page (Zalo OA: Connection → References).
+4. A link with `?ref=` opens the list on that conversation, in every status, with a **Reference** chip
+   that removes it.
+
 `GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
 adds or changes one (admins; an agent token asks a person first). MCP: `colliedesk_number_series_list`,
 `colliedesk_number_series_set_request`.
@@ -180,6 +193,10 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   shows how many rows are selected and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
   **Tags** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
+- With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
+  Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
+  customer whose channel has words for the new status (see [Telling the customer](#telling-the-customer)).
+  Untick it to change them quietly; the buttons' names say **Resolve quietly** and **Set status quietly**.
 - In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
   checked tag removes it from all of them; choosing any other tag adds it to the rows that lack it.
 - Press Escape to close an open menu; press it again to clear the selection.
@@ -210,6 +227,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   the conversation to **Resolved**, in one step. The status changes only after the reply was accepted: if the
   reply is refused, nothing changes and your text stays in the box with the reason. If the reply was sent but
   the status could not be changed, a message says so; press **Resolve** above the thread to try again.
+- On a chat channel with words for Resolved, **Send and resolve** also tells the customer; its tooltip
+  says so. To resolve quietly, send the reply, then choose **Resolve without telling the customer**.
 - A private note has no **Send and resolve**, because a note is often written while the work goes on. Add
   the note, then press **Resolve** above the thread.
 - Messages support Markdown.
@@ -268,10 +287,16 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 **Change the conversation**
 - **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
   screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
-  instead, which sets it back to Open. If the change fails, a message under the button says so.
+  instead, which sets it back to Open. If the change fails, a message under the button says so. When the
+  change would tell the customer (below), the button reads **Resolve and tell** or **Reopen and tell**,
+  and the arrow beside it offers **Resolve without telling the customer** or **Reopen without telling
+  the customer** (to add a note or fix a detail).
 
 In the details pane (**Show details** on a narrower screen):
-- **Status**: every status can be changed back, for example Resolved → Open to reopen.
+- **Status**: a menu; a status changes only once you choose it. Every status can be changed back, for
+  example Resolved → Open to reopen. On a conversation whose status may tell the customer, **Tell the
+  customer** comes first, ticked each time the menu opens, and says which statuses its channel tells;
+  untick it and the status you pick is set quietly.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
@@ -321,3 +346,20 @@ and `colliedesk_message_move_undo`, or the API `POST /api/v1/conversations/{id}/
 During the trial a banner under the workspace name shows the days left. When the trial or the
 subscription ends, the inbox is replaced by a page that says so, with the ways forward for admins.
 See [Plan and billing](billing.md).
+
+## Telling the customer
+
+- A conversation of a chat (a Zalo OA) tells its customer when its status is set to Pending, Resolved or
+  Closed, or reopened, if its channel has words for that status (an email conversation a Zalo message was
+  moved into is told on that chat) (a Zalo OA's **When a conversation's
+  status changes**, see [Zalo OA](zalo.md#when-the-status-of-a-conversation-changes)). The words come from the
+  channel, as its own message, shown in the timeline as **Sent by the channel · not a reply**. Email and
+  web form conversations are never told.
+- Every way to set a status has a quiet one: the arrow next to **Resolve** / **Reopen**, unticking **Tell
+  the customer** in Status, or **Tell customers** in the bulk bar. The API takes `notify: false` on
+  `PATCH /api/v1/conversations/{id}` and on the bulk change.
+- When a status was set by something other than a person on your team (an AI agent, the customer
+  writing or typing Reopen, the import, or the channel closing it by itself), a quiet line in the
+  timeline says who, at the time it happened.
+- An AI agent whose token may not write to customers asks a person first when its change would tell
+  one; the request shows the words that will be sent ([Agent requests](agent-requests.md)).

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import Markdown from 'react-markdown';
 import type { Attachment, Message, MessageOrigin } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
@@ -9,6 +8,7 @@ import { Avatar } from '../../ui/avatar';
 import { LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
+import { MarkdownBody } from './markdown-body';
 
 interface MessageItemProps {
   item: Message;
@@ -79,7 +79,7 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu 
       {item.origin && <OriginLine origin={item.origin} />}
       {showHTML && item.body_html
         ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
-        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>}
+        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <MarkdownBody text={item.body} />}</div>}
       {files.length > 0 && <AttachmentList items={files} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />

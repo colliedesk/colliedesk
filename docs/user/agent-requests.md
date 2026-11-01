@@ -19,6 +19,11 @@ edits it if needed, and sends it or throws it away.
   approver gets Google's consent page) or Microsoft 365 (the approver gets Microsoft's sign-in page),
   and changing the workspace address.
 
+A status change that would tell a customer in their chat (see [Telling the customer](inbox.md#telling-the-customer))
+needs the token to be allowed to send; below that it becomes a request, and the request shows the
+words each channel would send, filled in for one of its conversations ("Support OA will send" and the
+sentence). A quiet change (`notify: false`) tells nobody and asks nobody.
+
 A settings change shows what changes, from what to what, for example "Change the workspace
 timezone: UTC → Asia/Tokyo" or "Change ada@example.com: role agent → admin". A settings call with a
 field the setting does not take is refused at once and nothing is saved, so a password pasted next

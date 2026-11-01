@@ -70,3 +70,18 @@ test('a channel filter keeps channel ids only, goes to the API, and is saved in 
   expect(filtersOf({ status: 'all', channel_id: id })).toEqual({ channel_id: [id] });
   expect(queryOf({ channel_id: [id] })).toEqual({ status: 'all', channel_id: id });
 });
+
+test('a code in the address finds its conversation in every status', () => {
+  expect(inboxQueryFromSearch({ ref: ' CHD-2026-0142 ' })).toEqual({ ref: 'CHD-2026-0142', status: 'all' });
+  expect(apiQuery(inboxQueryFromSearch({ ref: 'CHD-2026-0142' }), 1)).toBe('ref=CHD-2026-0142&page=1&page_size=50');
+  expect(inboxQueryFromSearch({ ref: 'CHD-2026-0142', status: 'pending' })).toEqual({ ref: 'CHD-2026-0142', status: 'pending' });
+});
+
+test('a view saves the Targets filter and the Due first sort, and opens on them again', async () => {
+  const { conversationFiltersSchema } = await import('../api/saved-views');
+  const filters = filtersOf(inboxQueryFromSearch({ sla: 'overdue,due_soon', sort: 'due' }));
+  expect(filters).toMatchObject({ sla: ['overdue', 'due_soon'], sort: 'due' });
+  // As the server sends it back: the filter is kept, not dropped by the schema.
+  const read = conversationFiltersSchema.parse(JSON.parse(JSON.stringify(filters)));
+  expect(queryOf(read)).toMatchObject({ sla: 'overdue,due_soon', sort: 'due' });
+});

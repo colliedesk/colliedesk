@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import type { BulkConversationChanges } from '../../api/client';
 import type { Conversation, TeamMember, Tag } from '../../api/schemas';
 import { messages } from '../../messages';
 import { CheckCircleIcon, CheckIcon, CircleDotIcon, MinusIcon, TagIcon, UserIcon, XIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
+import { mayTellCustomers } from './status-tell';
 import { StatusLabel } from './conversation-labels';
 
 interface BulkActionBarProps {
@@ -24,16 +26,25 @@ function tagState(selected: Conversation[], tagId: string): 'true' | 'mixed' | '
 
 export function BulkActionBar({ selected, agents, tags, currentAgentId, busy, onApply, onClear }: BulkActionBarProps) {
   const others = agents.filter((agent) => agent.id !== currentAgentId && !agent.deactivated_at);
+  // Ticked again for each new selection: the bar is drawn afresh when rows are picked after none.
+  const [tell, setTell] = useState(true);
+  const offersTell = mayTellCustomers(selected);
+  const quiet = offersTell && !tell;
+  const setStatus = (changes: BulkConversationChanges) => onApply(quiet ? { ...changes, notify: false } : changes);
+  const resolveLabel = !offersTell ? messages.resolve : quiet ? messages.resolveQuietlyBulk : messages.resolveAndTellBulk;
+  const statusLabel = quiet ? messages.setStatusQuietly : messages.setStatus;
   const clearOnEscape = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !busy) onClear();
   };
   return (
     <div className="bulk-bar" role="group" aria-label={messages.bulkActions} onKeyDown={clearOnEscape}>
       <strong className="bulk-count">{messages.selectedCount(selected.length)}</strong>
+      {offersTell && <label className="bulk-tell" data-tip={messages.tellCustomersTip}>
+        <input type="checkbox" checked={tell} disabled={busy} onChange={(event) => setTell(event.target.checked)} />{messages.tellCustomers}</label>}
       <div className="bulk-actions">
-        <button type="button" className="icon-button bulk-resolve" aria-label={messages.resolve} data-tip={messages.resolve} disabled={busy}
-          onClick={() => onApply({ status: 'resolved' })}><CheckCircleIcon /></button>
-        <ActionMenu label={messages.setStatus} icon={<CircleDotIcon />} disabled={busy} onApply={onApply}>
+        <button type="button" className="icon-button bulk-resolve" aria-label={resolveLabel} data-tip={resolveLabel} disabled={busy}
+          onClick={() => setStatus({ status: 'resolved' })}><CheckCircleIcon /></button>
+        <ActionMenu label={statusLabel} icon={<CircleDotIcon />} disabled={busy} onApply={setStatus}>
           {(apply) => Object.keys(messages.statuses).map((value) => {
             const status = value as keyof typeof messages.statuses;
             return <button type="button" key={status} onClick={() => apply({ status })}><StatusLabel status={status} /></button>;

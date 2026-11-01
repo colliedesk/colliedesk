@@ -105,6 +105,17 @@ export const channelsMessages = {
   configureName: (name: string) => `Configure ${name}`,
   backToChannels: 'All channels',
   statusWorking: 'Working',
+  statusPaused: 'Processing paused',
+  pause: 'Pause processing',
+  resume: 'Resume processing',
+  pauseTitle: (name: string) => `Pause processing on ${name}?`,
+  pauseBody: 'Messages keep arriving and Colliedesk keeps every one, but opens no conversation, adds nothing and sends nothing: no notice, no replies. Resume handles them in the order they came, by the same rules.',
+  pausedSince: (when: string) => `Processing is paused since ${when}.`,
+  pausedRunning: (kept: number | undefined, canResume: boolean) => `${kept === undefined ? 'Messages are' : `${kept} ${kept === 1 ? 'message is' : 'messages are'}`} kept and handled in the order they came when ${canResume ? 'you resume' : 'an admin resumes processing'}. Nothing is sent meanwhile.`,
+  pausedWaiting: (kept: number) => `${kept} ${kept === 1 ? 'message' : 'messages'} waiting`,
+  pausedOffLead: (when: string, kept: number | undefined, canResume: boolean) => `Processing is paused since ${when}, and the channel is also off. ${canResume ? 'Turn the channel on first: it stays paused, and Resume then handles' : 'An admin turns the channel on first: it stays paused, and resuming then handles'} the ${kept === undefined ? 'kept messages' : `${kept} kept ${kept === 1 ? 'message' : 'messages'}`}.`,
+  resumed: 'Processing resumed. What arrived while it was paused is handled in order, as if it had just come.',
+  pauseFailed: 'That did not work. Try again.',
   statusWaiting: 'Waiting for first message',
   // A waiting channel's page says how to prove the way in works.
   waitingHelp: 'Nothing has arrived yet. Send a test message through it: it opens a conversation in the inbox, and this channel then reads Working.',
@@ -183,6 +194,9 @@ const reasons: Record<string, string> = {
   no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: whoever manages your email needs an inbound secret to send it here (a password for this only). A test message works without it.',
   no_origins: 'No website can send messages through this form yet. Add your website address below.',
   ai_chat_off: 'Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.',
+  zalo_secret_missing: 'Zalo’s events cannot be checked yet: add the OA secret key on the Connection tab.',
+  zalo_signature_failed: 'An event from Zalo did not match the OA secret key and was refused. Check the OA secret key and the app ID on the Connection tab.',
+  zalo_token_missing: 'Messages arrive, but replies cannot be sent yet: the Connection tab shows which secret is not set.',
 };
 
 const aiFeature: Record<string, string> = { triage: 'triage', draft: 'drafting', intake: 'intake' };

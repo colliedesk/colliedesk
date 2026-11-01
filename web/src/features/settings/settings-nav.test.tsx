@@ -26,7 +26,7 @@ test('Channels lists Email, Web form and Help chat under it, each opening its ty
   expect(channels).toHaveAttribute('href', '/settings/channels');
   const group = screen.getByRole('list', { name: 'Channels' });
   expect(within(group).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'],
+    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'], ['Zalo OA', '/settings/channels/type/zalo'],
   ]);
   expect(within(group).getByRole('link', { name: 'Email' })).toHaveAttribute('aria-current', 'page');
   expect(channels).not.toHaveAttribute('aria-current');

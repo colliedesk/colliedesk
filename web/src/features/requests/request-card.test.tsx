@@ -214,3 +214,58 @@ test('turning a coding agent on has no Approve on the card: it is in the request
   expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
 });
+
+const notice = (channel_name: string, told: number, example_ref: string, text: string) => ({ channel_id: crypto.randomUUID(), channel_name, example_ref, text, told });
+test('a status change that would tell a customer shows the words their channel will send, not the call body', () => {
+  render(<RequestCard item={agentRequest({ body: { status: 'resolved' }, notices: [notice('Hảo Đạt OA', 1, 'CHD-2026-0142', 'Đã xử lý CHD-2026-0142.')] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Hảo Đạt OA will send')).toBeInTheDocument();
+  expect(screen.getByText('Đã xử lý CHD-2026-0142.')).toHaveClass('reply-draft-text');
+  expect(screen.queryByText(/"status"/)).not.toBeInTheDocument();
+});
+
+test('once decided, the card keeps the words: what it was to send when approved, would have sent when rejected', () => {
+  const notices = [notice('Hảo Đạt OA', 1, 'CHD-2026-0142', 'Đã xử lý CHD-2026-0142.')];
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  const { unmount } = render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Hảo Đạt OA was to send')).toBeInTheDocument();
+  unmount();
+  render(<RequestCard item={agentRequest({ ...decided, status: 'rejected', notices })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Hảo Đạt OA would have sent')).toBeInTheDocument();
+});
+
+test('a bulk change shows one example per channel, filled in, and how many more channels', () => {
+  const notices = [notice('OA one', 8, 'CHD-1', 'Đóng CHD-1.'), notice('OA two', 1, 'CHD-2', 'Đóng CHD-2.'), notice('OA three', 2, 'CHD-3', 'x'), notice('OA four', 2, 'CHD-4', 'y'), notice('OA five', 2, 'CHD-5', 'z')];
+  render(<RequestCard item={agentRequest({ path: '/api/v1/conversations', route: '/api/v1/conversations', body: { ids: [], changes: { status: 'closed' } }, notices })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('OA one tells 8 customers, each with their own code. For example, CHD-1:')).toBeInTheDocument();
+  expect(screen.getByText('OA two tells 1 customer:')).toBeInTheDocument();
+  expect(screen.queryByText(/OA four/)).not.toBeInTheDocument();
+  expect(screen.getByText('And 2 more channels.')).toBeInTheDocument();
+});
+
+test('an approved status change that told nobody says so; a call of another kind shows its body', () => {
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  const { unmount } = render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices: [] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText(/No customer was told/)).toBeInTheDocument();
+  unmount();
+  render(<RequestCard item={agentRequest({ notices: null })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText(/"status": "pending"/)).toBeInTheDocument();
+});
+
+test('an approved bulk change says how many it was to tell, a few seconds after, never that they were told', () => {
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, path: '/api/v1/conversations', route: '/api/v1/conversations', notices: [notice('OA one', 8, 'CHD-1', 'Đóng CHD-1.')] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('OA one was to tell 8 customers a few seconds after approval (not one whose status changed again before then), each with their own code. For example, CHD-1:')).toBeInTheDocument();
+  expect(screen.queryByText(/ told 8/)).not.toBeInTheDocument();
+});
+
+test('a status change that tells nobody says so right under its title, waiting or approved, and shows no call body', () => {
+  const { unmount } = render(<RequestCard item={agentRequest({ summary: 'Set CHD-2026-0142 to Pending and tell the customer on Hảo Đạt OA: Đang chờ.', notices: [] })} timezone="UTC" {...actions()} />);
+  const note = screen.getByRole('note');
+  expect(note).toHaveTextContent('Approving it now tells no customer: the status is set already.');
+  expect(screen.getByRole('heading', { level: 3 }).closest('header')?.nextElementSibling).toBe(note);
+  expect(screen.queryByText(/"status"/)).not.toBeInTheDocument();
+  unmount();
+  const decided = { decided_by: { agent_id: null, name: 'Ada Admin' }, decided_at: '2026-10-17T10:00:00Z' };
+  render(<RequestCard item={agentRequest({ ...decided, status: 'approved', result_status: 200, notices: [] })} timezone="UTC" {...actions()} />);
+  expect(screen.getByRole('note')).toHaveTextContent(/No customer was told/);
+});

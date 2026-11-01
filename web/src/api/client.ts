@@ -76,9 +76,10 @@ export class ChangedElsewhereError extends ConflictError {
 
 async function invalidRequest(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown }; current?: unknown };
     if (typeof body.error?.message === 'string' && body.error.message) {
-      if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
+      // The version saved meanwhile comes with it where the route sends it (response targets), so the page can show it.
+      if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message, { ...body.error, current: body.current });
       // The replies are only shown, as text, so they are taken as sent.
       if (response.status === 409 && body.error.code === 'reply_conflict') {
         const { latest_reply_number: latest, newer_replies: newer } = body.error as { latest_reply_number?: number; newer_replies?: Message[] };
@@ -304,7 +305,8 @@ export const api = {
   conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
   inboxActivity: (since?: string) => request(`/api/v1/inbox/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, inboxActivitySchema),
   createConversation: (contact_id: string, subject: string, key: string) => request('/api/v1/conversations', conversationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createConversation'>({ contact_id, subject }) }),
-  conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema),
+  // Read by id, a conversation says for sure which statuses would tell its customer: none is sent when none would.
+  conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema).then((read) => ({ ...read, status_notices: read.status_notices ?? [] })),
   updateConversation: (id: string, value: UpdateConversationRequest) => request(`/api/v1/conversations/${id}`, conversationSchema, { method: 'PATCH', body: json<'updateConversation'>(value) }),
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),

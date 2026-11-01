@@ -401,7 +401,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   fireEvent.click(screen.getByRole('checkbox', { name: /gamma conversation/i }));
   const loadsBefore = api.conversations.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Resolved' }));
 
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' }));
   expect(await screen.findByText('Updated 2 conversations')).toHaveAttribute('aria-live', 'polite');
@@ -424,7 +424,7 @@ test('a refused bulk change reloads the list, so a conversation that is gone sto
   await screen.findByRole('button', { name: /alpha conversation/i });
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   const loadsBefore = api.conversations.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
 });
@@ -480,7 +480,7 @@ test('resolving the open conversation keeps it on screen although it left the Op
   api.updateConversation.mockImplementation(async () => { isResolved = true; return resolved; });
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(alpha.id));
   expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
 });
@@ -498,11 +498,72 @@ test('resolving the open conversation never swaps the screen to another one, so 
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer' } });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
   expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
+});
+
+test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo }], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue({ ...alpha, channel_ref: zalo, status_notices: ['resolved'] });
+  api.updateConversation.mockResolvedValue({ ...alpha, channel_ref: zalo });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const more = within(await screen.findByRole('group', { name: 'More ways to resolve' }));
+  fireEvent.click(more.getByRole('button', { name: 'Resolve without telling the customer' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved', notify: false }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenLastCalledWith(alpha.id, { status: 'resolved' }));
+});
+
+test('a listed chat conversation cannot be resolved from the header until the server says whether it tells', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo }], page: 1, page_size: 50 });
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  api.updateConversation.mockClear();
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const resolve = await screen.findByRole('button', { name: 'Resolve' });
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  fireEvent.click(resolve);
+  expect(api.updateConversation).not.toHaveBeenCalled();
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+});
+
+test('the first row shown with nothing picked is read for its notices too, so its Resolve is not stuck', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo, may_tell_customer: true }], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue({ ...alpha, channel_ref: zalo, may_tell_customer: true, status_notices: ['resolved'] });
+  renderRoute();
+  const resolve = await screen.findByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' });
+  expect(resolve).not.toHaveAttribute('aria-disabled');
+  expect(api.conversation).toHaveBeenCalledWith(alpha.id);
+});
+
+test('an email conversation in the list is not read again to open it', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(api.conversation).not.toHaveBeenCalled();
 });
 
 test('when the caught-up check fails, the inbox does not pretend the workspace is new', async () => {

@@ -5,12 +5,16 @@ sets them under Settings → Response targets; every teammate sees them.
 
 1. **Business hours**: a timezone (the workspace's unless you pick another), the hours each weekday is open
    (a day not open is closed; 00:00 to 24:00 is the whole day), and holidays. Time outside them does not
-   count. Turned on, they need an open day that is no holiday within the next two years.
-2. **Targets by priority**: business minutes to the first reply and to resolving, for urgent, high, normal
-   and low; leave one empty for no target.
+   count. Turned on, they need an open day that is no holiday within the next two years. A day that
+   closes at 00:00 on the page closes at midnight (`24:00` in the API). **Copy Monday to weekdays** fills
+   Tuesday to Friday with Monday's hours.
+2. **Targets by priority**: business time to the first reply and to resolving, for urgent, high, normal
+   and low, in hours on the page (in half hours; minutes in the API); leave one empty for no target.
 3. **Due soon**: how long before a target a conversation is due soon, when its reminder goes.
 4. **Applies to**: the channels whose conversations have targets (every channel unless you pick some).
-5. **Emails**: whether reminder and overdue emails go out.
+5. **Alerts**: whether reminder and overdue emails go out (an admin), and whether they reach you (each
+   person, while the workspace sends them).
+6. Each part saves on its own; agents read them. **Applies to** shows only with two channels or more.
 
 Nothing is measured until you turn them on, and only conversations opened from then on have targets;
 imported conversations have none. Turning them off hides every target and keeps what was measured.
@@ -29,9 +33,15 @@ has one, resolving. A clock runs only while the conversation is Open: Pending pa
 business time used, Resolved or Closed stops it, and opening it again goes on from what was used.
 Changing the priority adds or removes the resolution clock at once.
 
-The inbox shows a conversation due soon or overdue; filter them with Targets (Overdue, Due soon) and
-sort by Due first, and save that as a view (`filters.sla` and `sort: due` of `POST /api/v1/saved-views`, MCP
-`colliedesk_saved_view_create`). For AI agents and the API: `sla` on each conversation (`state` overdue, due_soon, ok,
+The inbox shows a conversation due soon or overdue: its row says "Due 1:15 PM" or "Overdue" after the
+priority (which clock, in business hours, in its tooltip), and counts its tags to stay one line; the
+header says the clock in full ("Reply by 1:15 PM", "Resolve overdue"); the details list both clocks under
+**Targets**, with the business time left or late, met or paused. Nothing shows while a clock is far from
+its target. Times are in your own time zone, named ("6:15 AM UTC") when it is not your browser's; an
+inbox left open reads again when a mark is due to change. Filter them with Targets (Overdue, Due soon)
+and sort by Due first (both offered once a listed conversation has targets), and save that as a view
+(`filters.sla` and `sort: due` of `POST /api/v1/saved-views`, MCP `colliedesk_saved_view_create`). For AI
+agents and the API: `sla` on each conversation (`state` overdue, due_soon, ok,
 paused, stopped or met; `first_response` and `resolution` with `due_at`, `warn_at`, `met_at`,
 `breached_at`, `due_soon`, `overdue` and `business_minutes_left`), `GET /api/v1/conversations?sla=overdue,due_soon`
 and `sort=due`, and the same `sla` and `sort` of MCP `colliedesk_inbox_search`. A conversation changed in

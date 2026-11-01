@@ -13,7 +13,7 @@ export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 // server's registry names (a chat type), which the inbox shows by its name instead of failing to load.
 export const knownChannels = ['email', 'web_form', 'help_chat', 'zalo', 'imported', 'agent', 'problem_report'] as const;
 export const channelSchema = z.string().regex(/^[a-z_]{1,40}$/);
-export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest']);
+export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest', 'due']);
 
 export const workspaceSchema = z.object({
   id: z.string().uuid(), slug: z.string(), name: z.string(), timezone: z.string(),
@@ -113,12 +113,36 @@ export const timeEntrySchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), agent_id: z.string().uuid().nullable(), agent_name: z.string(),
   minutes: z.number().int().nonnegative(), note: z.string(), billable: z.boolean(), executed_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TimeEntry'>>;
+// A conversation's response targets (docs/user/response-targets.md): its clocks as the server counts them in
+// business hours. null when targets are off, its channel is left out, or it was imported.
+const slaClockSchema = z.object({
+  state: z.enum(['running', 'paused', 'stopped', 'met']), due_at: z.string().datetime().nullable(), warn_at: z.string().datetime().nullable(),
+  met_at: z.string().datetime().nullable(), breached_at: z.string().datetime().nullable(), due_soon: z.boolean(), overdue: z.boolean(),
+  business_minutes_left: z.number().int().nullable(),
+}) satisfies z.ZodType<Generated<'SLAClock'>>;
+export const slaSchema = z.object({
+  state: z.enum(['ok', 'due_soon', 'overdue', 'met', 'paused', 'stopped']), first_response: slaClockSchema.nullable(), resolution: slaClockSchema.nullable(),
+  alerts: z.array(z.object({ clock: z.enum(['first_response', 'resolution']), threshold: z.enum(['reminder', 'overdue']), due_at: z.string().datetime(),
+    status: z.enum(['sending', 'sent', 'rejected', 'nobody']), recipients: z.number().int(), at: z.string().datetime() })).optional(),
+}) satisfies z.ZodType<Generated<'ConversationSLA'>>;
+export type SLA = z.infer<typeof slaSchema>;
+export type SLAClock = z.infer<typeof slaClockSchema>;
 export const conversationSchema = z.object({
   id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   latest_reply_number: z.number().int().nonnegative(),
   number: z.number().int().positive().optional(), number_series: z.string().optional(), display_ref: z.string().optional(),
+  // An older server sends none.
+  sla: slaSchema.nullable().optional(),
+  // Who set the status last when it was not a person on the team; an older server sends none.
+  last_status_change: z.object({ to: statusSchema, at: z.string().datetime(), by: z.enum(['agent', 'token', 'customer', 'command', 'auto_close', 'import']), name: z.string().optional() }).nullable().optional()
+    // One a newer server tells of in a way this app does not know is left out, not a failed conversation.
+    .catch(null),
+  // The statuses that, set now, would tell the customer in its chat (only on the conversation itself).
+  status_notices: z.array(statusSchema).optional(),
+  // Whether a status the team sets now may tell its customer (any status); on every conversation, lists too.
+  may_tell_customer: z.boolean().optional(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
     // A server from before chat channels sends no type: its replies always left by email.
     replies_via: z.object({ id: z.string(), type: z.string().catch('email'), name: z.string(), enabled: z.boolean(),
@@ -262,7 +286,7 @@ export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) })
 export const savedReplyListSchema = z.object({ items: z.array(savedReplySchema) }) satisfies z.ZodType<JsonResponse<'listSavedReplies', 200>>;
 export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSavedReplySchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listTrashedSavedReplies', 200>>;
 export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
-export const bulkUpdateResultSchema = z.object({ updated: z.number().int() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
+export const bulkUpdateResultSchema = z.object({ updated: z.number().int(), told: z.number().int().optional() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
@@ -310,6 +334,8 @@ export const agentRequestSchema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
   approvable_by: z.enum(['agent', 'admin', 'owner']), summary: z.string(),
   conversation_id: z.string().uuid().nullable(),
+  // What approving a status change would tell customers, one per chat channel.
+  notices: z.array(z.object({ channel_id: z.string().uuid(), channel_name: z.string(), example_ref: z.string(), text: z.string(), told: z.number().int() })).nullable().optional(),
   saved_reply: z.object({
     id: z.string().uuid(),
     before: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime() }).nullable(),

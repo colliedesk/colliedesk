@@ -58,6 +58,11 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   is ticked, that row becomes the action bar (`role="group"`, named "Bulk actions"), as in Gmail and
   Gorgias: count on the left, then icon controls with a tooltip and an accessible name: **Resolve**
   (the most common bulk change, one press), **Set status**, **Assign to**, **Tags**, **Clear selection**.
+  With a chat conversation in the selection, a **Tell customers** checkbox stands between the count and
+  the icons (DOM order = reading order), ticked for each new selection; unticked, Resolve and Set status
+  are named "… quietly" and send `notify: false`. The list column has no room for all three, so the icons
+  then take a second line, right-aligned. A closed menu's choices and a hidden tip take no room (`display:
+  none`), so neither the bar nor the thread header is wider than its box.
   The title and filters stay visible. **Tags** is one menu, as in Linear: a check mark when every selected
   row has the tag, a dash when some do (`aria-pressed` true/mixed); a checked tag comes off, any other goes
   on. Each choice is a button in a `<details>` menu, never a `<select>`: a select fires on every arrow key
@@ -87,6 +92,13 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   Articles | Media row.
 - Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
   resolving never needs the details drawer.
+  When the change would tell the customer in their chat (`status_notices` of the conversation), the
+  visible words say so (**Resolve and tell**, named "… the customer on {channel}") and the button becomes a
+  split one: an arrow menu (`ActionMenu`) with the quiet way only, hung from `.timeline-actions` so it
+  never leaves a 390 px screen. No arrow when nothing would be told: only real choices are offered.
+- Details · Status is an `ActionMenu` on every conversation, never a select: arrow keys on a closed select
+  fire `change` per step in some browsers, each a change of the conversation (and on a chat a message to
+  the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
   is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
@@ -179,6 +191,8 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 
 - Controls are 32 px with a mouse and 44 px on touch (`--control` switches on `pointer: coarse`;
   rail links, status tabs and list rows also grow to 44 px below 44 rem).
+- A reference is an id: mono, `--text-3` in the list (`--text-2` in the header), never a fill (`.conv-ref`).
+- A response target is a clock mark and words: `--warn` due soon, `--danger` overdue, never a fill (`.sla-mark`).
 - Three button shapes only: primary (`--accent`, ink), secondary (white with a light outline and a small
   shadow), danger (red text).
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
@@ -206,7 +220,14 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
   (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
-  only what the API returns: there are no SLA timers or ticket numbers because the backend has none.
+  only what the API returns. A conversation numbered in a series of its own (a channel's, such as
+  `CHD-2026-0142`) shows its code first in the row's meta and in the header with a copy button; the default
+  series' `#12` stays off both, so an inbox of email and web forms reads as before, and its code still finds
+  it (`?ref=`, search). A response target shows on a row only when it is due soon or late, after the
+  priority, as a clock mark and an absolute time ("Due 1:15 PM", "Overdue"; never a countdown, nothing on a
+  row ticks); its accessible name and tooltip say which clock and that it counts business hours. A row with
+  a mark counts its tags ("2 tags") so the meta stays one line; the code and the mark are never cut. The
+  header says the clock in full ("Reply overdue"); the details list both clocks under Targets.
 - Below 75 rem the details pane becomes a drawer opened by **Show details**; below 44 rem the
   rail becomes a top bar and the list and the conversation take turns (`data-view` on `.inbox-shell`):
   the list scrolls with the page, and a conversation opened by its address fills the screen under the
@@ -233,6 +254,8 @@ They are a gap finder, not a spec: where a list conflicts with a rule above, the
 | Conversation list and filters | Empty State, Filtering items, Search Results, Data Table |
 | Timeline and composer | Comments, Submitting a form, Showing input error |
 | Settings and email channel | Settings, Integrations, Saving changes |
+| Conversation numbers, a channel's References | Settings, Saving changes |
+| Response targets | Settings, Saving changes |
 | Sign-in, invites, sessions | Login, User Management |
 | Every screen | Accessibility, Loading, Toast, Drawer |
 
