@@ -1139,5 +1139,74 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 			return err
 		}
 	}
-	return rowsError("export channel events", inbound)
+	if err := rowsError("export channel events", inbound); err != nil {
+		return err
+	}
+	inbound.Close()
+	return exportChatThreads(ctx, tx, workspaceID, sink)
+}
+
+// exportChatThreads writes the places of the chat channels, everything said in them, and which of it
+// is part of which conversation; items stream, a busy group says a lot.
+func exportChatThreads(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	threads, err := tx.Query(ctx, `SELECT id::text,channel_id::text,kind,external_id,name,contact_id::text,opens_conversations,last_item_at,created_at
+		FROM channel_threads WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export chat threads: %w", err)
+	}
+	records, err := pgx.CollectRows(threads, func(row pgx.CollectableRow) (export.ChannelThread, error) {
+		var r export.ChannelThread
+		err := row.Scan(&r.ID, &r.ChannelID, &r.Kind, &r.ExternalID, &r.Name, &r.ContactID, &r.OpensConversations, &r.LastItemAt, &r.CreatedAt)
+		r.LastItemAt, r.CreatedAt = domain.UTCOptional(r.LastItemAt), domain.UTC(r.CreatedAt)
+		return r, err
+	})
+	if err != nil {
+		return fmt.Errorf("export chat threads: %w", err)
+	}
+	for _, record := range records {
+		if err := sink.ChannelThread(record); err != nil {
+			return err
+		}
+	}
+	items, err := tx.Query(ctx, `SELECT id::text,channel_id::text,thread_id::text,direction,role,sender_kind,sender_value,sender_name,contact_id::text,agent_id::text,
+			external_id,quote_external_id,body,inbound_event_id::text,message_id::text,gathering_id::text,disposition,disposition_reason,occurred_at,alerted_at
+		FROM channel_thread_items WHERE workspace_id=$1 ORDER BY occurred_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export chat items: %w", err)
+	}
+	for items.Next() {
+		var r export.ChannelThreadItem
+		if err := items.Scan(&r.ID, &r.ChannelID, &r.ThreadID, &r.Direction, &r.Role, &r.SenderKind, &r.SenderValue, &r.SenderName, &r.ContactID, &r.AgentID,
+			&r.ExternalID, &r.QuoteExternalID, &r.Body, &r.InboundEventID, &r.MessageID, &r.GatheringID, &r.Disposition, &r.DispositionReason,
+			&r.OccurredAt, &r.AlertedAt); err != nil {
+			items.Close()
+			return fmt.Errorf("export chat items: %w", err)
+		}
+		r.OccurredAt, r.AlertedAt = domain.UTC(r.OccurredAt), domain.UTCOptional(r.AlertedAt)
+		if err := sink.ChannelThreadItem(r); err != nil {
+			items.Close()
+			return err
+		}
+	}
+	if err := rowsError("export chat items", items); err != nil {
+		return err
+	}
+	links, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,item_id::text,reason,decision_id::text,linked_by_agent_id::text,linked_at,unlinked_at,
+			unlinked_by_agent_id::text FROM conversation_thread_items WHERE workspace_id=$1 ORDER BY linked_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export chat links: %w", err)
+	}
+	for links.Next() {
+		var r export.ConversationThreadItem
+		if err := links.Scan(&r.ID, &r.ConversationID, &r.ItemID, &r.Reason, &r.DecisionID, &r.LinkedByAgentID, &r.LinkedAt, &r.UnlinkedAt, &r.UnlinkedByAgentID); err != nil {
+			links.Close()
+			return fmt.Errorf("export chat links: %w", err)
+		}
+		r.LinkedAt, r.UnlinkedAt = domain.UTC(r.LinkedAt), domain.UTCOptional(r.UnlinkedAt)
+		if err := sink.ConversationThreadItem(r); err != nil {
+			links.Close()
+			return err
+		}
+	}
+	return rowsError("export chat links", links)
 }

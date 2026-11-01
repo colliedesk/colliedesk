@@ -70,6 +70,19 @@ since the frame handled them before the rules. An AI decider may only ever repla
    a reply to someone else never files the message in their request. Only a shared scope reads the
    sender, so email gains no query.
 
+## Chat threads
+
+A chat type gives each message a place (`Inbound.Place`: a one-to-one chat or a group, with whether a
+message there may open a conversation) and a role (`Inbound.Role`). The store writes the place
+(`channel_threads`) and the message (`channel_thread_items`) in the transaction that writes its journal
+row, whatever the rules decided: collected (`gathering`), kept as chatter (`archived`), held
+(`pending_review`, or `unresolved` while the channel is off), cancelled (`not_request`), or part of a
+conversation (`conversation`, with a `conversation_thread_items` link saying how). Collected messages
+stored as one conclude their items together. A reply or notice the channel sent is an item of the thread
+its conversation's items are in (`FinishOutbox`), so the copy the channel sends back is the echo it always
+was and adds none. One item per journal event (a unique index) and per channel id: a replay never doubles
+one. No public route reads a thread; agents read them with `messages:read`.
+
 ## Decisions
 
 - **Journal timing.** An Async type (a chat webhook that must answer within seconds) commits the raw

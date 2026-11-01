@@ -204,6 +204,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope; a raise waits for a person (admin token) | `admin` |
 | `colliedesk_ai_source_consent_request` | Asks to let AI intake send images, a contact's profile or an integration's data | `read` |
 | `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data (admin token) | `admin` |
+| `colliedesk_conversation_chat_get` | Reads what was said in the chat places a conversation came from, and which messages are its own | `read` |
+| `colliedesk_channel_threads_list` | Lists a chat channel's one-to-one chats and groups | `read` |
+| `colliedesk_channel_thread_items` | Reads everything said in one chat place | `read` |
+| `colliedesk_channel_unresolved_items` | Lists chat messages nobody concluded on yet | `read` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
 | `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |

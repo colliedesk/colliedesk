@@ -74,6 +74,57 @@ type AISourceConsent struct {
 	ConsentedAt time.Time `json:"consented_at"`
 }
 
+// ChannelThread is a place of a chat channel: a one-to-one chat or a group.
+type ChannelThread struct {
+	ID                 string     `json:"id"`
+	ChannelID          string     `json:"channel_id"`
+	Kind               string     `json:"kind"`
+	ExternalID         string     `json:"external_id"`
+	Name               *string    `json:"name"`
+	ContactID          *string    `json:"contact_id"`
+	OpensConversations bool       `json:"opens_conversations"`
+	LastItemAt         *time.Time `json:"last_item_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+}
+
+// ChannelThreadItem is one message said in a chat place, a customer's, the team's or the channel's,
+// with what became of it.
+type ChannelThreadItem struct {
+	ID                string     `json:"id"`
+	ChannelID         string     `json:"channel_id"`
+	ThreadID          string     `json:"thread_id"`
+	Direction         string     `json:"direction"`
+	Role              string     `json:"role"`
+	SenderKind        *string    `json:"sender_kind"`
+	SenderValue       *string    `json:"sender_value"`
+	SenderName        *string    `json:"sender_name"`
+	ContactID         *string    `json:"contact_id"`
+	AgentID           *string    `json:"agent_id"`
+	ExternalID        *string    `json:"external_id"`
+	QuoteExternalID   *string    `json:"quote_external_id"`
+	Body              string     `json:"body"`
+	InboundEventID    *string    `json:"inbound_event_id"`
+	MessageID         *string    `json:"message_id"`
+	GatheringID       *string    `json:"gathering_id"`
+	Disposition       string     `json:"disposition"`
+	DispositionReason *string    `json:"disposition_reason"`
+	OccurredAt        time.Time  `json:"occurred_at"`
+	AlertedAt         *time.Time `json:"alerted_at"`
+}
+
+// ConversationThreadItem says an item is, or was, part of a conversation, and how it came to it.
+type ConversationThreadItem struct {
+	ID                string     `json:"id"`
+	ConversationID    string     `json:"conversation_id"`
+	ItemID            string     `json:"item_id"`
+	Reason            string     `json:"reason"`
+	DecisionID        *string    `json:"decision_id"`
+	LinkedByAgentID   *string    `json:"linked_by_agent_id"`
+	LinkedAt          time.Time  `json:"linked_at"`
+	UnlinkedAt        *time.Time `json:"unlinked_at"`
+	UnlinkedByAgentID *string    `json:"unlinked_by_agent_id"`
+}
+
 // ChannelEvent is one change to a channel (channel_events).
 type ChannelEvent struct {
 	ID           string          `json:"id"`
@@ -829,7 +880,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -869,6 +920,9 @@ type Sink interface {
 	ChannelEvent(ChannelEvent) error
 	ChannelAILevel(ChannelAILevel) error
 	ChannelInboundEvent(ChannelInboundEvent) error
+	ChannelThread(ChannelThread) error
+	ChannelThreadItem(ChannelThreadItem) error
+	ConversationThreadItem(ConversationThreadItem) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error
