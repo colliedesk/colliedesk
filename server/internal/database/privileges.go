@@ -169,4 +169,9 @@ const (
 	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI). Only a count or
 	// a yes or no leaves the transaction; no row is returned.
 	PrivilegeOperatorPreview Privilege = "operator-preview"
+	// PrivilegeMetaConversionClaim gives up the Meta Conversions API events of every workspace that are too
+	// old for Meta, clears sign-up addresses and browsers no event needs any more, and leases the due events.
+	// Only workspace ids and event names leave the transaction; each event is then read, sent and settled in
+	// its own workspace.
+	PrivilegeMetaConversionClaim Privilege = "meta-conversion-claim"
 )

@@ -32,6 +32,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
+	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -141,6 +142,9 @@ type Config struct {
 	// Funnel receives the cloud's trial, activation (email channel, reply, teammate) and payment
 	// events; nil records nothing.
 	Funnel FunnelRecorder
+	// MetaConversions reports trials and first payments of sign-ups from Meta ads to Meta's Conversions API
+	// (queued here, sent by metaconversions.Worker). Zero on a self-hosted server: it reports nothing.
+	MetaConversions metaconversions.Config
 	// ProductAnalytics is the PostHog project the web app reports to; nil (telemetry turned off
 	// with DISABLE_TELEMETRY or DO_NOT_TRACK, or a development build) keeps it from loading.
 	ProductAnalytics *ProductAnalytics

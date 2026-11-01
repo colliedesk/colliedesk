@@ -8,6 +8,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 )
 
@@ -128,9 +129,25 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		properties["internal"] = true
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
+	a.queueStartTrial(request, workspace.ID, attribution, ip)
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
 	if !a.finishBrowserSignIn(response, request, &result, input.Next) {
 		return
 	}
 	writeJSON(response, http.StatusCreated, result)
+}
+
+// queueStartTrial queues the report to Meta of a trial that came from a Meta ad. It only writes a row
+// (metaconversions.Worker sends it), and a failure is logged: the trial exists either way.
+func (a *API) queueStartTrial(request *http.Request, workspaceID string, attribution domain.Attribution, clientIP string) {
+	if !a.config.MetaConversions.Enabled() || attribution.FBCLID == "" {
+		return
+	}
+	err := metaconversions.RecordStartTrial(request.Context(), a.db, metaconversions.StartTrial{
+		WorkspaceID: workspaceID, FBCLID: attribution.FBCLID, ClickIDSeenAt: attribution.ClickIDSeenAt, At: a.now(),
+		ClientIP: clientIP, UserAgent: request.UserAgent(), SourceURL: a.config.Origin + "/sign-in",
+	})
+	if err != nil {
+		slog.Error("meta StartTrial not queued", "workspace", workspaceID, "error", err)
+	}
 }

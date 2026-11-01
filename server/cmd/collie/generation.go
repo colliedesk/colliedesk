@@ -28,6 +28,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
+	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/results"
@@ -245,6 +246,14 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	usage := telemetry.New(db, telemetryConfig, nil)
 	g.Go(func(ctx context.Context) { usage.Run(ctx, logger) })
+	// Trials and first payments of sign-ups from Meta ads are reported to Meta from the hosted cloud only;
+	// a self-hosted server reads no variable for it (docs/internals/ad-conversions.md).
+	metaConfig := metaconversions.ConfigFromEnv(os.Getenv, hostedCloud)
+	if metaConfig.Enabled() {
+		logger.Info("meta conversions api on", "dataset", metaConfig.DatasetID, "graph_version", metaconversions.GraphVersion, "test_events", metaConfig.TestEventCode != "")
+		metaWorker := metaconversions.NewWorker(db, metaConfig, metaconversions.WorkerOptions{Logger: logger})
+		g.Go(func(ctx context.Context) { metaWorker.Run(ctx, 15*time.Second) })
+	}
 	// The results page only reads numbers this worker computes (docs/internals/results.md). It also sends
 	// the weekly email to admins, from the platform address, when the server can send mail.
 	resultsWorker := results.NewWorker(db)
@@ -279,7 +288,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	apiConfig := httpapi.Config{Cursor: p.cursor, AI: aiConfig, ImportKeys: p.importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth,
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
-		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil), MetaConversions: metaConfig,
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
 		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
