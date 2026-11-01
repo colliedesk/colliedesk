@@ -48,7 +48,14 @@ test('help center custom domain: an admin sets it in Settings, the DNS check mak
   setDNS({ txt: { [`_help-center-verify.${host}`]: [token] } });
   await page.getByRole('button', { name: 'Check now' }).click();
   await expect(page.getByRole('status').filter({ hasText: `The help center is served on ${host}.` })).toBeVisible();
-  await expect(page.getByRole('link', { name: `http://${host}:${new URL(servers.main).port}` })).toBeVisible();
+  // The check also opened the address and the help center answered there. This server has no TLS, so the
+  // address is http and the line claims no HTTPS (and shows no false failure).
+  const address = `http://${host}:${new URL(servers.main).port}`;
+  const opens = page.getByText(`${address} opens this help center.`, { exact: true });
+  await expect(opens).toBeVisible();
+  await expect(opens.getByRole('link', { name: address })).toHaveAttribute('href', address);
+  await expect(page.getByText(/HTTPS works|no valid certificate|could not be reached|did not answer in time|not with this help center/)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: address }).first()).toBeVisible();
 
   const home = await get(host, '/');
   expect(home.status).toBe(200);

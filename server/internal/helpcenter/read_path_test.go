@@ -9,7 +9,7 @@ import (
 
 // TestPublicPagesMakeNoExternalCall: a visitor's page, sitemap, llms.txt or Markdown reads only the
 // database and the server's own storage, so no other service's latency or outage reaches it. Only
-// the admin's domain check (domain-check.go) asks DNS.
+// the admin's domain check asks DNS (domain-check.go) and then opens the domain's address (address-check.go).
 func TestPublicPagesMakeNoExternalCall(t *testing.T) {
 	outbound := []string{"http.Client", "http.DefaultClient", "http.Get(", "http.Head(", "http.Post", "http.NewRequest", "http.DefaultTransport",
 		"net.Dial", "LookupTXT", "net.Resolver", "net.Lookup", "net.DefaultResolver", "smtp."}
@@ -18,7 +18,7 @@ func TestPublicPagesMakeNoExternalCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, source := range sources {
-		if strings.HasSuffix(source, "_test.go") || source == "domain-check.go" {
+		if strings.HasSuffix(source, "_test.go") || source == "domain-check.go" || source == "address-check.go" {
 			continue
 		}
 		text, err := os.ReadFile(source)

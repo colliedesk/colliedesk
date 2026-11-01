@@ -293,6 +293,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
 	}
 	apiConfig.LookupCNAME, apiConfig.LookupTXT = lookupCNAME, lookupTXT
+	apiConfig.HelpCenterAddressTransport = helpCenterAddressTransport
 	api := httpapi.New(p.pool, apiConfig)
 	g.api = api
 	g.Go(func(ctx context.Context) { recheckHelpCenterDomainsDaily(ctx, api) })

@@ -111,6 +111,9 @@ type Config struct {
 	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
 	// check; nil uses the system resolver.
 	LookupCNAME func(ctx context.Context, host string) (string, error)
+	// HelpCenterAddressTransport opens a custom domain's help center address after a DNS check proved
+	// the claim; nil dials public addresses only and checks certificates (helpcenter.NewAddressTransport).
+	HelpCenterAddressTransport http.RoundTripper
 	// HelpCenterProbe fetches a help center page under a domain on trial (D12) and returns its HTTP status;
 	// nil uses an HTTP client with a short timeout.
 	HelpCenterProbe func(ctx context.Context, url string) (int, error)
@@ -348,6 +351,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	if config.LookupCNAME == nil {
 		config.LookupCNAME = net.DefaultResolver.LookupCNAME
+	}
+	if config.HelpCenterAddressTransport == nil {
+		config.HelpCenterAddressTransport = helpcenter.NewAddressTransport()
 	}
 	outbound := Outbound(config)
 	requestPool := config.RequestPool

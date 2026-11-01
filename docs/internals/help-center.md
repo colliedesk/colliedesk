@@ -334,6 +334,21 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   the app's host, so only the token proves anything. The host name is stored lower-case ASCII (Unicode
   goes through `idna.Lookup`), never an IP address, a single label, `APP_ORIGIN`'s host or a name at or
   below `HELP_CENTER_DOMAIN` (`helpcenter.CustomHost`).
+- **A passing DNS check also opens the address, and the answer must carry the workspace's marker.**
+  DNS alone said "served" while the proxy had no certificate (`ERR_SSL_PROTOCOL_ERROR`). After a check
+  (the button or the daily re-check, never `tls-ask`) proves an active claim whose help center serves
+  there, `helpcenter.CheckAddress` sends one GET to `SiteURL` for the domain (APP_ORIGIN's scheme and
+  port, so a server without TLS uses http) and records `address_checked_at` / `address_error`. It
+  never follows a redirect, sends no credentials, reads only headers (16 KiB cap) and is bounded by
+  8 s, long enough for on-demand issuance: on Cloud this first request is what makes Caddy ask
+  `tls-ask` and issue the certificate. The pages on a custom domain carry `Colliedesk-Help-Center:
+  helpcenter.Marker(workspace id, host)`; the workspace id is not public, so another server answering on
+  the name cannot send it, and a missing or other value is "answers, but not with this help center".
+  The admin typed the name, so the request is an SSRF risk: it runs only after DNS proved the claim,
+  inside the existing 10-an-hour check limit, and `helpcenter.NewAddressTransport` dials through
+  `netguard.Control` (no loopback, private, link-local or reserved address). Only the `e2e` build
+  (`cmd/collie/e2e_dns.go`) dials the local server instead. The workspace reads a plain cause; the
+  network's error goes to the log (`TestHelpCenterDomainCheck*`, `TestAddressCheckRefusesInternalAddresses`).
 - **A check records only the claim it looked up.** Activation and failure match `workspace_id` and
   `claim`, never the host name: a remove and re-add of the same name during the 3 s lookup answers
   `domain_changed` instead of activating the new claim with the old claim's proof.

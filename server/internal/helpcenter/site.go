@@ -317,6 +317,10 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.writeNotFound(response, base == "")
 		return
 	}
+	// On its custom domain the help center says whose it is, for the custom domain check (CheckAddress).
+	if at.host != "" {
+		response.Header().Set(MarkerHeader, Marker(at.workspaceID, at.host))
+	}
 	view := s.newView(site, base, channels.HelpCenterAdditions{})
 	reached := s.helpCenterAt(view, base)
 	if route != nil {

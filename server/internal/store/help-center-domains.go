@@ -20,14 +20,14 @@ const takenMessage = "Another workspace's help center serves on this host name, 
 // takenOverMessage is the check_error of an active domain another workspace took over.
 const takenOverMessage = "Another workspace's DNS records proved this host name while this domain's records did not, so its help center serves there now."
 
-const helpCenterDomainColumns = `hostname, claim, token, status, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason`
+const helpCenterDomainColumns = `hostname, claim, token, status, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason, address_checked_at, address_error`
 
 func scanHelpCenterDomain(row pgx.Row) (domain.HelpCenterDomain, error) {
 	var d domain.HelpCenterDomain
-	err := row.Scan(&d.Hostname, &d.Claim, &d.Token, &d.Status, &d.CreatedAt, &d.VerifiedAt, &d.CheckedAt, &d.CheckError, &d.CertificateRequestedAt, &d.FailingSince, &d.PendingReason)
+	err := row.Scan(&d.Hostname, &d.Claim, &d.Token, &d.Status, &d.CreatedAt, &d.VerifiedAt, &d.CheckedAt, &d.CheckError, &d.CertificateRequestedAt, &d.FailingSince, &d.PendingReason, &d.AddressCheckedAt, &d.AddressError)
 	d.CreatedAt = d.CreatedAt.UTC()
 	d.VerifiedAt, d.CheckedAt, d.CertificateRequestedAt = domain.UTCOptional(d.VerifiedAt), domain.UTCOptional(d.CheckedAt), domain.UTCOptional(d.CertificateRequestedAt)
-	d.FailingSince = domain.UTCOptional(d.FailingSince)
+	d.FailingSince, d.AddressCheckedAt = domain.UTCOptional(d.FailingSince), domain.UTCOptional(d.AddressCheckedAt)
 	return d, err
 }
 
@@ -74,7 +74,8 @@ func (s *Store) SetHelpCenterDomain(ctx context.Context, workspaceID, host strin
 		return scanHelpCenterDomain(tx.QueryRow(ctx, `INSERT INTO help_center_domains (workspace_id, hostname, claim, token, status, created_at)
 			VALUES ($1, $2, $3, $4, 'pending', $5)
 			ON CONFLICT (workspace_id) DO UPDATE SET hostname=EXCLUDED.hostname, claim=EXCLUDED.claim, token=EXCLUDED.token, status='pending', created_at=EXCLUDED.created_at,
-				verified_at=NULL, checked_at=NULL, check_error=NULL, certificate_requested_at=NULL, failing_since=NULL, pending_reason=NULL
+				verified_at=NULL, checked_at=NULL, check_error=NULL, certificate_requested_at=NULL, failing_since=NULL, pending_reason=NULL,
+				address_checked_at=NULL, address_error=NULL
 			RETURNING `+helpCenterDomainColumns, workspaceID, host, claim, token, now))
 	})
 	if err != nil {
@@ -158,7 +159,7 @@ func (s *Store) takeOverHelpCenterHost(ctx context.Context, workspaceID, claim s
 			return domain.ErrHelpCenterDomainTaken
 		default:
 			if _, err := tx.Exec(ctx, `UPDATE help_center_domains SET status='pending', pending_reason='taken_over', failing_since=NULL,
-				checked_at=$2, check_error=$3 WHERE workspace_id=$1`, holder, now, takenOverMessage); err != nil {
+				address_checked_at=NULL, address_error=NULL, checked_at=$2, check_error=$3 WHERE workspace_id=$1`, holder, now, takenOverMessage); err != nil {
 				return err
 			}
 		}
@@ -205,6 +206,28 @@ func clipCheckError(message string) string {
 		return message
 	}
 	return string(runes[:domain.MaxHelpCenterDomainCheckError-1]) + "…"
+}
+
+// RecordHelpCenterAddressCheck records what opening the workspace's custom domain address showed: at is
+// when it was opened and failure the plain cause when the answer was not this help center's; both nil
+// clear an earlier result when no check opened it. ErrHelpCenterDomainMissing means the claim was removed
+// or replaced meanwhile.
+func (s *Store) RecordHelpCenterAddressCheck(ctx context.Context, workspaceID, claim string, at *time.Time, failure *string) (domain.HelpCenterDomain, error) {
+	if failure != nil {
+		clipped := clipCheckError(*failure)
+		failure = &clipped
+	}
+	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET address_checked_at=$3, address_error=$4
+			WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, at, failure))
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.HelpCenterDomain{}, domain.ErrHelpCenterDomainMissing
+	}
+	if err != nil {
+		return domain.HelpCenterDomain{}, fmt.Errorf("record help center address check: %w", err)
+	}
+	return got, nil
 }
 
 // NoteHelpCenterCertificate records that the reverse proxy was told it may get a certificate for the
