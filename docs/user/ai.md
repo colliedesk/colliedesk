@@ -325,7 +325,8 @@ again") with **Turn Auto back on**, which asks with the same dialog.
 Intake can have a **fallback model**: another of its provider's models, tried once when its model
 times out, is busy, refuses for its rate, is gone, or answers what Colliedesk cannot read. A refused key
 or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
-with `fallback_model` on `PUT /api/v1/ai/slots/intake` (an empty string removes it); the provider cannot
+with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set_request` (an empty string
+removes it); Settings does not show it yet. The provider cannot
 drop a model intake uses this way. A new fallback model takes intake back to Suggest on every channel,
 as another model does.
 

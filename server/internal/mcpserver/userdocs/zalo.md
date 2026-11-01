@@ -5,6 +5,31 @@ is a member of. Each message lands in your inbox as the [chat rules](channels.md
 channel decide, and your replies go back where the conversation was said: into its group, or to the
 customer alone, quoting the message they answer.
 
+## Set up a team from start to finish
+
+An admin, in this order:
+
+1. **A provider for AI**, unless the server's provider will do: **Settings → Built-in AI → Providers →
+   Add provider** ([Add your own provider](ai.md#add-your-own-provider)).
+2. **The OA**: [connect it](#connect-an-oa), paste the **Webhook URL** in the Zalo app, and set the OA
+   secret key before deliveries arrive; then add the tokens, so replies can be sent.
+3. **Chat intake**: its row in **Settings → Built-in AI → Features** shows once the workspace has a chat
+   channel such as the OA. Pick its provider and model and turn it on: that is your consent to send it the
+   chats. **Images customers sent** and **The customer's profile**, under it, are each a consent of their own
+   ([Every feature starts off](ai.md#every-feature-starts-off)).
+4. **AI on the OA's groups**: in the OA's **AI** tab, set **Intake** for **Groups** to Suggest and fill in its
+   **Intake settings**, among them the words that mark a secret in your customers' language ("mật khẩu",
+   "OTP") ([What AI does by itself, per channel](ai.md#what-ai-does-by-itself-per-channel)). One-to-one
+   messages open a conversation each, so they have no intake.
+5. **Groups** and **Staff**: link each group to its customer's organization, and add your team's Zalo
+   accounts, so what they write in a group is never a request.
+6. **Messages**: the commands customers type, what the OA says, the words for each status and when a
+   resolved conversation closes ([The Messages tab](#the-messages-tab)).
+7. **Review**: decide the cards in [Review](review.md). A card decided as AI suggested, or otherwise, is
+   what tells whether AI is ready.
+8. **Auto**: raise Intake for Groups to Auto. The dialog says which actions are ready, and **Let it … alone
+   anyway** opens one before its labels do ([When AI acts on its own](ai.md#when-ai-acts-on-its-own)).
+
 ## Connect an OA
 
 An admin opens **Settings → Channels → Add channel → Connect Zalo OA** and fills in:
