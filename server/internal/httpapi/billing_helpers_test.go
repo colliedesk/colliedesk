@@ -291,7 +291,9 @@ func (f billingFixture) mustDeliver(t *testing.T, id string, body []byte) {
 }
 
 type billingView struct {
-	CheckoutPlans     []string   `json:"checkout_plans"`
+	CheckoutPlans []string `json:"checkout_plans"`
+	// PurchasedPlan is the checkout plan the subscription in effect was bought as; nil when unknown.
+	PurchasedPlan     *string    `json:"purchased_plan"`
 	Plan              string     `json:"plan"`
 	Status            string     `json:"status"`
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
