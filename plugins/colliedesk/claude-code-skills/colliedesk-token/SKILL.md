@@ -10,7 +10,11 @@ allowed-tools: Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh" *)
 
 Result of checking and saving the token:
 
-!`sh "${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh" '${user_config.url}' '$ARGUMENTS'`
+```!
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh" '${user_config.url}' <<'COLLIEDESK_TOKEN'
+$ARGUMENTS
+COLLIEDESK_TOKEN
+```
 
 Tell the person the result above in their language, in one or two sentences, and nothing more.
 Do not run any other command, do not try another way to save a token, and never repeat the token.

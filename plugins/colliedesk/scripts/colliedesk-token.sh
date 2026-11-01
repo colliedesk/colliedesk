@@ -1,13 +1,16 @@
 #!/bin/sh
 # Saves a new agent token for the Colliedesk plugin: /colliedesk-token <token>.
-# Usage: colliedesk-token.sh <MCP address> <token>
+# Usage: colliedesk-token.sh <MCP address>, with the token on stdin.
 # The token is checked against the person's Colliedesk first and saved only when Colliedesk accepts
-# it, so a typo never replaces a working token. It goes to curl and to `claude plugin configure`
-# on stdin, never on a command line, and this script never prints it.
+# it, so a typo never replaces a working token. It reaches this script on stdin (a quoted heredoc in
+# the skill, so a stray quote or $( in a paste is text, not shell), and goes on to curl and to
+# `claude plugin configure` on stdin too. The shell Claude Code starts for the skill does hold the
+# whole command, token included, while it runs, as everything typed in the session is kept in its
+# history. This script never prints the token.
 set -u
 
 url=${1:-}
-token=${2:-}
+token=$(cat)
 
 usage() {
   echo "$1"
@@ -17,6 +20,8 @@ usage() {
 
 case $token in
 "") usage "No token given." ;;
+*"
+"*) usage "Give one token only." ;;
 cdk_agent_*) ;;
 *) usage "That is not a Colliedesk agent token: it starts with cdk_agent_." ;;
 esac

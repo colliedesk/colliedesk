@@ -169,7 +169,8 @@ func TestPluginReplacesTheTokenOnlyWhenAPersonAsks(t *testing.T) {
 	for _, want := range []string{
 		"name: colliedesk-token\n",
 		"disable-model-invocation: true\n",
-		"!`sh \"${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh\" '${user_config.url}' '$ARGUMENTS'`",
+		// The token goes in a quoted heredoc: a quote or $( in a paste stays text.
+		"sh \"${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh\" '${user_config.url}' <<'COLLIEDESK_TOKEN'\n$ARGUMENTS\nCOLLIEDESK_TOKEN\n",
 		"never repeat the token",
 	} {
 		if !strings.Contains(string(skill), want) {
