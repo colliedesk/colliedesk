@@ -19,8 +19,8 @@ An admin, in this order:
    ([Every feature starts off](ai.md#every-feature-starts-off)).
 4. **AI on the OA's groups**: in the OA's **AI** tab, set **Intake** for **Groups** to Suggest and fill in its
    **Intake settings**, among them the words that mark a secret in your customers' language ("mật khẩu",
-   "OTP") ([What AI does by itself, per channel](ai.md#what-ai-does-by-itself-per-channel)). One-to-one
-   messages open a conversation each, so they have no intake.
+   "OTP") ([What AI does by itself, per channel](ai.md#what-ai-does-by-itself-per-channel)). Intake runs on
+   groups only: one-to-one messages follow the channel's rules.
 5. **Groups** and **Staff**: link each group to its customer's organization, and add your team's Zalo
    accounts, so what they write in a group is never a request.
 6. **Messages**: the commands customers type, what the OA says, the words for each status and when a
@@ -105,7 +105,8 @@ What a customer can type to the OA, in a chat or a group: **Open a request**, **
 (followed by a conversation's code), **Confirm** (the answer to the question below) and **Help**. Each has
 its phrases and how they match: **Allow one typo** (one wrong letter in a phrase of five letters or more),
 **Whole words**, or **Exact** (the whole message, accents kept, in any case; best for short words such as
-"OK"). A command with no phrase is off.
+"OK"). A command with no phrase is off, and a new OA has none: write the phrases your customers will
+type (for example "tạo phiếu" for Open a request, "Chưa được" for Reopen, "OK" and "Hủy").
 
 **When a customer sends only the command** asks what the request is about when "Open a request" comes
 with nothing before it. A request still waiting for its description after **Forget a request still
