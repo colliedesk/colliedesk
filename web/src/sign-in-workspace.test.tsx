@@ -205,6 +205,15 @@ test('a sign-up from an ad link sends the post and the click it came from, then 
   await waitFor(() => expect(window.sessionStorage.getItem('colliedesk.signup-attribution')).toBeNull());
 });
 
+test('a Founding buyer from an ad link signs up with the click it came from', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  const router = open('/settings/billing?buy=founding&utm_source=meta&fbclid=IwAR_y');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/sign-in'));
+  const body = await submitSignup('Create workspace and continue to payment');
+  expect(body.attribution).toEqual({ utm_source: 'meta', fbclid: 'IwAR_y', click_id_seen_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) as unknown });
+});
+
 test('a sign-up without an ad link sends no attribution', async () => {
   clerk.signedIn = true;
   serve({ signedIn: false, config: config(false), exchange: notAnAgent() });

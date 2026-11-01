@@ -264,9 +264,11 @@ const billingRoute = createRoute({
   }),
   // Runs before sign-in is known, so the plan is kept through the sign-in and sign-up round trip.
   // `buy` is then removed from the address: Back or a reload after the checkout must not start another.
-  beforeLoad: ({ search }) => {
+  // The ad keys of the link are kept too: the redirect to sign-up carries only the plan.
+  beforeLoad: ({ search, location }) => {
     if (!search.buy) return;
     rememberCheckoutIntent(search.buy);
+    rememberSignupAttribution(location.searchStr);
     throw redirect({ to: '/settings/billing', search: { checkout: search.checkout }, replace: true });
   },
   component: function Billing() {
