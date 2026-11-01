@@ -96,10 +96,8 @@ func conversationRow(conversation restConversation, contact *restContact, agents
 		LastStatusChange: slaOf(conversation.LastStatusChange), MayTellCustomer: conversation.MayTellCustomer,
 		UntrustedCustomerContent: conversationContent{Subject: conversation.Subject}}
 	if contact != nil {
-		row.UntrustedCustomerContent.Contact = &contactOut{Name: contact.Name, Email: contact.Email}
-		if full {
-			row.UntrustedCustomerContent.Contact.Organization = contact.Organization
-		}
+		// The organization says which customer team wrote, as the conversation's details show it.
+		row.UntrustedCustomerContent.Contact = &contactOut{Name: contact.Name, Email: contact.Email, Organization: contact.Organization}
 	}
 	if full {
 		row.CreatedAt = utc(conversation.CreatedAt)

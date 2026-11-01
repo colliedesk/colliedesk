@@ -181,6 +181,29 @@ func TestIntakeToolsReturnWhatCustomersWroteAsUntrusted(t *testing.T) {
 			t.Errorf("%s: no customer text at all: %v", call.tool, result)
 		}
 	}
+	// Had AI decided the card by itself, the card says how sure it was, why and which model, in the list and on the conversation.
+	if _, err := e.pool.Exec(ctx, `WITH g AS (UPDATE intake_gatherings SET decided_by='ai',decided_by_agent_id=NULL WHERE id=$1 RETURNING workspace_id,id)
+		INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,reason,confidence,applied,items_seen,model)
+		SELECT workspace_id,id,'ai','model','create','MALLORY-AIAPPLIED',0.91,true,'{}','asked-model' FROM g`, card); err != nil {
+		t.Fatal(err)
+	}
+	listed := e.ok(reader, "colliedesk_intake_list", map[string]any{"state": "decided", "decided_by": "ai"})
+	byAI := at(t, listed, "items").([]any)
+	if len(byAI) != 1 || at(t, byAI[0], "ai_decision", "confidence") != 0.91 || at(t, byAI[0], "ai_decision", "model") != "asked-model" ||
+		at(t, byAI[0], "ai_decision", "untrusted_customer_content", "reason") != "MALLORY-AIAPPLIED" {
+		t.Fatalf("decided by AI = %v", listed)
+	}
+	why := e.ok(reader, "colliedesk_conversation_intake_get", map[string]any{"conversation_id": conversation})
+	if cards := at(t, why, "gatherings").([]any); len(cards) != 1 || at(t, cards[0], "card", "ai_decision", "action") != "create" {
+		t.Fatalf("conversation intake = %v", why)
+	}
+	for _, result := range []any{listed, why} {
+		leaves(result, nil, func(path []string, leaf string) {
+			if strings.Contains(leaf, "MALLORY") && !under(path, "untrusted_customer_content") {
+				t.Errorf("%q at %v", leaf, path)
+			}
+		})
+	}
 	if stats := e.ok(reader, "colliedesk_intake_stats", map[string]any{"channel_id": channel}); at(t, stats, "stats", "gatherings") != float64(1) {
 		t.Fatalf("stats = %v", stats)
 	}

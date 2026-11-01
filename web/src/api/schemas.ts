@@ -128,7 +128,9 @@ export const slaSchema = z.object({
 export type SLA = z.infer<typeof slaSchema>;
 export type SLAClock = z.infer<typeof slaClockSchema>;
 export const conversationSchema = z.object({
-  id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
+  id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(),
+  // An older server sends none.
+  contact_organization: z.string().nullable().optional(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   latest_reply_number: z.number().int().nonnegative(),

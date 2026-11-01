@@ -4878,7 +4878,7 @@ export interface components {
             attach_threshold?: number;
             /** @description Confidence to set a message aside as not a request. Default 0.95. */
             ignore_threshold?: number;
-            /** @description Never attach by itself while the customer has two or more open conversations it hesitates between. Default true. */
+            /** @description Never attach by itself while the customer has two or more unresolved conversations among the candidates, however sure AI is (not_applied_reason several_candidates). Default false: AI sure enough attaches to the conversation it names. */
             attach_requires_single_candidate?: boolean;
             /** @description A batch older than this when decided is only suggested. Default 7200. */
             auto_max_age_seconds?: number;
@@ -5135,6 +5135,32 @@ export interface components {
             preview: string;
             /** @description What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done. */
             suggestion: components["schemas"]["IntakeSuggestion"] | null;
+            /** @description The code people know conversation_id by ("CHD-2026-0008", "#12"); null without a conversation. */
+            conversation_ref: string | null;
+            /** @description The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided. */
+            ai_decision: components["schemas"]["IntakeAIDecision"] | null;
+        };
+        IntakeAIDecision: {
+            /** Format: uuid */
+            decision_id: string;
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore";
+            /**
+             * Format: uuid
+             * @description With attach.
+             */
+            target_conversation_id: string | null;
+            confidence: number | null;
+            /** @description With attach: how sure it was of the second most likely conversation. */
+            runner_up_confidence: number | null;
+            /** @description AI's reason, written from what the customer said; erased 90 days after. */
+            reason: string | null;
+            /** @description The model the channel's intake asked. */
+            model: string | null;
+            /** @description The model that answered instead of model, when the channel's model failed or its answer could not be read (the channel's fallback model) or the provider re-ran the request on another; null when model answered. */
+            fallback_model: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         IntakeSuggestion: {
             /** Format: uuid */
@@ -5169,7 +5195,7 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             reason: string | null;
             /**
-             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read).
              * @enum {string}
              */
             not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";
@@ -5345,7 +5371,10 @@ export interface components {
             follows_decision_id: string | null;
             /** @description What failed when AI's answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject. */
             error_code: string | null;
+            /** @description With AI: the model the channel's intake asked. */
             model: string | null;
+            /** @description With AI: the model that answered instead of model (the channel's fallback model, or another the provider re-ran the request on); null when model answered. */
+            fallback_model: string | null;
             /** Format: uuid */
             agent_id: string | null;
             via_token: boolean;
@@ -7571,6 +7600,8 @@ export interface components {
             /** Format: uuid */
             contact_id: string;
             contact_name: string;
+            /** @description The organization of its customer (a Zalo group's organization, a Freshdesk company): the name ?organization= lists the conversations of. Null when the customer has none. */
+            contact_organization?: string | null;
             subject: string;
             status: components["schemas"]["ConversationStatus"];
             priority: components["schemas"]["Priority"];

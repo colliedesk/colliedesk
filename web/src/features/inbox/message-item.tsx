@@ -19,6 +19,8 @@ interface MessageItemProps {
   // label says more about where the message came from (why a chat message is here); menu acts on it.
   label?: ReactNode;
   menu?: ReactNode;
+  // note is a line about the message under its header, the width of the message (why AI added it).
+  note?: ReactNode;
   // channelName is the conversation's channel, the author of a notice it sent by itself (named even once removed).
   channelName?: string;
 }
@@ -46,7 +48,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, channelName }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -56,6 +58,9 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
   // an image is already on screen, so its row would repeat it; the file stays stored and downloadable, and
   // the row returns in the plain-text view, where nothing else shows the image.
   const files = showHTML ? stored.filter((file) => !file.inline) : stored;
+  // Only mail (and mail imported from another helpdesk) is hard-wrapped by its client; every break of a chat or
+  // a form, the batches of chat messages put together included, is one the customer typed.
+  const typedBreaks = !item.email && !item.origin;
   const sender = approvedBy ?? item.author_name ?? messages.someone;
   // A token or draft line already names the person; the plain name would repeat it.
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
@@ -79,11 +84,12 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
         <time dateTime={item.created_at} title={stampTitle(item.created_at, timezone)}>{formatDate(item.created_at, timezone)}{zoneSuffix(item.created_at, timezone)}</time>
         {menu}
       </header>
+      {note}
       {item.email && <EmailEnvelope email={item.email} storedFiles={stored.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
       {showHTML && item.body_html
         ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
-        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <MarkdownBody text={item.body} />}</div>}
+        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.body} />}</div>}
       {files.length > 0 && <AttachmentList items={files} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />

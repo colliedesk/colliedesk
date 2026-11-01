@@ -28,7 +28,7 @@ func newAIDesk(t *testing.T, gate intake.Gate) aiDesk {
 	t.Helper()
 	d := aiDesk{loopDesk: newLoopDesk(t, intakeLoop()), fake: &aiprovider.Fake{}}
 	service := ai.NewService(database.New(d.pool), ai.Config{
-		Server: &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "server-key", Models: map[string][]string{ai.SlotIntake: {"claude-haiku-5-5"}}},
+		Server: &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "server-key", Models: map[string][]string{ai.SlotIntake: {"claude-haiku-5-5", "fallback-model"}}},
 		Build:  func(ai.Spec) (aiprovider.Provider, error) { return d.fake, nil }})
 	service.SetClock(func() time.Time { return *d.clock })
 	d.worker = ai.NewWorker(service, database.New(d.pool), ai.WorkerOptions{MaxRunning: 1, PerWorkspace: 1})
@@ -670,5 +670,140 @@ func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
 	}
 	if got := d.one(t, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2`, conversation); got != "open" {
 		t.Fatalf("after a thank-you to a closed conversation it is %s", got)
+	}
+}
+
+// AI sure enough joins a customer's batch to the conversation it names even while the customer has other
+// open conversations, as it does with one; attach_requires_single_candidate (off by default) holds every
+// such attach back for a person, however sure AI is.
+func TestAISureEnoughAttachesAmongSeveralOpenConversationsUnlessTheScopeAsksForOne(t *testing.T) {
+	for _, c := range []struct {
+		options, want string
+	}{{"", "create/applied,create/applied,attach/applied"}, {`{"attach_requires_single_candidate":true}`, "create/applied,create/applied,attach/several_candidates"}} {
+		t.Run(c.want, func(t *testing.T) {
+			d := newAIDesk(t, intake.OpenGate)
+			d.intakeAt(t, "auto")
+			if c.options != "" {
+				if _, err := d.pool.Exec(context.Background(), `UPDATE channel_ai_levels SET options=$2::jsonb WHERE workspace_id=$1 AND slot='intake'`, d.workspaceID, c.options); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Without the thread's key each batch of the customer is held for AI.
+			forget := func() {
+				if _, err := d.pool.Exec(context.Background(), `DELETE FROM conversation_thread_keys WHERE workspace_id=$1`, d.workspaceID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
+			d.flush(t)
+			d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.97})
+			d.runAI(t)
+			forget()
+			d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Name: "Lan", Group: "g1", Text: "and the invoice printer is offline"})
+			d.flush(t)
+			d.answers(map[string]any{"action": "create", "subject": "Printer", "confidence": 0.97})
+			d.runAI(t)
+			forget()
+			d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Name: "Lan", Group: "g1", Text: "the printer is a Xprinter on USB"})
+			d.flush(t)
+			if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1 AND status='open'`); got != "2" {
+				t.Fatalf("open conversations = %s", got)
+			}
+			d.answers(map[string]any{"action": "attach", "target": "C1", "runner_up": "C2", "runner_up_confidence": 0.02, "confidence": 0.97,
+				"reason": "more on the printer of C1, not C2"})
+			d.runAI(t)
+			if got := d.decisions(t); got != c.want {
+				t.Fatalf("decisions = %s", got)
+			}
+			// The reason names the conversations by the code people know, never by the prompt's labels.
+			want := d.one(t, `SELECT 'more on the printer of '||t.display_ref||', not '||r.display_ref FROM intake_decisions d
+				JOIN conversations t ON t.id=d.target_conversation_id JOIN conversations r ON r.id=d.runner_up_conversation_id
+				WHERE d.workspace_id=$1 AND d.action='attach'`)
+			if got := d.one(t, `SELECT reason FROM intake_decisions WHERE workspace_id=$1 AND action='attach'`); got != want || strings.Contains(got, "C1") {
+				t.Fatalf("reason = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// A card AI decided says how: its action, how sure it was, why, the model asked, and the fallback model only when
+// the channel's model did not answer. A provider answering under a dated name of the same model is no fallback.
+func TestACardAIDecidedSaysHowSureWhyAndWhichModel(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	if _, err := d.pool.Exec(context.Background(), `UPDATE ai_slots SET fallback_model='fallback-model' WHERE workspace_id=$1 AND slot='intake'`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	answer := func(model, subject string) aiprovider.FakeReply {
+		raw, _ := json.Marshal(map[string]any{"action": "create", "target": "", "runner_up": "", "runner_up_confidence": 0, "command": "", "subject": subject,
+			"reply_kind": "substantive", "ignore_reason": "", "confidence": 0.93, "reason": "a new problem with the export"})
+		return aiprovider.FakeReply{Response: aiprovider.Response{Text: string(raw), JSON: string(raw), Stop: aiprovider.StopDone, Model: model,
+			Usage: aiprovider.Usage{Reported: true, InputTokens: 100, OutputTokens: 20}}}
+	}
+	decided := func() store.IntakeGathering {
+		t.Helper()
+		page, err := store.New(d.pool).IntakeGatherings(context.Background(), d.workspaceID, store.IntakeListDecided, "", "", "", "", 10)
+		if err != nil || len(page.Items) == 0 {
+			t.Fatalf("decided = %+v, %v", page.Items, err)
+		}
+		return page.Items[0]
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.fake.Script(answer("claude-haiku-5-5-20261001", "Stock export fails"))
+	d.runAI(t)
+	first := decided()
+	if ref := d.one(t, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, *first.ConversationID); first.ConversationRef == nil || *first.ConversationRef != ref || ref == "" {
+		t.Fatalf("conversation ref = %v, want %q", first.ConversationRef, ref)
+	}
+	got := first.AIDecision
+	if got == nil || got.Action != "create" || got.Confidence == nil || *got.Confidence != 0.93 || got.Reason == nil || *got.Reason != "a new problem with the export" ||
+		got.Model == nil || *got.Model != "claude-haiku-5-5" || got.FallbackModel != nil || got.CreatedAt.IsZero() {
+		t.Fatalf("ai decision = %+v", got)
+	}
+	// The channel's model answers what cannot be read: the fallback model decides.
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Name: "Minh", Group: "g1", Text: "the printer is offline"})
+	d.flush(t)
+	d.fake.Script(aiprovider.FakeReply{Response: aiprovider.Response{Text: "not json", Stop: aiprovider.StopDone, Model: "claude-haiku-5-5",
+		Usage: aiprovider.Usage{Reported: true, InputTokens: 100, OutputTokens: 20}}}, answer("fallback-model-20261001", "Printer offline"))
+	d.runAI(t)
+	card := decided()
+	if card.AIDecision == nil || card.AIDecision.FallbackModel == nil || *card.AIDecision.FallbackModel != "fallback-model" {
+		t.Fatalf("ai decision = %+v", card.AIDecision)
+	}
+	detail, err := store.New(d.pool).IntakeGatheringByID(context.Background(), d.workspaceID, card.ID, time.Now())
+	if err != nil || detail.AIDecision == nil || detail.AIDecision.DecisionID != card.AIDecision.DecisionID || len(detail.Decisions) != 1 ||
+		detail.Decisions[0].FallbackModel == nil || *detail.Decisions[0].FallbackModel != "fallback-model" {
+		t.Fatalf("card = %+v, %v", detail, err)
+	}
+	// The provider re-ran a declined request on another model inside the call: its last hop answered.
+	d.send(t, channeltest.LoopbackEvent{ID: "r-1", From: "r", Name: "Tuan", Group: "g1", Text: "the till is slow"})
+	d.flush(t)
+	rerun := answer("claude-haiku-5-5", "Till is slow")
+	rerun.Response.Hops = []aiprovider.Hop{{Model: "claude-haiku-5-5", Usage: rerun.Response.Usage}, {Model: "claude-opus-5-5", Usage: rerun.Response.Usage}}
+	d.fake.Script(rerun)
+	d.runAI(t)
+	if got := decided().AIDecision; got == nil || got.FallbackModel == nil || *got.FallbackModel != "claude-opus-5-5" {
+		t.Fatalf("re-run ai decision = %+v", got)
+	}
+	// A re-run on the same model, named as asked or with a date, is no fallback.
+	for i, last := range []string{"claude-haiku-5-5", "claude-haiku-5-5-20261001"} {
+		d.send(t, channeltest.LoopbackEvent{ID: fmt.Sprintf("s-%d", i), From: fmt.Sprintf("s%d", i), Name: "Mai", Group: "g1", Text: "the scale is off"})
+		d.flush(t)
+		same := answer("claude-haiku-5-5-20261001", "Scale is off")
+		same.Response.Hops = []aiprovider.Hop{{Model: "claude-haiku-5-5-20261001", Usage: same.Response.Usage}, {Model: last, Usage: same.Response.Usage}}
+		d.fake.Script(same)
+		d.runAI(t)
+		if got := decided().AIDecision; got == nil || got.FallbackModel != nil {
+			t.Fatalf("same-model re-run to %s = %+v", last, got)
+		}
+	}
+	// A card the rules decided has none.
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Name: "Hoa", Group: "g1", Text: "hello"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.6})
+	d.runAI(t)
+	if got := decided(); got.AIDecision != nil {
+		t.Fatalf("decided by the rules = %+v", got)
 	}
 }

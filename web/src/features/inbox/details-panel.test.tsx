@@ -46,6 +46,16 @@ test('the details narrow the list to the conversation\'s customer', () => {
   expect(onShow).toHaveBeenCalledWith('55555555-5555-4555-8555-555555555555');
 });
 
+test('the details name the customer\'s organization and narrow the list to it; a customer without one shows none', () => {
+  const onShow = vi.fn();
+  const { rerender } = render(<DetailsPanel conversation={{ ...conversation(null), contact_organization: 'Cửa hàng B' }} agents={[active]} tags={[]} onShowOrganizationConversations={onShow} />);
+  expect(screen.getByText('Organization')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Cửa hàng B' }));
+  expect(onShow).toHaveBeenCalledWith('Cửa hàng B');
+  rerender(<DetailsPanel conversation={conversation(null)} agents={[active]} tags={[]} onShowOrganizationConversations={onShow} />);
+  expect(screen.queryByText('Organization')).not.toBeInTheDocument();
+});
+
 test('targets list each clock in full, read only, with the business time left or late; an admin can edit them', () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));

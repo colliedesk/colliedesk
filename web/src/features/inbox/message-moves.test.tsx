@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactElement } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { Conversation, Message } from '../../api/schemas';
-import { MessageIntakeLabel, MessageMoveMenu, MessageMovesLog } from './message-moves';
+import { MessageIntakeLabel, MessageIntakeWhy, MessageMoveMenu, MessageMovesLog } from './message-moves';
 
 const { api, ConflictError, InvalidRequestError } = vi.hoisted(() => {
   class InvalidRequestError extends Error {}
@@ -39,8 +39,8 @@ const move = (overrides = {}) => ({
   gathering_id: null, decision_id: null, moved_by_agent_id: ANN, via_token: false, moved_at: '2026-10-25T10:00:00Z', undone_at: null,
   undone_by_agent_id: null, undoable: true, ...overrides,
 });
-const intake = (gathering: string | null, rule: string | null = 'thread_reference', basis: string | null = 'match') =>
-  ({ messages: [FIRST, SECOND].map((id) => ({ message_id: id, decision_basis: basis, decision_rule: rule, gathering_id: gathering })) });
+const intake = (gathering: string | null, rule: string | null = 'thread_reference', basis: string | null = 'match', cards: unknown[] = []) =>
+  ({ messages: [FIRST, SECOND].map((id) => ({ message_id: id, decision_basis: basis, decision_rule: rule, gathering_id: gathering })), gatherings: cards });
 
 let client: QueryClient;
 const view = (ui: ReactElement) => render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
@@ -195,4 +195,27 @@ test('the move dialog takes the focus when it opens, and Escape closes it', asyn
   expect(dialog.contains(document.activeElement)).toBe(true);
   fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('a message AI added says how sure it was, why, which model answered and when', async () => {
+  const card = '88888888-8888-4888-8888-888888888888';
+  moves.intake.mockResolvedValue(intake(card, 'intake_attach', 'model', [{ id: card, ai_decision: {
+    decision_id: '99999999-0000-4000-8000-000000000001', action: 'attach', target_conversation_id: HERE, confidence: 0.97, runner_up_confidence: 0.02,
+    reason: 'Same printer problem, more detail', model: 'z-ai/glm-5.3-flash', fallback_model: 'google/gemini-3.8-flash', created_at: '2026-10-25T08:01:00Z' } }]));
+  view(<><MessageIntakeLabel conversation={conversation({ channel: 'loopback' })} message={timeline[0]} />
+    <MessageIntakeWhy conversation={conversation({ channel: 'loopback' })} message={timeline[0]} timezone="Asia/Ho_Chi_Minh" /></>);
+  expect(await screen.findByText('Added by AI')).toBeInTheDocument();
+  const why = await screen.findByRole('note', { name: 'Why AI added it' });
+  expect(why).toHaveTextContent('97% sure');
+  expect(why).toHaveTextContent('google/gemini-3.8-flash (fallback for z-ai/glm-5.3-flash)');
+  expect(why).toHaveTextContent('Same printer problem, more detail');
+  expect(within(why).getByText(/3:01/)).toHaveAttribute('datetime', '2026-10-25T08:01:00Z');
+});
+
+test('a message the rules added says nothing of AI', async () => {
+  moves.intake.mockResolvedValue(intake('88888888-8888-4888-8888-888888888888', 'new_thread', 'default', [{ id: '88888888-8888-4888-8888-888888888888', ai_decision: null }]));
+  view(<><MessageIntakeLabel conversation={conversation({ channel: 'loopback' })} message={timeline[0]} />
+    <MessageIntakeWhy conversation={conversation({ channel: 'loopback' })} message={timeline[0]} timezone="UTC" /></>);
+  expect(await screen.findByText('Opened: a new chat')).toBeInTheDocument();
+  expect(screen.queryByRole('note', { name: 'Why AI added it' })).not.toBeInTheDocument();
 });

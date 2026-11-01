@@ -193,6 +193,11 @@ func withoutCustomerText(detail store.IntakeGatheringDetail) store.IntakeGatheri
 		suggestion.Subject, suggestion.Reason, suggestion.TargetSubject, suggestion.RunnerUpSubject = nil, nil, nil, nil
 		detail.Suggestion = &suggestion
 	}
+	if detail.AIDecision != nil {
+		decision := *detail.AIDecision
+		decision.Reason = nil
+		detail.AIDecision = &decision
+	}
 	decisions := make([]store.IntakeDecisionView, len(detail.Decisions))
 	for i, decision := range detail.Decisions {
 		decision.Subject, decision.Reason = nil, nil

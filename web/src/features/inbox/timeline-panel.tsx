@@ -55,6 +55,7 @@ interface TimelinePanelProps {
   before?: ReactNode;
   messageLabel?: (item: Message) => ReactNode;
   messageMenu?: (item: Message) => ReactNode;
+  messageNote?: (item: Message) => ReactNode;
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
@@ -94,7 +95,7 @@ function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversati
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   const event = conversation ? <StatusEvent conversation={conversation} timezone={timezone} canManageChannels={canManageChannels} /> : null;
   // The line stands at its time, before a message of the same moment (the notice it caused).
@@ -134,7 +135,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
           {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
-            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} />
+            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
           {eventAt === items.length && event}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}

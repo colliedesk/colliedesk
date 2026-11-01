@@ -68,6 +68,9 @@ type Candidate struct {
 	Subject        string
 	LastMessage    string
 	Reporter       Person
+	// Ref is the code people know the conversation by ("CHD-2026-0003"); a reason or subject the model writes
+	// names it in place of its label.
+	Ref string
 }
 
 // Contact is what the workspace knows of the customer the card is from.
@@ -152,6 +155,8 @@ type Context struct {
 	// candidates maps the labels C1..Cn to conversation ids; names maps people's labels to their names.
 	candidates map[string]string
 	names      map[string]string
+	// refs maps the labels C1..Cn to what people call the conversation: its code, else its subject quoted.
+	refs map[string]string
 }
 
 // CandidateCount is how many conversations the model was offered.
@@ -220,11 +225,15 @@ func Build(s Snapshot) Context {
 	masker := newContactMasker(s.ContactLabels)
 	scrub := func(text string) string { return masker.mask(oneLine(anonymise(text))) }
 
-	out := Context{candidates: map[string]string{}, names: people.names}
+	out := Context{candidates: map[string]string{}, names: people.names, refs: map[string]string{}}
 	labelOf := map[string]string{}
 	for i, candidate := range candidates {
 		label := fmt.Sprintf("C%d", i+1)
 		out.candidates[label] = candidate.ConversationID
+		out.refs[label] = candidate.Ref
+		if candidate.Ref == "" {
+			out.refs[label] = "“" + candidate.Subject + "”"
+		}
 		labelOf[candidate.ConversationID] = label
 	}
 	// A message in an offered conversation says which one, once the budget has settled which are offered:
@@ -329,6 +338,7 @@ func Build(s Snapshot) Context {
 		offered, manifest[SourceOpenConversations].Cut = offered[:len(offered)-1], true
 		label := fmt.Sprintf("C%d", len(offered)+1)
 		delete(out.candidates, label)
+		delete(out.refs, label)
 	}
 	settle := func(lines []string) {
 		for i, text := range lines {

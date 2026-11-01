@@ -9,6 +9,7 @@ import { apiQuery } from '../../lib/inbox-query';
 import { Dialog, Field } from '../../ui/dialog';
 import { RotateCcwIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
+import { AIDecisionWhy } from '../review/ai-decision-why';
 import { ConversationPicker } from './conversation-picker';
 import { messageMovesApi } from './message-moves-api';
 import type { MessageMove, MessageMoveResult, MoveInput } from './message-moves-api';
@@ -80,6 +81,15 @@ export function MessageIntakeLabel({ conversation, message }: { conversation: Co
       {conversation.status === 'resolved' && <> · <button type="button" className="link-action" disabled={reopening} onClick={() => void reopen()}>{m.reopen}</button></>}
       {failed && <span role="alert" className="error-copy"> {m.reopenFailed}</span>}</span>}
   </>;
+}
+
+// MessageIntakeWhy is the line under a message AI added: how sure it was, why, which model, when. It takes the
+// message's width, so a narrow screen does not squeeze it beside the author and the time.
+export function MessageIntakeWhy({ conversation, message, timezone }: { conversation: Conversation; message: Message; timezone: string }) {
+  const answer = useIntake(conversation.id).data;
+  const intake = answer?.messages.find((entry) => entry.message_id === message.id);
+  const byAI = intake?.decision_basis === 'model' ? answer?.gatherings.find((card) => card.id === intake.gathering_id)?.ai_decision : undefined;
+  return byAI ? <div className="message-ai-why"><AIDecisionWhy decision={byAI} timezone={timezone} label={m.whyAI} /></div> : null;
 }
 
 // useMoveAction sends a move under the key of its press: a press sent again (a double click, a retry after a

@@ -110,11 +110,12 @@ test('a card AI set aside can be put back', async () => {
 });
 
 test('a decided card says what happened, who decided and links its conversation', () => {
-  const { rerender } = render(<IntakeCard {...props({ item: gathering({ state: 'attached', review_reason: null, decided_by: 'rules', conversation_id: CONVERSATION,
+  const { rerender } = render(<IntakeCard {...props({ item: gathering({ state: 'attached', review_reason: null, decided_by: 'rules', conversation_id: CONVERSATION, conversation_ref: 'CHD-2026-0004',
     rules: { action: 'attach', rule: 'quote', basis: 'match', target_conversation_id: CONVERSATION }, decided_at: '2026-10-26T02:03:00Z' }) })} />);
   expect(screen.getByText('Added to a conversation')).toBeInTheDocument();
   expect(screen.getByText('Rules · match')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open the conversation' })).toHaveAttribute('href', `/conversations/${CONVERSATION}`);
+  expect(screen.getByText('CHD-2026-0004')).toBeInTheDocument();
   rerender(<IntakeCard {...props({ item: gathering({ state: 'created', review_reason: null, decided_by: 'rules', fallback: true, conversation_id: CONVERSATION, decided_at: '2026-10-26T02:03:00Z' }) })} />);
   expect(screen.getByText('Rules · default')).toBeInTheDocument();
   expect(screen.getByText('Fallback: AI did not decide in time')).toBeInTheDocument();
@@ -122,6 +123,17 @@ test('a decided card says what happened, who decided and links its conversation'
   expect(screen.getByText('Ann Agent')).toBeInTheDocument();
   expect(screen.getByText('Set aside: Already reported')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Put back in queue' })).toBeInTheDocument();
+});
+
+test('a card AI decided by itself says how sure it was, why, which model answered and when', () => {
+  render(<IntakeCard {...props({ item: gathering({ state: 'created', review_reason: null, decided_by: 'ai', conversation_id: CONVERSATION, decided_at: '2026-10-26T02:03:00Z',
+    ai_decision: { decision_id: DECISION, action: 'create', target_conversation_id: null, confidence: 0.85, runner_up_confidence: null,
+      reason: 'A new printing problem, not the open scale one', model: 'z-ai/glm-5.3-flash', fallback_model: null, created_at: '2026-10-26T02:02:58Z' } }) })} />);
+  expect(screen.getByText('AI')).toBeInTheDocument();
+  const why = screen.getByRole('note', { name: 'Why AI decided it' });
+  expect(why).toHaveTextContent('85% sure · z-ai/glm-5.3-flash');
+  expect(why).not.toHaveTextContent('fallback');
+  expect(why).toHaveTextContent('A new printing problem, not the open scale one');
 });
 
 test('messages that could not be loaded say so and can be asked again', () => {

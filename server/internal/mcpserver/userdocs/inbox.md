@@ -102,7 +102,9 @@ conversations with any of them; each filter you add narrows the list further.
   names the channel, with "(removed)" for a channel that was removed. In an address it is
   `?channel_id=<id>`, which **Settings → Channels** links use.
 - **All conversations of** *name* in the conversation details shows that customer's conversations in
-  every status.
+  every status. When the customer belongs to an organization (a Zalo group's, a Freshdesk company), the
+  details name it under **Organization**; selecting it lists that organization's conversations in every
+  status (`organization=`).
 
 Each active filter shows as a chip under the status tabs; select its **x** to remove it, or **Clear all**
 to go back to **Open**. The Filter button counts the filters that are on.
@@ -319,7 +321,10 @@ request. A chat conversation nobody replied in or wrote a note in yet also offer
 Move it…** above its messages (closing is still refused once a person assigned it). The moves out of and into a conversation are listed above its
 messages, newest first, with who moved what and where, and **Undo** while the move can be undone; a chat
 message says why it is in the conversation (a reply to a message here, a command, a person in
-[Review](review.md)). A message taken back waits in Review as a card that says who took it back.
+[Review](review.md), or AI). One AI added says how sure it was, the model it asked (or the fallback model that
+answered when that one failed), when, and the reason it gave (kept 90 days). A chat message
+keeps every line break the customer typed, and a batch of chat messages put together shows each on its own
+line. A message taken back waits in Review as a card that says who took it back.
 - A message taken back to the queue leaves the conversation (it is kept, not deleted). Until its card is
   decided it is in no timeline, search, AI suggestion or reply thread, and a customer's reply quoting it
   does not find that conversation. Deciding the card adds the message to the conversation chosen, or opens

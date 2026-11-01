@@ -153,8 +153,8 @@ type IntakeOptions struct {
 	CreateThreshold *float64 `json:"create_threshold,omitempty"`
 	AttachThreshold *float64 `json:"attach_threshold,omitempty"`
 	IgnoreThreshold *float64 `json:"ignore_threshold,omitempty"`
-	// AttachRequiresSingleCandidate: never attach by itself while the customer has two or more open
-	// conversations the AI hesitates between.
+	// AttachRequiresSingleCandidate: never attach by itself while the customer has two or more unresolved
+	// conversations among the candidates, however sure AI is (off by default: AI sure enough attaches).
 	AttachRequiresSingleCandidate *bool `json:"attach_requires_single_candidate,omitempty"`
 	// AutoMaxAgeSeconds: a batch older than this when it is decided is only suggested.
 	AutoMaxAgeSeconds *int `json:"auto_max_age_seconds,omitempty"`
@@ -273,7 +273,7 @@ func (o IntakeOptions) Effective() IntakeOptions {
 		}
 		return &fallback
 	}
-	single := true
+	single := false
 	if o.AttachRequiresSingleCandidate != nil {
 		single = *o.AttachRequiresSingleCandidate
 	}
@@ -428,7 +428,7 @@ func sortedKeys(m map[string]bool) []string {
 }
 
 // optionsLoosen says whether going from before to after lets intake do more by itself: a lower
-// threshold, attaching among several candidates, older batches, a longer reopen window, a source
+// threshold, attaching while the customer has several open conversations, older batches, a longer reopen window, a source
 // turned on, fewer words redacted or masked, a gate opened by hand, or other instructions. Only a change that tightens needs no approval.
 func optionsLoosen(before, after IntakeOptions) bool {
 	b, a := before.Effective(), after.Effective()

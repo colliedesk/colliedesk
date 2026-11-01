@@ -228,3 +228,26 @@ test('a notice the channel sent by itself says so and is not shown as a reply of
   expect(screen.queryByText('Someone')).toBeNull();
   expect(screen.getByText('Đã nhận yêu cầu của anh/chị.')).toBeInTheDocument();
 });
+
+test('a chat message keeps every line break the customer typed, however long the line; mail still joins its client\'s wraps', () => {
+  const lines = ['Chào shop, app bên mình từ sáng không in được hoá đơn, bấm in thì báo lỗi kết nối máy in',
+    'Máy in vẫn bật đèn xanh bình thường, mình đã tắt mở lại máy in và cả máy tính rồi mà vẫn bị',
+    'Khách đang đợi lấy hoá đơn nên shop xem giúp mình sớm với nhé'];
+  const { container, rerender } = render(<MessageItem item={{ ...base, email: null, body: lines.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(lines.join('\n'));
+  rerender(<MessageItem item={{ ...base, body: lines.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(lines.join(' '));
+});
+
+test('mail and imported messages still join a client\'s hard wraps and keep short lines; chat keeps every break', () => {
+  // A paragraph wrapped near 72 characters, then a short line and a list the sender typed.
+  const wrapped = ['Thanks for the quick answer, the export works again since this morning but the', 'totals are still off by one day.', '', 'Regards,', '- Vic'];
+  const joined = 'Thanks for the quick answer, the export works again since this morning but the totals are still off by one day.\n\nRegards,\n- Vic';
+  const imported = { system: 'freshdesk', external_id: '42', kind: 'incoming' as const, from: 'vic@customer.example', to: [], cc: [], bcc: [] };
+  const { container, rerender } = render(<MessageItem item={{ ...base, body: wrapped.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(joined);
+  rerender(<MessageItem item={{ ...base, email: null, origin: imported, body: wrapped.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(joined);
+  rerender(<MessageItem item={{ ...base, email: null, body: wrapped.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(wrapped.join('\n'));
+});

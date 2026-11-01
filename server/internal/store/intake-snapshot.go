@@ -46,6 +46,8 @@ type IntakeSnapshotItem struct {
 type IntakeSnapshotCandidate struct {
 	IntakeCandidate
 	LastMessage string
+	// DisplayRef is the code people know it by ("#12", "CHD-2026-0003"); "" when it has none.
+	DisplayRef string
 }
 
 // IntakeSnapshotContact is the customer the card is from.
@@ -128,7 +130,8 @@ func (s *Store) IntakeSnapshotOf(ctx context.Context, workspaceID, gatheringID s
 		for _, candidate := range candidates {
 			c := IntakeSnapshotCandidate{IntakeCandidate: candidate}
 			if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT body FROM messages WHERE workspace_id=$1 AND conversation_id=$2::uuid AND kind IN ('incoming','outgoing')
-					AND detached_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 1),'')`, workspaceID, candidate.ConversationID).Scan(&c.LastMessage); err != nil {
+					AND detached_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 1),''),
+					COALESCE((SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2::uuid),'')`, workspaceID, candidate.ConversationID).Scan(&c.LastMessage, &c.DisplayRef); err != nil {
 				return snap, fmt.Errorf("read candidate's last message: %w", err)
 			}
 			snap.Candidates = append(snap.Candidates, c)

@@ -224,7 +224,7 @@ func TestIntakeLevelOnlyOnDeclaredScopes(t *testing.T) {
 		t.Fatalf("intake on the group scope: %+v", response)
 	}
 	item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake")
-	if item.EffectiveLevel != "auto" || item.Options == nil || *item.Options.AttachThreshold != 0.92 || *item.Options.CreateThreshold != 0.85 || !*item.Options.AttachRequiresSingleCandidate {
+	if item.EffectiveLevel != "auto" || item.Options == nil || *item.Options.AttachThreshold != 0.92 || *item.Options.CreateThreshold != 0.85 || *item.Options.AttachRequiresSingleCandidate {
 		t.Fatalf("group intake = %+v options %+v", item, item.Options)
 	}
 	for _, refused := range []map[string]any{

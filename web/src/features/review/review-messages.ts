@@ -94,6 +94,7 @@ export const reviewMessages = {
   ai: 'AI',
   rules: 'The rules',
   fallback: 'Fallback: AI did not decide in time',
+  whyAI: 'Why AI decided it',
   setAsideWhy: (reason: string) => `Set aside: ${reason}`,
   // What AI suggested for a card it did not decide alone.
   suggested: 'Suggested by AI',

@@ -307,3 +307,22 @@ func TestRestoreLeavesLabelsItDidNotIssue(t *testing.T) {
 		t.Errorf("Restore = %q", got)
 	}
 }
+
+// The conversations' labels exist only in the prompt: a reason or subject that names one says the
+// conversation's code instead (its subject when it has none). A label it was not offered stays as written.
+func TestParseNamesConversationsByTheirCodeNotTheirLabel(t *testing.T) {
+	snap := groupSnapshot()
+	snap.Candidates[0].Ref, snap.Candidates[1].Ref = "CHD-2026-0003", ""
+	c := Build(snap)
+	answer, err := c.Parse(`{"action":"attach","target":"C1","runner_up":"","runner_up_confidence":0,"command":"","subject":"","reply_kind":"substantive","ignore_reason":"","confidence":0.92,"reason":"Same report as C1, not the printer issue in C2 (C3, C12 and AC1 are no labels)"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Same report as CHD-2026-0003, not the printer issue in “Blank labels” (C3, C12 and AC1 are no labels)"; answer.Reason != want {
+		t.Errorf("reason = %q, want %q", answer.Reason, want)
+	}
+	answer, err = c.Parse(`{"action":"create","target":"","runner_up":"","runner_up_confidence":0,"command":"","subject":"Follow-up of C1","reply_kind":"substantive","ignore_reason":"","confidence":0.8,"reason":"new"}`)
+	if err != nil || answer.Subject != "Follow-up of CHD-2026-0003" {
+		t.Errorf("subject = %q, %v", answer.Subject, err)
+	}
+}

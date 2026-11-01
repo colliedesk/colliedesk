@@ -8402,7 +8402,7 @@ components:
         create_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to open a conversation by itself. Default 0.85.'}
         attach_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to add a message to an open conversation by itself; a wrong one hides a new request. Default 0.90.'}
         ignore_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to set a message aside as not a request. Default 0.95.'}
-        attach_requires_single_candidate: {type: boolean, description: 'Never attach by itself while the customer has two or more open conversations it hesitates between. Default true.'}
+        attach_requires_single_candidate: {type: boolean, description: 'Never attach by itself while the customer has two or more unresolved conversations among the candidates, however sure AI is (not_applied_reason several_candidates). Default false: AI sure enough attaches to the conversation it names.'}
         auto_max_age_seconds: {type: integer, minimum: 60, maximum: 86400, description: 'A batch older than this when decided is only suggested. Default 7200.'}
         reopen_window_days: {type: integer, minimum: 0, maximum: 90, description: 'How long after its last change a resolved conversation is a candidate. Default 7.'}
         sources:
@@ -8563,7 +8563,7 @@ components:
     IntakeGathering:
       type: object
       required: [id, channel_id, scope, thread_id, lane_key, contact_id, state, review_reason, rules, conversation_id, decided_by, decided_at, decided_by_agent_id,
-        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion]
+        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion, ai_decision, conversation_ref]
       properties:
         id: {type: string, format: uuid}
         channel_id: {type: string, format: uuid}
@@ -8606,6 +8606,23 @@ components:
         suggestion:
           anyOf: [{$ref: '#/components/schemas/IntakeSuggestion'}, {type: 'null'}]
           description: 'What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done.'
+        conversation_ref: {type: [string, 'null'], description: 'The code people know conversation_id by ("CHD-2026-0008", "#12"); null without a conversation.'}
+        ai_decision:
+          anyOf: [{$ref: '#/components/schemas/IntakeAIDecision'}, {type: 'null'}]
+          description: 'The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided.'
+    IntakeAIDecision:
+      type: object
+      required: [decision_id, action, target_conversation_id, confidence, runner_up_confidence, reason, model, fallback_model, created_at]
+      properties:
+        decision_id: {type: string, format: uuid}
+        action: {type: string, enum: [create, attach, ignore]}
+        target_conversation_id: {type: [string, 'null'], format: uuid, description: With attach.}
+        confidence: {type: [number, 'null']}
+        runner_up_confidence: {type: [number, 'null'], description: 'With attach: how sure it was of the second most likely conversation.'}
+        reason: {type: [string, 'null'], description: "AI's reason, written from what the customer said; erased 90 days after."}
+        model: {type: [string, 'null'], description: The model the channel's intake asked.}
+        fallback_model: {type: [string, 'null'], description: 'The model that answered instead of model, when the channel''s model failed or its answer could not be read (the channel''s fallback model) or the provider re-ran the request on another; null when model answered.'}
+        created_at: {type: string, format: date-time}
     IntakeSuggestion:
       type: object
       required: [decision_id, action, target_conversation_id, target_subject, target_status, runner_up_conversation_id, runner_up_subject, runner_up_confidence,
@@ -8627,7 +8644,7 @@ components:
         reason: {type: [string, 'null']}
         not_applied_reason: {type: string, enum: [level_suggest, below_threshold, too_old, credential, person_first, target_changed, lane_blocked, gate_closed, limit, error,
             several_candidates, no_content],
-          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).'}
+          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read).'}
         created_at: {type: string, format: date-time}
     IntakeCounts:
       type: object
@@ -8769,7 +8786,7 @@ components:
     IntakeDecision:
       type: object
       required: [id, decider, basis, action, target_conversation_id, runner_up_conversation_id, runner_up_confidence, command, subject, reply_kind, confidence, reason,
-        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, error_code, model, agent_id, via_token, created_at]
+        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, error_code, model, fallback_model, agent_id, via_token, created_at]
       properties:
         id: {type: string, format: uuid}
         decider: {type: string, enum: [ai, agent]}
@@ -8790,7 +8807,8 @@ components:
         corrects_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI decision a person undid or decided otherwise than.'}
         follows_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI suggestion a person decided as.'}
         error_code: {type: [string, 'null'], description: 'What failed when AI''s answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject.'}
-        model: {type: [string, 'null']}
+        model: {type: [string, 'null'], description: 'With AI: the model the channel''s intake asked.'}
+        fallback_model: {type: [string, 'null'], description: 'With AI: the model that answered instead of model (the channel''s fallback model, or another the provider re-ran the request on); null when model answered.'}
         agent_id: {type: [string, 'null'], format: uuid}
         via_token: {type: boolean}
         created_at: {type: string, format: date-time}
@@ -10964,6 +10982,7 @@ components:
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
         contact_name: {type: string}
+        contact_organization: {type: [string, 'null'], description: 'The organization of its customer (a Zalo group''s organization, a Freshdesk company): the name ?organization= lists the conversations of. Null when the customer has none.'}
         subject: {type: string}
         status: {$ref: '#/components/schemas/ConversationStatus'}
         priority: {$ref: '#/components/schemas/Priority'}

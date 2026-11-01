@@ -161,3 +161,28 @@ func TestLongMessagesAreCutUnlessTheFullTextIsAsked(t *testing.T) {
 		t.Errorf("full body was changed: %d characters, truncated=%v", len(got.(string)), at(t, messages[24], "truncated"))
 	}
 }
+
+// A conversation names its customer's organization, to a person (the conversation's details) and to an AI
+// agent in the default read, as customer text.
+func TestAConversationNamesItsCustomersOrganization(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Org Desk", "admin@org.example.com")
+	contact := e.created("/api/v1/contacts", map[string]any{"name": "Chị Hoa", "email": "hoa@shop.example.com"}, w.admin)
+	// As a Zalo group's organization or a Freshdesk company sets it.
+	if _, err := e.pool.Exec(t.Context(), `UPDATE contacts SET organization='Cửa hàng B' WHERE id=$1`, contact); err != nil {
+		t.Fatal(err)
+	}
+	conversation := e.created("/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer"}, w.admin)
+	_, got := e.rest(http.MethodGet, "/api/v1/conversations/"+conversation, nil, w.admin)
+	if at(t, got, "contact_organization") != "Cửa hàng B" {
+		t.Fatalf("conversation = %v", got)
+	}
+	_, list := e.rest(http.MethodGet, "/api/v1/conversations?organization=c%E1%BB%ADa%20h%C3%A0ng%20b", nil, w.admin)
+	if at(t, list, "items", 0, "contact_organization") != "Cửa hàng B" {
+		t.Fatalf("list = %v", list)
+	}
+	read := e.ok(e.connect(w.read, ""), "colliedesk_conversation_get", map[string]any{"conversation_id": conversation})
+	if at(t, read, "conversation", "untrusted_customer_content", "contact", "organization") != "Cửa hàng B" {
+		t.Fatalf("conversation_get = %v", read)
+	}
+}

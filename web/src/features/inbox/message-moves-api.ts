@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { json, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated } from '../../api/schemas';
+import { intakeAIDecisionSchema } from '../../api/intake';
 
 // Moving customer messages between conversations (docs/user/inbox.md "Move messages to another
 // conversation") and why each message is in its conversation. Loaded with the message-moves part, never in
@@ -21,13 +22,14 @@ const messageMoveResultSchema = z.object({
 
 const messageMovePageSchema = z.object({ items: z.array(messageMoveSchema) }) satisfies z.ZodType<Generated<'MessageMovePage'>>;
 
-// Only the messages' part of the answer: what decided each message. The cards it also carries are the
-// Review page's.
+// What decided each message, and of the cards they came in only what AI decided by itself (the rest is the
+// Review page's).
 const conversationIntakeSchema = z.object({
   messages: z.array(z.object({
     message_id: uuid, decision_basis: z.enum(['match', 'default', 'person', 'model']).nullable(), decision_rule: z.string().nullable(), gathering_id: uuid.nullable(),
   })),
-}) satisfies z.ZodType<Pick<Generated<'ConversationIntake'>, 'messages'>>;
+  gatherings: z.array(z.object({ id: uuid, ai_decision: intakeAIDecisionSchema.nullable() })),
+}) satisfies z.ZodType<{ messages: Generated<'ConversationIntake'>['messages']; gatherings: Pick<Generated<'IntakeGatheringDetail'>, 'id' | 'ai_decision'>[] }>;
 
 export type MessageMove = z.infer<typeof messageMoveSchema>;
 export type MessageMoveResult = z.infer<typeof messageMoveResultSchema>;
