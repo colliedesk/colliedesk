@@ -27,7 +27,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     // Sign up: the trial opens on the empty inbox, which leads to the import.
     expect((await signUp(page, provider, adminEmail, `Golden Desk ${suffix}`)).status()).toBe(201);
     await page.goto(baseURL);
-    await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
+    await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
     await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Import from Freshdesk/ }).click();
     await expect(page).toHaveURL(`${baseURL}/settings/import-freshdesk`);
 

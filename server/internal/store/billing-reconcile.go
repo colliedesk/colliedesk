@@ -40,7 +40,7 @@ func (s *Store) BillingSnapshot(ctx context.Context) (BillingSnapshot, error) {
 		for rows.Next() {
 			var workspaceID string
 			var sub domain.Subscription
-			if err := rows.Scan(&workspaceID, &sub.Plan, &sub.SubscriptionID, &sub.CustomerID, &sub.Status, &sub.CurrentPeriodEnd, &sub.CancelAtPeriodEnd, &sub.EndedAt, &sub.ModifiedAt); err != nil {
+			if err := rows.Scan(&workspaceID, &sub.Plan, &sub.SubscriptionID, &sub.CustomerID, &sub.Status, &sub.CurrentPeriodEnd, &sub.CancelAtPeriodEnd, &sub.EndedAt, &sub.ModifiedAt, &sub.ProductID); err != nil {
 				return err
 			}
 			if snapshot.Subscriptions[workspaceID] == nil {
