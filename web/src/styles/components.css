@@ -81,7 +81,8 @@
   .property-row select { display: flex; align-items: center; }
   .property-row select::picker-icon { opacity: 0; }
   .property-row select:is(:hover, :focus-visible)::picker-icon { opacity: 1; }
-  .property-row select:hover:not(:disabled) { background-image: none; }
+  /* One chevron on hover: the picker icon. The extra :not() outranks the hover chevron of the plain row below. */
+  .property-row select:hover:not(:disabled):not([multiple]) { background-image: none; }
   .property-row select option:is([value="open"], [value="pending"], [value="resolved"], [value="closed"])::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--dot); }
   .property-row option[value="open"] { --dot: var(--open); } .property-row option[value="pending"] { --dot: var(--pending); }
   .property-row option[value="resolved"] { --dot: var(--ok); } .property-row option[value="closed"] { --dot: var(--text-3); }
