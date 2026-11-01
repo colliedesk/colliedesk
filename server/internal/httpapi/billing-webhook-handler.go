@@ -11,6 +11,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -69,7 +70,7 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	// past_due subscription is paid, and a workspace may later switch plans. Read before applying,
 	// because applying records this webhook.
 	firstActivation := false
-	if event.Type == "subscription.active" && a.config.Funnel != nil {
+	if event.Type == "subscription.active" && (a.config.Funnel != nil || a.config.MetaConversions.Enabled()) {
 		activated, err := a.store.HasBeenActivated(request.Context(), workspaceID)
 		if err != nil {
 			writeInternalError(response, err)
@@ -85,7 +86,10 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	}
 	// A redelivery is a duplicate and a stale event changes nothing; neither is counted.
 	if result == store.SubscriptionApplied && firstActivation {
-		a.recordFunnel("subscription_activated", workspaceID, a.activationProperties(request.Context(), workspaceID, incoming.Plan))
+		if a.config.Funnel != nil {
+			a.recordFunnel("subscription_activated", workspaceID, a.activationProperties(request.Context(), workspaceID, incoming.Plan))
+		}
+		a.queueSubscribe(request.Context(), workspaceID, event.Subscription)
 	}
 	status := string(result)
 	if result == store.SubscriptionUnknownWorkspace {
@@ -137,6 +141,18 @@ func (a *API) activationProperties(ctx context.Context, workspaceID, plan string
 	}
 	maps.Copy(properties, attribution.Properties())
 	return properties
+}
+
+// queueSubscribe queues the report to Meta of a first payment, with the subscription's price. Only a
+// workspace whose sign-up came from a Meta ad gets one (metaconversions.RecordSubscribe). A failure is
+// logged; the payment stays applied and Polar gets its 2xx.
+func (a *API) queueSubscribe(ctx context.Context, workspaceID string, sub *polar.Subscription) {
+	if !a.config.MetaConversions.Enabled() {
+		return
+	}
+	if err := metaconversions.RecordSubscribe(ctx, a.db, workspaceID, a.now(), a.config.Origin+"/settings/billing", sub.Amount, sub.Currency); err != nil {
+		slog.Error("meta Subscribe not queued", "workspace", workspaceID, "error", err)
+	}
 }
 
 // recordReply counts a reply sent to a customer, by a person or an AI agent's token; a note is not a reply.

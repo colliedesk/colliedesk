@@ -219,6 +219,8 @@ type subscription struct {
 	EndedAt           *time.Time
 	ModifiedAt        time.Time
 	CustomerEmail     string // customer.email; empty omits it
+	Amount            int    // amount in cents, with Currency; zero omits both
+	Currency          string
 }
 
 func (s subscription) event(eventType string) []byte {
@@ -234,15 +236,16 @@ func (s subscription) event(eventType string) []byte {
 	if s.CustomerEmail != "" {
 		customer["email"] = s.CustomerEmail
 	}
-	payload := map[string]any{
-		"type": eventType, "timestamp": time.Now().UTC().Format(time.RFC3339),
-		"data": map[string]any{
-			"id": s.ID, "status": s.Status, "product_id": s.Product, "customer_id": "cus_" + s.ID,
-			"current_period_end": s.PeriodEnd.Format(time.RFC3339), "cancel_at_period_end": s.CancelAtPeriodEnd,
-			"ended_at": ended, "modified_at": s.ModifiedAt.Format(time.RFC3339),
-			"customer": customer,
-		},
+	data := map[string]any{
+		"id": s.ID, "status": s.Status, "product_id": s.Product, "customer_id": "cus_" + s.ID,
+		"current_period_end": s.PeriodEnd.Format(time.RFC3339), "cancel_at_period_end": s.CancelAtPeriodEnd,
+		"ended_at": ended, "modified_at": s.ModifiedAt.Format(time.RFC3339),
+		"customer": customer,
 	}
+	if s.Amount != 0 {
+		data["amount"], data["currency"] = s.Amount, s.Currency
+	}
+	payload := map[string]any{"type": eventType, "timestamp": time.Now().UTC().Format(time.RFC3339), "data": data}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)

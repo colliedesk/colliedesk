@@ -31,6 +31,7 @@ var privilegedCallSites = []string{
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",
 	"internal/importjobs/people.go: PrivilegeImportJobClaim",
 	"internal/importjobs/store.go: PrivilegeImportJobClaim",
+	"internal/metaconversions/worker.go: PrivilegeMetaConversionClaim",
 	"internal/results/weekly_email.go: PrivilegeResultsClaim",
 	"internal/results/worker.go: PrivilegeResultsClaim",
 	"internal/retention/service.go: PrivilegeRetention",

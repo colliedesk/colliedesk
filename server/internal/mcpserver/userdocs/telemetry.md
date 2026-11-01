@@ -88,6 +88,26 @@ never carry the email address of the person who signed up, the workspace name or
 The events are sent in the background; a failure is logged as `funnel event not sent` and changes
 nothing in the workspace.
 
+## Colliedesk Cloud only: sign-ups from Meta ads
+
+When a team starts a Colliedesk Cloud trial after clicking one of our ads on Facebook or Instagram, the
+sign-in link carries Meta's click ID (`fbclid`). The server then reports to Meta's Conversions API that
+the click led to a trial (`StartTrial`), and later, if the team subscribes, to a paid plan (`Subscribe`).
+Each report carries only:
+
+- `fbc`: the click ID and the time the browser first saw it,
+- the IP address and browser (User-Agent) of the sign-up,
+- `event_id` = the workspace id, so Meta counts a report once even when it is sent again,
+- for `Subscribe`, the plan's price and currency.
+
+It never carries an email address, a name, a company, the workspace name or anything from the
+workspace. Nothing is reported for a sign-up without `fbclid`. The website and the app load no Meta
+pixel and set no Meta cookie. The server sends the reports in the background, after the sign-up or the
+payment, and retries a failed one later; neither ever waits for Meta. Once the `Subscribe` report is sent,
+or 90 days after a sign-up, the server forgets the sign-up's IP address and browser.
+
+A self-hosted server never sends anything to Meta and has no setting to turn it on.
+
 ## How the web app is used
 
 The web app also reports which screens agents open and which buttons they click, so the team can

@@ -25,6 +25,10 @@ type Subscription struct {
 	EndedAt           *time.Time
 	// ModifiedAt orders events of one subscription; it falls back to the event timestamp.
 	ModifiedAt time.Time
+	// Amount is the subscription's price in the currency's minor unit (cents), and Currency its
+	// lower-case code; zero and empty when the payload omits them.
+	Amount   int64
+	Currency string
 }
 
 // Event is one webhook delivery. Subscription is set only for "subscription.*" events.
@@ -72,6 +76,8 @@ func decodeSubscription(raw json.RawMessage, fallbackModifiedAt time.Time) (*Sub
 		EndedAt           *time.Time `json:"ended_at"`
 		ModifiedAt        *time.Time `json:"modified_at"`
 		CreatedAt         *time.Time `json:"created_at"`
+		Amount            *int64     `json:"amount"`
+		Currency          string     `json:"currency"`
 		Customer          struct {
 			ExternalID *string `json:"external_id"`
 			Email      string  `json:"email"`
@@ -86,7 +92,10 @@ func decodeSubscription(raw json.RawMessage, fallbackModifiedAt time.Time) (*Sub
 	subscription := &Subscription{
 		ID: data.ID, Status: data.Status, ProductID: data.ProductID, CustomerID: data.CustomerID,
 		CurrentPeriodEnd: data.CurrentPeriodEnd, CancelAtPeriodEnd: data.CancelAtPeriodEnd, EndedAt: data.EndedAt,
-		ModifiedAt: fallbackModifiedAt, CustomerEmail: data.Customer.Email,
+		ModifiedAt: fallbackModifiedAt, CustomerEmail: data.Customer.Email, Currency: data.Currency,
+	}
+	if data.Amount != nil {
+		subscription.Amount = *data.Amount
 	}
 	switch {
 	case data.ModifiedAt != nil:
