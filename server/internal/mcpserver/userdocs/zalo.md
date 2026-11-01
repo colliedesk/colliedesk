@@ -11,7 +11,7 @@ An admin, in this order:
 
 1. **A provider for AI**, unless the server's provider will do: **Settings → Built-in AI → Providers →
    Add provider** ([Add your own provider](ai.md#add-your-own-provider)).
-2. **The OA**: [connect it](#connect-an-oa), [verify the webhook's address](#verify-the-webhooks-address)
+2. **The OA**: [connect it](#connect-an-oa), [verify the webhook address](#verify-the-webhook-address)
    in the Zalo app, paste the **Webhook URL** there, and set the OA secret key before deliveries arrive;
    then add the tokens, so replies can be sent.
 3. **Chat intake**: its row in **Settings → Built-in AI → Features** shows once the workspace has a chat
@@ -54,7 +54,7 @@ The channel's page then has four tabs of its own, before AI and History:
    the dialog asks for the access token alone. The tokens show no last four characters, since they
    change each time they are renewed.
    **Domain verification** takes the code Zalo gives to verify the webhook's address; see
-   [Verify the webhook's address](#verify-the-webhooks-address).
+   [Verify the webhook address](#verify-the-webhook-address).
    **References** picks the [number series](inbox.md#conversation-numbers) the OA's conversations are
    numbered in and shows the code the next one gets (`CHD-2026-0143`); the series themselves are changed in
    Settings → Conversation numbers.
@@ -101,7 +101,7 @@ delivery is signed right again. Without the key it says `zalo_secret_missing`; w
 or the app's secret, `zalo_token_missing` (deliveries are taken, replies cannot be sent). The channel's
 line in **Channels** reads "OA 1234…5678 · 2 groups linked".
 
-## Verify the webhook's address
+## Verify the webhook address
 
 Zalo takes a Webhook URL only on an address the app has verified ("Đường dẫn webhook chưa được xác thực
 domain"). You do not need to change your DNS or upload a file: Colliedesk serves Zalo's verification file
