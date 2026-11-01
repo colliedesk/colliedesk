@@ -37,6 +37,7 @@ export const importMessages = {
   rowSavedReplies: 'Saved replies',
   rowArticles: 'Knowledge base articles',
 
+  linksTurnOn: 'Turn on the help center to make the imported old addresses redirect. You do not need to run the import again.',
   linksHeading: 'Old help center links',
   linksOK: 'All good',
   linksUnverified: 'Needs a look',

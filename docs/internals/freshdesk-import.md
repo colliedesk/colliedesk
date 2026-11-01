@@ -302,13 +302,23 @@ is gone, or its key left every ring) is taken by any worker and moves to `waitin
 different rings therefore never take each other's jobs while those are alive. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
 putting a new key in front (`k2:new,k1:old`), never by replacing it.
 
-### Notice to the admins
+### Notice to the initiating admin
 
-When an import ends on its own (`finished`, or `failed`), the worker mails the person who started it
-and every active admin, one message each, from `noreply@MAIL_FROM_DOMAIN` like the retention notice
-(`importjobs/notice.go`). A preview, a cancel and an undo send none. It is sent after the end is
-committed, at most once: a crash in between, or a relay failure (logged), means no mail; the page and
-the job always hold the result. Without SMTP the page alone says it. No telemetry event is added (#105).
+A terminal import queues `notice_state=pending` in the job's final transaction. Preview, cancel and
+undo jobs do not queue mail. Historical jobs are not backfilled. `importjobs/notice.go` uses the same
+configured platform SMTP path as trial reminders, from `noreply@MAIL_FROM_DOMAIN`; without SMTP or the
+mail domain it sends nothing. Only the active agent named by `created_by` receives the notice.
+
+The import job is its durable outbox row. `Tick` lists only due job/workspace ids using
+`PrivilegeImportJobClaim`, then reads the recipient and report in that workspace. A scoped row lock
+with `SKIP LOCKED` serializes sending and settling, so competing workers do not send twice. Temporary
+failures remain pending for the next minute, including after restart; permanent refusal is rejected.
+The Message-ID is deterministic per job. SMTP and PostgreSQL cannot commit atomically: losing the
+relay acknowledgement, or crashing after acceptance before commit, can retry the same Message-ID.
+
+`notice-text.go` composes report counts and recovery guidance. `Store.SetupProgress` and
+`store.SetupLinks` supply the same next action as HTTP/MCP, including an optional help-center link.
+The old `move_steps.preview` JSON values remain stored and unused; no applied migration is changed.
 
 ### Freshdesk agents (import_people)
 

@@ -1,6 +1,8 @@
 // Strings of the Search Console part of the help center card; they live in the card's chunk.
 export const searchConsoleMessages = {
   heading: 'Search Console',
+  moving: 'Moving from Freshdesk? The import carries verification tags it finds. Keep existing DNS verification records too, then check verification on your domain in Search Console.',
+  submitSitemap: 'After switching the domain, submit this sitemap in Search Console. Saving tokens here does not submit it:',
   description: 'Verify your help center address in Google Search Console and Bing Webmaster Tools yourself. Each tool offers a verification by HTML tag: paste only the content value of its meta tag here. The help center then puts the tag in the head of every page of this help center, and nowhere else.',
   loadFailed: 'The Search Console tokens could not be loaded.',
   googleLabel: 'Google Search Console token',

@@ -22,6 +22,7 @@ type sentMail struct {
 type fakeMailer struct {
 	mu   sync.Mutex
 	sent []sentMail
+	err  error
 }
 
 // Send keeps the message with its body decoded from quoted-printable, as a reader sees it.
@@ -30,6 +31,9 @@ func (f *fakeMailer) Send(_ context.Context, from string, to []string, message [
 	decoded, _ := io.ReadAll(quotedprintable.NewReader(strings.NewReader(body)))
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
 	f.sent = append(f.sent, sentMail{from: from, to: to, message: head + "\n\n" + string(decoded)})
 	return nil
 }
@@ -40,7 +44,7 @@ func (e *env) mailingWorker(t *testing.T, mailer *fakeMailer) *importjobs.Worker
 		Lease: time.Minute, Mailer: mailer, MailFrom: "noreply@mail.example.com", Origin: "https://desk.example.com"})
 }
 
-func TestTheAdminsHearWhenAnImportEnds(t *testing.T) {
+func TestOnlyTheInitiatingAdminHearsWhenAnImportEnds(t *testing.T) {
 	e := newEnv(t, true)
 	e.exec(t, `INSERT INTO agents(workspace_id,email,role) VALUES($1,'second-admin@acme.example','admin'),($1,'agent@acme.example','agent')`, e.a.id)
 	e.exec(t, `INSERT INTO agents(workspace_id,email,role,deactivated_at) VALUES($1,'gone@acme.example','admin',now())`, e.a.id)
@@ -53,6 +57,9 @@ func TestTheAdminsHearWhenAnImportEnds(t *testing.T) {
 		}
 		report := &freshdesk.Report{Status: freshdesk.StatusOK}
 		report.Tickets.Source, report.Tickets.Imported = 300, 300
+		report.Contacts = freshdesk.EntityCount{Source: 4, Imported: 4}
+		report.KnowledgeBase.Articles = freshdesk.EntityCount{Source: 3, Imported: 3}
+		report.Links = &freshdesk.LinksReport{OldAddresses: freshdesk.OldAddresses{Found: 18, Redirected: 18}}
 		return report, nil
 	}, nil, nil)
 	tick(t, w)
@@ -60,11 +67,15 @@ func TestTheAdminsHearWhenAnImportEnds(t *testing.T) {
 	for _, sent := range mailer.sent {
 		to = append(to, sent.to...)
 	}
-	if strings.Join(to, ",") != "admin@acmesupport.example,second-admin@acme.example" || mailer.sent[0].from != "noreply@mail.example.com" {
+	if strings.Join(to, ",") != "admin@acmesupport.example" || mailer.sent[0].from != "noreply@mail.example.com" {
 		t.Fatalf("to=%v from=%s", to, mailer.sent[0].from)
 	}
+	tick(t, e.mailingWorker(t, mailer))
+	if len(mailer.sent) != 1 {
+		t.Fatalf("restart sent %d notices", len(mailer.sent))
+	}
 	mail := mailer.sent[0]
-	for _, want := range []string{"Subject: Freshdesk import complete: acme.freshdesk.com", "300 of 300 tickets", "https://desk.example.com/settings/import-freshdesk", "Auto-Submitted: auto-generated"} {
+	for _, want := range []string{"Subject: Freshdesk import complete: acme.freshdesk.com", "300 of 300 tickets", "4 of 4 contacts", "3 of 3 articles", "18 of 18 old help-center addresses", "Open the inbox: https://desk.example.com/", "Next step: Receive customer email", "https://desk.example.com/settings/channels/type/email", "https://desk.example.com/settings/import-freshdesk", "Auto-Submitted: auto-generated"} {
 		if !strings.Contains(mail.message, want) {
 			t.Errorf("mail lacks %q:\n%s", want, mail.message)
 		}

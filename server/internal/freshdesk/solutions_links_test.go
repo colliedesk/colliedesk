@@ -169,8 +169,11 @@ func TestImportLeavesChangedContentAndAnOffHelpCenterAlone(t *testing.T) {
 	env := newImportEnv(t).withLinks()
 	first := env.linkRun(t)
 	api := env.fake.api.URL
-	if first.Links == nil || first.Links.Status != freshdesk.StatusUnverified || !strings.Contains(strings.Join(first.Links.Detail, " "), "turn the help center on") {
+	if first.Links == nil || first.Links.Status != freshdesk.StatusUnverified || !strings.Contains(strings.Join(first.Links.Detail, " "), "Turn on the help center") {
 		t.Fatalf("off help center links = %+v", first.Links)
+	}
+	if detail := strings.Join(first.Links.Detail, " "); strings.Contains(detail, "turn the help center on, then run the import again") {
+		t.Fatalf("enabling must not require another import: %s", detail)
 	}
 	if first.Links.OldAddresses.Redirected != 0 || first.Links.Rewritten != (freshdesk.LinkRewrites{}) {
 		t.Errorf("off help center links = %+v", first.Links)

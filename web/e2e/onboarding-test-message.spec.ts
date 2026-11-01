@@ -17,7 +17,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
   const suffix = uniqueSuffix();
   const adminEmail = `owner-${suffix}@acme.example`;
   const support = `support-${suffix}@acme.example`;
-  expect((await signUp(page, provider, adminEmail, `Test Message Desk ${suffix}`)).status()).toBe(201);
+  expect((await signUp(page, provider, adminEmail, `Test Message Desk ${suffix}`, 'shared_inbox')).status()).toBe(201);
   await page.goto(baseURL);
   await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
 
@@ -49,7 +49,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
 test('the Connection tab sends one test message before an inbound secret exists and opens its conversation', async ({ page }) => {
   const suffix = uniqueSuffix();
   const adminEmail = `owner-${suffix}@acme.example`;
-  expect((await signUp(page, provider, adminEmail, `Connection Test ${suffix}`)).status()).toBe(201);
+  expect((await signUp(page, provider, adminEmail, `Connection Test ${suffix}`, 'shared_inbox')).status()).toBe(201);
   await page.goto(baseURL);
   await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Receive customer email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@acme.example`);

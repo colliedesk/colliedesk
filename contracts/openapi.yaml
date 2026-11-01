@@ -4881,14 +4881,41 @@ paths:
       operationId: getSetupProgress
       x-permission: authenticated
       description: >-
-        Where the workspace stands on getting started: receive customer email, import from Freshdesk,
-        invite the team, answer the first email. The steps come in the order the sign-up goal suggests;
-        first_reply is always last. States only, computed on every call.
+        Where the workspace stands on getting started. For leave_helpdesk the five move steps are
+        import, custom_domain, plan, cname and search_console. Other goals keep the email,
+        import, invite and first_reply guide. Each step includes its next action URL; next_url is the
+        first unfinished step's URL. Reads existing import, billing and help center state without
+        making external calls. Confirmed milestones stay done; optional domain steps may be skipped.
       responses:
         '200':
           description: The setup steps and whether all are done
           content: {application/json: {schema: {$ref: '#/components/schemas/SetupProgress'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/workspace/setup/move:
+    put:
+      operationId: setSetupMoveStep
+      x-permission: access:write
+      description: >-
+        Confirm Search Console verification and sitemap submission.
+        The server requires a successful custom-domain address check for Search Console. Use custom_domain skipped
+        to skip the four optional domain steps, or none to restore skipped steps. Completed
+        steps never regress. Safe to repeat; lower-tier tokens file an approval request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetupMoveStepInput'}
+      responses:
+        '200':
+          description: The updated setup progress
+          content: {application/json: {schema: {$ref: '#/components/schemas/SetupProgress'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422':
+          description: Invalid step or missing prerequisite; nothing changed
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/agents/me/setup-guide:
     put:
       operationId: setSetupGuideHidden
@@ -9786,32 +9813,50 @@ components:
         slug: {type: string}
         name: {type: string}
         timezone: {type: string, default: UTC}
+    SetupMoveStepInput:
+      type: object
+      additionalProperties: false
+      required: [step, state]
+      properties:
+        step: {type: string, enum: [custom_domain, search_console]}
+        state: {type: string, enum: [done, skipped, none]}
+    SetupHelpCenter:
+      type: object
+      required: [action, url]
+      properties:
+        action: {type: string, enum: [view, enable]}
+        url: {type: string}
     SetupProgress:
       type: object
-      required: [steps, complete, recommended]
+      required: [steps, complete, recommended, next_url]
       properties:
+        help_center:
+          description: Optional help center action after a successful move import; enabling needs no new import.
+          $ref: '#/components/schemas/SetupHelpCenter'
         steps:
           type: array
           items: {$ref: '#/components/schemas/SetupStep'}
-        complete: {type: boolean, description: True when every step is done.}
+        complete: {type: boolean, description: True when every step is done or skipped.}
         recommended:
-          description: The step the sign-up goal puts first while it is not done; null for a goal without one.
+          description: The next move step, or the first step suggested by another sign-up goal; null when none.
           type: [string, 'null']
-          enum: [email, import, invite, null]
+          enum: [email, import, invite, custom_domain, plan, cname, search_console, null]
+        next_url: {type: [string, 'null'], description: Action URL for the first unfinished step; null when complete.}
     SetupStep:
       type: object
-      required: [key, state, detail]
+      required: [key, state, detail, url]
       properties:
-        key: {type: string, enum: [email, import, invite, first_reply]}
+        key: {type: string, enum: [email, import, invite, first_reply, custom_domain, plan, cname, search_console]}
         state:
           type: string
           description: >-
             email none, waiting, working or needs_attention; import none, running or done; invite alone,
-            invited or joined; first_reply none or sent.
-          enum: [none, waiting, working, needs_attention, running, done, alone, invited, joined, sent]
+            invited or joined; first_reply none or sent. Move steps use none, done or skipped.
+          enum: [none, waiting, working, needs_attention, running, done, alone, invited, joined, sent, skipped]
         detail:
-          description: A reason code for needs_attention; null otherwise.
+          description: Reason code for a missing prerequisite or a step needing attention; null otherwise.
           type: [string, 'null']
+        url: {type: string, description: Link to the action or the missing prerequisite.}
     Agent:
       type: object
       required: [id, email, display_name, role, timezone_override]
@@ -10594,6 +10639,14 @@ components:
       type: object
       required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason, awaiting_payment, address_url, address_checked_at, address_error]
       properties:
+        next_step:
+          type: [object, 'null']
+          description: Missing help center prerequisite, shown before plan advice on a verified domain.
+          required: [key, url]
+          properties:
+            key: {type: string, enum: [import, enable]}
+            url: {type: string}
+
         hostname: {type: [string, 'null'], description: 'The custom host name in ASCII (punycode) form; null when none is set.'}
         status:
           type: string

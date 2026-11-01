@@ -75,7 +75,7 @@ const (
 	// be decided, for the rules' decision to apply; each is then applied in its own workspace.
 	PrivilegeIntakeDueClaim Privilege = "intake-due-claim"
 	// PrivilegeImportJobClaim leases due in-app import jobs of every workspace for the import worker,
-	// and discards previews nobody started within the hour.
+	// discards previews nobody started within the hour, and lists terminal jobs with due notices.
 	PrivilegeImportJobClaim Privilege = "import-job-claim"
 	// PrivilegeVerifiedSender resolves the workspace whose support address domain the email provider
 	// verified, from the From domain of a delivery event. At most one workspace holds a given name.

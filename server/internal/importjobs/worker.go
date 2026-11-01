@@ -52,7 +52,7 @@ type WorkerOptions struct {
 	BaseURL func(host string) string
 	// Configure changes the importer options of every run; tests and end-to-end builds point the network at a fake.
 	Configure func(*freshdesk.Options)
-	// Mailer and MailFrom send the admins a notice when an import ends; nil sends nothing.
+	// Mailer and MailFrom send the initiating admin a notice when an import ends; nil sends nothing.
 	Mailer   Mailer
 	MailFrom string
 	// Origin is the address of the app, for the link in the notice; with HelpCenterDomain it also gives
@@ -128,6 +128,9 @@ func (w *Worker) Tick(ctx context.Context) error {
 	expired, err := expirePreviews(ctx, w.options.DB, w.options.Now().UTC())
 	w.options.Keys.forget(expired...)
 	w.startRelinks(ctx)
+	if err == nil {
+		w.sendNotices(ctx)
+	}
 	free := cap(w.slots) - len(w.slots)
 	if free == 0 || err != nil {
 		return err
@@ -575,7 +578,7 @@ func (r *jobRun) endAnd(ctx context.Context, also func(context.Context, pgx.Tx) 
 		state, nullable(status), nullable(code), nullable(message), r.now(), report, markdown)
 	r.worker.options.Keys.forget(r.item.id)
 	if err == nil {
-		r.notifyAdmins(ctx, state, status, code, report)
+		r.worker.sendNotice(context.WithoutCancel(ctx), r.item)
 	}
 	return err
 }
@@ -585,6 +588,9 @@ func (w *Worker) end(ctx context.Context, item claimed, state, status, code, mes
 	err := update(ctx, w.options.DB, item, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
 		state, nullable(status), nullable(code), nullable(message), w.options.Now().UTC(), report, markdown)
 	w.options.Keys.forget(item.id)
+	if err == nil {
+		w.sendNotice(context.WithoutCancel(ctx), item)
+	}
 	return err
 }
 

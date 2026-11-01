@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { InvalidRequestError, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated } from '../../api/schemas';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
 import { searchConsoleMessages as text } from './help-center-search-console-messages';
 
@@ -31,9 +32,10 @@ function fieldMessages(error: unknown): Record<string, string> {
 
 // HelpCenterSearchConsoleSection holds the Google and Bing verification tokens of the help center's card.
 // Admins paste and save them; every agent sees whether each is set.
-export function HelpCenterSearchConsoleSection({ canManage }: { canManage: boolean }) {
+export function HelpCenterSearchConsoleSection({ canManage, helpCenterURL }: { canManage: boolean; helpCenterURL?: string }) {
   const client = useQueryClient();
   const current = useQuery({ queryKey: ['help-center-search-console'], queryFn: searchConsoleApi.get });
+  useScrollToHashWhenReady(current.isSuccess, 'help-center-search-console-heading');
   const save = useMutation({ mutationFn: searchConsoleApi.save, onSuccess: (saved) => client.setQueryData(['help-center-search-console'], saved) });
   const [google, setGoogle] = useState('');
   const [bing, setBing] = useState('');
@@ -55,6 +57,8 @@ export function HelpCenterSearchConsoleSection({ canManage }: { canManage: boole
   return <section className="stacked-form" aria-labelledby="help-center-search-console-heading">
     <h3 id="help-center-search-console-heading">{text.heading}</h3>
     <p className="muted-copy">{text.description}</p>
+    <p className="muted-copy">{text.moving}</p>
+    {helpCenterURL && <p className="muted-copy">{text.submitSitemap} <a href={`${helpCenterURL}/sitemap.xml`} target="_blank" rel="noreferrer">{`${helpCenterURL}/sitemap.xml`}</a></p>}
     {canManage
       ? <form className="stacked-form" onSubmit={submit}>
           <Token id="search-console-google" label={text.googleLabel} help={text.googleHelp} value={google} problem={fields.google_site_verification} onChange={setGoogle} />

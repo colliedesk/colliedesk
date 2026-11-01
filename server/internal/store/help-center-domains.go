@@ -105,8 +105,12 @@ func (s *Store) ActivateHelpCenterDomain(ctx context.Context, workspaceID, claim
 	// A takeover that loses a race to another one finds a new holder; three rounds settle any race.
 	for range 3 {
 		got, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-			return scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET `+activateColumns+`
-				WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, now, certificate))
+			d, err := scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET `+activateColumns+`
+                WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, now, certificate))
+			if err == nil {
+				err = rememberMoveStep(ctx, tx, workspaceID, "custom_domain", "done")
+			}
+			return d, err
 		})
 		if !isUniqueViolation(err) {
 			break
@@ -168,6 +172,9 @@ func (s *Store) takeOverHelpCenterHost(ctx context.Context, workspaceID, claim s
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrHelpCenterDomainMissing
 		}
+		if err == nil {
+			err = rememberMoveStep(ctx, tx, workspaceID, "custom_domain", "done")
+		}
 		return err
 	})
 	return got, holder, err
@@ -218,8 +225,12 @@ func (s *Store) RecordHelpCenterAddressCheck(ctx context.Context, workspaceID, c
 		failure = &clipped
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET address_checked_at=$3, address_error=$4
-			WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, at, failure))
+		d, err := scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET address_checked_at=$3, address_error=$4
+            WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, at, failure))
+		if err == nil && at != nil && failure == nil {
+			err = rememberMoveStep(ctx, tx, workspaceID, "cname", "done")
+		}
+		return d, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterDomain{}, domain.ErrHelpCenterDomainMissing

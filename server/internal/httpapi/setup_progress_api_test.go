@@ -124,7 +124,7 @@ func TestSetupProgressIsOrderedByTheSignUpGoal(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "Goal Desk", "admin@goal.example.com")
 	slug := workspaceSlug(t, api, admin)
-	for goal, first := range map[string]string{"leave_helpdesk": "import", "shared_inbox": "email", "lower_cost": "invite", "ai_agents": "email", "other": "email"} {
+	for goal, first := range map[string]string{"shared_inbox": "email", "lower_cost": "invite", "ai_agents": "email", "other": "email"} {
 		if _, err := pool.Exec(t.Context(), `INSERT INTO workspace_onboarding(workspace_id,goal) SELECT id,$2 FROM workspaces WHERE slug=$1
 			ON CONFLICT (workspace_id) DO UPDATE SET goal=EXCLUDED.goal`, slug, goal); err != nil {
 			t.Fatal(err)

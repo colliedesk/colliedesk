@@ -14,7 +14,12 @@ export const domainMessages = {
   cutoverHeading: 'Moving from Freshdesk?',
   cutover: 'Verify by TXT first, then change the CNAME. Add only the TXT record and press Check now: the domain is then verified while your visitors still reach Freshdesk. Change the CNAME afterwards, to the target in the CNAME record below. The domain is already verified, so the first visit after the switch gets its certificate at once, without waiting for a DNS check.',
   trial: 'During the trial you can set and verify your domain to prepare the move. The help center serves on your domain once you pay for a plan: trial pages are hidden from search engines, and serving them on your domain would cost it its place in search results.',
-  verifiedUnpaid: (hostname: string) => `${hostname} is verified. The help center serves there once you pay for a plan; until then it stays on its own address.`,
+  nextStep: { import: 'Import your knowledge base with images; old article links keep working', enable: 'Turn on the help center' },
+  checkedTrial: (hostname: string | null) => `DNS checked. ${hostname} is verified. The help center serves on this domain once you choose a plan.`,
+  choosePlan: 'Choose a plan',
+  readyForPlan: (hostname: string) => `${hostname} is verified. Choose a plan, then change the CNAME and press Check now.`,
+  verifiedState: (hostname: string, unpaid: boolean) => `${hostname} is verified. ${unpaid ? 'After the help center is ready, choose a plan; then change the CNAME and press Check now.' : 'Finish the help center step above before changing the CNAME.'}`,
+
   state: (status: Status, hostname: string | null) => status === 'active'
     ? `The help center is served on ${hostname}.`
     : status === 'pending' ? `${hostname} is waiting for its DNS records. It starts serving as soon as a check finds them.` : 'No custom domain is set.',

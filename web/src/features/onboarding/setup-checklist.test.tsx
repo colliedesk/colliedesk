@@ -33,7 +33,7 @@ test('an admin sees the four steps in the order the server gives, each with its 
     expect.stringContaining('Answer your first email'),
   ]);
   expect(rows()[0]).toHaveTextContent('Waiting for the first email');
-  expect(rows()[1]).toHaveTextContent('Moves your history over');
+  expect(rows()[1]).toHaveTextContent('Tickets, contacts and the knowledge base with images; old article links keep working');
   expect(rows()[2]).toHaveTextContent('Just you so far');
   expect(rows()[3]).toHaveTextContent('Not yet');
 });
@@ -150,4 +150,31 @@ test('Escape inside the open guide folds it', () => {
   fireEvent.keyDown(screen.getByRole('link', { name: /Invite your team/ }), { key: 'Escape' });
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Finish setting up/ })).toHaveFocus();
+});
+
+test('a moving team sees five steps, an optional help center link and stays open after import', () => {
+  const move = {
+    steps: [
+      { key: 'import', state: 'done', detail: null, url: '/settings/import-freshdesk' },
+      { key: 'custom_domain', state: 'none', detail: null, url: '/settings#help-center-domain-heading' },
+      { key: 'plan', state: 'none', detail: null, url: '/settings/billing' },
+      { key: 'cname', state: 'none', detail: null, url: '/settings#help-center-domain-heading' },
+      { key: 'search_console', state: 'none', detail: null, url: '/settings#help-center-search-console-heading' },
+    ], complete: false, recommended: 'custom_domain', next_url: '/settings#help-center-domain-heading',
+    help_center: { action: 'view', url: 'https://acme.colliedesk.com/help' },
+  } as unknown as SetupProgress;
+  render(<SetupChecklist progress={move} admin goal="leave_helpdesk" onHide={vi.fn()} />);
+  expect(rows()).toHaveLength(5);
+  expect(screen.getByRole('link', { name: 'View help center' })).toHaveAttribute('href', 'https://acme.colliedesk.com/help');
+  expect(screen.queryByRole('button', { name: 'I checked the preview' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Preview the help center')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'No custom domain needed' })).toBeEnabled();
+});
+
+test('skipping an optional domain step does not report it as completed', () => {
+  const before: SetupProgress = { steps: [{ key: 'custom_domain', state: 'none', detail: null, url: '/settings#help-center-domain-heading' }], complete: false, recommended: 'custom_domain', next_url: '/settings#help-center-domain-heading' };
+  const { rerender } = render(<SetupChecklist progress={before} admin goal="leave_helpdesk" defaultOpen onHide={vi.fn()} />);
+  rerender(<SetupChecklist progress={{ ...before, complete: true, steps: [{ ...before.steps[0], state: 'skipped' }] }} admin goal="leave_helpdesk" defaultOpen onHide={vi.fn()} />);
+  expect(screen.getByText('Skipped')).toBeInTheDocument();
+  expect(tracked).not.toHaveBeenCalled();
 });

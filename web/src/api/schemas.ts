@@ -241,12 +241,14 @@ export const inviteSchema = z.object({
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema, continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
-const setupStepKeys = ['email', 'import', 'invite', 'first_reply'] as const;
+const setupStepKeys = ['email', 'import', 'invite', 'first_reply', 'custom_domain', 'plan', 'cname', 'search_console'] as const;
 export type SetupStepKey = (typeof setupStepKeys)[number];
 export const setupProgressSchema = z.object({
-  steps: z.array(z.object({ key: z.enum(setupStepKeys), state: z.enum(['none', 'waiting', 'working', 'needs_attention', 'running', 'done', 'alone', 'invited', 'joined', 'sent']), detail: z.string().nullable() })),
+  steps: z.array(z.object({ key: z.enum(setupStepKeys), state: z.enum(['none', 'waiting', 'working', 'needs_attention', 'running', 'done', 'alone', 'invited', 'joined', 'sent', 'skipped']), detail: z.string().nullable(), url: z.string().default('') })),
   complete: z.boolean(),
-  recommended: z.enum(['email', 'import', 'invite']).nullable(),
+  recommended: z.enum(['email', 'import', 'invite', 'custom_domain', 'plan', 'cname', 'search_console']).nullable(),
+  next_url: z.string().nullable().default(null),
+  help_center: z.object({ action: z.enum(['view', 'enable']), url: z.string() }).optional(),
 }) satisfies z.ZodType<Generated<'SetupProgress'>>;
 export type SetupProgress = z.infer<typeof setupProgressSchema>;
 export const setupGuideHiddenSchema = z.object({ hidden: z.boolean() }) satisfies z.ZodType<JsonResponse<'setSetupGuideHidden', 200>>;

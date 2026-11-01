@@ -169,6 +169,8 @@ func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(con
 // status, error code, error message, now.
 const endSQL = `state=$4, status=$5, error_code=$6, error_message=$7, sealed_key=NULL, sealed_key_id=NULL,
 	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8,
+	notice_state=CASE WHEN kind='import' AND phase<>'preview' AND $4 IN ('finished','failed') THEN 'pending' ELSE notice_state END,
+	notice_next_attempt_at=$8,
 	imported_conversations=CASE WHEN kind='import' AND account_source IS NOT NULL THEN (SELECT count(*) FROM import_items i
 		WHERE i.workspace_id=import_jobs.workspace_id AND i.source=import_jobs.account_source AND i.entity='ticket' AND i.status='done') END`
 
@@ -177,4 +179,22 @@ func nullable(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+// dueNotices returns only job and workspace ids. Mail content and recipient are read in that workspace.
+func dueNotices(ctx context.Context, db *database.DB, now time.Time) ([]claimed, error) {
+	var jobs []claimed
+	err := db.Privileged(ctx, database.PrivilegeImportJobClaim, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT id::text,workspace_id::text FROM import_jobs
+			WHERE notice_state='pending' AND notice_next_attempt_at<=$1 ORDER BY notice_next_attempt_at LIMIT 20`, now)
+		if err != nil {
+			return err
+		}
+		jobs, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (claimed, error) {
+			var job claimed
+			return job, row.Scan(&job.id, &job.workspaceID)
+		})
+		return err
+	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	return jobs, err
 }

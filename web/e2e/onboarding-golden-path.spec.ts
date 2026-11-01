@@ -4,6 +4,7 @@ import { FakeFreshdesk, fixture, requesterEmail, ticketSubject } from './support
 import { IdentityProvider } from './support/identity-provider';
 import { waitForMail } from './support/mailpit';
 import { signUp } from './support/signup';
+import { setDNS } from './support/dns';
 
 // The golden path (#105): the first hour of a team leaving Freshdesk, on the hosted cloud, in one test.
 // It signs up, imports the account in the app, sees the reconcile report OK and answers its first
@@ -21,15 +22,26 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
   test.setTimeout(240_000);
   const suffix = uniqueSuffix();
   const adminEmail = `lead-${suffix}@acme.example`;
-  const fake = new FakeFreshdesk({ apiKey, agentEmail: adminEmail, fixed: true });
+  const fake = new FakeFreshdesk({ apiKey, agentEmail: adminEmail, fixed: true, knowledgeBase: true, links: true });
   await fake.start();
   try {
     // Sign up: the trial opens on the empty inbox, which leads to the import.
     expect((await signUp(page, provider, adminEmail, `Golden Desk ${suffix}`)).status()).toBe(201);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(baseURL);
     await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
-    await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Import from Freshdesk/ }).click();
+    const guide = page.getByRole('region', { name: 'Finish setting up' });
+    const openGuide = async () => {
+      const launcher = page.getByRole('button', { name: /Finish setting up/ });
+      await expect(guide.or(launcher)).toBeVisible();
+      if (!await guide.isVisible()) await launcher.click();
+    };
+    await expect(guide.getByRole('listitem')).toHaveCount(5);
+    await expect(guide).toContainText('knowledge base with images');
+    await expect(guide).toContainText('old article links keep working');
+    await guide.getByRole('link', { name: /Import from Freshdesk/ }).click();
     await expect(page).toHaveURL(`${baseURL}/settings/import-freshdesk`);
+    await page.setViewportSize({ width: 1280, height: 800 });
 
     // Import in the app, in the background, until the reconcile report is ready and OK.
     await page.getByLabel('Freshdesk address').fill('acme.freshdesk.com');
@@ -41,6 +53,72 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await expect(page.getByRole('row', { name: /^Tickets/ }).getByRole('cell')).toHaveText([String(fixture.tickets), String(fixture.tickets), '—']);
     const imports = await (await page.request.get(`${baseURL}/api/v1/imports`)).json() as { items: Array<{ kind: string; status: string | null }> };
     expect(imports.items.filter((job) => job.kind === 'import').map((job) => job.status)).toEqual(['OK']);
+
+    const notice = await waitForMail(adminEmail, 30_000, 'Freshdesk import complete');
+    expect(notice.from).toBe('noreply@mail.example.net');
+    expect(notice.text).toContain('300 of 300 tickets, 120 of 120 contacts and 3 of 3 articles imported.');
+    expect(notice.text).toContain('0 of 18 old help-center addresses');
+    expect(notice.text).toContain(`Open the inbox: ${baseURL}/`);
+    expect(notice.text).toContain('Next step: Turn on the help center');
+    expect(notice.text).toContain(`${baseURL}/settings#help-center-heading`);
+    expect(notice.text).not.toContain('then run the import again');
+
+    // Import completion keeps the move guide open; viewing the help center is optional.
+    await page.goto(baseURL);
+    await expect(guide).toBeVisible();
+    await expect(guide.getByRole('listitem')).toHaveCount(5);
+    await expect(guide.locator('[data-step="preview"]')).toHaveCount(0);
+    await expect(guide.getByRole('button', { name: 'I checked the preview' })).toHaveCount(0);
+    await expect(guide.locator('[data-step="import"]')).toHaveAttribute('data-state', 'done');
+    const me = await (await page.request.get(`${baseURL}/api/v1/auth/me`)).json() as { workspace: { slug: string } };
+    await expect(guide.getByRole('link', { name: 'Turn on the help center', exact: true })).toHaveAttribute('href', '/settings#help-center-heading');
+    const headers = { Origin: baseURL };
+    expect((await page.request.put(`${baseURL}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Golden help', locale: 'en' } })).status()).toBe(200);
+    await page.reload();
+    await expect(guide.getByRole('link', { name: 'View help center' })).toHaveAttribute('href', `${baseURL}/help/${me.workspace.slug}`);
+    const preview = await page.request.get(`${baseURL}/help/${me.workspace.slug}`);
+    expect(preview.status()).toBe(200);
+    expect(await preview.text()).toContain('Start');
+    const oldArticle = await page.request.get(`${baseURL}/help/${me.workspace.slug}/support/solutions/articles/7201`, { maxRedirects: 0 });
+    expect(oldArticle.status()).toBe(301);
+    expect(oldArticle.headers().location).toContain(`/help/${me.workspace.slug}/a/`);
+    expect((await page.request.get(oldArticle.headers().location)).status()).toBe(200);
+    await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'todo');
+
+    // TXT proof completes verification without sending visitors away from the old helpdesk.
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
+    await expect(page).toHaveURL(`${baseURL}/settings`);
+    const host = `help.golden-${suffix}.example`;
+    await page.getByRole('textbox', { name: 'Host name' }).fill(host);
+    await page.getByRole('button', { name: 'Set domain' }).click();
+    const txt = page.getByRole('group', { name: 'TXT record: proves the domain is yours' });
+    const token = await txt.getByRole('textbox', { name: 'Value' }).inputValue();
+    setDNS({ txt: { [`_help-center-verify.${host}`]: [token] } });
+    await page.getByRole('button', { name: 'Check now' }).click();
+    await expect(page.getByRole('status').filter({ hasText: `${host} is verified` })).toBeVisible();
+    // Returning through the app must show the new state even while setup's cached value is fresh.
+    await page.getByRole('link', { name: 'Inbox', exact: true }).click();
+    await openGuide();
+    await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'done');
+    await guide.getByRole('button', { name: 'Minimize' }).click();
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
+    // A CNAME check on the trial explains why the domain is not serving yet.
+    const cname = page.getByRole('group', { name: /CNAME record/ });
+    const target = await cname.getByRole('textbox', { name: 'Value' }).inputValue();
+    setDNS({ txt: { [`_help-center-verify.${host}`]: [token] }, cname: { [host]: target } });
+    await page.getByRole('button', { name: 'Check now' }).click();
+    await expect(page.getByRole('status').filter({ hasText: /DNS checked.*once you choose a plan/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Choose a plan', exact: true })).toHaveAttribute('href', '/settings/billing');
+    // An imported but empty/off help center points to enabling, without importing twice.
+    expect((await page.request.put(`${baseURL}/api/v1/help-center`, { headers, data: { enabled: false, title: 'Golden help', locale: 'en' } })).status()).toBe(200);
+    const articles = await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: Array<{ id: string; updated_at: string }> };
+    for (const article of articles.items) expect((await page.request.delete(`${baseURL}/api/v1/kb/articles/${article.id}?updated_at=${encodeURIComponent(article.updated_at)}`, { headers })).status()).toBe(204);
+    await page.reload();
+    await expect(page.getByRole('link', { name: 'Turn on the help center', exact: true })).toHaveAttribute('href', '/settings#help-center-heading');
+    await page.goto(baseURL);
+    await openGuide();
+    await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'done');
+    await guide.getByRole('button', { name: 'Minimize' }).click();
 
     // The results page shows the baseline measured from the import (#100). Every ticket of the fixture got
     // its first reply 20 minutes after the customer's first message (not after the follow-up at 10), and

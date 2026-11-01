@@ -173,6 +173,7 @@ var routeTiers = map[string]string{
 	"DELETE /api/v1/results/share-link":                                "admin",
 	"PATCH /api/v1/agents/me/results-email":                            "draft",
 	"GET /api/v1/workspace/setup":                                      "read",
+	"PUT /api/v1/workspace/setup/move":                                 "admin",
 	"PUT /api/v1/agents/me/setup-guide":                                "draft",
 	"POST /api/v1/tags":                                                "draft",
 	"PATCH /api/v1/tags/{id}":                                          "send",

@@ -30,8 +30,15 @@ const (
 	helpCenterLiveCheckHosts   = 4096
 )
 
+// helpCenterNextStep is the prerequisite a verified domain still needs.
+type helpCenterNextStep struct {
+	Key string `json:"key"`
+	URL string `json:"url"`
+}
+
 // helpCenterDomainView is a workspace's custom domain as the API shows it (HelpCenterDomain).
 type helpCenterDomainView struct {
+	NextStep               *helpCenterNextStep       `json:"next_step"`
 	Hostname               *string                   `json:"hostname"`
 	Status                 string                    `json:"status"`
 	Records                []helpcenter.DomainRecord `json:"records"`
@@ -105,7 +112,21 @@ func (a *API) writeHelpCenterDomain(response http.ResponseWriter, request *http.
 		writeJSON(response, http.StatusOK, noHelpCenterDomain(who.Access))
 		return
 	}
-	writeJSON(response, http.StatusOK, a.helpCenterDomainView(current, who.Access))
+	view := a.helpCenterDomainView(current, who.Access)
+	if current.Status == domain.HelpCenterDomainActive {
+		ready, err := a.store.MoveReadiness(request.Context(), who.Workspace.ID, a.now())
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		switch {
+		case !ready.Published && ready.Imported != "done":
+			view.NextStep = &helpCenterNextStep{Key: "import", URL: "/settings/import-freshdesk"}
+		case !ready.Enabled || !ready.Published:
+			view.NextStep = &helpCenterNextStep{Key: "enable", URL: "/settings#help-center-heading"}
+		}
+	}
+	writeJSON(response, http.StatusOK, view)
 }
 
 func writeDomainTaken(response http.ResponseWriter) {
