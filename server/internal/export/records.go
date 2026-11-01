@@ -18,6 +18,8 @@ type Agent struct {
 	Role             string    `json:"role"`
 	TimezoneOverride *string   `json:"timezone_override"`
 	CreatedAt        time.Time `json:"created_at"`
+	// SLAAlertEmail is whether the agent gets the response-target reminder and overdue emails.
+	SLAAlertEmail bool `json:"sla_alert_email"`
 	// DeactivatedAt is null for an active agent. A deactivated agent stays in the archive because
 	// conversations and messages still name it.
 	DeactivatedAt *time.Time `json:"deactivated_at"`
@@ -54,6 +56,9 @@ type Channel struct {
 	IsDefault bool `json:"is_default"`
 	// ProcessingPausedAt is when its processing was paused; null while it runs.
 	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
+	// AutoCloseSince is when auto-close was turned on: only conversations resolved after it close by
+	// themselves. Null while it is off.
+	AutoCloseSince *time.Time `json:"auto_close_since"`
 }
 
 // ChannelAILevel is the level a channel sets for an AI feature on one of its scopes (” is the
@@ -565,6 +570,9 @@ type AgentRequest struct {
 	// saw it (with the version a restore applies).
 	SavedReplyID     *string         `json:"saved_reply_id"`
 	SavedReplyBefore json.RawMessage `json:"saved_reply_before"`
+	// Notices are what a status-change request showed it would tell customers, as it was when the
+	// token asked; null for other requests.
+	Notices json.RawMessage `json:"notices"`
 }
 
 // ImportJob is an import from another helpdesk run inside the app, or its undo. It never holds the
@@ -781,11 +789,53 @@ type AIDraft struct {
 // it comes from, when that import's first full run finished, its reconcile status (null for an import
 // made before results existed) and the numbers as stored.
 type ResultsBaseline struct {
-	Source       string          `json:"source"`
-	AnchorAt     time.Time       `json:"anchor_at"`
-	ImportStatus *string         `json:"import_status"`
-	ComputedAt   *time.Time      `json:"computed_at"`
-	Numbers      json.RawMessage `json:"numbers"`
+	Source       string    `json:"source"`
+	AnchorAt     time.Time `json:"anchor_at"`
+	ImportStatus *string   `json:"import_status"`
+	// ImportCause says why the import has that status (archive_refused), or null.
+	ImportCause *string         `json:"import_cause"`
+	ComputedAt  *time.Time      `json:"computed_at"`
+	Numbers     json.RawMessage `json:"numbers"`
+}
+
+// AIAutomaticLimits is how many automatic AI tasks the workspace runs a UTC day and a minute, and how
+// many drafts and intake decisions of them a day; written once someone set them.
+type AIAutomaticLimits struct {
+	PerDay       int       `json:"per_day"`
+	PerMinute    int       `json:"per_minute"`
+	DraftPerDay  int       `json:"draft_per_day"`
+	IntakePerDay int       `json:"intake_per_day"`
+	UpdatedBy    *string   `json:"updated_by"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// ResponseTargets are the workspace's response targets (SLA), written once someone saved them: business
+// hours in a timezone, holidays, targets by priority in business minutes, the warning before a target,
+// the channels they apply to (null: all) and whether reminder emails go out.
+type ResponseTargets struct {
+	Enabled           bool            `json:"enabled"`
+	Timezone          *string         `json:"timezone"`
+	Hours             json.RawMessage `json:"hours"`
+	Holidays          json.RawMessage `json:"holidays"`
+	Targets           json.RawMessage `json:"targets"`
+	WarnBeforeMinutes int             `json:"warn_before_minutes"`
+	ChannelIDs        []string        `json:"channel_ids"`
+	AlertEmail        bool            `json:"alert_email"`
+	// EnabledAt is when they were turned on: conversations opened from then on are measured.
+	EnabledAt *time.Time `json:"enabled_at"`
+	// AlertsSince is when reminder emails were turned on: alerts are sent from then on.
+	AlertsSince      *time.Time `json:"alerts_since"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	UpdatedByAgentID *string    `json:"updated_by_agent_id"`
+}
+
+// MigrationRequest is a request an admin sent Colliedesk to move the workspace's Freshdesk data.
+type MigrationRequest struct {
+	ID               string    `json:"id"`
+	RequestedBy      *string   `json:"requested_by"`
+	FreshdeskAddress string    `json:"freshdesk_address"`
+	Times            string    `json:"times"`
+	RequestedAt      time.Time `json:"requested_at"`
 }
 
 // AutofixInstallation is a GitHub App installation the workspace connected for Autofix.
@@ -1033,6 +1083,12 @@ type StatusChange struct {
 	ChangedAt    time.Time `json:"changed_at"`
 	ActorAgentID *string   `json:"actor_agent_id"`
 	Source       string    `json:"source"`
+	// Cause is who changed it: agent, token, customer, command, auto_close or import. ActorTokenID is
+	// the API token of a token's change (ActorAgentID is then its owner), and Quiet a change made with
+	// notify:false, which told the customer nothing.
+	Cause        string  `json:"cause"`
+	ActorTokenID *string `json:"actor_token_id"`
+	Quiet        bool    `json:"quiet"`
 }
 
 // Conversation is one line of conversations.ndjson with everything that hangs off it.
@@ -1044,7 +1100,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, AIAutomaticLimits*, ResponseTargets*, MigrationRequest*, AutofixInstallation*, AutofixRepo*, AutofixConnector*, Fix*, FixEvent*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -1075,6 +1131,9 @@ type Sink interface {
 	AITriage(AITriage) error
 	AIChatSession(AIChatSession) error
 	ResultsBaseline(ResultsBaseline) error
+	AIAutomaticLimits(AIAutomaticLimits) error
+	ResponseTargets(ResponseTargets) error
+	MigrationRequest(MigrationRequest) error
 	AutofixInstallation(AutofixInstallation) error
 	AutofixRepo(AutofixRepo) error
 	AutofixConnector(AutofixConnector) error
