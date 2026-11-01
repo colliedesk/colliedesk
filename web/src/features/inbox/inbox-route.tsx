@@ -18,6 +18,7 @@ import { messages } from '../../messages';
 import { useSettleTargets, useSLARefresh } from './sla-refresh';
 import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
+import { trialDomainUnverified, typedAddressOnly } from './trial-reply-block';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
 import { useConversationPresence } from './use-conversation-presence';
@@ -225,6 +226,8 @@ export function InboxRoute() {
   const channelNotice = via && (removed ? messages.channelRemoved(via.name) : via.replies_via === null ? messages.repliesNotConnected
     : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
   const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // The trial never emails an address a visitor typed (help chat, web form); the box says so before a reply is written.
+  const typedAddressTrial = !channelNotice && trialDomainUnverified(me.data?.plan?.plan, emailChannel.data) && typedAddressOnly(selected, timeline.data?.items);
   // Which mailbox a reply leaves from, once there are two; and why, when the one it was pinned to is gone.
   const sender = via?.replies_via;
   const sendsFrom = !sender || outbound ? undefined : sender.instead_of ? messages.sendsInsteadOf(sender.instead_of.name, sender.name)
@@ -337,7 +340,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed || typedAddressTrial} typedAddressTrial={typedAddressTrial} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}

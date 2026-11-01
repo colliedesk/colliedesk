@@ -6,6 +6,7 @@ import type { WebFormSettings } from '../../api/schemas';
 import { WebFormSection } from '../../features/settings/web-form-section';
 import { saveState } from '../../features/settings/save-feedback';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
+import { TrialRepliesNotice } from '../trial-replies-notice';
 
 // Embed changes only the allowed origins: the channel's switch is the one place that turns the form on or off.
 function Embed({ channel, canManage }: ChannelPanelProps) {
@@ -14,8 +15,11 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
     mutationFn: (origins: string[]) => channelsApi.update(channel.id, { config: { allowed_origins: origins } }),
     onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['channels'] }), client.invalidateQueries({ queryKey: ['web-form'] })]),
   });
-  return <WebFormSection part="embed" settings={channel.config as WebFormSettings} canManage={canManage} save={saveState(save)}
-    onSave={(_enabled, origins) => save.mutate(origins)} />;
+  return <>
+    <TrialRepliesNotice />
+    <WebFormSection part="embed" settings={channel.config as WebFormSettings} canManage={canManage} save={saveState(save)}
+      onSave={(_enabled, origins) => save.mutate(origins)} />
+  </>;
 }
 
 // Connect adds the form, on, with the sites allowed to post to it.

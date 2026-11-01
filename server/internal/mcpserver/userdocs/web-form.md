@@ -10,6 +10,13 @@ You can reply from the conversation. On a Colliedesk Cloud **trial**, a reply to
 conversation is refused (error `trial_outbound_restricted`), because the form cannot prove who owns
 the address; a paid plan has no such rule. Self-hosted installs have no trial.
 
+You do not find out after you press Send. On the trial, while the sending domain is not verified,
+the conversation shows a notice above the reply box saying the customer typed their address and
+nothing proves it is theirs, with the links **Verify your sending domain in Settings** and
+**Choose a plan**. **Send reply** stays off, and a private note still works. The form's page in
+Settings says the same in one sentence. Once you verify the sending domain or choose a plan, the
+notice goes away.
+
 It works the same on self-hosted installs and on Colliedesk Cloud.
 
 ## Turn it on

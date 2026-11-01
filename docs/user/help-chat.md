@@ -57,8 +57,14 @@ conversation's id, the start of its address in Colliedesk (`/conversations/<id>`
 
 You reply by email. On a Colliedesk Cloud **trial**, a reply to a help chat conversation is refused
 (error `trial_outbound_restricted`), as for the web form; the customer is told that you have their
-message, not that you will reply by email. One address may hand off 5 chats in 10 minutes, and the
-channel opens at most 50 conversations in 10 minutes.
+message, not that you will reply by email. The refusal stays because the address was typed and
+nothing proves it is the customer's: without it, a trial could email any address its owner typed
+into their own chat. You do not find out after you press Send. On the trial, while the sending
+domain is not verified, the conversation shows a notice above the reply box, with the links
+**Verify your sending domain in Settings** and **Choose a plan**; **Send reply** stays off, and a
+private note still works. This channel's setup page says the same in one sentence. Once you verify
+the sending domain or choose a plan, the notice goes away and you reply as usual. One address may
+hand off 5 chats in 10 minutes, and the channel opens at most 50 conversations in 10 minutes.
 
 ## Limits you should know
 

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
@@ -1216,4 +1216,64 @@ test('a conversation whose replies leave through a chat channel asks for no emai
   await waitFor(() => expect(api.messages).toHaveBeenCalled());
   // A chat channel has no email settings: asking for them would be refused (404).
   expect(api.emailChannelOf).not.toHaveBeenCalled();
+});
+
+// On the trial, a reply to an address a visitor typed (help chat, web form) is refused whatever the agent writes;
+// the box says so before anything is typed, and takes private notes only.
+describe('the trial and an address a visitor typed', () => {
+  const emailRef = { id: '55555555-5555-4555-8555-555555555555', type: 'email', name: 'Email', enabled: true };
+  const typedMessage = (via: 'platform' | 'web_form' | null, authentication: 'pass' | 'none' | 'fail' = 'none') => ({
+    id: `77777777-7777-4777-8777-77777777777${via === 'platform' ? 8 : 7}`, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, agent_token: null,
+    ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'incoming', body: `Message ${via ?? 'typed'}`, body_html: null, origin: null, attachments: [], cc: [],
+    created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
+    email: via ? { from: 'reader@example.com', authentication, via, attachments: [], original_attachment_id: null } : null,
+  });
+  const open = async ({ plan = 'trial', verified = false, channel, items }: { plan?: string; verified?: boolean; channel: 'help_chat' | 'web_form' | 'email'; items: unknown[] }) => {
+    const ref = { id: '44444444-4444-4444-8444-444444444444', type: channel, name: 'Channel', enabled: true, deleted: false, replies_via: { ...emailRef, instead_of: null } };
+    const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel, channel_ref: ref };
+    api.me.mockResolvedValue({ timezone: 'UTC', plan: { plan, trial_ends_at: '2026-11-20T00:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false } });
+    api.emailChannelOf.mockResolvedValue({ channel: { support_address: 'support@desk.example', domain_verified_at: verified ? '2026-10-01T00:00:00Z' : null }, inbound_url: 'https://desk.example.com/x',
+      smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockResolvedValue(alpha);
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    testRouter.params = { conversationId: alpha.id };
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    await screen.findByRole('heading', { name: 'Alpha conversation' });
+    await waitFor(() => expect(api.emailChannelOf).toHaveBeenCalledWith(emailRef.id));
+    await screen.findAllByRole('article');
+  };
+  const box = () => screen.getAllByLabelText('Message body').at(-1)!;
+
+  test.each([['help_chat'], ['web_form']] as const)('a %s conversation says the reply cannot be sent, links the way out, and takes notes only', async (channel) => {
+    await open({ channel, items: [typedMessage(channel === 'web_form' ? 'web_form' : null)] });
+    const notice = (await screen.findByText(/they typed their address and nothing proves it is theirs/)).closest('p')!;
+    expect(notice).toHaveAttribute('role', 'status');
+    expect(notice).toHaveClass('composer-notice');
+    expect(within(notice).getByRole('link', { name: 'Verify your sending domain in Settings' })).toHaveAttribute('href', `/settings/channels/${emailRef.id}?tab=replies`);
+    expect(within(notice).getByRole('link', { name: 'Choose a plan' })).toHaveAttribute('href', '/settings/billing');
+    fireEvent.click(screen.getAllByRole('button', { name: /^Reply/ }).at(-1)!);
+    fireEvent.change(box(), { target: { value: 'Hello' } });
+    expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeDisabled();
+    fireEvent.click(screen.getAllByRole('button', { name: /Private note/ }).at(-1)!);
+    expect(screen.getAllByRole('button', { name: 'Add private note' }).at(-1)).toBeEnabled();
+  });
+
+  test.each([
+    ['a verified sending domain', { verified: true, channel: 'help_chat', items: [typedMessage(null)] }],
+    ['a paid plan', { plan: 'team', channel: 'web_form', items: [typedMessage('web_form')] }],
+    ['an email conversation', { channel: 'email', items: [typedMessage('platform', 'pass')] }],
+    ['verified mail from the customer in a help chat conversation', { channel: 'help_chat', items: [typedMessage(null), typedMessage('platform', 'pass')] }],
+  ] as const)('%s: no trial notice, and Send works as before', async (_name, input) => {
+    await open({ ...input, items: [...input.items] });
+    fireEvent.change(box(), { target: { value: 'Hello' } });
+    expect(screen.queryByText(/they typed their address/)).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
+  });
 });
