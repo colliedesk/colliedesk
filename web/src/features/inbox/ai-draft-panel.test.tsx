@@ -175,10 +175,11 @@ test('while a draft is written the button says so and keeps the panel open', asy
   expect(screen.getByRole('region', { name: 'Draft with AI' })).toBeInTheDocument();
 });
 
-test('when reply drafts are off, an agent is told whom to ask and an admin gets the way to turn them on', () => {
+test('when reply drafts are off, an agent sees no AI tool and an admin gets the way to turn them on', () => {
   const { rerender } = render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff />));
-  fireEvent.click(screen.getByRole('button', { name: /Draft with AI/ }));
-  expect(screen.getByRole('status')).toHaveTextContent('Ask an admin to turn them on in Settings → Built-in AI.');
+  // An agent cannot turn drafts on: a tool that only says Off is noise in every reply box.
+  expect(screen.queryByRole('button', { name: /Draft with AI/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /Draft with AI/ })).toBeNull();
   rerender(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff canManage />));
   const off = screen.getByRole('link', { name: 'Draft with AI (off)' });
   expect(off).toHaveAttribute('href', '/settings/ai');

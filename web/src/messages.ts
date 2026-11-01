@@ -365,7 +365,6 @@ export const messages = {
   fromAIDraftUnchanged: 'from an AI draft, sent as written',
   aiDraftsOff: 'Off',
   aiDraftsOffName: 'Draft with AI (off)',
-  aiDraftsOffAgent: 'Reply drafts are off in this workspace. Ask an admin to turn them on in Settings → Built-in AI.',
   aiDraftsOffAdmin: 'Reply drafts are off. Turn them on in Settings → Built-in AI.',
   drafting: 'Drafting…',
   checkBeforeSending: 'Check before sending: not in this conversation:',

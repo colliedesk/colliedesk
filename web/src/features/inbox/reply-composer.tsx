@@ -54,7 +54,7 @@ interface ReplyComposerProps {
   aiDraftsFor?: string;
   // The id of the customer's newest message: when it changes, the automatic draft is read again.
   latestCustomerMessage?: string;
-  // Reply drafts are off: the box says so, with the way to turn them on (canManage) or whom to ask.
+  // Reply drafts are off: an admin (canManage) sees the tool as Off, with the way to turn them on.
   aiDraftsOff?: boolean;
   agentId?: string;
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
@@ -195,7 +195,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [assist, setAssist] = useState(false);
   // A draft is being written in the open panel: the button says so and keeps the panel (and its Stop) open.
   const [drafting, setDrafting] = useState(false);
-  const [offNote, setOffNote] = useState(false);
   // The AI draft the reply was written from, until it is sent or the box is emptied.
   const [aiDraft, setAIDraft] = useState<string>();
   // What the draft put in the box that the conversation does not hold: shown until it is sent or the box is emptied.
@@ -394,15 +393,15 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
             onSendAnyway={() => { mark.current = conflict.latest; submit(resolveAfter.current); }}
             onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
-        {offNote && !aiDraftsFor && <p role="status" className="composer-notice">{messages.aiDraftsOffAgent}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
-        <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
+          {/* Attach is the first tool; the chosen files and their notes take a line above the row (components.css). */}
+          <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
             <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'}
+          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.articles}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon /><span className="tool-label">{messages.articles}</span></button>
           {aiDraftsFor && (
@@ -411,13 +410,12 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
               <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
           )}
-          {!aiDraftsFor && aiDraftsOff && (canManage
+          {/* Only an admin can turn drafts on, so only an admin sees the tool while they are off. */}
+          {!aiDraftsFor && aiDraftsOff && canManage && (
             // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
             // drafts on is its description.
-            ? <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
-                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>
-            : <button type="button" className="saved-reply-button" aria-disabled="true" title={messages.aiDraftsOffAgent} onClick={() => setOffNote((shown) => !shown)}>
-                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></button>)}
+            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
+              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>

@@ -28,7 +28,22 @@ for (const width of [1280, 1440, 1536, 1920]) {
     expect(Math.abs(send.y - resolve.y), 'Send reply is on the row of Send and resolve').toBeLessThanOrEqual(1);
     // From a 1440 px screen Draft with AI keeps its name, also when it is off: an icon and "Off" alone say little.
     if (width >= 1440) await expect(page.locator('.composer-actions').getByText('Draft with AI')).toBeVisible();
+    // Attach is a tool like the others: on their row, not on a row of its own above them.
+    const attach = (await page.getByRole('button', { name: 'Add attachment' }).boundingBox())!;
+    const saved = (await page.getByRole('button', { name: /Insert saved reply/ }).boundingBox())!;
+    expect(Math.abs(attach.y - saved.y), 'Add attachment is on the row of the tools').toBeLessThanOrEqual(1);
     const overflow = await page.locator('.composer-actions').evaluate((bar) => bar.scrollWidth - bar.clientWidth);
     expect(overflow, 'the toolbar does not overflow sideways').toBeLessThanOrEqual(0);
   });
 }
+
+test('a chosen file is listed above the toolbar, and the tools keep their row', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openTicket(page);
+  await page.getByLabel('Attach files').setInputFiles({ name: 'invoice.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+  const file = (await page.getByRole('list', { name: 'Files to send' }).boundingBox())!;
+  const attach = (await page.getByRole('button', { name: 'Add attachment' }).boundingBox())!;
+  const send = (await page.getByRole('button', { name: 'Send reply' }).boundingBox())!;
+  expect(file.y + file.height, 'the file sits above the toolbar').toBeLessThanOrEqual(attach.y);
+  expect(Math.abs(attach.y - send.y), 'Add attachment and Send reply share the toolbar row').toBeLessThanOrEqual(4);
+});
