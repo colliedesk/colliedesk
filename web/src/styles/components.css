@@ -324,13 +324,19 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
 /* A narrow reply box keeps every tool on screen: the tools show their icon only (the label stays their
    accessible name) and their keycaps go. The shortcut hint lives in the composer head. */
-@container (max-width: 40rem) {
+/* 45rem: with every tool's label, Off, Cc and both send buttons the row needs about 44rem; below that Send reply
+   would drop to a line of its own. */
+@container (max-width: 45rem) {
   /* A narrow box keeps the send keys only; Send and resolve shows its own keys on hover. */
   .composer-keys-resolve { display: none; }
   .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .composer-actions .saved-reply-button kbd { display: none; }
   /* Draft with AI keeps its words: the automatic draft and its notices point people to it by name. */
   .composer-actions .ai-tool .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+}
+/* Draft with AI that is off keeps its name where it fits, so the icon is not left with a bare "Off". */
+@container (min-width: 36rem) and (max-width: 45rem) {
+  .composer-actions :has(> .ai-off-label) .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
 }
 /* A phone-wide box has no room beside the tabs: the keys stay in the buttons' tooltips. */
 @container (max-width: 28rem) {
