@@ -190,6 +190,8 @@ export const messages = {
   useOtherTabDraft: 'Use it',
   keepMyDraft: 'Keep mine',
   replyMode: 'Reply',
+  channelNotice: 'Sent by the channel · not a reply',
+  channelNoticeAuthor: 'Channel',
   copyReference: (ref: string) => `Copy reference ${ref}`,
   targets: 'Targets',
   targetFirstReply: 'First reply',

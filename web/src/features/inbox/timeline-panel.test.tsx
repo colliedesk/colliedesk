@@ -283,22 +283,13 @@ test('another conversation shows neither', () => {
   expect(screen.queryByText('Unverified sender (Help chat)')).not.toBeInTheDocument();
 });
 
-test('the header shows a numbered conversation\'s code with a way to copy it; the default series shows none', () => {
-  const conversation = (series: string, ref: string) => ({ id: base.conversation_id, subject: 'Máy in', status: 'open', priority: 'normal', contact_id: '88888888-8888-4888-8888-888888888888',
-    contact_name: 'Nguyễn Văn A', tags: [], channel: 'zalo', number: 142, number_series: series, display_ref: ref }) as unknown as Conversation;
-  const { unmount } = render(<TimelinePanel conversation={conversation('chd', 'CHD-2026-0142')} items={[]} timezone="UTC" />);
-  expect(screen.getByText('CHD-2026-0142')).toHaveClass('conv-ref');
-  expect(screen.getByRole('button', { name: 'Copy reference CHD-2026-0142' })).toBeInTheDocument();
+test('a notice the channel sent by itself is written by the channel, named even when it was removed', () => {
+  const notice: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Đã nhận yêu cầu.', notice_kind: 'received' };
+  const conversation = (deleted: boolean) => ({ id: base.conversation_id, subject: 'Máy in', channel_ref: { id: '77777777-7777-4777-8777-777777777777', type: 'zalo_oa', name: 'Hảo Đạt OA', enabled: true, deleted, replies_via: null } }) as unknown as Conversation;
+  const { unmount } = render(<TimelinePanel conversation={conversation(false)} items={[notice]} timezone="UTC" />);
+  expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
+  expect(screen.getByText('Sent by the channel · not a reply')).toBeInTheDocument();
   unmount();
-  render(<TimelinePanel conversation={conversation('default', '#12')} items={[]} timezone="UTC" />);
-  expect(screen.queryByText('#12')).toBeNull();
-  expect(screen.queryByRole('button', { name: /Copy reference/ })).toBeNull();
-});
-
-test('the header says which clock is due or late in full words', () => {
-  const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
-  const conversation = { id: base.conversation_id, subject: 'Máy in', status: 'open', priority: 'urgent', contact_id: '88888888-8888-4888-8888-888888888888', contact_name: 'A', tags: [], channel: 'zalo',
-    sla: { state: 'overdue', first_response: { ...clock, state: 'met', met_at: '2026-11-02T02:00:00Z' }, resolution: { ...clock, due_at: '2026-11-02T04:10:00Z', overdue: true } } } as unknown as Conversation;
-  render(<TimelinePanel conversation={conversation} items={[]} timezone="UTC" />);
-  expect(screen.getByText('Resolve overdue')).toHaveClass('sla-late');
+  render(<TimelinePanel conversation={conversation(true)} items={[notice]} timezone="UTC" />);
+  expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
 });

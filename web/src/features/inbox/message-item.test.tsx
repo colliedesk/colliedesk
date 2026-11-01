@@ -1,16 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeAll, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { MessageItem } from './message-item';
-import { markdownPart } from './markdown-body';
-
-// Replies' Markdown renders from its own chunk; it is there before these tests start.
-beforeAll(async () => {
-  markdownPart.preload();
-  await import('./markdown-render');
-  await new Promise((resolve) => setTimeout(resolve, 0));
-});
 
 const base: Message = { reply_number: null,
   id: '22222222-2222-4222-8222-222222222222', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: 'Vic Customer',
@@ -219,3 +211,10 @@ test('the time names its timezone in its title, and on screen when it is not the
   expect(time).toHaveTextContent(/7:42\sPM GMT\+14$/);
 });
 
+test('a notice the channel sent by itself says so and is not shown as a reply of the team', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', author_name: null, email: null, notice_kind: 'received', body: 'Đã nhận yêu cầu của anh/chị.' }} timezone="UTC" />);
+  expect(screen.getByText('Sent by the channel · not a reply')).toBeInTheDocument();
+  expect(screen.queryByText('Reply')).toBeNull();
+  expect(screen.queryByText('Someone')).toBeNull();
+  expect(screen.getByText('Đã nhận yêu cầu của anh/chị.')).toBeInTheDocument();
+});
