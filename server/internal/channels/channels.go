@@ -394,6 +394,9 @@ type Definition struct {
 	HelpCenterAdditions func(kit HelpCenterKit) func(ctx context.Context, at HelpCenter) (HelpCenterAdditions, error)
 	// Tools are the MCP tools of the type's own admin actions.
 	Tools []ToolSpec
+	// Files are the public files the type serves below a directory of its own under /api/v1 (a
+	// provider's site verification file), by names a mux pattern cannot hold.
+	Files []File
 }
 
 // Route is one HTTP route of a type, mounted under /api/v1 with its token tier.
@@ -406,6 +409,25 @@ type Route struct {
 	// AlwaysAsk makes an agent token's call a request a person approves.
 	AlwaysAsk bool
 	Handler   func(kit RouteKit) http.HandlerFunc
+}
+
+// File is a public file of a type: GET and HEAD of /api/v1 + Dir + "/" + a name Name matches, answered
+// before the mux, because a Go mux wildcard is a whole segment ("zalo_verifier{code}.html" is not a
+// pattern) and a wildcard segment below /channels/<type>/ would collide with /channels/{id}/<literal>.
+// Like a type's Routes it is outside Routes() and the token tiers: no session and no token reaches it.
+// A name Serve does not find, another method and every other path go on to the mux, so they answer
+// exactly as a path the server does not have.
+type File struct {
+	Dir   string
+	Name  *regexp.Regexp
+	Serve func(kit RouteKit) func(ctx context.Context, name string) (PublicFile, bool, error)
+}
+
+// PublicFile is the body of a File and how long a cache may keep it.
+type PublicFile struct {
+	ContentType string
+	Body        []byte
+	MaxAge      time.Duration
 }
 
 // RouteKit is what the API gives a type's route.
@@ -422,6 +444,9 @@ type RouteKit interface {
 	// InWorkspace runs fn in a transaction of a channel's workspace (the type records what it saw of a
 	// delivery in its own table).
 	InWorkspace(ctx context.Context, channel Channel, fn func(pgx.Tx) error) error
+	// SiteVerificationHeld says whether a live channel of the route's type, in any workspace, holds a
+	// provider's site verification code (public by nature); only the yes or no leaves the lookup.
+	SiteVerificationHeld(ctx context.Context, code string) (bool, error)
 }
 
 // HelpCenterRoute is one route of a type on the help center: Path is below the help center's root

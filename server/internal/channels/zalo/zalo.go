@@ -108,7 +108,10 @@ func (a *Adapter) Definition() channels.Definition {
 				ScopeDirect: {Mode: channels.ModeAll},
 				ScopeGroup:  {Mode: channels.ModeCommands, Gather: &channels.Gather{QuietSeconds: 300, MaxSeconds: 1200}},
 			}},
-		Routes: []channels.Route{{Method: http.MethodPost, Path: WebhookPath, Public: true, Handler: a.webhook}}}
+		// The webhook and the verification file are public routes of the type, outside Routes() and the
+		// token tiers like every type's routes: Zalo calls them, never a person's session or a token.
+		Routes: []channels.Route{{Method: http.MethodPost, Path: WebhookPath, Public: true, Handler: a.webhook}},
+		Files:  []channels.File{{Dir: VerificationDir, Name: siteFile, Serve: a.verificationFile}}}
 }
 
 func (a *Adapter) Config() channels.ConfigPart     { return config{} }
@@ -121,6 +124,8 @@ type ConfigValue struct {
 	AppID        *string            `json:"app_id,omitempty"`
 	StaffUserIDs *[]string          `json:"staff_user_ids,omitempty"`
 	Groups       *map[string]string `json:"groups,omitempty"`
+	// SiteVerification is Zalo's site verification code; "" clears it.
+	SiteVerification *string `json:"site_verification,omitempty"`
 }
 
 // Public is the channel's configuration as the API shows it; never a secret.
@@ -131,6 +136,10 @@ type Public struct {
 	Groups       map[string]string `json:"groups"`
 	// WebhookPath is the app's webhook below the server's /api/v1, for the Zalo app's settings.
 	WebhookPath string `json:"webhook_path"`
+	// SiteVerification is the code Zalo gave the app for the HTML file method, or null.
+	SiteVerification *string `json:"site_verification"`
+	// VerificationPrefixPath is the URL prefix to verify in the Zalo app, below the server's address.
+	VerificationPrefixPath string `json:"verification_prefix_path"`
 	// Credentials say which secrets are set: each of the four, its last four characters and when it was
 	// last written (a refresh too); never its value.
 	Credentials []CredentialState `json:"credentials"`
@@ -155,7 +164,7 @@ func (config) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.
 	var value ConfigValue
 	if len(patch) > 0 {
 		if err := json.Unmarshal(patch, &value); err != nil {
-			return channels.ConfigChange{}, &channels.FieldError{Message: "The configuration must be oa_id, app_id, staff_user_ids and groups."}
+			return channels.ConfigChange{}, &channels.FieldError{Message: "The configuration must be oa_id, app_id, staff_user_ids, groups and site_verification."}
 		}
 	}
 	change := channels.ConfigChange{Detail: map[string]any{}}
@@ -206,6 +215,17 @@ func (config) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.
 		}
 		value.Groups, change.Detail["groups"] = &groups, len(groups)
 	}
+	if value.SiteVerification != nil {
+		code := ""
+		if strings.TrimSpace(*value.SiteVerification) != "" {
+			var ok bool
+			if code, ok = SiteVerificationCode(*value.SiteVerification); !ok {
+				return channels.ConfigChange{}, fieldError("site_verification",
+					"Paste the code Zalo shows for the HTML file method (the part of zalo_verifier<code>.html between zalo_verifier and .html), or the file's name; an empty value clears it.")
+			}
+		}
+		value.SiteVerification, change.Detail["site_verification"] = &code, code != ""
+	}
 	if current != nil && len(change.Detail) == 0 {
 		return channels.ConfigChange{}, nil
 	}
@@ -231,17 +251,19 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 	}
 	if value.AppID == nil {
 		// A change of the rest of the channel (its name, its settings) leaves its row as it is.
-		if _, err := tx.Exec(ctx, `UPDATE zalo_channels SET staff_user_ids=COALESCE($3,staff_user_ids),groups=COALESCE($4::jsonb,groups),updated_at=now()
-			WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID, value.StaffUserIDs, groups); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE zalo_channels SET staff_user_ids=COALESCE($3,staff_user_ids),groups=COALESCE($4::jsonb,groups),
+			site_verification=CASE WHEN $5::text IS NULL THEN site_verification ELSE NULLIF($5,'') END,updated_at=now()
+			WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID, value.StaffUserIDs, groups, value.SiteVerification); err != nil {
 			return channels.Event{}, fmt.Errorf("save zalo channel: %w", err)
 		}
 		return channels.Event{Kind: "config_changed", Detail: change.Detail}, nil
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO zalo_channels(workspace_id,channel_id,app_id,staff_user_ids,groups)
-		VALUES($1,$2,$3,COALESCE($4,'{}'::text[]),COALESCE($5::jsonb,'{}'))
+	if _, err := tx.Exec(ctx, `INSERT INTO zalo_channels(workspace_id,channel_id,app_id,staff_user_ids,groups,site_verification)
+		VALUES($1,$2,$3,COALESCE($4,'{}'::text[]),COALESCE($5::jsonb,'{}'),NULLIF($6,''))
 		ON CONFLICT(workspace_id,channel_id) DO UPDATE SET app_id=COALESCE($3,zalo_channels.app_id),
-			staff_user_ids=COALESCE($4,zalo_channels.staff_user_ids),groups=COALESCE($5::jsonb,zalo_channels.groups),updated_at=now()`,
-		channel.WorkspaceID, channel.ID, value.AppID, value.StaffUserIDs, groups); err != nil {
+			staff_user_ids=COALESCE($4,zalo_channels.staff_user_ids),groups=COALESCE($5::jsonb,zalo_channels.groups),
+			site_verification=CASE WHEN $6::text IS NULL THEN zalo_channels.site_verification ELSE NULLIF($6,'') END,updated_at=now()`,
+		channel.WorkspaceID, channel.ID, value.AppID, value.StaffUserIDs, groups, value.SiteVerification); err != nil {
 		return channels.Event{}, fmt.Errorf("save zalo channel: %w", err)
 	}
 	return channels.Event{Kind: "config_changed", Detail: change.Detail}, nil
@@ -250,6 +272,7 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 // settings is the channel's row of zalo_channels.
 type settings struct {
 	AppID           string
+	SiteCode        *string
 	Staff           []string
 	Groups          map[string]string
 	SignatureFailed *time.Time
@@ -258,8 +281,8 @@ type settings struct {
 func readSettings(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (settings, error) {
 	var s settings
 	var groups []byte
-	err := tx.QueryRow(ctx, `SELECT app_id,staff_user_ids,groups,signature_failed_at FROM zalo_channels WHERE workspace_id=$1 AND channel_id=$2`,
-		workspaceID, channelID).Scan(&s.AppID, &s.Staff, &groups, &s.SignatureFailed)
+	err := tx.QueryRow(ctx, `SELECT app_id,staff_user_ids,groups,signature_failed_at,site_verification FROM zalo_channels WHERE workspace_id=$1 AND channel_id=$2`,
+		workspaceID, channelID).Scan(&s.AppID, &s.Staff, &groups, &s.SignatureFailed, &s.SiteCode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return settings{Staff: []string{}, Groups: map[string]string{}}, nil
 	}
@@ -280,7 +303,8 @@ func (config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (
 	if err != nil {
 		return nil, err
 	}
-	public := Public{OAID: channel.ExternalAccount, AppID: s.AppID, StaffUserIDs: s.Staff, Groups: s.Groups, WebhookPath: "/api/v1" + WebhookPath}
+	public := Public{OAID: channel.ExternalAccount, AppID: s.AppID, StaffUserIDs: s.Staff, Groups: s.Groups, WebhookPath: "/api/v1" + WebhookPath,
+		SiteVerification: s.SiteCode, VerificationPrefixPath: "/api/v1" + VerificationDir + "/"}
 	stored := map[string]CredentialState{}
 	rows, err := tx.Query(ctx, `SELECT name,hint,updated_at FROM channel_credentials WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID)
 	if err != nil {

@@ -8179,6 +8179,10 @@ export interface components {
             };
             /** @description The app's one webhook, below the server's address, for the Zalo app's settings (/api/v1/channels/zalo/webhook). */
             webhook_path: string;
+            /** @description The code Zalo gave the app to verify the URL prefix of its webhook with the HTML file method, or null. While a live channel of the server holds it, GET (and HEAD) {verification_prefix_path}zalo_verifier{code}.html answers Zalo's file (text/html) to anyone, as the file is public; any other name below the prefix answers the server's 404 for a path it does not have. Not a secret. */
+            site_verification: string | null;
+            /** @description The URL prefix to verify in the Zalo app (Domain verification › URL prefix), below the server's address (/api/v1/channels/zalo/); it covers the webhook. */
+            verification_prefix_path: string;
             /** @description The four secrets in order (app_secret, oa_secret_key, access_token, refresh_token): whether each is set, its last four characters and when it was last written (a token refresh too). Never a value. */
             credentials: {
                 /** @enum {string} */
@@ -8242,6 +8246,8 @@ export interface components {
             groups?: {
                 [key: string]: string;
             };
+            /** @description Zalo's site verification code (letters, digits, _ and -, 8 to 100 characters). The TXT value (zalo-platform-site-verification=<code>), the meta tag, the file's name or address, or the whole file may be pasted instead: the code is read from it. An empty string clears it. */
+            site_verification?: string;
         };
         /** @description A channel's configuration as its type takes it. */
         ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
