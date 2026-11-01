@@ -15,7 +15,10 @@ const (
 	channelOutput   = `{"type":"object","required":["channel"],"properties":{"channel":{"type":"object"}}}`
 	channelSettings = `"settings":{"type":"object","description":"The channel's rules over its type's defaults: join_policy {kind: always_reopen, within_days with days, never}, ` +
 		`default_tags, default_priority, default_assignee_id, rate_limits {window_seconds, per_sender, new_conversations, scope}, commands (name to {action, phrases, tags, priority}), review, scopes, notices {received}. Never a secret."}`
-	channelConfig  = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}; help_chat {greeting, suggestions (at most 4), instructions, widget_origins}."}`
+	channelConfig = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}; help_chat {greeting, suggestions (at most 4), instructions, widget_origins}; ` +
+		`zalo {oa_id, app_id (both to add one), staff_user_ids, groups (group id to organization), site_verification (the code Zalo gives the app's URL prefix with the HTML file method; the meta tag or file name may be given; empty clears it)}. ` +
+		`Setting up Zalo: Zalo takes the webhook only on a verified address, so give the person the channel's verification_prefix_url to verify in the Zalo app (URL prefix, HTML file method), ` +
+		`set the code Zalo shows as site_verification with colliedesk_channels_update, then give them webhook_url for the app's webhook settings."}`
 	channelDefault = `"is_default":{"type":"boolean","enum":[true],"description":"true makes the channel its type's default; the one that was loses it."}`
 	heldEventIDs   = `"event_ids":{"type":"array","maxItems":500,"items":{"type":"string",` + uuid + `},"description":"Leave out for every held message."}`
 )
@@ -37,7 +40,7 @@ func channelsListSpec() Spec {
 func channelsGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_get", Title: "Show a channel",
-		Description: `Show one channel with its configuration as its type shows it (never a secret).` + "\n\nTier: read.",
+		Description: `Show one channel with its configuration as its type shows it (never a secret). A Zalo channel's config has the absolute verification_prefix_url and webhook_url to give the person for the Zalo app.` + "\n\nTier: read.",
 		Tier:        "read", ReadOnly: true,
 		REST:   []string{"GET /api/v1/channels/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
@@ -122,7 +125,8 @@ func channelsCredentialsSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_channels_credentials_set",
 		Title: "Set a channel's secret",
-		Description: `Store a secret a channel's type needs (an access token of its account). It is sealed and only its last four characters are shown again.` +
+		Description: `Store a secret a channel's type needs (an access token of its account). It is sealed and only its last four characters are shown again. ` +
+			`The names by type: zalo: app_secret, oa_secret_key, access_token, refresh_token (email, web_form and help_chat keep none here).` +
 			"\n\nTier: admin (a lower tier is refused, so the secret never waits in a request).",
 		Tier: "admin",
 		REST: []string{"PUT /api/v1/channels/{id}/credentials"},

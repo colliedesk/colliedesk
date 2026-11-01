@@ -54,7 +54,8 @@ const (
 	// PrivilegeChannelRoute resolves the live channel that is an account outside (a chat account), from
 	// an event a channel's webhook received, or that a public address names by its random id (a web
 	// form's own address). Accounts are unique on the server; only the workspace and channel ids leave
-	// the transaction.
+	// the transaction. It also answers whether a live Zalo channel holds a site verification code, for
+	// the public file Zalo fetches (the code is public); only the yes or no leaves.
 	PrivilegeChannelRoute Privilege = "channel-route"
 	// PrivilegeChannelInboundClaim leases due events of the channel journal of every workspace (received,
 	// failed, or collected until their flush time) for the inbound worker; each is then processed in its

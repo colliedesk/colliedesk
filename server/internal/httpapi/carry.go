@@ -23,6 +23,7 @@ type Carry struct {
 	testMessages, migrationRequests     *webFormLimiter
 	helpCenterPages, helpCenterSearches *webFormLimiter
 	helpCenterHostLookups               *webFormLimiter
+	channelFileLookups                  *webFormLimiter
 	certificateNotes                    *webFormLimiter
 	operatorSignIns, operatorSignInIPs  *webFormLimiter
 	mailImageLimits                     *mailImageLimiter
@@ -47,6 +48,10 @@ const (
 	operatorSignInsPerAddressPerMinute = 60
 )
 
+// channelFileLookupsPerAddress bounds the channel types' public files (a provider's site verification
+// file) one client address may ask for per minute; each name that looks like one is a privileged lookup.
+const channelFileLookupsPerAddress = 30
+
 // NewCarry makes the state a process's APIs share, sized by config as New would.
 func NewCarry(config Config) *Carry {
 	clock := config.Now
@@ -64,11 +69,12 @@ func NewCarry(config Config) *Carry {
 		migrationRequests: newWindowLimiter(migrationRequestsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages:   newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
-		operatorSignIns:   newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),
-		operatorSignInIPs: newWindowLimiter(operatorSignInsPerAddressPerMinute, webFormMaxKeys, time.Minute),
-		mailImageLimits:   newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
-		liveChecks:        helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
-		alerted:           &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
+		channelFileLookups: newWebFormLimiter(channelFileLookupsPerAddress, webFormMaxKeys),
+		operatorSignIns:    newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),
+		operatorSignInIPs:  newWindowLimiter(operatorSignInsPerAddressPerMinute, webFormMaxKeys, time.Minute),
+		mailImageLimits:    newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
+		liveChecks:         helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
+		alerted:            &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
 		founding: &foundingState{}, trial: &trialEvidence{}, helpChat: &helpChatLimiters{}, chatGate: ai.NewChatGate(),
 	}
 }

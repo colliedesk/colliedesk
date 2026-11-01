@@ -32,6 +32,20 @@ Under **Connect your agent**, Settings shows these steps for Claude Code with yo
 
 `/mcp` in Claude Code lists `colliedesk` as connected.
 
+### Change the token
+
+When `/mcp` shows `colliedesk` as failed with HTTP 401, the token was revoked or has expired.
+Create a new one in **Settings → External AI agents** and give it to Claude Code:
+
+```text
+/colliedesk-token <your token>
+```
+
+Colliedesk checks the new token first and Claude Code saves it only when Colliedesk accepts it, so a
+mistyped token never replaces a working one. Then run `/reload-plugins` to reconnect. What you type
+stays in the session's history; `/plugin configure colliedesk@colliedesk` asks for the token without
+showing it.
+
 ### Without the plugin
 
 The MCP server alone, with the token in an environment variable. Put the `export` line in your
