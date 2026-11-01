@@ -91,20 +91,24 @@ type ChannelEvent struct {
 // failed, dropped, or kept without a conversation (a group's chatter). Its raw payload is here, or in
 // the archive at raw_path; its fetched files are in the archive too.
 type ChannelInboundEvent struct {
-	ID              string               `json:"id"`
-	ChannelID       string               `json:"channel_id"`
-	ExternalEventID *string              `json:"external_event_id"`
-	State           string               `json:"state"`
-	Raw             json.RawMessage      `json:"raw"`
-	RawPath         *string              `json:"raw_path"`
-	HoldReason      *string              `json:"hold_reason"`
-	DropReason      *string              `json:"drop_reason"`
-	Error           *string              `json:"error"`
-	ReceivedAt      time.Time            `json:"received_at"`
-	ProcessedAt     *time.Time           `json:"processed_at"`
-	Files           []ChannelInboundFile `json:"files"`
-	RawKey          string               `json:"-"`
-	RawSize         int64                `json:"-"`
+	ID              string          `json:"id"`
+	ChannelID       string          `json:"channel_id"`
+	ExternalEventID *string         `json:"external_event_id"`
+	State           string          `json:"state"`
+	Raw             json.RawMessage `json:"raw"`
+	RawPath         *string         `json:"raw_path"`
+	HoldReason      *string         `json:"hold_reason"`
+	DropReason      *string         `json:"drop_reason"`
+	Error           *string         `json:"error"`
+	// DecisionBasis and DecisionRule are what the channel's rules decided (match, default, person, and
+	// the rule's name); null for what the frame handled before them or what is still being collected.
+	DecisionBasis *string              `json:"decision_basis"`
+	DecisionRule  *string              `json:"decision_rule"`
+	ReceivedAt    time.Time            `json:"received_at"`
+	ProcessedAt   *time.Time           `json:"processed_at"`
+	Files         []ChannelInboundFile `json:"files"`
+	RawKey        string               `json:"-"`
+	RawSize       int64                `json:"-"`
 }
 
 // ChannelInboundFile is a file fetched for an event, or why it could not be.
@@ -777,8 +781,12 @@ type Message struct {
 	ChannelID   *string         `json:"channel_id"`
 	ExternalID  *string         `json:"external_id"`
 	ChannelMeta json.RawMessage `json:"channel_meta"`
-	CreatedAt   time.Time       `json:"created_at"`
-	Attachments []Attachment    `json:"attachments"`
+	// DecisionBasis and DecisionRule say why a message from a channel is in this conversation: what the
+	// channel's rules decided (match, default, person; new_thread, thread_key…). Null for the others.
+	DecisionBasis *string      `json:"decision_basis"`
+	DecisionRule  *string      `json:"decision_rule"`
+	CreatedAt     time.Time    `json:"created_at"`
+	Attachments   []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.

@@ -124,6 +124,8 @@ type Loopback struct {
 	IntakeScopes []string
 	// ExtraScopes are declared after user and group.
 	ExtraScopes []string
+	// SharedScopes are the scopes it declares several customers write in.
+	SharedScopes []string
 }
 
 // NewLoopback returns the Async loopback type with an endpoint.
@@ -138,7 +140,7 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 
 func (l *Loopback) Definition() channels.Definition {
 	return channels.Definition{Type: l.Type, Identified: true, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
-		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: append([]string{"user", "group"}, l.ExtraScopes...), IntakeScopes: l.IntakeScopes,
+		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: append([]string{"user", "group"}, l.ExtraScopes...), IntakeScopes: l.IntakeScopes, SharedScopes: l.SharedScopes,
 		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
 		Routes:     []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
 		HelpCenterRoutes: []channels.HelpCenterRoute{{Method: http.MethodGet, Path: "/" + string(l.Type), Handler: l.helpCenter},

@@ -50,6 +50,26 @@ fails when shared code names a type; `TestEveryRegisteredTypeIsWhole` when a reg
 No file of the shared code changes. When one has to, the frame lacks something: fix the frame first, in
 its own change.
 
+## Rules decide first
+
+What a message is (a new conversation, part of one, chatter kept without one, held for a person, a
+cancel) is `intake/rules.Decide`, a pure function of facts the store reads in the order the rules use
+them: the cancel before the rate limit and the storage check, a scope's chatter and review before the
+contact is looked up (archived chatter creates no contact), then the reopen reference and the thread.
+Each decision has a basis: **match** (a command, a reference, a thread key: evidence the message
+carries), **default** (what the scope does with a message that carries none), or **person** (a held
+message put in a conversation). The journal keeps both (`channel_inbound_events.decision_basis`,
+`decision_rule`); a duplicate, an echo, a channel off and a message still being collected keep none,
+since the frame handled them before the rules. An AI decider may only ever replace a default.
+
+1. The code is the table, not the design's: an open command whose thread key finds a conversation
+   joins it; a reference the join policy refuses lets the next reference try, while a refused thread key
+   ends the search (`join_policy`).
+2. **Shared scopes** (`Definition.SharedScopes`, a chat's groups): a reference to another sender's
+   message (its journal row's `sender_key`) is no match there (`reference_other_customer`, default), so
+   a reply to someone else never files the message in their request. Only a shared scope reads the
+   sender, so email gains no query.
+
 ## Decisions
 
 - **Journal timing.** An Async type (a chat webhook that must answer within seconds) commits the raw
