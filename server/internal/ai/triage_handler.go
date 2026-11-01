@@ -68,7 +68,7 @@ func (s *Service) loadTriageContext(ctx context.Context, run *Run) (triageContex
 		}
 		// The first customer message: what the ticket is about. Never a private note.
 		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT body FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
-			ORDER BY created_at,id LIMIT 1),'')`, ws, run.Task.ConversationID).Scan(&c.message); err != nil {
+			AND detached_at IS NULL ORDER BY created_at,id LIMIT 1),'')`, ws, run.Task.ConversationID).Scan(&c.message); err != nil {
 			return err
 		}
 		c.message = cut(strings.TrimSpace(c.message), triageMessageRunes)

@@ -214,8 +214,10 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 			return discarded{}, err
 		}
 		count := len(keys)
-		// A gathering set aside whose messages are all thrown away is over.
+		// A gathering set aside whose held messages are all thrown away is over. A card of messages taken
+		// back to the queue holds no held message: it is never ended here.
 		if _, err := tx.Exec(ctx, `UPDATE intake_gatherings g SET state='cancelled',updated_at=now() WHERE g.workspace_id=$1 AND g.channel_id=$2 AND g.state='ignored'
+			AND EXISTS(SELECT 1 FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id)
 			AND NOT EXISTS(SELECT 1 FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id AND e.state<>'discarded')`,
 			workspaceID, channelID); err != nil {
 			return discarded{}, fmt.Errorf("end discarded gatherings: %w", err)

@@ -144,6 +144,8 @@ var requestTitles = map[string]string{
 	"PATCH /api/v1/ai/providers/{id}":                            "Loosen an AI provider's routing",
 	"POST " + intakeDecideRoute:                                  "Decide a card of the intake queue",
 	"POST /api/v1/intake/gatherings/{id}/requeue":                "Put a card back in the intake queue",
+	"POST /api/v1/conversations/{id}/messages/move":              "Move customer messages to another conversation",
+	"POST /api/v1/message-moves/{id}/undo":                       "Undo a move of customer messages",
 	"DELETE /api/v1/ai/source-consents/{class}":                  "Stop AI intake sending some data",
 	"PATCH /api/v1/conversations/{id}":                           "Change a conversation",
 	"PUT /api/v1/conversations/{id}/tags/{tagId}":                "Tag a conversation",

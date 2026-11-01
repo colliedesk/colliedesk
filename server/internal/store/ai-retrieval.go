@@ -585,7 +585,7 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 				UNION SELECT f.value FROM ai_retrieval_former_names f JOIN contacts x ON x.workspace_id=f.workspace_id AND x.id=f.contact_id
 				WHERE f.workspace_id=c.workspace_id AND f.kind='organization' AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
 			c.updated_at,
-			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' ORDER BY m.created_at, m.id LIMIT 1),
+			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND m.detached_at IS NULL ORDER BY m.created_at, m.id LIMIT 1),
 			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' ORDER BY m.created_at DESC, m.id DESC LIMIT 1)
 		FROM conversations c
 		WHERE c.workspace_id=$1 AND c.id=ANY($2::uuid[]) AND c.status IN ('resolved','closed')`, workspaceID, ids)

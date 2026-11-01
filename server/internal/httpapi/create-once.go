@@ -31,6 +31,8 @@ const (
 	previewAIChatOperation      = "ai_chat_preview"
 	decideIntakeOperation       = "intake_decide"
 	requeueIntakeOperation      = "intake_requeue"
+	moveMessagesOperation       = "message_move"
+	undoMessageMoveOperation    = "message_move_undo"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first

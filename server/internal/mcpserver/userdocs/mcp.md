@@ -215,6 +215,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_intake_summary` | Says how many intake cards wait for a person and for AI, and the chat channels they come from | `read` |
 | `colliedesk_intake_stats` | Counts a period of intake: by state, by who decided, and AI's decisions a person changed | `read` |
 | `colliedesk_conversation_intake_get` | Reads why each message from a channel is in a conversation | `read` |
+| `colliedesk_messages_move` | Moves customer messages to another conversation, a new one, or back to a chat's intake queue | `draft` |
+| `colliedesk_message_moves_list` | Lists the moves of messages out of or into a conversation | `read` |
+| `colliedesk_message_move_undo` | Undoes a move of customer messages | `draft` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
 | `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |
