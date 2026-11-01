@@ -179,13 +179,14 @@ func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 		"strong":        strings.Repeat("**a", 33333),
 		"email-like":    strings.Repeat("*a", 49990) + "@example.com",
 	} {
-		started := time.Now()
-		if _, err := renderArticle(body, ""); err != nil {
-			t.Fatal(err)
-		}
-		excerpt(body, descriptionChars)
-		if took := time.Since(started); took > 500*time.Millisecond {
-			t.Errorf("%s took %s", name, took)
+		took := bestOf(3, func() {
+			if _, err := renderArticle(body, ""); err != nil {
+				t.Fatal(err)
+			}
+			excerpt(body, descriptionChars)
+		})
+		if took > 500*time.Millisecond {
+			t.Errorf("%s took %s, best of 3", name, took)
 		}
 	}
 }
@@ -265,12 +266,13 @@ func TestHeadingIDsAreGoldmarksInLinearTime(t *testing.T) {
 		t.Errorf("ids %q\nwant %q", got, want)
 	}
 	for name, body := range map[string]string{"atx": strings.Repeat("# a\n", 25000), "setext": strings.Repeat("a\n---\n", 16000)} {
-		started := time.Now()
-		if _, err := renderArticle(body, ""); err != nil {
-			t.Fatal(err)
-		}
-		if took := time.Since(started); took > 500*time.Millisecond {
-			t.Errorf("%s headings took %s", name, took)
+		took := bestOf(3, func() {
+			if _, err := renderArticle(body, ""); err != nil {
+				t.Fatal(err)
+			}
+		})
+		if took > 500*time.Millisecond {
+			t.Errorf("%s headings took %s, best of 3", name, took)
 		}
 	}
 }
@@ -318,4 +320,20 @@ func TestLinkifyLinksWhatGoldmarkLinks(t *testing.T) {
 	if strings.Join(ours, " ") != strings.Join(want, " ") {
 		t.Errorf("links\n%q\nwant\n%q", ours, want)
 	}
+}
+
+// bestOf runs f n times and returns its fastest run. A budget on one run fails whenever the shared CI
+// host stalls the test for a moment (the "tildes" body took 528 to 570 ms there);
+// the fastest of three still fails a body that the renderer handles slowly every time, which is what the
+// budget is for (docs/internals/performance.md keeps the same rule for its gates).
+func bestOf(n int, f func()) time.Duration {
+	best := time.Duration(1<<63 - 1)
+	for range n {
+		started := time.Now()
+		f()
+		if took := time.Since(started); took < best {
+			best = took
+		}
+	}
+	return best
 }

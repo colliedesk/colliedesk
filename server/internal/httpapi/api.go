@@ -241,7 +241,9 @@ type API struct {
 	problemReports *webFormLimiter
 	// testMessages limits the test messages a workspace sends itself per hour.
 	testMessages *webFormLimiter
-	polar        *polar.Client
+	// migrationRequests limits the Freshdesk migration requests a workspace sends per hour.
+	migrationRequests *webFormLimiter
+	polar             *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
 	founding *foundingState
@@ -355,7 +357,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
-		testMessages: carry.testMessages, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
+		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
 		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
@@ -639,6 +641,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/billing", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
+		{http.MethodPost, "/api/v1/billing/migration-request", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 		{http.MethodPost, resendWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, foundingPath, auth.PermissionPublic},

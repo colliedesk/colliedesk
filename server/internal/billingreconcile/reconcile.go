@@ -101,7 +101,10 @@ func Run(ctx context.Context, source Source, data Data, products polar.Products,
 		incoming := sub.Stored(plan)
 		stored, have := snapshot.Subscriptions[workspaceID][sub.ID]
 		switch {
-		case have && !incoming.ModifiedAt.After(stored.ModifiedAt):
+		case have && incoming.ModifiedAt.Before(stored.ModifiedAt):
+			continue
+		// The same state is in sync once the row keeps its product; one stored before that is filled.
+		case have && incoming.ModifiedAt.Equal(stored.ModifiedAt) && stored.ProductID != "":
 			continue
 		case !have && !incoming.Entitled(now):
 			// Never stored and grants nothing: there is no access to restore.
@@ -122,8 +125,9 @@ func Run(ctx context.Context, source Source, data Data, products polar.Products,
 	}
 	for i := range report.Changes {
 		change := &report.Changes[i]
-		// The webhook id is derived from the subscription state, so a repeated run is a duplicate.
-		webhookID := fmt.Sprintf("reconcile:%s:%s", change.Polar.SubscriptionID, change.Polar.ModifiedAt.UTC().Format(time.RFC3339Nano))
+		// The webhook id is derived from the subscription state and its product, so a repeated run is a
+		// duplicate, and a state an earlier release reconciled without the product is written again.
+		webhookID := fmt.Sprintf("reconcile:%s:%s:%s", change.Polar.SubscriptionID, change.Polar.ModifiedAt.UTC().Format(time.RFC3339Nano), change.Polar.ProductID)
 		result, err := data.ApplySubscription(ctx, change.WorkspaceID, webhookID, "reconcile", change.Polar)
 		if err != nil {
 			change.Result = ResultFailed
