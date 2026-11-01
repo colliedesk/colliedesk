@@ -43,7 +43,35 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
 
 ## Checking it
 
-With `META_CONVERSIONS_TEST_EVENT_CODE` set, sign up from a link with `fbclid=test123` (a team
-address, see AGENTS.md "Testing on Colliedesk Cloud"). Events Manager → Test events shows one
-`StartTrial` whose event id is the workspace id. `SELECT event_name, attempts, sent_at, last_error FROM
-meta_conversion_events` shows what the worker did.
+### When to run a test
+
+1. Once after the first deploy that sets the variables.
+2. After a new dataset or a new access token.
+3. After a release that changes sign-up, onboarding, billing webhooks or `GraphVersion`.
+4. When ads get clicks but Events Manager shows no `StartTrial` for 3 days.
+
+### Steps (the owner can run them; an agent changes the server)
+
+> Warning: while `META_CONVERSIONS_TEST_EVENT_CODE` is set, every real event also goes to Test
+> events only, so Meta stops learning from real trials. Unset it on the same day.
+
+1. In Events Manager, open the `Colliedesk` dataset, then **Test events**. Copy the test code
+   (`TEST…`). It is not a secret.
+2. An agent sets `META_CONVERSIONS_TEST_EVENT_CODE` to that code on Cloud and restarts the server.
+3. Open a private browser window.
+4. Open `https://app.colliedesk.com/sign-in?intent=trial&fbclid=test123`.
+5. Sign up with a team address (see AGENTS.md "Testing on Colliedesk Cloud"), for example
+   `chinh+meta1@hclabs.co`. Name the workspace `test-meta-1`. A workspace sends `StartTrial` once,
+   so each new test needs a new address and workspace.
+6. Within one minute, Test events shows one `StartTrial`. Its event id is the workspace id.
+7. An agent unsets the variable and restarts the server.
+
+`Subscribe` needs a real payment, so it is not part of this test. After the first paid workspace that
+came from an ad, check its row instead. If Test events stays empty, `SELECT event_name, attempts,
+sent_at, last_error FROM meta_conversion_events` shows what the worker did.
+
+### Ad links
+
+The sign-in page reads `fbclid` from its own address. Until colliedesk.com forwards `utm_*`,
+`ttclid` and `fbclid` to its trial links, an ad that lands on colliedesk.com loses the click ID and
+no event is sent. Point Meta ads at the app sign-in link, or ship the site forwarding first.
