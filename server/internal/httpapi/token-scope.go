@@ -268,6 +268,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/{id}/email/test-message":   grant(auth.PermConversationsUpdate),
 	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
 	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),
+	"PATCH /api/v1/agents/me/sla-alerts":              grant(auth.PermProfileUpdate),
 	"PATCH /api/v1/agents/me/display-name":            grant(auth.PermProfileUpdate),
 	"GET /api/v1/billing":                             grant(auth.PermBillingRead),
 	"PATCH /api/v1/workspace/timezone":                grant(auth.PermWorkspaceUpdate),
@@ -282,16 +283,20 @@ var tokenTiers = map[string]TokenAccess{
 	"PUT /api/v1/help-center/theme":                   grant(auth.PermHelpCenterUpdate),
 	"PUT /api/v1/help-center/search-console":          grant(auth.PermHelpCenterUpdate),
 
-	"POST /api/v1/auth/tokens":               alwaysAsk(auth.PermTeamCreateTokens),
-	"POST /api/v1/auth/invites":              alwaysAsk(auth.PermTeamInvite),
-	"GET /api/v1/export":                     alwaysAsk(auth.PermWorkspaceExport),
-	"POST /api/v1/export/link":               alwaysAsk(auth.PermWorkspaceExport),
-	"POST /api/v1/billing/checkout":          alwaysAsk(auth.PermBillingManage),
-	"POST /api/v1/billing/portal":            alwaysAsk(auth.PermBillingManage),
-	"POST /api/v1/billing/migration-request": alwaysAsk(auth.PermBillingManage),
-	"DELETE /api/v1/channels/email":          alwaysAsk(auth.PermChannelsManageCredentials),
-	"POST /api/v1/channels/email/secret":     alwaysAsk(auth.PermChannelsManageCredentials),
-	"PATCH /api/v1/workspace/slug":           alwaysAsk(auth.PermWorkspaceUpdate),
+	"POST /api/v1/auth/tokens":                        alwaysAsk(auth.PermTeamCreateTokens),
+	"POST /api/v1/auth/invites":                       alwaysAsk(auth.PermTeamInvite),
+	"GET /api/v1/export":                              alwaysAsk(auth.PermWorkspaceExport),
+	"POST /api/v1/export/link":                        alwaysAsk(auth.PermWorkspaceExport),
+	"POST /api/v1/billing/checkout":                   alwaysAsk(auth.PermBillingManage),
+	"POST /api/v1/billing/portal":                     alwaysAsk(auth.PermBillingManage),
+	"POST /api/v1/billing/migration-request":          alwaysAsk(auth.PermBillingManage),
+	"DELETE /api/v1/channels/email":                   alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST /api/v1/channels/email/secret":              alwaysAsk(auth.PermChannelsManageCredentials),
+	"PATCH /api/v1/workspace/slug":                    alwaysAsk(auth.PermWorkspaceUpdate),
+	"GET /api/v1/conversation-number-series":          grant(auth.PermConversationsRead),
+	"PUT /api/v1/conversation-number-series/{series}": alwaysAsk(auth.PermWorkspaceUpdate),
+	"GET /api/v1/response-targets":                    grant(auth.PermConversationsRead),
+	"PUT /api/v1/response-targets":                    alwaysAsk(auth.PermWorkspaceUpdate),
 	// Connecting Gmail grants Colliedesk a sending identity (and the consent address is for a person's
 	// browser); disconnecting changes the address customers get replies from.
 	"POST " + gmailPath:   alwaysAsk(auth.PermChannelsManageCredentials),
@@ -335,10 +340,16 @@ var tokenTiers = map[string]TokenAccess{
 	// leaving, like turning a feature on; taking it back only lowers.
 	"PUT /api/v1/ai/source-consents/{class}":    alwaysAsk(auth.PermAISettingsUpdate),
 	"DELETE /api/v1/ai/source-consents/{class}": grant(auth.PermAISettingsUpdate),
+	// Readiness says whether AI may act on its own; recording an evaluation can open a gate, so a token's
+	// record waits for a person like any raise.
+	"GET /api/v1/channels/{id}/ai/intake/readiness":    grant(auth.PermChannelsRead),
+	"POST /api/v1/channels/{id}/ai/intake/evaluations": alwaysAsk(auth.PermAISettingsUpdate),
+	"GET /api/v1/channels/{id}/ai/intake/evaluations":  grant(auth.PermChannelsRead),
 	// What was said in a chat channel's places, as the conversations' messages are read.
 	"GET /api/v1/conversations/{id}/chat":                grant(auth.PermMessagesRead),
 	"GET /api/v1/channels/{id}/threads":                  grant(auth.PermMessagesRead),
 	"GET /api/v1/channels/{id}/threads/{threadId}/items": grant(auth.PermMessagesRead),
+	"GET /api/v1/channels/{id}/senders":                  grant(auth.PermMessagesRead),
 	"GET /api/v1/channel-thread-items":                   grant(auth.PermMessagesRead),
 	// The intake queue shows what customers wrote; deciding a card opens a conversation (and may tell
 	// the customer it was received), joins one or sets the card aside.

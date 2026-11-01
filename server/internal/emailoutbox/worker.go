@@ -46,6 +46,8 @@ type Sender interface {
 
 // Options tune the worker; zero values use the defaults.
 type Options struct {
+	// Wake starts a round at once (outbox.Options.Wake).
+	Wake        <-chan struct{}
 	Now         func() time.Time
 	MaxAttempts int
 	Lease       time.Duration
@@ -106,7 +108,7 @@ func Backoff(attempt int) time.Duration { return outbox.Backoff(attempt) }
 
 // worker is the shared outbox worker that sends email through w.
 func (w *Worker) worker() *outbox.Worker {
-	return outbox.New(w.store, outbox.Options{Now: w.options.Now, MaxAttempts: w.options.MaxAttempts, Lease: w.options.Lease,
+	return outbox.New(w.store, outbox.Options{Wake: w.options.Wake, Now: w.options.Now, MaxAttempts: w.options.MaxAttempts, Lease: w.options.Lease,
 		BatchSize: w.options.BatchSize, Logger: w.options.Logger, Senders: map[channels.Type]channels.OutboundPart{domain.ChannelEmail: w}})
 }
 

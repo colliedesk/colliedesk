@@ -875,7 +875,7 @@ export interface paths {
         head?: never;
         /**
          * Change up to 50 conversations at once
-         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added.
+         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50 conversations as for one; a conversation whose status changes again before then is told only the later change.
          */
         patch: operations["bulkUpdateConversations"];
         trace?: never;
@@ -895,6 +895,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A token that may not write to customers (below the send tier) asks a person first (202) when the change would tell one, with a summary that quotes the notice; a quiet change does not ask. The conversation's `status_notices` says beforehand which statuses would tell. */
         patch: operations["updateConversation"];
         trace?: never;
     };
@@ -1356,6 +1357,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/ai/intake/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; an admin may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
+        get: operations["getIntakeReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/ai/intake/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The offline evaluations recorded for a chat channel's intake, newest first (at most 100); scope narrows them. */
+        get: operations["listIntakeEvaluations"];
+        put?: never;
+        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. Only admins; an agent token's record is an agent request a person approves, since it can open a gate. */
+        post: operations["recordIntakeEvaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/threads": {
         parameters: {
             query?: never;
@@ -1367,6 +1407,25 @@ export interface paths {
         };
         /** @description The places of a chat channel (one-to-one chats and groups), most recently active first, each with its newest item. Empty for a channel type without places (email, a web form). No public route reads a thread: a customer never sees another customer's message. */
         get: operations["listChannelThreads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/senders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The people who wrote in a chat channel's places (customers and the team, never the channel itself), each once with the place and time they last wrote, most recent first, at most 200: every member of a group, not only its last writer. Empty for a channel type without places. */
+        get: operations["listChannelSenders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1989,6 +2048,77 @@ export interface paths {
         head?: never;
         /** @description Rename the workspace. The team sees the name in the workspace switcher and Settings. Customers see it as the help center title while the help center has no title of its own; replies never carry it, because every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is 2 to 60 characters without line breaks or other control characters (400 otherwise). On Colliedesk Cloud a name with a well-known brand in it is refused (422), as at sign-up. */
         patch: operations["updateWorkspaceName"];
+        trace?: never;
+    };
+    "/api/v1/conversation-number-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The series the workspace's conversations are numbered in, the default one ("#{n}") first: each with its code format, the number the next conversation takes, and where this server took it over. */
+        get: operations["listConversationNumberSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversation-number-series/{series}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Add a series, or change its format, next number or start. A channel numbers the conversations it opens in the series its settings name (number_series). The next number only counts on: never below what it was, nor below a number the series gave. A code below start (in start_year or before) that is not here belongs to the system the series was taken over from. A new series needs its format: letters, digits, # - _ / . and {n} once, {n:04} to pad (2 to 8 digits), {yyyy} for the year it was opened in the workspace's timezone. Changing the format changes the codes of conversations opened afterwards. */
+        put: operations["setConversationNumberSeries"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/sla-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turn your own reminder and overdue emails of response targets on or off (my_alert_email of GET /api/v1/response-targets). */
+        patch: operations["setMySLAAlerts"];
+        trace?: never;
+    };
+    "/api/v1/response-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's response targets: business hours in a timezone, holidays, first-response and resolution targets by priority in business minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out. Never set, they are off with no hours and no targets. */
+        get: operations["getResponseTargets"];
+        /** @description Replace the response targets with this document. Turning them on measures the conversations opened from then on; turning them off hides every target and keeps what was measured. A wrong part answers 400 with its path in fields (hours.2.to, holidays.0.date, targets.urgent.resolution_minutes, timezone, channel_ids.0). Send updated_at as you read it to save only if nobody saved since: 409 changed_elsewhere otherwise, with the stored document as current, and nothing changes. Without it the last save wins. */
+        put: operations["setResponseTargets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/workspace/slug": {
@@ -4579,6 +4709,18 @@ export interface components {
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
+            /** @description What a status change tells customers, one per chat channel, always through that chat's channel: while it waits, what approving it would tell now; once approved, what it was to tell as it ran, read just before (an empty list when it told nobody: each conversation had that status already, or its approval failed; a change of several tells a few seconds later, and not one whose status changes again before then); once rejected or expired, what it would have told when the token asked. Kept with the call and cleared with it after the retention. Null for other calls and a quiet change, and in a list without detail=full. */
+            notices?: {
+                /** Format: uuid */
+                channel_id: string;
+                channel_name: string;
+                /** @description The display_ref of one of its conversations, whose notice text is */
+                example_ref: string;
+                /** @description The notice as that conversation's customer would read it, its placeholders filled */
+                text: string;
+                /** @description How many of the conversations it tells on this channel */
+                told: number;
+            }[] | null;
             /** @description For a request that edits, deletes or restores a saved reply: the reply as it was when the token asked (before) and as it is now (current, null once it is deleted for good), so the change can be shown as a difference. Only with detail=full and on a single request; null otherwise. */
             saved_reply: null | {
                 /** Format: uuid */
@@ -4750,6 +4892,21 @@ export interface components {
             instructions?: string;
             /** @description Words that mark a secret in the channel's language (a password, a code). */
             redact_keywords?: string[];
+            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Removing one needs the approval raising AI needs. */
+            contact_labels?: {
+                account?: string[];
+                id?: string[];
+            };
+            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs. */
+            redact_patterns?: {
+                pattern: string;
+                /** @enum {string} */
+                mask: "phone" | "id_number" | "account_number" | "hidden";
+            }[];
+            /** @description Actions AI may take on its own before readiness shows it is ready (an admin's call); needs gate_override_reason. Adding one needs the approval raising AI needs. */
+            gate_override?: ("create" | "attach" | "ignore")[];
+            /** @description Why the gates in gate_override were opened by hand. */
+            gate_override_reason?: string;
         };
         AIChannelLevel: {
             /** Format: uuid */
@@ -4793,6 +4950,13 @@ export interface components {
                     off_reason: "workspace_off" | null;
                     /** @description Intake only, with the defaults filled in. */
                     options: components["schemas"]["IntakeOptions"] | null;
+                    /** @description The server's last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider). */
+                    lowered?: {
+                        /** Format: date-time */
+                        at: string;
+                        /** @enum {string} */
+                        reason: "model_changed" | "recipient_changed";
+                    } | null;
                 }[];
             }[];
         };
@@ -4813,7 +4977,7 @@ export interface components {
             contact_id: string | null;
             /** Format: uuid */
             agent_id: string | null;
-            /** @description On a conversation's chat: a customer who is not the conversation's. */
+            /** @description On a conversation's chat: a customer who is not the conversation's (another contact, or, for chatter that names no contact, someone other than who wrote the conversation's own items). */
             is_other_customer: boolean;
             body: string;
             /** @description Its id on the channel. */
@@ -4830,7 +4994,7 @@ export interface components {
             disposition_reason: string | null;
             /** Format: date-time */
             occurred_at: string;
-            /** @description The files of an item that came in, as they were fetched; the conversation message it became has them as attachments. */
+            /** @description The files of an item that came in, as they were fetched (an imported item: the attachments of its message); the conversation message it became has them as attachments. */
             files: {
                 name: string;
                 content_type: string;
@@ -4842,6 +5006,11 @@ export interface components {
             linked: boolean;
             /** @enum {string|null} */
             link_reason: "opened" | "gathered" | "command" | "ai" | "agent" | "reopen" | "reply" | "import" | null;
+            /**
+             * @description A notice the channel sent in a chat where no conversation is (the unmatched notice): whether it went out. Null for every other item.
+             * @enum {string|null}
+             */
+            delivery_status?: "queued" | "sent" | "failed" | null;
         };
         ChatPage: {
             items: components["schemas"]["ChatItem"][];
@@ -4866,6 +5035,29 @@ export interface components {
             /** Format: date-time */
             last_item_at: string | null;
             last_item: components["schemas"]["ChatItem"] | null;
+        };
+        ChatSenderList: {
+            items: {
+                /** @description How the channel names them (zalo_user). */
+                kind: string;
+                /** @description Their id on the channel (a Zalo user id). */
+                value: string;
+                /** @description The name the channel last gave them; null while it gave none. */
+                name: string | null;
+                /**
+                 * @description What their last message was taken as: a team member of the channel, or a customer.
+                 * @enum {string}
+                 */
+                role: "customer" | "staff";
+                /** Format: date-time */
+                last_at: string;
+                /**
+                 * Format: uuid
+                 * @description The place they last wrote in.
+                 */
+                thread_id: string;
+                thread_name: string | null;
+            }[];
         };
         ChatThreadPage: {
             items: components["schemas"]["ChatThread"][];
@@ -4941,6 +5133,139 @@ export interface components {
             } | null;
             /** @description The beginning of what the customer wrote first. */
             preview: string;
+            /** @description What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done. */
+            suggestion: components["schemas"]["IntakeSuggestion"] | null;
+        };
+        IntakeSuggestion: {
+            /** Format: uuid */
+            decision_id: string;
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore";
+            /**
+             * Format: uuid
+             * @description With attach.
+             */
+            target_conversation_id: string | null;
+            target_subject: string | null;
+            /** @description resolved or closed: following it reopens the conversation, except a resolved one when reply_kind is acknowledgement. */
+            target_status: components["schemas"]["ConversationStatus"] | null;
+            /**
+             * Format: uuid
+             * @description The second most likely conversation.
+             */
+            runner_up_conversation_id: string | null;
+            runner_up_subject: string | null;
+            runner_up_confidence: number | null;
+            confidence: number | null;
+            /** @description With create: the command whose tags and priority it opens with. */
+            command: string | null;
+            /** @description With create. */
+            subject: string | null;
+            /**
+             * @description acknowledgement: the customer only thanked or acknowledged.
+             * @enum {string|null}
+             */
+            reply_kind: "substantive" | "acknowledgement" | null;
+            ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
+            reason: string | null;
+            /**
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).
+             * @enum {string}
+             */
+            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";
+            /** Format: date-time */
+            created_at: string;
+        };
+        IntakeCounts: {
+            labels: number;
+            correct: number;
+            /** @description attach: a new request merged into an old conversation; ignore: a request set aside; create: none. */
+            severe: number;
+            light: number;
+        };
+        IntakeEvaluationInput: {
+            scope: string;
+            model: string;
+            prompt_version: string;
+            dataset_sha256: string;
+            counts: {
+                create?: components["schemas"]["IntakeCounts"];
+                attach?: components["schemas"]["IntakeCounts"];
+                ignore?: components["schemas"]["IntakeCounts"];
+            };
+        };
+        IntakeEvaluation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            scope: string;
+            model: string;
+            prompt_version: string;
+            dataset_sha256: string;
+            counts: {
+                [key: string]: components["schemas"]["IntakeCounts"];
+            };
+            /** Format: uuid */
+            run_by_agent_id: string | null;
+            via_token: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IntakeLabelCounts: {
+            labels: number;
+            correct: number;
+            wrong: number;
+            severe: number;
+        };
+        IntakeReadiness: {
+            /** Format: uuid */
+            channel_id: string;
+            scope: string;
+            /** @description The model intake runs; empty while intake is off (evaluations then count for nothing). */
+            model: string;
+            prompt_version: string;
+            actions: {
+                /** @enum {string} */
+                action: "create" | "attach" | "ignore";
+                /**
+                 * @description open or overridden: AI takes the action on its own at auto; closed: it stays a suggestion.
+                 * @enum {string}
+                 */
+                gate: "open" | "closed" | "overridden";
+                labels: number;
+                correct: number;
+                wrong: number;
+                severe: number;
+                /** @description Labels the action needs. */
+                needed: number;
+                accuracy_needed: number;
+                /** @description What keeps the gate closed: too few labels, too many wrong, a severe error, or (create) more than one conversation opened for chatter in a week. */
+                missing: ("labels" | "accuracy" | "severe" | "junk")[];
+                live: components["schemas"]["IntakeLabelCounts"];
+                evaluation: (components["schemas"]["IntakeLabelCounts"] & {
+                    /** Format: date-time */
+                    run_at: string;
+                }) | null;
+            }[];
+            /** @description What AI did on its own in the last 30 days, and how much people corrected. */
+            applied: {
+                decisions: number;
+                corrected: number;
+                correction_rate: number | null;
+            };
+            /** @description What the last days say: cards closed, how many AI would read at auto (the rules decided them only by default), and the average cost of a call. */
+            estimate: {
+                days: number;
+                cards: number;
+                ai_calls: number;
+                cost_per_call: {
+                    /** @description On the server's provider: its price in millionths of a dollar. */
+                    micro_usd: number | null;
+                    /** @description What the provider reported, in its own unit (OpenRouter credits). */
+                    provider_cost: number | null;
+                };
+            };
         };
         /**
          * @description chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.
@@ -5008,8 +5333,18 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             not_applied_reason: string | null;
             fallback: boolean;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The AI decision a person undid or decided otherwise than.
+             */
             corrects_decision_id: string | null;
+            /**
+             * Format: uuid
+             * @description The AI suggestion a person decided as.
+             */
+            follows_decision_id: string | null;
+            /** @description What failed when AI's answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject. */
+            error_code: string | null;
             model: string | null;
             /** Format: uuid */
             agent_id: string | null;
@@ -5042,6 +5377,11 @@ export interface components {
             /** @description With create. */
             subject?: string;
             ignore_reason?: components["schemas"]["IntakeIgnoreReason"];
+            /**
+             * Format: uuid
+             * @description The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card's, or no AI decision, is refused.
+             */
+            follows_decision_id?: string;
         };
         IntakeStats: {
             days: number;
@@ -6030,16 +6370,13 @@ export interface components {
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
-        /**
-         * @description How the conversation started. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem.
-         * @enum {string}
-         */
-        ConversationChannel: "email" | "web_form" | "help_chat" | "imported" | "agent" | "problem_report";
+        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
+        ConversationChannel: string;
         /**
          * @default updated_desc
          * @enum {string}
          */
-        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest";
+        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest" | "due";
         /** @description The filters of `GET /api/v1/conversations` as one object; a list holds the values the query string separates with commas. An empty object is every conversation, most recently updated first. */
         ConversationFilters: {
             status?: components["schemas"]["ConversationStatus"][];
@@ -6070,6 +6407,8 @@ export interface components {
             updated_before?: string;
             sort?: components["schemas"]["ConversationSort"];
             search?: string;
+            /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target). */
+            sla?: ("overdue" | "due_soon")[];
         };
         /** @enum {string} */
         SavedViewScope: "personal" | "shared";
@@ -7076,6 +7415,125 @@ export interface components {
             /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
             suggestion: string | null;
         };
+        ConversationSLA: {
+            /**
+             * @description The most pressing of its clocks.
+             * @enum {string}
+             */
+            state: "overdue" | "due_soon" | "ok" | "paused" | "stopped" | "met";
+            /** @description Null when its priority has no first-response target. */
+            first_response: components["schemas"]["SLAClock"] | null;
+            /** @description Null when its priority has no resolution target. */
+            resolution: components["schemas"]["SLAClock"] | null;
+            /** @description The reminder and overdue emails its clocks sent, oldest first. */
+            alerts?: {
+                /** @enum {string} */
+                clock: "first_response" | "resolution";
+                /** @enum {string} */
+                threshold: "reminder" | "overdue";
+                /** Format: date-time */
+                due_at: string;
+                /**
+                 * @description nobody: no recipient gets these emails.
+                 * @enum {string}
+                 */
+                status: "sending" | "sent" | "rejected" | "nobody";
+                recipients: number;
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        SLAClock: {
+            /**
+             * @description running while it is open; paused while pending; stopped once resolved or closed; met by the first reply.
+             * @enum {string}
+             */
+            state: "running" | "paused" | "stopped" | "met";
+            /** Format: date-time */
+            due_at: string | null;
+            /**
+             * Format: date-time
+             * @description When it is due soon: warn_before_minutes of business time before due_at.
+             */
+            warn_at: string | null;
+            /** Format: date-time */
+            met_at: string | null;
+            /**
+             * Format: date-time
+             * @description due_at, once a running clock passed it.
+             */
+            breached_at: string | null;
+            due_soon: boolean;
+            overdue: boolean;
+            /** @description Business minutes to due_at at the time of the request; negative once late; null unless running. */
+            business_minutes_left: number | null;
+        };
+        BusinessDay: {
+            /** @enum {string} */
+            day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+            open: boolean;
+            /** @description Opening time, as 08:00, when open. */
+            from?: string;
+            /** @description Closing time, after from; 24:00 for midnight. */
+            to?: string;
+        };
+        TargetMinutes: {
+            /** @description Business minutes to the first reply; null is no target. */
+            first_response_minutes?: number | null;
+            /** @description Business minutes to resolve; null is no target. */
+            resolution_minutes?: number | null;
+        };
+        ResponseTargetsInput: {
+            enabled: boolean;
+            /** @description IANA timezone the hours are in; null is the workspace timezone. */
+            timezone?: string | null;
+            /** @description A weekday left out is closed. */
+            hours: components["schemas"]["BusinessDay"][];
+            holidays?: {
+                /** Format: date */
+                date: string;
+                name: string;
+            }[];
+            targets: {
+                urgent?: components["schemas"]["TargetMinutes"];
+                high?: components["schemas"]["TargetMinutes"];
+                normal?: components["schemas"]["TargetMinutes"];
+                low?: components["schemas"]["TargetMinutes"];
+            };
+            /** @description Business minutes before a target a conversation is due soon (and its reminder goes). */
+            warn_before_minutes?: number;
+            /** @description The channels whose conversations have targets; null is every channel. */
+            channel_ids?: string[] | null;
+            /** @description Whether reminder and overdue emails go out (each teammate can turn theirs off). */
+            alert_email?: boolean;
+            /**
+             * Format: date-time
+             * @description As you read it: save only if nobody saved since (409 changed_elsewhere otherwise).
+             */
+            updated_at?: string | null;
+        };
+        ResponseTargets: components["schemas"]["ResponseTargetsInput"] & {
+            /**
+             * Format: date-time
+             * @description When they were last turned on: conversations opened before have no target.
+             */
+            enabled_at: string | null;
+            /** @description Whether you get the reminder and overdue emails (PATCH /api/v1/agents/me/sla-alerts). */
+            my_alert_email?: boolean;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        ConversationNumberSeries: {
+            series: string;
+            /** @example #{n} */
+            format: string;
+            /** @description The number the next conversation of the series takes. */
+            next: number;
+            start: number;
+            start_year: number | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
         SavedReplyText: {
             title: string;
             body: string;
@@ -7085,6 +7543,20 @@ export interface components {
         Conversation: {
             /** @description The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply. */
             latest_reply_number: number;
+            /** @description The newest change of its status and who made it; null when it never changed in Colliedesk or an import. */
+            last_status_change?: components["schemas"]["StatusChange"] | null;
+            /** @description The statuses that, set by the team now, would tell its customer: the ones its live chat channel has a notice for, other than its status. Only on GET /conversations/{id}; missing in lists and for a conversation of no chat. */
+            status_notices?: components["schemas"]["ConversationStatus"][];
+            /** @description true when a status the team sets now may tell its customer: the chat it is in (a chat message moved into it included) has a channel live and on with a notice for a status other than its own. In lists too, so a bulk change can offer to tell; status_notices on the detail names which statuses. */
+            may_tell_customer?: boolean;
+            /** @description Its number in number_series, which counts on and never restarts. */
+            number?: number;
+            /** @description The series it is numbered in: default, or the one its channel names (settings.number_series). */
+            number_series?: string;
+            /** @description The code customers see and type back, in the format of its series when it was opened ("#12"). Find it with GET /api/v1/conversations?ref=. */
+            display_ref?: string;
+            /** @description Its response clocks; null while the response targets are off or none applies to it (opened before they were on, on a channel they leave out, imported). */
+            sla?: components["schemas"]["ConversationSLA"] | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -7105,6 +7577,18 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        StatusChange: {
+            to: components["schemas"]["ConversationStatus"];
+            /** Format: date-time */
+            at: string;
+            /**
+             * @description agent: a team member; token: an AI agent's token (a request of it a person approved included); customer: the customer writing again; command: the customer's reopen command; auto_close: the channel closing it by itself (auto_close_hours); import: an import.
+             * @enum {string}
+             */
+            by: "agent" | "token" | "customer" | "command" | "auto_close" | "import";
+            /** @description The team member's name, or the token's label; for a token's request approved by a person other than its owner, "<label> · approved by <name>". Missing for the others. */
+            name?: string;
         };
         ConversationOrigin: {
             /** @description Source system, for example freshdesk */
@@ -7148,10 +7632,14 @@ export interface components {
                 assignee_id?: string | null;
                 add_tag_ids?: string[];
                 remove_tag_ids?: string[];
+                /** @description false sets the status without telling the customers (the channels' status notices); a token below the send tier asks a person first when one would be told. true by default. */
+                notify?: boolean;
             };
         };
         BulkConversationUpdateResult: {
             updated: number;
+            /** @description How many customers its status change tells in their chats, a few seconds after it commits; 0 for a quiet change or no status. */
+            told?: number;
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
@@ -7267,6 +7755,13 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
+            /** @description A reply the channel sent by itself, which counts as no reply of the team: it does not make the conversation answered, nor its first reply in Results. received, unmatched, ask_confirm, cancelled, ask_description and expired come with chat intake; reopened, reopen_noted, reopen_not_found and reopen_legacy answer a reopen command (reopened also tells a status the team set to open); help answers the help command; status_pending, status_resolved and status_closed tell a status the team set (status_closed also when the channel closes it by itself). Null for a reply of the team. */
+            notice_kind?: string | null;
+            /**
+             * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
+             * @enum {string|null}
+             */
+            intake_reply_kind?: "substantive" | "acknowledgement" | null;
             /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
             external_id?: string | null;
             /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */
@@ -7375,6 +7870,8 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
+            /** @description Whether a person's retry may succeed: true for a failed delivery that would not fail the same way again. False while it is not failed, for channel_removed and no_recipient, and for a failure the same reply meets every time (a file its channel cannot carry, such as zalo_no_files or zalo_file_too_large); POST .../messages/{messageId}/retry answers 409 delivery_final then. */
+            retryable?: boolean;
             /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched Gmail or Microsoft 365 off; it is sent once it is on again), mailbox_not_configured (a queued reply waits because the server lost a setting its connected provider needs; it is sent once the setting is back; on a server that runs no email outbox at all, no SMTP relay and no provider set up, the reply fails at once with this code and Retry sends it once the setting is back). Null for most email failures, whose words are in last_error. */
             reason_code?: string | null;
             attempts: number;
@@ -7595,11 +8092,8 @@ export interface components {
             /** Format: date-time */
             connected_at: string;
         };
-        /**
-         * @description A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
-         * @enum {string}
-         */
-        ChannelType: "email" | "web_form" | "help_chat";
+        /** @description A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat, zalo. A test build may run another (the loopback chat stand-in), so a client shows a type it does not know by its name. A new type adds its value to the shipped types here and its configuration to ChannelConfig. */
+        ChannelType: string;
         ChannelState: {
             /**
              * @description `waiting`: set up, but nothing has arrived on the channel yet (reason `no_message_yet`); it turns `working` with the first message received, which proves the way in works.
@@ -7629,6 +8123,13 @@ export interface components {
             last_inbound_at: string | null;
             /** @description Whether this is its type's default channel: a call, link or address that names no channel uses it. */
             is_default?: boolean;
+            /**
+             * Format: date-time
+             * @description When the channel's processing was paused (null while it runs): what arrives waits in its journal as it came, nothing is decided, opened or sent; once resumed it is processed in order by the channel's rules.
+             */
+            processing_paused_at?: string | null;
+            /** @description Messages kept while the channel's processing is paused, waiting to be processed (0 while it runs). */
+            paused_count?: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -7655,10 +8156,43 @@ export interface components {
             /** @description Exact origins (scheme://host[:port]) whose pages may embed the chat. */
             widget_origins: string[];
         };
-        /** @description A channel's configuration, by its type. */
-        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"];
+        /** @description A Zalo Official Account channel (docs/user/zalo.md). Its secrets (app_secret, oa_secret_key, access_token, refresh_token) go through PUT /api/v1/channels/{id}/credentials and are never shown. */
+        ZaloChannelConfig: {
+            /** @description The Official Account's id; one OA is one channel on the whole server. */
+            oa_id: string;
+            /** @description The Zalo app the OA is reached through. */
+            app_id: string;
+            /** @description The team's Zalo user ids: what they write in a group is the team's, never a customer's request. */
+            staff_user_ids: string[];
+            /** @description Group id to the organization its members are customers of. */
+            groups: {
+                [key: string]: string;
+            };
+            /** @description The app's one webhook, below the server's address, for the Zalo app's settings (/api/v1/channels/zalo/webhook). */
+            webhook_path: string;
+            /** @description The four secrets in order (app_secret, oa_secret_key, access_token, refresh_token): whether each is set, its last four characters and when it was last written (a token refresh too). Never a value. */
+            credentials: {
+                /** @enum {string} */
+                name: "app_secret" | "oa_secret_key" | "access_token" | "refresh_token";
+                hint: string | null;
+                /** Format: date-time */
+                set_at: string | null;
+            }[];
+        };
+        /** @description A channel's configuration, by its type. A type this document does not describe yet (a test build's loopback chat stand-in, a chat type before its schema is written here) answers its own object, which a client shows nothing of. */
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"] | components["schemas"]["ZaloChannelConfig"] | {
+            [key: string]: unknown;
+        };
         ChannelDetail: components["schemas"]["Channel"] & {
             config: components["schemas"]["ChannelConfig"];
+            /** @description The rules the channel stores over its type's defaults (ChannelSettings), as a change of settings replaces them whole. Left out for a removed channel. */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description The rules in force: the type's defaults with the channel's settings over them (ChannelSettings). Left out for a removed channel. */
+            effective_settings?: {
+                [key: string]: unknown;
+            };
         };
         ChannelTypeInfo: {
             type: components["schemas"]["ChannelType"];
@@ -7691,9 +8225,18 @@ export interface components {
             instructions?: string;
             widget_origins?: string[];
         };
+        /** @description oa_id and app_id are needed to add the channel; a field left out is kept. */
+        ZaloChannelConfigInput: {
+            oa_id?: string;
+            app_id?: string;
+            staff_user_ids?: string[];
+            groups?: {
+                [key: string]: string;
+            };
+        };
         /** @description A channel's configuration as its type takes it. */
-        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
-        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type declares), `notices` {received}. Never a secret. */
+        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["ZaloChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds, pre_command_seconds, confirm_seconds, expire_seconds}, cut_on_command, unmatched: join_open or notice}), `notices` {received, unmatched, ask_confirm, cancelled, expired, reopen_not_found, reopen_legacy, reopened, reopen_noted, help, status_pending, status_resolved, status_closed (what the team setting that status tells the customer; reopened for open), help_every_seconds (0 to 86400, default 300: the least time between two help notices of one chat), unmatched_every_seconds (0 to 86400, default 300: the least time between two unmatched notices of one chat); a placeholder the channel does not fill is refused: received fills {ref}, the conversation's display_ref; reopen_not_found {ref}, the code typed; reopen_legacy {ref} and {old_ref}; reopened and reopen_noted {ref}; status_pending, status_resolved and status_closed {ref} and {subject}}, `auto_close_hours` (0 to 720, none by default: a conversation resolved after it was turned on closes by itself that long after its resolve and the customer's last message, telling the customer with status_closed, quietly for one resolved quietly; one imported resolved and untouched since closes that long after its resolve in the source, quietly, whenever it was turned on; any other resolved before it was turned on never closes by itself, and changing the hours keeps when it was turned on). Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
         };
@@ -7713,6 +8256,8 @@ export interface components {
             is_default?: boolean;
             config?: components["schemas"]["ChannelConfigInput"];
             settings?: components["schemas"]["ChannelSettings"];
+            /** @description true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose messages wait in a journal (Zalo) can be paused; another answers 400. */
+            processing_paused?: boolean;
         };
         ChannelCredentialInput: {
             name: string;
@@ -7729,7 +8274,7 @@ export interface components {
             /** Format: date-time */
             at: string;
             /** @enum {string} */
-            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed" | "ai_changed";
+            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed" | "ai_changed" | "paused" | "resumed";
             /** Format: uuid */
             channel_id: string;
             channel_name: string;
@@ -7780,6 +8325,8 @@ export interface components {
             replies_via: null | {
                 /** Format: uuid */
                 id: string;
+                /** @description The type of the channel the replies leave through (email for a web form's). */
+                type: string;
                 name: string;
                 enabled: boolean;
                 /** @description The channel the replies would leave from, removed: the default stands in for it. Null otherwise. */
@@ -10756,12 +11303,16 @@ export interface operations {
                 status?: string;
                 /** @description One priority or several, comma-separated: high,urgent. */
                 priority?: string;
+                /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target), or both comma-separated. While the response targets are off nothing matches. A conversation changed in the last seconds may be a round of the server behind. */
+                sla?: string;
                 /** @description Comma-separated. me (the caller), unassigned, anyone (assigned to somebody) or the id of a team member of this workspace. */
                 assignee?: string;
                 /** @description One tag id or several, comma-separated. */
                 tag?: string;
                 /** @description any (default): a conversation with one of the tags. all: with every tag. */
                 tag_match?: "any" | "all";
+                /** @description The conversation with this code (`display_ref`), as a person types it: another case, surrounding spaces or more or fewer leading zeros match; a code naming another year does not. A code of no series of the workspace returns no rows. */
+                ref?: string;
                 /** @description Only the conversations of this contact (any status unless `status` is given), for the contact's history. An id of another workspace's contact returns no rows; a value that is not a UUID answers 400. */
                 contact?: string;
                 /** @description Only conversations of contacts whose organization has this name, ignoring case. */
@@ -10782,7 +11333,7 @@ export interface operations {
                 created_before?: string;
                 updated_after?: string;
                 updated_before?: string;
-                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update). */
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update). */
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
@@ -10954,6 +11505,8 @@ export interface operations {
                     /** Format: uuid */
                     assignee_id?: string | null;
                     tag_ids?: string[];
+                    /** @description false sets the status without telling the customer (the channel's status notice). true by default. */
+                    notify?: boolean;
                 };
             };
         };
@@ -11873,6 +12426,108 @@ export interface operations {
             422: components["responses"]["AILevelNotAllowed"];
         };
     };
+    getIntakeReadiness: {
+        parameters: {
+            query: {
+                /** @description One of the scopes the channel's type collects for intake. */
+                scope: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scope's readiness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeReadiness"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIntakeEvaluations: {
+        parameters: {
+            query?: {
+                scope?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded evaluations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["IntakeEvaluation"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    recordIntakeEvaluation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeEvaluationInput"];
+            };
+        };
+        responses: {
+            /** @description The evaluation an earlier request with the same Idempotency-Key recorded; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeEvaluation"];
+                };
+            };
+            /** @description The recorded evaluation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeEvaluation"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
     listChannelThreads: {
         parameters: {
             query?: {
@@ -11899,6 +12554,32 @@ export interface operations {
             };
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listChannelSenders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The people who wrote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSenderList"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13116,6 +13797,166 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["NameNotAllowed"];
+        };
+    };
+    listConversationNumberSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConversationNumberSeries"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setConversationNumberSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    format?: string;
+                    next?: number;
+                    start?: number;
+                    start_year?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNumberSeries"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setMySLAAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Your setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        email: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getResponseTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The response targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseTargets"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setResponseTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResponseTargetsInput"];
+            };
+        };
+        responses: {
+            /** @description The response targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseTargets"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Someone saved the response targets after you read them (changed_elsewhere); nothing changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            /** @enum {string} */
+                            code: "changed_elsewhere";
+                            message: string;
+                            request_id?: string;
+                        };
+                        current: components["schemas"]["ResponseTargets"];
+                    };
+                };
+            };
         };
     };
     updateWorkspaceSlug: {

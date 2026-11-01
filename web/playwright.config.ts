@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { scratchDir } from './e2e/support/checkout';
+import { ports, scratchDir } from './e2e/support/checkout';
 import { defineConfig } from '@playwright/test';
 import { attachmentsDir, bootstrapEnv, databaseFor, databaseNameFor, goEnv, postgresURL, servers, settingsFile } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
@@ -48,7 +48,9 @@ export default defineConfig({
     // address), with a key ring as a fresh install has one. Its operator lets workspaces use an AI
     // provider on the local network, where the AI journeys run their fake model server; the others
     // allow it too, so an AI journey behaves the same on whichever server it runs.
-    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1', COLLIEDESK_E2E_DNS_FILE: dnsFile }, 'e2e'),
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1', COLLIEDESK_E2E_DNS_FILE: dnsFile,
+      // Zalo's API for a Zalo channel is the stand-in a test starts (e2e/support/zalo.ts); nothing calls Zalo.
+      COLLIEDESK_E2E_ZALO_URL: `http://127.0.0.1:${ports.zalo}` }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any', AI_ALLOW_PRIVATE_BASE_URLS: '1' }),
     // The cloud server also imports in the app and sends replies by SMTP, through its own outbox worker,
     // for the golden path. It sends with the mail server's From policy, so a reply leaves both the same way.

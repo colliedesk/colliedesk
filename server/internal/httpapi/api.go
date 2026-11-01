@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"io"
 	"log/slog"
 	"net"
@@ -29,6 +30,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
+	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
@@ -146,6 +148,8 @@ type Config struct {
 	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
 	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
 	ExtraChannelTypes []channels.Adapter
+	// Zalo is where the Zalo type reaches Zalo; a test points it at a stand-in.
+	Zalo zalo.Config
 	// SwitchedOff are the features an operator switched off (serverconfig features.<name> = false). Their
 	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
 	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
@@ -287,6 +291,12 @@ func (s *Server) AI() *ai.Service { return s.api.ai }
 // GitHub App is not set up.
 func (s *Server) GitHubSync() *githubsync.Service { return s.api.githubSync }
 
+// IntakeHandler decides the intake cards of chat channels for the AI worker; a nil gate opens an action's
+// gate only when the scope's readiness does (otherwise AI suggests and the rules apply).
+func (s *Server) IntakeHandler(gate intake.Gate) ai.Handler {
+	return s.api.intakeService().WithGate(gate).AIHandler()
+}
+
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
 func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
@@ -315,7 +325,7 @@ func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Co
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat})
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: config.Zalo})
 	if len(config.ExtraChannelTypes) == 0 {
 		return registered
 	}
@@ -549,8 +559,13 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/agents", auth.PermissionAccessRead},
 		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/conversation-number-series", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/conversation-number-series/{series}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/response-targets", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/response-targets", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/name", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
+		{http.MethodPatch, "/api/v1/agents/me/sla-alerts", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/me/display-name", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/tags", auth.PermissionConversationsRead},
@@ -716,9 +731,13 @@ func Routes() []Route {
 		{http.MethodPut, channelAIRoute, auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/{id}/ai/intake/readiness", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/channels/{id}/ai/intake/evaluations", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/{id}/ai/intake/evaluations", auth.PermissionAccessRead},
 		{http.MethodGet, "/api/v1/conversations/{id}/chat", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channels/{id}/threads", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channels/{id}/threads/{threadId}/items", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/channels/{id}/senders", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channel-thread-items", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/intake/gatherings", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/intake/gatherings/{id}", auth.PermissionConversationsRead},

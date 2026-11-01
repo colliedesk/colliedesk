@@ -9,7 +9,7 @@ import type { ChannelUI, ConnectProps } from '../../../channels/registry';
 import { formatDate } from '../../../lib/format-date';
 import { messages } from '../../../messages';
 import { Dialog } from '../../../ui/dialog';
-import { PlusIcon } from '../../../ui/icons';
+import { ChatIcon, PlusIcon } from '../../../ui/icons';
 import { Part, PartUnavailable } from '../../../ui/lazy-part';
 import { panelID, tabID, Tabs } from '../../../ui/tabs';
 import { NameForm } from '../name-form';
@@ -94,8 +94,12 @@ const navPage = (type: string | undefined): SettingsPath => (type && channelUI(t
 // provider's redirect): those open that channel, never the type's home.
 const carriesChannelState = (search: ChannelsSearch) => Boolean(search.tab || search.gmail || search.gmail_error || search.microsoft || search.microsoft_error);
 
+const pausedRefresh = 20_000;
+
+// The list counts what a paused channel keeps again every 20 seconds while one is paused.
 function useChannels() {
-  return useQuery({ queryKey: ['channels'], queryFn: channelsApi.list });
+  return useQuery({ queryKey: ['channels'], queryFn: channelsApi.list,
+    refetchInterval: (query) => (query.state.data?.items.some((item) => item.processing_paused_at) ? pausedRefresh : false) });
 }
 
 function LoadFailed({ onRetry }: { onRetry: () => void }) {
@@ -107,8 +111,21 @@ const stateLabel: Record<Channel['status']['state'], string> = {
 };
 const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', waiting: 'ch-st-off', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
 
+// A channel whose processing is paused says so while it is on; off says Off, as the switch does.
 function StatePill({ channel }: { channel: Channel }) {
+  if (channel.processing_paused_at && channel.enabled) return <span className="status ch-st-off">{m.statusPaused}</span>;
   return <span className={`status ${stateClass[channel.status.state]}`}>{stateLabel[channel.status.state]}</span>;
+}
+
+// Processing is the Pause and Resume of a type that keeps what arrives (registry pausable): Pause asks
+// first; Resume does not (it loses nothing) and says what it did where the button was.
+function useProcessing(channel: Channel, onDone: (paused: boolean) => void) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (paused: boolean) => channelsApi.update(channel.id, { processing_paused: paused }),
+    onSuccess: (_data, paused) => onDone(paused),
+    onSettled: () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events'].includes(String(query.queryKey[0])) }),
+  });
 }
 
 // The types this server runs, in the registry's order, only those the web knows. A workspace may add
@@ -201,7 +218,8 @@ function ChannelRow({ channel, isAdmin, markDefault }: { channel: Channel; isAdm
     <div className="ch-row-name">{ui && <ui.Icon />}<span><span className="ch-row-title"><strong>{channel.name}</strong>{markDefault && <span className="ch-default">{m.defaultLabel}</span>}</span>
       {channel.summary && <small>{channel.summary}</small>}</span></div>
     <div className="ch-row-state"><StatePill channel={channel} />
-      {channel.held_count > 0 && <small>{m.held(channel.held_count, channel.name)}</small>}</div>
+      {channel.held_count > 0 && <small>{m.held(channel.held_count, channel.name)}</small>}
+      {channel.processing_paused_at && (channel.paused_count ?? 0) > 0 && <small>{m.pausedWaiting(channel.paused_count ?? 0)}</small>}</div>
     <div className="ch-row-actions">
       {isAdmin && <EnabledSwitch channel={channel} />}
       <a href={href} className="button" aria-label={m.configureName(channel.name)}>{m.configure}</a>
@@ -269,8 +287,10 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
 function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
   const client = useQueryClient();
   const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
-  return (guided: boolean): ConnectProps['create'] => async (input) => {
+  return (guided: boolean): ConnectProps['create'] => async (input, beforeOpen) => {
     const created = await createChannel.run({ type: type as ChannelType, ...input });
+    // The channel exists from here: what beforeOpen could not do shows on its page, never undoes it.
+    await beforeOpen?.(created).catch(() => undefined);
     await client.invalidateQueries({ queryKey: ['channels'] });
     navigate(`${base}/${created.id}${guided ? '/setup' : ''}`, true);
     return created;
@@ -334,7 +354,9 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   useEffect(() => {
     if (mailboxOutcome && takeSetupReturn(id)) navigate(withSearch(`${base}/${id}/setup`, { ...search, tab: undefined }), true);
   }, [mailboxOutcome, id, search, navigate]);
-  const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
+  // While its processing is paused, what it keeps grows: the page counts it again every 20 seconds.
+  const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2,
+    refetchInterval: (query) => (query.state.data?.processing_paused_at ? pausedRefresh : false) });
   const [removing, setRemoving] = useState(false);
   // What the last open or discard of held messages did; it stays after the notice of held messages goes.
   const [heldDone, setHeldDone] = useState<{ kind: 'opened' | 'discarded'; count: number; skipped?: number }>();
@@ -344,6 +366,18 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   const prefix = useId();
   const channel = detail.data;
   const ui = channel ? channelUI(channel.type) : undefined;
+  const [pausing, setPausing] = useState(false);
+  const [resumed, setResumed] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const resumedNote = useRef<HTMLParagraphElement>(null);
+  const pausedNote = useRef<HTMLParagraphElement>(null);
+  // The Resume button goes once the channel reloads running; focus goes to what it did.
+  const runningAgain = Boolean(detail.data && !detail.data.processing_paused_at);
+  useEffect(() => { if (resumed && runningAgain) resumedNote.current?.focus(); }, [resumed, runningAgain]);
+  // Pause swaps its button for Resume: focus goes to the notice of what it did, once the channel reads paused.
+  const pausedNow = Boolean(detail.data?.processing_paused_at);
+  useEffect(() => { if (paused && pausedNow) pausedNote.current?.focus(); }, [paused, pausedNow]);
+  const processing = useProcessing(channel ?? ({ id } as Channel), (done) => { setResumed(!done); setPaused(done); });
   // Removing the default hands it to the oldest other live channel of the type, as the server does.
   const channels = useChannels();
   const nextDefault = channel && channels.data?.items.filter((item) => item.type === channel.type && item.id !== channel.id)
@@ -360,20 +394,30 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   if (isMissing(detail.error)) return <><p role="alert" className="error-copy">{m.notFound}</p><a href={base}>{m.backToChannels}</a></>;
   if (detail.isError) return <LoadFailed onRetry={() => void detail.refetch()} />;
   if (!channel) return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
-  if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
-  const tabs = [...ui.tabs, { id: 'ai', label: m.tabAI }, { id: 'history', label: m.tabHistory }];
+  // A type with no screens here (a chat type before its own, a test build's stand-in) keeps the frame's
+  // tabs: what AI does on it and its history.
+  const tabs = [...(ui?.tabs ?? []), { id: 'ai', label: m.tabAI }, { id: 'history', label: m.tabHistory }];
   const open = tabs.find((item) => item.id === tab)?.id ?? tabs[0].id;
-  const capabilities = channel.capabilities.map(ui.capabilityLabel).filter(Boolean);
+  const capabilities = ui ? channel.capabilities.map(ui.capabilityLabel).filter(Boolean) : [];
   return <>
     <a href={base} className="ch-back">{m.backToChannels}</a>
     <section className="settings-card ch-detail" aria-labelledby="ch-detail-heading">
       <div className="ch-detail-head">
-        <div className="ch-row-name"><ui.Icon /><span><h2 id="ch-detail-heading">{channel.name}</h2>{channel.summary && <small>{channel.summary}</small>}</span></div>
-        <div className="ch-row-actions"><StatePill channel={channel} />{isAdmin && <EnabledSwitch channel={channel} />}</div>
+        <div className="ch-row-name">{ui ? <ui.Icon /> : <ChatIcon />}<span><h2 id="ch-detail-heading">{channel.name}</h2>{channel.summary && <small>{channel.summary}</small>}</span></div>
+        <div className="ch-row-actions"><StatePill channel={channel} />
+          {isAdmin && ui?.pausable && channel.enabled && (channel.processing_paused_at
+            ? <button type="button" disabled={processing.isPending} onClick={() => processing.mutate(false)}>{m.resume}</button>
+            : <button type="button" disabled={processing.isPending} onClick={() => { setResumed(false); setPaused(false); setPausing(true); }}>{m.pause}</button>)}
+          {isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
+      {channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={pausedNote}><span>{channel.enabled
+        ? <><strong>{m.pausedSince(formatDate(channel.processing_paused_at, timezone))}</strong> {m.pausedRunning(channel.paused_count, isAdmin)}</>
+        : m.pausedOffLead(formatDate(channel.processing_paused_at, timezone), channel.paused_count, isAdmin)}</span></p>}
+      {resumed && !channel.processing_paused_at && <p className="notice notice-plain" role="status" tabIndex={-1} ref={resumedNote}><span>{m.resumed}</span></p>}
+      {processing.isError && <p role="alert" className="error-copy">{processing.error instanceof InvalidRequestError ? processing.error.message : m.pauseFailed}</p>}
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{ui?.waitingHelp ?? m.waitingHelp}</span></p>}
-      <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />
+      {ui && <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />}
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
       {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count, heldDone.skipped ?? 0) : m.heldDiscarded(heldDone.count)}</span>
@@ -382,23 +426,28 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
       <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
-          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} />
-          : <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
+          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
+          : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
               return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
             }} />}
       </div>
       {isAdmin && <div className="button-row ch-remove">
-        <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui.removal?.label ?? m.remove}</button>
+        <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui?.removal?.label ?? m.remove}</button>
         {remove.isError && <span role="alert" className="error-copy">{remove.error instanceof InvalidRequestError ? remove.error.message : m.actionFailed}</span>}
       </div>}
     </section>
-    {removing && <Dialog alert title={ui.removal?.title ?? m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
+    {pausing && <Dialog alert title={m.pauseTitle(channel.name)} closeLabel={m.close} onClose={() => setPausing(false)}
+      onSubmit={() => { setPausing(false); processing.mutate(true); }}
+      footer={<><button type="button" autoFocus onClick={() => setPausing(false)}>{m.cancel}</button><button type="submit" className="primary-action">{m.pause}</button></>}>
+      <p>{m.pauseBody}</p>
+    </Dialog>}
+    {removing && <Dialog alert title={ui?.removal?.title ?? m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
       onSubmit={() => { if (channel.held_count > 0) return; setRemoving(false); remove.mutate(); }}
       footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button>
-        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{ui.removal?.confirm ?? m.removeConfirm}</button></>}>
-      <p>{ui.removal?.body(channel) ?? m.removeBody}</p>
-      {channel.is_default && <p>{nextDefault ? m.removeDefaultNext(nextDefault.name) : m.removeDefaultNone(ui.label)}</p>}
+        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{ui?.removal?.confirm ?? m.removeConfirm}</button></>}>
+      <p>{ui?.removal?.body(channel) ?? m.removeBody}</p>
+      {channel.is_default && <p>{nextDefault ? m.removeDefaultNext(nextDefault.name) : m.removeDefaultNone(ui?.label ?? channel.type)}</p>}
       {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;

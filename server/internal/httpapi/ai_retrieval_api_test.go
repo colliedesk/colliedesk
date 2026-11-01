@@ -586,3 +586,34 @@ func TestAIRetrievalLeavesAWorkspaceBeingDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A resolved conversation's reply, as AI reads it, is the team's: a notice the channel sent after it is not.
+func TestAIRetrievalReadsTheTeamsReplyNotTheChannelsNotice(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Notices", "admin@retrieval-notices.example.com")
+	workspace := workspaceID(t, api, admin)
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Kim", "email": "kim@customer.example"})
+	resolved := seedResolvedConversation(t, api, pool, admin, workspace, contact, "Printer jams",
+		"The printer jams on tray two.", "a note", "Open tray two and take the jammed sheet out.")
+	if _, err := pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body,notice_kind,created_at)
+		VALUES($1,$2,'outgoing','NOTICE-CANARY we got your message','received',now()+interval '1 minute')`, workspace, resolved); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `INSERT INTO ai_retrieval_pending(workspace_id,conversation_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, workspace, resolved); err != nil {
+		t.Fatal(err)
+	}
+	buildAIRetrieval(t, pool)
+	found := false
+	for _, doc := range aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "printer jams tray", ConversationLimit: 3}) {
+		if doc.ConversationID != resolved {
+			continue
+		}
+		found = true
+		if text := doc.Title + "\n" + doc.Text; strings.Contains(text, "NOTICE-CANARY") || !strings.Contains(text, "jammed sheet") {
+			t.Fatalf("retrieved reply:\n%s", text)
+		}
+	}
+	if !found {
+		t.Fatal("the resolved conversation was not retrieved")
+	}
+}

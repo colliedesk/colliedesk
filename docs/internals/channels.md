@@ -29,10 +29,13 @@ fails when shared code names a type; `TestEveryRegisteredTypeIsWhole` when a reg
 
 1. A migration: one `channel_types` row, its own table if it has configuration (with `channel_id`,
    row-level security), fixture rows.
-2. `contracts/openapi.yaml`: the type in `ChannelType` and in `ConversationChannel`, `<Type>ChannelConfig`
-   in `ChannelConfig`, its input in `ChannelConfigInput`, its own routes. The web app's copy of
-   `ConversationChannel` (`channelSchema` in `web/src/api/schemas.ts`) gets the value too: it parses every
-   conversation, and a missing value fails the inbox list. `TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins`
+2. `contracts/openapi.yaml`: the type in the documented values of `ChannelType` ("Shipped types: …") and of
+   `ConversationChannel` ("Values: …"), `<Type>ChannelConfig` in `ChannelConfig`, its input in
+   `ChannelConfigInput`, its own routes. Both schemas take any type's name (`^[a-z_]{1,40}$`), so a type a
+   client does not know yet (the loopback chat stand-in of end-to-end builds, a new chat type before the web
+   app has its screens) is listed by its name instead of failing the inbox or Settings → Channels. The web
+   app's known values (`knownChannels` in `web/src/api/schemas.ts`) are what the Filter menu offers.
+   `TestEveryRegisteredTypeIsWhole`, `TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins`
    and `web/src/channels/registry.test.ts` fail until all three agree. The server's conversation filter,
    saved views and MCP tool schemas read the registry (`mcpserver/channel-values.go`).
 3. `server/internal/channels/<type>/`: the adapter, its own routes in `Definition.Routes` (mounted by the
@@ -69,6 +72,25 @@ since the frame handled them before the rules. An AI decider may only ever repla
    message (its journal row's `sender_key`) is no match there (`reference_other_customer`, default), so
    a reply to someone else never files the message in their request. Only a shared scope reads the
    sender, so email gains no query.
+
+## Episodes
+
+The chat rules of a scope (`Gather.PreCommandSeconds`, `Scope.CutOnCommand`, `Scope.Unmatched`), the
+staff rule and the cancel rule are fields whose zero value is the behaviour before them, so email, web
+forms and `channeltest.Run` never change.
+
+1. **The journal knows a batch's command.** `channel_inbound_events.command` is written with the pending
+   row. A cancel command cancels only a batch with one (where messages are collected; elsewhere it is
+   still dropped), and a command keeps what came within `pre_command_seconds` before it only when the
+   batch named none (else three quick commands would merge).
+2. **Join open is by the sender's open conversations, not the thread.** `unmatched=join_open` skips the
+   thread lookup of a commands-only scope and joins the only open or pending conversation of the
+   sender's contact on the channel (`unmatched_join_open`); otherwise the item stays `unresolved`
+   (`unmatched_kept`), counted in `/api/v1/channel-thread-items`. The hint a one-to-one chat answers
+   with (support-desk's "N-07") needs notices to a place without a conversation: until that ships, a
+   chat type relying on it must not go live.
+3. **Staff.** `Inbound.Role = staff` that names no command that opens is a `staff` item and nothing
+   else; it never gathers, so it never makes or joins a customer's batch.
 
 ## Intake
 
@@ -110,7 +132,71 @@ Email and web forms declare none, so their path gains no row and no query beyond
    people through: a group's open or pending conversations active in 72 hours, a one-to-one customer's on
    the same channel, then resolved ones within `reopen_window_days`; never a closed one. They are built
    when the card is read, so they include what the card before it just opened. A person may still attach
-   anywhere in the workspace through the API.
+   anywhere in the workspace through the API; a conversation merged away (`merged_into_id`) is followed to
+   the one it was merged into.
+
+### AI decides
+
+1. **One task a card, one card a lane.** The ingest transaction queues the `intake` AI task in SQL (the
+   store cannot import `ai`): `holdForIntake` and every conclusion of a card (`unblockLane`) ask for the
+   lane's next turn, which goes to the oldest `deciding` card that never had a task, only while no card of
+   the lane has one waiting or running and none waits for a person. At `suggest`, a card the rules applied
+   by default or held for a person gets a task of its own. `ai_tasks_intake_gathering` keeps one live task
+   a card. The worker polls (5 s), so a card waits seconds for AI, never the request that brought it.
+2. **The prompt is built from a snapshot.** `store.IntakeSnapshotOf` reads the card, its scope's level and
+   options, the workspace's consents, its items, 40 items of the place before it (the prompt shows 15; the
+   rest only pair a login with its password), the quoted items, the candidates (the same set a person is
+   offered, the rules' target first) and the channel's commands. `intake/prompt` lays it out with no clock
+   and no database, so an evaluation replays the same text, and refuses an answer naming a conversation it
+   was not offered (`target_invalid` after one more ask). Prompts and answers are not stored; the decision
+   keeps the manifest (sources, counts, cuts, what was hidden) and `prompt_version`.
+3. **A gate per action.** `intake.Gate` decides whether AI may act on its own; the default opens an
+   action only when the scope's readiness does (13 below), else `gate_closed`. AI applies only at `auto`, on a
+   card still `deciding`, through an open gate, at or above the scope's threshold, without a credential,
+   with something to read, within `auto_max_age_seconds`, and for attach while the customer has one open
+   conversation it could mean (`attach_requires_single_candidate`). Otherwise its decision is recorded
+   with `applied=false` and why, and a card that waited at `auto` gets the rules' decision at once
+   (`fallback=false`; true when the model failed): the customer never waits for AI that may not act. A
+   commands-only scope's chatter then waits for a person with the reason AI did not act.
+4. **Who decided first wins.** The suggestion is written in the task's own transaction (`Run.Record`), so a
+   cancelled task records nothing; a card a person decided meanwhile records `person_first`, one the rules
+   decided past its time `too_old`. An applied decision goes through `Service.Decide` like a person's and
+   loses to whoever locked the card first.
+5. **A task that ends without deciding hands the card to the rules.** When the worker cancels or fails an
+   intake task (the day's `intake_per_day`, the feature off, a locked workspace, retries spent), it sets
+   the card's `decide_by` to now, so the next sweep applies the rules instead of waiting two minutes.
+6. **People label AI.** A person's decision is compared with the card's newest AI decision nobody labelled
+   yet, applied or not (or the one `follows_decision_id` names, which must be one of the card's): the same action and conversation
+   follows it (`follows_decision_id`, taking its `reply_kind`), anything else corrects it
+   (`corrects_decision_id`). These are the labels intake's evaluation reads.
+7. **A thank-you keeps resolved.** A decision's `reply_kind` travels with an attach (`IntakeApply.ReplyKind`):
+   `acknowledgement` joins without reopening a resolved conversation (a closed one opens, so the message is seen), and only
+   then is the message stored with `messages.intake_reply_kind = 'acknowledgement'` (joined to an open or closed one it is
+   `substantive`: it kept nothing), at insert, which `ai_draft_on_customer_message` reads to queue no
+   automatic draft. The AI's own label stays in `intake_decisions.reply_kind`. The rules never set it, so email keeps reopening on a thank-you as it always did.
+8. **A failing model is left alone.** Five failed calls in a row (provider errors or answers that are not
+   a decision) pause a workspace's intake for ten minutes in the process (`intake_paused`): its cards go to
+   the rules at once. A refusal of what one card holds (`bad_request`, `too_large`) is that card's, not the
+   provider failing, and does not count.
+9. **Reasons go first.** AI's `reason` is written from what customers said; `PruneIntakeReasons` erases it
+   after 90 days (daily, `PrivilegeIntakeReasonPrune`). The decision and its labels stay.
+10. **Pictures need three yeses.** The images source on, the workspace's `images` consent, and
+   `aiprovider.ImageTaker` saying the model and its fallback read pictures (Claude: always; OpenRouter:
+   `architecture.input_modalities` from the same hourly `/models` cache as reasoning). The bytes are the
+   files the frame fetched before the batch was held (`channel_inbound_files`, stored), at most four of
+   5 MB, typed by their bytes (`http.DetectContentType`), not by what the channel called them: a file that
+   is no PNG, JPEG, GIF or WebP is left out. The manifest says `consent`, `model_text_only`, `off` or `credential` when none went.
+11. **A channel's patterns run before the frame's phone numbers**, so a number of the channel's own shape
+   is named as its kind. They are checked when saved (RE2, at most 2000 instructions compiled, never the
+   empty match); one that no longer compiles masks nothing rather than failing the card.
+12. **The prompt's Version pins what it writes.** `TestThePromptVersionNamesWhatTheModelReads` hashes the
+   golden prompt: a change without a new `prompt.Version` fails, since an evaluation counts only for the
+   Version and the requested model (`run.Binding.Model`, not the id a provider answers with) it ran on.
+13. **Gates open on explicit labels only.** `readinessGate` (the default of `intake.New`) asks
+   `store.IntakeReadinessOf` for the scope, the model the binding asks for and `prompt.Version`: people's
+   follows and corrections of the last 30 days plus the newest run of each dataset of that model and prompt.
+   A decision nobody looked at is no label: at auto most cards go to the rules unseen, so silence would
+   read as accuracy. `gate_override` opens an action by hand.
 
 ## Chat threads
 
@@ -124,6 +210,40 @@ stored as one conclude their items together. A reply or notice the channel sent 
 its conversation's items are in (`FinishOutbox`), so the copy the channel sends back is the echo it always
 was and adds none. One item per journal event (a unique index) and per channel id: a replay never doubles
 one. No public route reads a thread; agents read them with `messages:read`.
+
+A notice in a chat where no conversation is (`unmatched: notice`) is its thread item, written with the
+customer's in one transaction (`queueThreadNotice`, deduplicated by the item it quotes), and a
+`channel_outbox` row that names the item instead of a message (`thread_item_id`, one of the two):
+`LoadOutbound` gives the sender its text, `Outbound.Place` and the customer it quotes as the recipient,
+with an empty conversation; `FinishOutbox` gives the item the id the channel returned, which
+`channel_sent_ids` keeps for the item. `Prepare` is not called for it. A message the frame writes by
+itself in a conversation (the received notice) carries `messages.notice_kind`, and every place that asks
+whether the team replied (`last_public_kind`, Results, the setup step, usage counts, the reply conflict,
+an automatic draft) skips it.
+
+## Zalo
+
+A Zalo app has one webhook for every OA that authorized it, so the route finds the channel by the
+delivery's OA (`oa_id`, else the sender of an `oa_send_*`, else the recipient) and only then checks the
+signature with that channel's `oa_secret_key` and `app_id` (`RouteKit.Credential`); an OA no channel is
+answers 200 and is dropped, as Zalo sends the app's events of every OA here. A delivery whose signature
+does not match answers the same 200 (no probe tells which OAs are here); one of the channel's own app is
+noted in `zalo_channels.signature_failed_at` at most once a minute (`RouteKit.InWorkspace`), so the
+channel's state shows it, and a delivery signed right clears it: Zalo does not deliver a refused one again. Nothing calls Zalo but a send: the access token is refreshed only when
+Zalo refuses it, under the lock of the refresh token (`RefreshCredential`, a refresh token is used once),
+and the new access token is stored before the new refresh token is. A reply's place is the place of the
+conversation's newest item of the channel (`Outbound.Place`, the query `recordSentItem` uses), so a
+group reply goes to its group. Every `oa_send_*` is the team's; a copy of what we sent is known by
+`channel_sent_ids` when Zalo answered its `message_id`, else it is kept as the team's item, never a
+customer's message. A sender's name is read right after a delivery is answered (`Config.Background`):
+it goes to `zalo_users`, which the snapshot gives Parse, so a message parsed later carries it, and to
+what was stored before it was known (and a contact made while it was being read takes it from the next
+message: `contactForIdentity` names a contact still called by its identity); `looked_up_at` keeps Zalo
+from being asked more than once an hour for someone it has no name for (a refused token, the network or
+a 5xx gives the claim back), a group's member list (`group:<id>`) is read once for all its members, and
+at most four lookups run at once. The lookup never refreshes the token: only a send does, under the
+refresh token's lock. A picture of a reply is uploaded (`/v2.0/oa/upload/image`) and sent as a
+media template message of its own; that a group takes the same template is not confirmed live yet.
 
 ## Decisions
 
@@ -217,3 +337,8 @@ a database with two channels of a type, naming them.
   says `string` breaks the whole list, which typecheck does not catch (`api/schemas.test.ts`).
 - `channel_inbound_events` with an empty `EventIDs` array: compare with `COALESCE($n::text[],'{}')`;
   `ANY(NULL)` filters every row out.
+- Intake's redactor (`intake/prompt/redact.go`) hides what follows a secret's label only when it looks like
+  a secret: letters alone on the line after a label on its own (`mật khẩu`, then `abcdef`) stay, and after
+  `mật khẩu: abc def` only the first word goes. The trade-off keeps a sentence about a password readable.
+  A channel without `redact_keywords` in its language hides only after the English labels, so a
+  Vietnamese password there reaches the model (docs/user/ai.md says to add them).

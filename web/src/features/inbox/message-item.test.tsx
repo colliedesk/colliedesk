@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { MessageItem } from './message-item';
@@ -144,17 +144,27 @@ function declared(element: Element, property: 'list-style-type' | 'padding-left'
   return rules.filter((rule) => element.matches(rule.selectorText) && rule.style.getPropertyValue(property)).at(-1)?.style.getPropertyValue(property);
 }
 
-test('a reply or note written as a Markdown list keeps its numbers and bullets on the timeline', () => {
+// The Markdown renderer loads on its own chunk (markdown-body.tsx), so each case waits for the list to render.
+test('a reply or note written as a Markdown list keeps its numbers and bullets on the timeline', async () => {
   for (const kind of ['outgoing', 'note'] as const) {
     const { container, unmount } = render(<MessageItem item={{ ...base, kind, email: null, body: 'Steps:\n\n1. Open settings\n2. Turn it on\n   - first\n   - second\n\nThanks' }} timezone="UTC" />);
-    const ol = container.querySelector('.markdown-body ol')!;
+    const ol = await waitFor(() => {
+      const found = container.querySelector('.markdown-body ol');
+      expect(found).not.toBeNull();
+      return found!;
+    });
     expect(declared(ol, 'list-style-type')).toBe('decimal');
     expect(declared(ol, 'padding-left')).toBe('var(--space-6)');
     expect(declared(ol.querySelector('ul')!, 'list-style-type')).toBe('circle');
     unmount();
   }
   const { container } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, body: '- one\n- two' }} timezone="UTC" />);
-  expect(declared(container.querySelector('.markdown-body ul')!, 'list-style-type')).toBe('disc');
+  const ul = await waitFor(() => {
+    const found = container.querySelector('.markdown-body ul');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(declared(ul, 'list-style-type')).toBe('disc');
 });
 
 test('a reply saved while its channel was off reads as not sent yet, not as a failure, and can be retried', () => {
@@ -171,6 +181,12 @@ test('a reply whose channel was removed, or whose customer has no address on it,
     expect(screen.queryByRole('button', { name: 'Retry delivery' })).toBeNull();
     unmount();
   }
+});
+
+test('a reply that would fail the same way again shows why and offers no retry', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 1, last_error: "moving.gif: GIF isn't supported yet. Send a JPEG or PNG picture instead.", sent_at: null, reason_code: 'zalo_no_files', retryable: false } }} timezone="UTC" />);
+  expect(screen.getByText('Delivery failed')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Retry delivery' })).toBeNull();
 });
 
 test('a reply saved before any channel could carry it reads as not sent yet, with Retry for once it is connected', () => {
@@ -203,4 +219,12 @@ test('the time names its timezone in its title, and on screen when it is not the
   const time = document.querySelector('time') as HTMLElement;
   expect(time).toHaveAttribute('title', 'Oct 28, 2026, 7:42 PM GMT+14');
   expect(time).toHaveTextContent(/7:42\sPM GMT\+14$/);
+});
+
+test('a notice the channel sent by itself says so and is not shown as a reply of the team', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', author_name: null, email: null, notice_kind: 'received', body: 'Đã nhận yêu cầu của anh/chị.' }} timezone="UTC" />);
+  expect(screen.getByText('Sent by the channel · not a reply')).toBeInTheDocument();
+  expect(screen.queryByText('Reply')).toBeNull();
+  expect(screen.queryByText('Someone')).toBeNull();
+  expect(screen.getByText('Đã nhận yêu cầu của anh/chị.')).toBeInTheDocument();
 });

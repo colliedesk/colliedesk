@@ -105,14 +105,20 @@ func recordThreadItems(ctx context.Context, tx pgx.Tx, journal *journalWriter, i
 		if len(in.Thread.References) > 0 {
 			quote = in.Thread.References[0]
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,sender_name,
+		inserted, err := tx.Exec(ctx, `INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,sender_name,
 				contact_id,external_id,quote_external_id,body,inbound_event_id,message_id,disposition,disposition_reason,occurred_at)
 			VALUES($1,$2,$3,'in',$4,NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,'')::uuid,NULLIF($9,''),NULLIF($10,''),$11,$12::uuid,
 				NULLIF($13,'')::uuid,$14,NULLIF($15,''),$16)
 			ON CONFLICT DO NOTHING`, channel.WorkspaceID, channel.ID, threadID, role, clip(in.Sender.Identity.Kind, 40), clip(in.Sender.Identity.Value, 200),
 			clip(in.Sender.Name, 200), outcome.contactID, clip(in.ExternalID, 1000), clip(quote, 1000), clip(in.Text, 20000), eventIDs[0],
-			outcome.messageID, outcome.disposition, outcome.reason, occurred); err != nil {
+			outcome.messageID, outcome.disposition, outcome.reason, occurred)
+		if err != nil {
 			return fmt.Errorf("record chat item: %w", err)
+		}
+		if inserted.RowsAffected() == 1 {
+			if err := recordSender(ctx, tx, channel, threadID, role, in.Sender, occurred); err != nil {
+				return err
+			}
 		}
 	}
 	if outcome.conversationID == "" {
@@ -126,10 +132,46 @@ func recordThreadItems(ctx context.Context, tx pgx.Tx, journal *journalWriter, i
 	return nil
 }
 
+// recordSender keeps who wrote an item in channel_senders: where and when they last wrote, and the last
+// name the channel gave them. A message older than what is kept (a late delivery, a replay) moves
+// nothing back; the channel's own account (its external_account now) is no person and is left out.
+func recordSender(ctx context.Context, tx pgx.Tx, channel channels.Channel, threadID, role string, sender channels.Sender, at time.Time) error {
+	kind, value := clip(sender.Identity.Kind, 40), clip(sender.Identity.Value, 200)
+	if kind == "" || value == "" || (role != channels.RoleCustomer && role != channels.RoleStaff) || (channel.ExternalAccount != "" && value == channel.ExternalAccount) {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO channel_senders(workspace_id,channel_id,sender_kind,sender_value,name,role,last_at,thread_id)
+		SELECT $1,$2,$3,$4,NULLIF($5,''),$6,$7,$8 FROM channels c WHERE c.workspace_id=$1 AND c.id=$2 AND $4 IS DISTINCT FROM c.external_account
+		ON CONFLICT (workspace_id,channel_id,sender_kind,sender_value) DO UPDATE SET
+			name=CASE WHEN EXCLUDED.last_at>=channel_senders.last_at AND EXCLUDED.name IS NOT NULL THEN EXCLUDED.name ELSE COALESCE(channel_senders.name,EXCLUDED.name) END,
+			role=CASE WHEN EXCLUDED.last_at>=channel_senders.last_at THEN EXCLUDED.role ELSE channel_senders.role END,
+			thread_id=CASE WHEN EXCLUDED.last_at>=channel_senders.last_at THEN EXCLUDED.thread_id ELSE channel_senders.thread_id END,
+			last_at=GREATEST(channel_senders.last_at,EXCLUDED.last_at)`,
+		channel.WorkspaceID, channel.ID, kind, value, clip(sender.Name, 200), role, at, threadID)
+	if err != nil {
+		return fmt.Errorf("record chat sender: %w", err)
+	}
+	return nil
+}
+
+// RecordImportedSender keeps who wrote an item an import wrote in a chat (a bundle), as recordSender does
+// for what a channel receives.
+func RecordImportedSender(ctx context.Context, tx pgx.Tx, workspaceID, channelID, threadID, role string, sender channels.Sender, at time.Time) error {
+	return recordSender(ctx, tx, channels.Channel{WorkspaceID: workspaceID, ID: channelID}, threadID, role, sender, at)
+}
+
 // recordSentItem writes the item of a reply or a notice a chat channel sent, in the thread its
 // conversation's items are in, as the team's or the channel's own.
 func recordSentItem(ctx context.Context, tx pgx.Tx, claim OutboxClaim, externalID string, now time.Time) error {
 	if claim.ChannelID == "" {
+		return nil
+	}
+	if claim.ThreadItemID != "" {
+		// A notice in a chat where no conversation is: its item was written when it was queued.
+		if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET external_id=COALESCE(NULLIF($3,''),external_id),occurred_at=$4
+			WHERE workspace_id=$1 AND id=$2`, claim.WorkspaceID, claim.ThreadItemID, clip(externalID, 1000), now); err != nil {
+			return fmt.Errorf("record sent chat notice: %w", err)
+		}
 		return nil
 	}
 	tag, err := tx.Exec(ctx, `WITH thread AS (
@@ -189,6 +231,9 @@ type ChatItem struct {
 	// Linked and LinkReason: on a conversation's chat, whether the item is part of it, and how it came.
 	Linked     bool    `json:"linked"`
 	LinkReason *string `json:"link_reason"`
+	// DeliveryStatus is how a notice the channel sent where no conversation is went out (queued, sent,
+	// failed); nil for every other item.
+	DeliveryStatus *string `json:"delivery_status"`
 }
 
 // ChatSender is who wrote an item, as the channel names them.
@@ -233,20 +278,66 @@ type ChatThreadPage struct {
 	Next  *string      `json:"next_cursor"`
 }
 
+// ChannelSender is someone who wrote in a channel's chats: where and when they last wrote, and the name the
+// channel last gave them.
+type ChannelSender struct {
+	Kind       string    `json:"kind"`
+	Value      string    `json:"value"`
+	Name       *string   `json:"name"`
+	Role       string    `json:"role"`
+	LastAt     time.Time `json:"last_at"`
+	ThreadID   string    `json:"thread_id"`
+	ThreadName *string   `json:"thread_name"`
+}
+
+// MaxChatSenders is the most people ChannelSenders lists.
+const MaxChatSenders = 200
+
+// ChannelSenders lists the people who wrote in a channel's chats (customers and the team, never the
+// channel itself), each once, most recent first: every member of a group, not only its last writer.
+func (s *Store) ChannelSenders(ctx context.Context, workspaceID, channelID string) ([]ChannelSender, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]ChannelSender, error) {
+		if _, err := s.channelByID(ctx, tx, workspaceID, channelID); err != nil {
+			return nil, err
+		}
+		rows, err := tx.Query(ctx, `SELECT s.sender_kind,s.sender_value,s.name,s.role,s.last_at,s.thread_id::text,t.name FROM channel_senders s
+				JOIN channel_threads t ON t.workspace_id=s.workspace_id AND t.id=s.thread_id
+			WHERE s.workspace_id=$1 AND s.channel_id=$2::uuid ORDER BY s.last_at DESC,s.sender_value LIMIT $3`, workspaceID, channelID, MaxChatSenders)
+		if err != nil {
+			return nil, fmt.Errorf("read chat senders: %w", err)
+		}
+		senders, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChannelSender, error) {
+			var sender ChannelSender
+			err := row.Scan(&sender.Kind, &sender.Value, &sender.Name, &sender.Role, &sender.LastAt, &sender.ThreadID, &sender.ThreadName)
+			sender.LastAt = domain.UTC(sender.LastAt)
+			return sender, err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("read chat senders: %w", err)
+		}
+		return senders, nil
+	})
+}
+
 // MaxChatPage is the most items or threads a page holds.
 const MaxChatPage = 100
 
 const chatItemColumns = `i.id::text,i.thread_id::text,i.direction,i.role,i.sender_kind,i.sender_value,i.sender_name,i.contact_id::text,i.agent_id::text,
 	i.body,i.external_id,i.quote_external_id,i.message_id::text,i.disposition,i.disposition_reason,i.occurred_at,
-	(SELECT COALESCE(json_agg(json_build_object('name',f.name,'content_type',f.content_type,'status',f.status,'size',f.size,'error',f.error) ORDER BY f.idx),'[]')
-		FROM channel_inbound_files f WHERE f.workspace_id=i.workspace_id AND f.event_id=i.inbound_event_id)`
+	CASE WHEN i.inbound_event_id IS NULL AND i.message_id IS NOT NULL AND i.direction='in' THEN
+		-- An item written with its message (an import) has the message's files.
+		(SELECT COALESCE(json_agg(json_build_object('name',a.filename,'content_type',a.content_type,'status','stored','size',a.size,'error',NULL) ORDER BY a.created_at,a.id),'[]')
+			FROM attachments a WHERE a.workspace_id=i.workspace_id AND a.message_id=i.message_id)
+	ELSE (SELECT COALESCE(json_agg(json_build_object('name',f.name,'content_type',f.content_type,'status',f.status,'size',f.size,'error',f.error) ORDER BY f.idx),'[]')
+		FROM channel_inbound_files f WHERE f.workspace_id=i.workspace_id AND f.event_id=i.inbound_event_id) END,
+	(SELECT o.status FROM channel_outbox o WHERE o.workspace_id=i.workspace_id AND o.thread_item_id=i.id)`
 
 func scanChatItem(row pgx.Row, extra ...any) (ChatItem, error) {
 	var item ChatItem
 	var files []byte
 	err := row.Scan(append([]any{&item.ID, &item.ThreadID, &item.Direction, &item.Role, &item.Sender.Kind, &item.Sender.Value, &item.Sender.Name,
 		&item.ContactID, &item.AgentID, &item.Body, &item.ExternalID, &item.QuoteExternalID, &item.MessageID, &item.Disposition,
-		&item.DispositionReason, &item.OccurredAt, &files}, extra...)...)
+		&item.DispositionReason, &item.OccurredAt, &files, &item.DeliveryStatus}, extra...)...)
 	if err != nil {
 		return item, err
 	}
@@ -305,6 +396,28 @@ func (s *Store) ConversationChat(ctx context.Context, workspaceID, conversationI
 			}
 			return page, err
 		}
+		// Who wrote the conversation's customer's items (not another member's that joined it): chatter that
+		// names no contact (part of no conversation) is another customer's when someone else wrote it.
+		senders := map[[2]string]bool{}
+		own, err := tx.Query(ctx, `SELECT DISTINCT i.sender_kind,i.sender_value FROM conversation_thread_items l
+			JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
+			WHERE l.workspace_id=$1 AND l.conversation_id=$2::uuid AND l.unlinked_at IS NULL AND i.role=$3 AND i.contact_id=$4::uuid
+				AND i.sender_kind IS NOT NULL AND i.sender_value IS NOT NULL`, workspaceID, conversationID, channels.RoleCustomer, contactID)
+		if err != nil {
+			return page, fmt.Errorf("read conversation senders: %w", err)
+		}
+		for own.Next() {
+			var kind, value string
+			if err := own.Scan(&kind, &value); err != nil {
+				own.Close()
+				return page, err
+			}
+			senders[[2]string{kind, value}] = true
+		}
+		own.Close()
+		if err := own.Err(); err != nil {
+			return page, err
+		}
 		rows, err := tx.Query(ctx, `WITH threads AS (
 				SELECT DISTINCT i.thread_id FROM conversation_thread_items l
 				JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
@@ -326,7 +439,7 @@ func (s *Store) ConversationChat(ctx context.Context, workspaceID, conversationI
 				return page, fmt.Errorf("read conversation chat: %w", err)
 			}
 			item.Linked, item.LinkReason = reason != nil, reason
-			item.IsOtherCustomer = item.Role == channels.RoleCustomer && item.ContactID != nil && *item.ContactID != contactID
+			item.IsOtherCustomer = isOtherCustomer(item, contactID, senders)
 			page.Items = append(page.Items, item)
 		}
 		if err := rows.Err(); err != nil {
@@ -335,6 +448,20 @@ func (s *Store) ConversationChat(ctx context.Context, workspaceID, conversationI
 		page.Items, page.Next = cutItemPage(page.Items, limit)
 		return page, nil
 	})
+}
+
+// isOtherCustomer says a chat item is a customer's who is not the conversation's: another contact, or,
+// for one that names none, someone other than who wrote the conversation's own items.
+func isOtherCustomer(item ChatItem, contactID string, senders map[[2]string]bool) bool {
+	switch {
+	case item.Role != channels.RoleCustomer:
+		return false
+	case item.ContactID != nil:
+		return *item.ContactID != contactID
+	case item.Sender.Kind == nil || item.Sender.Value == nil || len(senders) == 0:
+		return false
+	}
+	return !senders[[2]string{*item.Sender.Kind, *item.Sender.Value}]
 }
 
 func cutItemPage(items []ChatItem, limit int) ([]ChatItem, *string) {
@@ -488,4 +615,80 @@ func (s *Store) UnresolvedItems(ctx context.Context, workspaceID string, olderTh
 		page.Items, page.Next = cutItemPage(page.Items, limit)
 		return page, nil
 	})
+}
+
+// queueThreadNotice answers the customer's item of the journal's event, in its chat, with a notice the
+// channel sends by itself: its item (the channel's, quoting the customer's) and its delivery are written
+// now, in the transaction that keeps the customer's message. An item answered already is not answered
+// again (a second delivery, a replay), and a chat answered with this kind of notice less than every ago
+// (counted from when the last was queued) is not answered again yet: a lock of the chat keeps two
+// messages at once to one notice.
+func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, eventID, kind, text string, every time.Duration) error {
+	if eventID == "" || text == "" {
+		return nil
+	}
+	channel := journal.channel
+	var threadID string
+	err := tx.QueryRow(ctx, `SELECT thread_id::text FROM channel_thread_items WHERE workspace_id=$1 AND inbound_event_id=$2::uuid AND direction='in' LIMIT 1`,
+		channel.WorkspaceID, eventID).Scan(&threadID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find the chat of a notice: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "chat-notice:"+threadID+":"+kind); err != nil {
+		return fmt.Errorf("lock the chat of a notice: %w", err)
+	}
+	var itemID string
+	err = tx.QueryRow(ctx, `WITH customer AS (
+			SELECT i.thread_id,i.external_id FROM channel_thread_items i WHERE i.workspace_id=$1 AND i.inbound_event_id=$2::uuid AND i.direction='in'
+				AND NOT EXISTS (SELECT 1 FROM channel_thread_items b WHERE b.workspace_id=i.workspace_id AND b.thread_id=i.thread_id AND b.role='bot'
+					AND b.disposition_reason=$5 AND (b.quote_external_id=i.external_id OR b.created_at>$6::timestamptz-make_interval(secs => $7)))
+			LIMIT 1)
+		INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,quote_external_id,body,disposition,disposition_reason,occurred_at,created_at)
+		SELECT $1,$3,thread_id,'out','bot',external_id,left($4,20000),'bot',$5,$6,$6 FROM customer RETURNING id::text`,
+		channel.WorkspaceID, eventID, channel.ID, text, kind, journal.now, every.Seconds()).Scan(&itemID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("record chat notice: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,thread_item_id,status,created_at,recipients,channel_type,channel_id)
+		VALUES($1,$2,'queued',$3,1,$4,$5)`, channel.WorkspaceID, itemID, journal.now, string(channel.Type), channel.ID); err != nil {
+		return fmt.Errorf("queue chat notice: %w", err)
+	}
+	return nil
+}
+
+// loadThreadNotice reads what a sender needs of a notice queued in a chat where no conversation is: its
+// text, the place, and the customer it answers, whose message it quotes.
+func loadThreadNotice(ctx context.Context, tx pgx.Tx, claim OutboxClaim, out channels.Outbound) (channels.Outbound, error) {
+	var place channels.Place
+	var quote, senderKind, senderValue, senderName, contactID *string
+	err := tx.QueryRow(ctx, `SELECT n.id::text,n.body,n.created_at,t.kind,t.external_id,COALESCE(t.name,''),n.quote_external_id,c.sender_kind,c.sender_value,c.sender_name,c.contact_id::text
+		FROM channel_thread_items n JOIN channel_threads t ON t.workspace_id=n.workspace_id AND t.id=n.thread_id
+		LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.contact_id FROM channel_thread_items i
+			WHERE i.workspace_id=n.workspace_id AND i.thread_id=n.thread_id AND i.direction='in' AND i.external_id=n.quote_external_id LIMIT 1) c ON true
+		WHERE n.workspace_id=$1 AND n.id=$2`, claim.WorkspaceID, claim.ThreadItemID).
+		Scan(&out.Message.ID, &out.Message.Body, &out.Message.CreatedAt, &place.Kind, &place.ExternalID, &place.Name, &quote, &senderKind, &senderValue, &senderName, &contactID)
+	if err != nil {
+		return out, fmt.Errorf("load chat notice %s: %w", claim.ThreadItemID, err)
+	}
+	out.Place = &place
+	if quote != nil {
+		out.References, out.LastIncoming = []string{*quote}, *quote
+	}
+	if contactID != nil {
+		out.Recipient.ContactID = *contactID
+	}
+	if senderName != nil {
+		out.Recipient.Name = *senderName
+	}
+	if senderKind != nil && senderValue != nil {
+		out.Recipient.Identities = []channels.Identity{{Kind: *senderKind, Value: *senderValue}}
+	}
+	out.Message.Files = []channels.OutFile{}
+	return out, nil
 }

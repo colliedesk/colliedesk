@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -200,6 +201,9 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 	// once, at the first one, and every address is looked up in them.
 	var mailboxes map[string]*channels.Channel
 	for i := range items {
+		if items[i].ChatChannelID != nil {
+			items[i].MayTellCustomer = mayTell(byID[*items[i].ChatChannelID], items[i].Status)
+		}
 		choice := replyChoice{origin: channels.Type(items[i].Channel)}
 		if items[i].ChannelID != nil {
 			choice.own = byID[*items[i].ChannelID]
@@ -245,7 +249,7 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 			continue
 		}
 		if route.Channel != nil {
-			via := &domain.ChannelRepliesVia{ID: route.Channel.ID, Name: route.Channel.Name, Enabled: route.Channel.Enabled}
+			via := &domain.ChannelRepliesVia{ID: route.Channel.ID, Type: string(route.Channel.Type), Name: route.Channel.Name, Enabled: route.Channel.Enabled}
 			if route.InsteadOf != nil {
 				via.InsteadOf = &domain.ChannelName{ID: route.InsteadOf.ID, Name: route.InsteadOf.Name}
 			}
@@ -391,6 +395,71 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	return nil
 }
 
+// retryNotice queues a failed channel's own message again on its chat channel, while that channel can send.
+func (s *Store) retryNotice(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, channelID string) (domain.Message, error) {
+	channel, err := s.channelByID(ctx, tx, workspaceID, channelID)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	switch {
+	case !channel.Live():
+		return domain.Message{}, fmt.Errorf("%w: %s was removed.", ErrOutboundNotReady, channel.Name)
+	case !channel.Enabled:
+		return domain.Message{}, fmt.Errorf("%w: %s is off. Turn it on, then retry.", ErrOutboundNotReady, channel.Name)
+	}
+	result, err := tx.Exec(ctx, `UPDATE channel_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
+		claim_token=NULL,last_error=NULL,last_error_code=NULL,updated_at=now(),created_at=$3
+		WHERE workspace_id=$1 AND message_id=$2 AND status='failed' AND channel_id=$4`, workspaceID, messageID, s.now(), channel.ID)
+	if err != nil {
+		return domain.Message{}, fmt.Errorf("retry notice: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	return getMessage(ctx, tx, workspaceID, messageID)
+}
+
+// enqueueNotice queues a channel's own message on that chat channel, for the place the conversation's
+// newest item of it is in (the sender reads it there). The conversation's reply channel is neither used
+// nor pinned: a status notice of a chat moved into an email conversation is never emailed.
+func (s *Store) enqueueNotice(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, channel channels.Channel) error {
+	adapter, ok := s.channels.Adapter(channel.Type)
+	if !ok {
+		return fmt.Errorf("queue notice: no channel type %s", channel.Type)
+	}
+	recipient, err := replyRecipient(ctx, tx, workspaceID, conversationID, channel.ID)
+	if err != nil {
+		return err
+	}
+	prepared, err := adapter.Outbound().Prepare(ctx, tx, channels.PrepareRequest{WorkspaceID: workspaceID, Channel: channel,
+		ConversationID: conversationID, MessageID: messageID, Recipient: recipient, Host: s})
+	if err != nil {
+		return err
+	}
+	external := ""
+	if prepared.ExternalID != "" {
+		external = string(channel.Type) + ":" + prepared.ExternalID
+	}
+	if _, err := tx.Exec(ctx, `UPDATE messages SET channel_id=$3,external_id=COALESCE(NULLIF($4,''),external_id) WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, messageID, channel.ID, external); err != nil {
+		return fmt.Errorf("assign notice channel: %w", err)
+	}
+	status := prepared.Status
+	if status == "" {
+		status = channels.DeliveryQueued
+	}
+	var meta []byte
+	if len(prepared.Meta) > 0 {
+		meta = prepared.Meta
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,status,last_error,last_error_code,created_at,recipients,transport,channel_type,channel_id,meta)
+		VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,1,NULLIF($7,''),$8,$9,$10)`,
+		workspaceID, messageID, status, prepared.Reason, prepared.Code, s.now(), prepared.Transport, string(channel.Type), channel.ID, meta); err != nil {
+		return fmt.Errorf("queue notice: %w", err)
+	}
+	return nil
+}
+
 // RetryDelivery requeues a failed delivery of a reply in this workspace and conversation, if its
 // channel can send now.
 func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, messageID string) (domain.Message, error) {
@@ -399,6 +468,9 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 	})
 }
 
+// ErrDeliveryFinal refuses to retry a delivery that would fail the same way (MessageDelivery.Retryable).
+var ErrDeliveryFinal = errors.New("this delivery would fail the same way again")
+
 func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
 	message, err := getMessage(ctx, tx, workspaceID, messageID)
 	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
@@ -406,6 +478,14 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if message.Delivery.Status != "failed" {
 		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	if !message.Delivery.Retryable {
+		return domain.Message{}, ErrDeliveryFinal
+	}
+	// A channel's own message (a status notice) is retried on the chat channel it was queued on, never on
+	// the conversation's reply channel, which it does not pin either.
+	if message.NoticeKind != nil && message.ChannelID != nil {
+		return s.retryNotice(ctx, tx, workspaceID, conversationID, messageID, *message.ChannelID)
 	}
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {
@@ -485,12 +565,13 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	return getMessage(ctx, tx, workspaceID, messageID)
 }
 
-// OutboxClaim is one leased outbox row of any channel type.
+// OutboxClaim is one leased outbox row of any channel type: a message, or the thread item of a notice
+// the channel sends in a chat where no conversation is (ThreadItemID).
 type OutboxClaim struct {
-	OutboxID, WorkspaceID, MessageID, ClaimToken string
-	Attempts                                     int
-	Type                                         channels.Type
-	ChannelID                                    string
+	OutboxID, WorkspaceID, MessageID, ThreadItemID, ClaimToken string
+	Attempts                                                   int
+	Type                                                       channels.Type
+	ChannelID                                                  string
 }
 
 // ClaimDueOutbox leases due rows of every channel type, counts the attempt and stamps a claim token
@@ -506,9 +587,11 @@ func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, le
 		rows, err := tx.Query(ctx, `WITH due AS (
 				SELECT id FROM channel_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
 					AND NOT (channel_type=ANY($4))
+					AND NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id=channel_outbox.workspace_id AND c.id=channel_outbox.channel_id AND c.processing_paused_at IS NOT NULL)
 				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
 			UPDATE channel_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
-			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts,o.channel_type,COALESCE(o.channel_id::text,'')`,
+			RETURNING o.id::text,o.workspace_id::text,COALESCE(o.message_id::text,''),COALESCE(o.thread_item_id::text,''),o.claim_token::text,o.attempts,o.channel_type,
+				COALESCE(o.channel_id::text,'')`,
 			now, limit, now.Add(lease), skipped)
 		if err != nil {
 			return fmt.Errorf("claim deliveries: %w", err)
@@ -516,7 +599,7 @@ func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, le
 		claimed, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (OutboxClaim, error) {
 			var item OutboxClaim
 			var kind string
-			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts, &kind, &item.ChannelID)
+			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ThreadItemID, &item.ClaimToken, &item.Attempts, &kind, &item.ChannelID)
 			item.Type = channels.Type(kind)
 			return item, err
 		})
@@ -563,20 +646,38 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 			}
 		}
 		out.Channel = channel
+		if claim.ThreadItemID != "" {
+			return loadThreadNotice(ctx, tx, claim, out)
+		}
 		var meta []byte
 		var cc []string
 		var origin string
-		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,c.id::text,c.subject,c.channel,o.meta
+		var notice *string
+		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,m.notice_kind,c.id::text,c.subject,c.channel,o.meta
 			FROM channel_outbox o JOIN messages m ON m.workspace_id=o.workspace_id AND m.id=o.message_id
 			JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 			WHERE o.workspace_id=$1 AND o.id=$2`, claim.WorkspaceID, claim.OutboxID).
-			Scan(&out.Message.ID, &out.Message.Body, &cc, &out.Message.CreatedAt, &out.Conversation.ID, &out.Conversation.Subject, &origin, &meta)
+			Scan(&out.Message.ID, &out.Message.Body, &cc, &out.Message.CreatedAt, &notice, &out.Conversation.ID, &out.Conversation.Subject, &origin, &meta)
 		if err != nil {
 			return out, fmt.Errorf("load delivery %s: %w", claim.OutboxID, err)
 		}
 		out.Message.CC, out.Conversation.Origin, out.Prepared = cc, channels.Type(origin), meta
 		if out.Recipient, err = replyRecipient(ctx, tx, claim.WorkspaceID, out.Conversation.ID, channel.ID); err != nil {
 			return out, err
+		}
+		// A chat reply goes to the place the conversation's newest item of this channel is in, the place
+		// recordSentItem writes it in once sent.
+		var place channels.Place
+		err = tx.QueryRow(ctx, `SELECT t.kind,t.external_id,COALESCE(t.name,'') FROM conversation_thread_items l
+			JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id AND i.channel_id=$3
+			JOIN channel_threads t ON t.workspace_id=i.workspace_id AND t.id=i.thread_id
+			WHERE l.workspace_id=$1 AND l.conversation_id=$2 AND l.unlinked_at IS NULL ORDER BY l.linked_at DESC,l.id DESC LIMIT 1`,
+			claim.WorkspaceID, out.Conversation.ID, channel.ID).Scan(&place.Kind, &place.ExternalID, &place.Name)
+		switch {
+		case err == nil:
+			out.Place = &place
+		case !errors.Is(err, pgx.ErrNoRows):
+			return out, fmt.Errorf("load reply place: %w", err)
 		}
 		prefix := string(channel.Type) + ":"
 		// A message moved in from another customer's conversation, or taken back to the queue, is not this
@@ -593,7 +694,8 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 				return out, fmt.Errorf("scan thread reference: %w", err)
 			}
 			out.References = append(out.References, id)
-			if kind == "incoming" {
+			// The received notice answers the message that opened the conversation, whatever came since.
+			if kind == "incoming" && (notice == nil || out.LastIncoming == "") {
 				out.LastIncoming = id
 			}
 		}
@@ -633,7 +735,7 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 	case result.Retryable:
 		set, args = `next_attempt_at=$4,last_error=$5,last_error_code=NULLIF($6,'')`, []any{next, result.Reason, result.Code}
 	default:
-		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,'')`, []any{result.Reason, result.Code}
+		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,''),final=$6`, []any{result.Reason, result.Code, result.Final}
 	}
 	var meta []byte
 	if len(result.Meta) > 0 {
@@ -653,8 +755,9 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 			ids = append(ids, result.ExternalID)
 		}
 		if len(ids) > 0 && claim.ChannelID != "" {
-			if _, err := tx.Exec(ctx, `INSERT INTO channel_sent_ids(workspace_id,channel_id,external_id,message_id)
-				SELECT $1,$2,id,$3 FROM unnest($4::text[]) id ON CONFLICT DO NOTHING`, claim.WorkspaceID, claim.ChannelID, claim.MessageID, ids); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO channel_sent_ids(workspace_id,channel_id,external_id,message_id,thread_item_id)
+				SELECT $1,$2,id,NULLIF($3,'')::uuid,NULLIF($5,'')::uuid FROM unnest($4::text[]) id ON CONFLICT DO NOTHING`,
+				claim.WorkspaceID, claim.ChannelID, claim.MessageID, ids, claim.ThreadItemID); err != nil {
 				return 0, fmt.Errorf("record sent ids: %w", err)
 			}
 		}

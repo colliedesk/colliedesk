@@ -4,7 +4,7 @@ import { channelsApi } from '../../api/channels';
 import type { ChannelList } from '../../api/channels';
 import { resultsApi } from '../../api/results';
 import type { Results } from '../../api/results';
-import { channelSchema } from '../../api/schemas';
+import { knownChannels } from '../../api/schemas';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, XIcon } from '../../ui/icons';
@@ -13,6 +13,7 @@ import { listOf, withoutValue } from '../../lib/inbox-query-edit';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { trackFilterChanges } from './filter-analytics';
 import { channelLabel, filterMessages as text } from './filter-messages';
+import { slaOf } from '../../lib/sla';
 
 // The Filter menu, the Sort menu and the chips of the active filters. They load on their own chunk, right
 // after the first screen (inbox-filters.tsx).
@@ -29,8 +30,9 @@ export interface FilterPartProps {
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
-// Every value of the contract's ConversationChannel (channelSchema), named by the registry or as an origin.
-const channels = channelSchema.options;
+// The known values of the contract's ConversationChannel, named by the registry or as an origin; a chat
+// channel is chosen by itself (channel_id).
+const channels = knownChannels;
 const dateFilters = [['created', 'created_after', 'created_before'], ['updated', 'updated_after', 'updated_before']] as const;
 
 // How a conversation started without a channel, offered in every workspace.
@@ -44,7 +46,7 @@ function lastDay(before: string, timeZone: string): string {
 
 // Filters counted on the Filter button; status, sort and search have their own controls, and a date range
 // counts once. Source, organization and the date ranges are set only by a link and show as chips.
-const menuKeys: InboxQueryKey[] = ['priority', 'assignee', 'tag', 'contact', 'organization', 'awaiting', 'has_pending_draft', 'delivery_failed',
+const menuKeys: InboxQueryKey[] = ['priority', 'assignee', 'tag', 'sla', 'contact', 'organization', 'awaiting', 'has_pending_draft', 'delivery_failed',
   'source', 'channel', 'channel_id', 'created_after', 'updated_after'];
 const has = (query: InboxQuery, key: InboxQueryKey) => query[key] !== undefined && query[key] !== '';
 
@@ -64,7 +66,7 @@ function useChannelList(wanted: boolean): ChannelList | undefined {
   return list;
 }
 
-type ListFilter = 'priority' | 'assignee' | 'tag' | 'channel' | 'channel_id';
+type ListFilter = 'priority' | 'assignee' | 'tag' | 'channel' | 'channel_id' | 'sla';
 
 // changeOf replaces the filters (reporting what kind changed) and sets one of them.
 function changeOf({ query, onChange }: FilterPartProps) {
@@ -110,7 +112,8 @@ export function FilterBar(props: FilterPartProps) {
         <div className="filter-popover" role="group" aria-label={messages.filter}><FilterPanel {...props} opened={opened} /></div>
       </details>
       <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === 'updated_desc' ? undefined : event.currentTarget.value)}>
-        {Object.entries(text.sorts).filter(([value]) => offeredSorts.includes(value) || value === sort).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        {/* Due first is offered once a listed conversation has targets. */}
+        {Object.entries(text.sorts).filter(([value]) => offeredSorts.includes(value) || value === sort || (value === 'due' && props.conversations?.some((item) => slaOf(item)))).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
     </>
   );
@@ -149,6 +152,9 @@ function FilterPanel(props: FilterPartProps & { opened: boolean }) {
         {(chosenTags.length > 1 || query.tag_match === 'all') && <label className="check-row filter-match"><input type="checkbox" checked={query.tag_match === 'all'}
           onChange={(event) => set('tag_match', event.currentTarget.checked ? 'all' : undefined)} /><span>{text.matchAllTags}</span></label>}
       </fieldset>
+      {/* Offered once a listed conversation has targets (they are on), or while the filter is set. */}
+      {(listOf(query, 'sla').length > 0 || props.conversations?.some((item) => slaOf(item))) && <fieldset><legend>{text.targets}</legend>
+        {check('sla', 'overdue', text.targetStates.overdue)}{check('sla', 'due_soon', text.targetStates.due_soon)}</fieldset>}
       <fieldset><legend>{text.attention}</legend>
         <label className="check-row"><input type="checkbox" checked={query.awaiting === 'team'} onChange={(event) => set('awaiting', event.currentTarget.checked ? 'team' : undefined)} /><span>{text.awaitingOptions.team}</span></label>
         <label className="check-row"><input type="checkbox" checked={query.delivery_failed === true} onChange={(event) => set('delivery_failed', event.currentTarget.checked || undefined)} /><span>{text.deliveryFailed}</span></label>
@@ -226,10 +232,12 @@ export function FilterChips(props: FilterPartProps) {
     ...(query.awaiting === 'team' || query.awaiting === 'customer' ? [{ key: 'awaiting' as const, label: text.awaitingOptions[query.awaiting] }] : []),
     ...(query.has_pending_draft !== undefined ? [{ key: 'has_pending_draft' as const, label: query.has_pending_draft ? text.hasPendingDraft : text.noPendingDraft }] : []),
     ...(query.delivery_failed !== undefined ? [{ key: 'delivery_failed' as const, label: query.delivery_failed ? text.deliveryFailed : text.noDeliveryFailed }] : []),
+    ...listOf(query, 'sla').map((value) => ({ key: 'sla' as const, value, label: `${text.targets}: ${text.targetStates[value as 'overdue' | 'due_soon'] ?? value}` })),
     ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${channelLabel(value)}` })),
     ...listOf(query, 'channel_id').map((value) => ({ key: 'channel_id' as const, value, label: `${text.channel}: ${channelName(value)}` })),
     ...(query.source === 'imported' || query.source === 'native' ? [{ key: 'source' as const, label: `${text.source}: ${text.sources[query.source]}` }] : []),
     ...(query.organization ? [{ key: 'organization' as const, label: `${text.organization}: ${query.organization}` }] : []),
+    ...(query.ref ? [{ key: 'ref' as const, label: `${text.reference}: ${query.ref}` }] : []),
     ...(query.result ? [{ key: 'result' as const, label: resultLabel(query.result, results.data, timezone) }] : []),
     ...dateFilters.flatMap(([name, after, before]) => (query[after] || query[before]
       ? [{ key: after, label: `${text[name]}: ${text.dateRange(query[after] ? zonedDay(query[after], timezone) : undefined, query[before] ? lastDay(query[before], timezone) : undefined)}` }]

@@ -45,6 +45,7 @@ type inboxArgs struct {
 	Tag             stringList `json:"tag"`
 	TagMatch        string     `json:"tag_match"`
 	ContactID       string     `json:"contact_id"`
+	Ref             string     `json:"ref"`
 	Organization    string     `json:"organization"`
 	Awaiting        string     `json:"awaiting"`
 	HasPendingDraft *bool      `json:"has_pending_draft"`
@@ -57,6 +58,7 @@ type inboxArgs struct {
 	UpdatedAfter    string     `json:"updated_after"`
 	UpdatedBefore   string     `json:"updated_before"`
 	Sort            string     `json:"sort"`
+	SLA             stringList `json:"sla"`
 	Q               string     `json:"q"`
 	Result          string     `json:"result"`
 	Limit           int        `json:"limit"`
@@ -157,7 +159,10 @@ func (c *call) inboxQuery(args inboxArgs) (url.Values, error) {
 		}
 		set("tag", strings.Join(ids, ","))
 	}
-	for key, value := range map[string]string{"tag_match": args.TagMatch, "contact": args.ContactID, "organization": args.Organization,
+	if len(args.SLA) > 0 {
+		set("sla", strings.Join(args.SLA, ","))
+	}
+	for key, value := range map[string]string{"tag_match": args.TagMatch, "contact": args.ContactID, "ref": args.Ref, "organization": args.Organization,
 		"awaiting": args.Awaiting, "source": args.Source, "created_after": args.CreatedAfter, "created_before": args.CreatedBefore,
 		"updated_after": args.UpdatedAfter, "updated_before": args.UpdatedBefore, "sort": args.Sort, "search": args.Q, "result": args.Result} {
 		set(key, value)

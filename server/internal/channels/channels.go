@@ -12,7 +12,10 @@ package channels
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"regexp"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,6 +39,9 @@ type Channel struct {
 	DeletedAt       *time.Time
 	// IsDefault marks the channel of its type that answers what names no channel.
 	IsDefault bool
+	// ProcessingPausedAt is set while the channel's processing is paused: what arrives waits in its
+	// journal, nothing is decided or sent.
+	ProcessingPausedAt *time.Time
 }
 
 // Live is whether the channel was not removed.
@@ -86,32 +92,148 @@ const (
 	ActionCancel = "cancel"
 	// ActionReopen adds the message to the conversation the customer names (Intent.Ref).
 	ActionReopen = "reopen"
+	// ActionConfirm sends what the customer is writing now, where a scope asks before it opens
+	// (Gather.ConfirmSeconds); with nothing being written it is an ordinary message.
+	ActionConfirm = "confirm"
+	// ActionHelp answers with the channel's guide (Notices.Help): it opens nothing and is no part of a
+	// request being written.
+	ActionHelp = "help"
+)
+
+// Command matches.
+const (
+	// MatchFuzzy compares a message's first words folded (FoldText) and forgives one wrong letter of a
+	// phrase of five letters or more (the default).
+	MatchFuzzy = "fuzzy"
+	// MatchWords compares them folded and forgives no wrong letter, only a missing or doubled space
+	// between the words of the phrase.
+	MatchWords = "words"
+	// MatchExact compares the whole message, with its accents, in any case.
+	MatchExact = "exact"
 )
 
 // Command is a command customers type at the start of a message, as a workspace sets it up: its
 // phrases come only from the channel's settings, never from a list built into the server.
 type Command struct {
-	Action   string   `json:"action,omitempty"`
+	Action string `json:"action,omitempty"`
+	// Match is how its phrases are compared with a message (MatchFuzzy when empty).
+	Match    string   `json:"match,omitempty"`
 	Phrases  []string `json:"phrases,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Priority string   `json:"priority,omitempty"`
+	// AskDescription, where messages are collected, answers the command alone (no words after it, no
+	// file) by asking for a description: the request opens only once it has one.
+	AskDescription string `json:"ask_description,omitempty"`
 }
+
+// Notice kinds, as their messages are marked (notice_kind).
+const (
+	NoticeReceived       = "received"
+	NoticeUnmatched      = "unmatched"
+	NoticeAskConfirm     = "ask_confirm"
+	NoticeCancelled      = "cancelled"
+	NoticeAskDescription = "ask_description"
+	NoticeExpired        = "expired"
+	// NoticeReopenNotFound answers a reopen command whose code names no conversation of the customer's
+	// (mistyped, someone else's, another group's): the same words whatever the reason.
+	NoticeReopenNotFound = "reopen_not_found"
+	// NoticeReopenLegacy answers a reopen command naming a code of the system before (below where the
+	// channel's series was taken over), with the new conversation it opened instead.
+	NoticeReopenLegacy = "reopen_legacy"
+	// NoticeReopened and NoticeReopenNoted answer a reopen command that found its conversation: resolved or
+	// closed, it opened again; still open or pending, it took the message.
+	NoticeReopened    = "reopened"
+	NoticeReopenNoted = "reopen_noted"
+	// NoticeHelp answers a help command with the channel's guide.
+	NoticeHelp = "help"
+	// NoticeStatusPending, NoticeStatusResolved and NoticeStatusClosed tell a customer the team changed
+	// their conversation's status; one the team opens again is told with NoticeReopened.
+	NoticeStatusPending  = "status_pending"
+	NoticeStatusResolved = "status_resolved"
+	NoticeStatusClosed   = "status_closed"
+)
 
 // Notices are the messages a channel sends the customer by itself; an empty text is off.
 type Notices struct {
 	// Received answers the first message of a new conversation.
 	Received string `json:"received,omitempty"`
+	// Unmatched answers, in its chat, a message a scope with unmatched notice opens nothing for.
+	Unmatched string `json:"unmatched,omitempty"`
+	// UnmatchedEverySeconds is the least time between two unmatched notices of one chat (one customer
+	// writing on, or a bot answering the notice); 0 answers every message. Merge fills in the default.
+	UnmatchedEverySeconds *int `json:"unmatched_every_seconds,omitempty"`
+	// AskConfirm asks whether a request being written is complete (Gather.ConfirmSeconds).
+	AskConfirm string `json:"ask_confirm,omitempty"`
+	// Cancelled says a cancel command threw away the request being written.
+	Cancelled string `json:"cancelled,omitempty"`
+	// Expired tells a customer their request waiting for a description expired (Gather.ExpireSeconds).
+	Expired string `json:"expired,omitempty"`
+	// ReopenNotFound and ReopenLegacy answer a reopen command (NoticeReopenNotFound, NoticeReopenLegacy).
+	ReopenNotFound string `json:"reopen_not_found,omitempty"`
+	ReopenLegacy   string `json:"reopen_legacy,omitempty"`
+	Reopened       string `json:"reopened,omitempty"`
+	ReopenNoted    string `json:"reopen_noted,omitempty"`
+	// Help answers a help command (NoticeHelp).
+	Help string `json:"help,omitempty"`
+	// StatusPending, StatusResolved and StatusClosed tell the customer the team set the conversation to
+	// that status (NoticeStatusPending…); empty is quiet. Reopened (above) tells them it is open again.
+	StatusPending  string `json:"status_pending,omitempty"`
+	StatusResolved string `json:"status_resolved,omitempty"`
+	StatusClosed   string `json:"status_closed,omitempty"`
+	// HelpEverySeconds is the least time between two help notices of one chat; 0 answers each help.
+	// Merge fills in the default.
+	HelpEverySeconds *int `json:"help_every_seconds,omitempty"`
+}
+
+// DefaultUnmatchedEverySeconds is how long a chat waits for its next unmatched notice when the channel
+// sets nothing.
+const DefaultUnmatchedEverySeconds = 300
+
+// DefaultHelpEverySeconds is how long a chat waits for its next help notice when the channel sets nothing.
+const DefaultHelpEverySeconds = 300
+
+// NoticePlaceholders are the {name} placeholders each notice kind may use, which the frame fills when it
+// sends the notice. A placeholder of no list is refused when the settings are saved.
+var NoticePlaceholders = map[string][]string{NoticeReceived: {"ref"}, NoticeUnmatched: {}, NoticeAskConfirm: {}, NoticeCancelled: {},
+	NoticeAskDescription: {}, NoticeExpired: {}, NoticeReopenNotFound: {"ref"}, NoticeReopenLegacy: {"ref", "old_ref"},
+	NoticeReopened: {"ref"}, NoticeReopenNoted: {"ref"}, NoticeHelp: {},
+	NoticeStatusPending: {"ref", "subject"}, NoticeStatusResolved: {"ref", "subject"}, NoticeStatusClosed: {"ref", "subject"}}
+
+// noticePlaceholder is how a placeholder is written: {name}, lower case letters and underscores.
+var noticePlaceholder = regexp.MustCompile(`\{([a-z_]+)\}`)
+
+// UnknownPlaceholder is the first placeholder of text that a notice of kind may not use, "" when none.
+func UnknownPlaceholder(kind, text string) string {
+	for _, match := range noticePlaceholder.FindAllStringSubmatch(text, -1) {
+		if !slices.Contains(NoticePlaceholders[kind], match[1]) {
+			return match[0]
+		}
+	}
+	return ""
+}
+
+// RenderNotice fills the placeholders of a notice's text with values; one without a value is left out.
+func RenderNotice(text string, values map[string]string) string {
+	return noticePlaceholder.ReplaceAllStringFunc(text, func(placeholder string) string {
+		return values[placeholder[1:len(placeholder)-1]]
+	})
 }
 
 // Settings are a channel's rules for what arrives and what leaves. They never hold a secret.
 type Settings struct {
-	JoinPolicy        JoinPolicy         `json:"join_policy"`
-	DefaultTags       []string           `json:"default_tags,omitempty"`
-	DefaultPriority   string             `json:"default_priority,omitempty"`
-	DefaultAssigneeID string             `json:"default_assignee_id,omitempty"`
-	RateLimits        RateLimits         `json:"rate_limits"`
-	Commands          map[string]Command `json:"commands,omitempty"`
-	Notices           Notices            `json:"notices,omitempty"`
+	JoinPolicy JoinPolicy `json:"join_policy"`
+	// AutoCloseHours closes a conversation that stayed resolved this long (wall-clock, from its resolve or
+	// the customer's last message after it); nil or 0 never.
+	AutoCloseHours    *int     `json:"auto_close_hours,omitempty"`
+	DefaultTags       []string `json:"default_tags,omitempty"`
+	DefaultPriority   string   `json:"default_priority,omitempty"`
+	DefaultAssigneeID string   `json:"default_assignee_id,omitempty"`
+	// NumberSeries is the series of the workspace the conversations it opens are numbered in (empty: the
+	// default one, "#n").
+	NumberSeries string             `json:"number_series,omitempty"`
+	RateLimits   RateLimits         `json:"rate_limits"`
+	Commands     map[string]Command `json:"commands,omitempty"`
+	Notices      Notices            `json:"notices,omitempty"`
 	// Review holds a collected message that named no command for a person to decide (hold_reason review).
 	Review bool `json:"review,omitempty"`
 	// Scopes change these rules for one kind of conversation of the type (a chat's one-to-one messages
@@ -132,7 +254,28 @@ const (
 type Gather struct {
 	QuietSeconds int `json:"quiet_seconds"`
 	MaxSeconds   int `json:"max_seconds"`
+	// PreCommandSeconds takes what a sender said this long before a command into the command's batch
+	// (a screenshot sent just before "report a bug"), unless the batch named a command of its own. 0: a
+	// command always starts a batch of its own.
+	PreCommandSeconds int `json:"pre_command_seconds,omitempty"`
+	// ConfirmSeconds asks before a commanded batch opens (a one-to-one request written over several
+	// messages): once the customer is quiet, the channel sends Notices.AskConfirm and waits this long; a
+	// confirm command opens it at once, more messages join it and ask again, silence opens it. 0 asks not.
+	ConfirmSeconds int `json:"confirm_seconds,omitempty"`
+	// ExpireSeconds throws away a request still waiting for its description (Command.AskDescription) this
+	// long after the customer's last message; their next message is told so (Notices.Expired). 0 keeps it.
+	ExpireSeconds int `json:"expire_seconds,omitempty"`
 }
+
+// Unmatched rules of a scope that opens conversations only on a command.
+const (
+	// UnmatchedJoinOpen joins a message that names no command to its sender's open or pending
+	// conversation on the channel when there is exactly one; otherwise the message is kept unresolved.
+	UnmatchedJoinOpen = "join_open"
+	// UnmatchedNotice keeps a message that names no command in its chat and answers it there with the
+	// channel's unmatched notice.
+	UnmatchedNotice = "notice"
+)
 
 // Scope is the rules of one scope; a field left out keeps the channel's.
 type Scope struct {
@@ -140,7 +283,17 @@ type Scope struct {
 	JoinPolicy *JoinPolicy `json:"join_policy,omitempty"`
 	Gather     *Gather     `json:"gather,omitempty"`
 	Review     *bool       `json:"review,omitempty"`
+	// CutOnCommand: a command closes what its sender was collecting and starts a batch of its own (the
+	// default); false adds it to the batch being collected (a one-to-one chat composing a request).
+	CutOnCommand *bool `json:"cut_on_command,omitempty"`
+	// Unmatched is what a commands-only scope does with a message that names no command and continues
+	// nothing being collected: empty joins the open conversation its thread finds, else keeps it;
+	// UnmatchedJoinOpen joins the sender's only open conversation on the channel.
+	Unmatched string `json:"unmatched,omitempty"`
 }
+
+// Cuts says a command starts a batch of its own in this scope.
+func (s Scope) Cuts() bool { return s.CutOnCommand == nil || *s.CutOnCommand }
 
 // ForScope returns the rules of a scope: the channel's with what the scope sets over them.
 func (s Settings) ForScope(scope string) (Settings, Scope) {
@@ -163,12 +316,24 @@ func (s Settings) ForScope(scope string) (Settings, Scope) {
 
 // Merge returns s with every field override sets replacing it; override is JSON a channel stores.
 func (s Settings) Merge(override json.RawMessage) (Settings, error) {
-	if len(override) == 0 {
-		return s, nil
-	}
+	// s is a type's defaults, shared by every channel of the type: decoding writes into the maps and the
+	// slice it finds, so it decodes into copies of them.
 	merged := s
-	if err := json.Unmarshal(override, &merged); err != nil {
-		return Settings{}, err
+	merged.DefaultTags = slices.Clone(s.DefaultTags)
+	merged.Commands = maps.Clone(s.Commands)
+	merged.Scopes = maps.Clone(s.Scopes)
+	if len(override) > 0 {
+		if err := json.Unmarshal(override, &merged); err != nil {
+			return Settings{}, err
+		}
+	}
+	if merged.Notices.UnmatchedEverySeconds == nil {
+		every := DefaultUnmatchedEverySeconds
+		merged.Notices.UnmatchedEverySeconds = &every
+	}
+	if merged.Notices.HelpEverySeconds == nil {
+		every := DefaultHelpEverySeconds
+		merged.Notices.HelpEverySeconds = &every
 	}
 	return merged, nil
 }
@@ -251,6 +416,12 @@ type RouteKit interface {
 	FindChannel(ctx context.Context, externalAccount string) (Channel, bool, error)
 	// WriteError writes the API's error body.
 	WriteError(w http.ResponseWriter, status int, code, message string)
+	// Credential opens a secret of a channel of the route's type (a webhook's signing key); found is
+	// false when none is stored.
+	Credential(ctx context.Context, channel Channel, name string) (value string, found bool, err error)
+	// InWorkspace runs fn in a transaction of a channel's workspace (the type records what it saw of a
+	// delivery in its own table).
+	InWorkspace(ctx context.Context, channel Channel, fn func(pgx.Tx) error) error
 }
 
 // HelpCenterRoute is one route of a type on the help center: Path is below the help center's root

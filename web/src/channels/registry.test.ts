@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { renderHook, waitFor } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import { channelSchema } from '../api/schemas';
+import { channelSchema, knownChannels } from '../api/schemas';
 import { channelLabel } from '../features/inbox/filter-messages';
 import { channelTypes } from './registry';
 
@@ -10,7 +10,7 @@ import { channelTypes } from './registry';
 // words, icon and panels, and the shared pages never name a type (src/channels/registry.ts is the one list).
 
 const openapi = readFileSync(path.resolve(process.cwd(), '../contracts/openapi.yaml'), 'utf8');
-const apiTypes = /\n {4}ChannelType:\n(?: {6}.*\n)*? {6}enum: \[([^\]]*)\]/.exec(openapi)?.[1].split(',').map((type) => type.trim()) ?? [];
+const apiTypes = /\n {4}ChannelType:\n[\s\S]*?Shipped types: ([a-z_, ]+)\./.exec(openapi)?.[1].split(',').map((type) => type.trim()) ?? [];
 
 test('the registry has exactly the channel types of the API, once each', () => {
   expect(apiTypes.length).toBeGreaterThan(0);
@@ -49,12 +49,15 @@ test('the shared channel pages name no channel type', () => {
   }
 });
 
-// How a conversation started: the web app parses every conversation against channelSchema, so a value
-// the contract lists and the schema lacks would fail the whole inbox list. Both list the same values,
-// and each has words in the Filter menu.
-test('the conversation channel schema is the contract\'s ConversationChannel, and each value has a label', () => {
-  const contract = /\n {4}ConversationChannel:\n {6}type: string\n {6}enum: \[([^\]]*)\]/.exec(openapi)?.[1].split(',').map((value) => value.trim()) ?? [];
-  expect(contract.length).toBeGreaterThan(0);
-  expect([...channelSchema.options].sort()).toEqual([...contract].sort());
-  for (const value of contract) expect(channelLabel(value), value).not.toBe(value);
+// How a conversation started: the contract's ConversationChannel is any channel type's name, and documents
+// the values known today; the Filter menu offers those (knownChannels), each with its words, and a chat
+// type's name is still parsed, so it never fails the whole inbox list.
+test('the known conversation channels are the ones the contract documents, each has a label, and another type still parses', () => {
+  const block = (/\n {4}ConversationChannel:\n([\s\S]*?)\n {4}[A-Z]/.exec(openapi)?.[1] ?? '').replace(/\s+/g, ' ');
+  const documented = /Values: ([a-z_, ]+)\./.exec(block)?.[1].split(',').map((value) => value.trim()) ?? [];
+  expect(documented.length).toBeGreaterThan(0);
+  expect([...knownChannels].sort()).toEqual([...documented].sort());
+  for (const value of knownChannels) expect(channelLabel(value), value).not.toBe(value);
+  expect(channelSchema.safeParse('zalo').success).toBe(true);
+  expect(channelSchema.safeParse('Not a type').success).toBe(false);
 });

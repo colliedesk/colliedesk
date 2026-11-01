@@ -19,6 +19,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
@@ -50,6 +51,9 @@ var microsoftBaseURL = ""
 // e2eChannelTypes are channel types run after the shipped ones; only end-to-end builds set them (a
 // loopback chat type whose groups collect messages for intake).
 var e2eChannelTypes []channels.Adapter
+
+// e2eZalo points the Zalo channel type at a local stand-in of Zalo's API; only end-to-end builds set it.
+var e2eZalo zalo.Config
 
 func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -234,7 +238,7 @@ func recheckHelpCenterDomainsDaily(ctx context.Context, api *httpapi.Server) {
 
 // sweepDaily runs the daily clean-up at start and then daily until ctx ends: it clears the call and
 // answer of agent requests decided more than 90 days ago (the rows stay as the record of who asked and
-// who decided), and deletes for good the saved replies and knowledge base articles and collections that
+// who decided), erases the reasons of AI intake decisions older than 90 days, and deletes for good the saved replies and knowledge base articles and collections that
 // have been in the trash for 30 days, and knowledge base images no article has linked for 30 days.
 func sweepDaily(ctx context.Context, data *store.Store) {
 	ticker := time.NewTicker(24 * time.Hour)
@@ -244,6 +248,11 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 			slog.Error("prune old agent requests", "error", err)
 		} else if pruned > 0 {
 			slog.Info("pruned old agent requests", "count", pruned)
+		}
+		if pruned, err := data.PruneIntakeReasons(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("prune old intake reasons", "error", err)
+		} else if pruned > 0 {
+			slog.Info("erased the reasons of AI intake decisions older than 90 days", "count", pruned)
 		}
 		if purged, err := data.PurgeSavedReplyTrash(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("purge saved reply trash", "error", err)

@@ -80,11 +80,13 @@ func channelsUpdateSpec() Spec {
 		Name: "colliedesk_channels_update", Title: "Change a channel",
 		Description: `Rename a channel, make it its type's default (is_default true: what names no channel goes to it), turn it on or off, or change its configuration or its rules (settings). While a channel is off it receives nothing: ` +
 			`what arrives is held for a person to open or discard (the web form instead answers as if it did not exist), and replies are saved but not sent until it is on again. ` +
+			`processing_paused true pauses a Zalo channel's processing (what arrives waits in its journal as it came, nothing is decided, opened or sent), false resumes it: what arrived is then processed in order by its rules. ` +
 			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PATCH /api/v1/channels/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"minProperties":2,"properties":{` + channelIDInput + `,` +
-			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `}}`,
+			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `,` +
+			`"processing_paused":{"type":"boolean","description":"true pauses the channel's processing, false resumes it (Zalo channels only)."}}}`,
 		Output: channelOutput,
 		run:    channelsUpdate,
 	}

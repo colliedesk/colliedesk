@@ -15,7 +15,7 @@ func inboxSearchSpec() Spec {
 		Name:  "colliedesk_inbox_search",
 		Title: "Search the inbox",
 		Description: `List conversations (tickets) of the shared support inbox, most recently active first unless sort says otherwise. Each row gives the status, priority, assignee, tags, channel and who wrote in. ` +
-			`Use it to find work: status "open" is the working queue, assignee "unassigned" is what nobody owns, awaiting "team" is where the customer wrote last, tag follows a topic, q searches subjects, message text and the customer's name and email. ` +
+			`Use it to find work: status "open" is the working queue, assignee "unassigned" is what nobody owns, awaiting "team" is where the customer wrote last, tag follows a topic, q searches subjects, message text and the customer's name and email, and finds a conversation by its code (display_ref, such as #12) ahead of the rest. ` +
 			`Filters that take a list match any of its values (tag with tag_match "all" needs every tag); every filter given narrows further. saved_view_id applies a saved view (colliedesk_saved_views_list); an argument given next to it replaces that one filter of the view. ` +
 			`A row is only a summary; call colliedesk_conversation_get with its id to read the messages. ` +
 			`Results come in pages: when next_cursor is not null, call again with the same arguments plus that cursor. A page that is full may be followed by an empty one.` +
@@ -31,6 +31,7 @@ func inboxSearchSpec() Spec {
 			`"tag":` + oneOrMany(`{"type":"string","maxLength":100}`, 50, `"Name of an existing tag (see colliedesk_tags_list): its exact spelling, or any case when no other tag has the same letters. A list matches any of them unless tag_match is all."`) + `,` +
 			`"tag_match":{"type":"string","enum":["any","all"],"default":"any"},` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"Only conversations of this contact (colliedesk_contacts_find)."},` +
+			`"ref":{"type":"string","maxLength":60,"description":"The conversation with this code (display_ref), as a customer typed it: another case or leading zeros match, another year does not. q finds a code too, first."},` +
 			`"organization":{"type":"string","maxLength":200,"description":"Only conversations of contacts of this organization, ignoring case."},` +
 			`"awaiting":{"type":"string","enum":["team","customer"],"description":"team: the customer wrote last (notes do not count), the team owes an answer. customer: the team answered last."},` +
 			`"has_pending_draft":{"type":"boolean","description":"true: an AI agent's reply draft waits for a person's approval. false: none waits."},` +
@@ -41,8 +42,9 @@ func inboxSearchSpec() Spec {
 			`"created_after":{"type":"string","format":"date-time","maxLength":40,"description":"RFC 3339 with an offset; included."},` +
 			`"created_before":{"type":"string","format":"date-time","maxLength":40,"description":"Excluded."},` +
 			`"updated_after":{"type":"string","format":"date-time","maxLength":40},"updated_before":{"type":"string","format":"date-time","maxLength":40},` +
-			`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest"],"default":"updated_desc",` +
-			`"description":"priority: urgent first. waiting_longest: conversations awaiting the team, the oldest customer message first, then the rest."},` +
+			`"sla":` + oneOrMany(`{"type":"string","enum":["overdue","due_soon"]}`, 2, `"overdue: a running response target is past. due_soon: one is near (colliedesk_response_targets_get)."`) + `,` +
+			`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest","due"],"default":"updated_desc",` +
+			`"description":"priority: urgent first. waiting_longest: conversations awaiting the team, the oldest customer message first, then the rest. due: the earliest running response target first."},` +
 			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject, in any message text, or in the customer's name or email."},` +
 			`"result":{"type":"string","maxLength":120,"pattern":"^[0-9a-f-]{36}:(30d|7d)\\.[a-z_]+$","description":"Only the conversations one number of colliedesk_results_get counts: <snapshot id>:<window>.<metric>, for example <current id>:30d.first_response. Leave status out: a number counts any status."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Rows per page."},` +
@@ -111,6 +113,7 @@ func conversationGetSpec() Spec {
 			`"messages":{"type":"array","description":"Oldest first.","items":{"type":"object","required":["id","kind","created_at","truncated"],"properties":{` +
 			`"id":{"type":"string"},"kind":{"type":"string","enum":["incoming","outgoing","note"]},"created_at":{"type":"string"},` +
 			`"author":{"type":"string","description":"The team member who wrote an outgoing message or note in Colliedesk."},` +
+			`"notice_kind":{"type":"string","description":"A message the channel sent by itself, not a reply of the team: received, unmatched, ask_confirm, cancelled, ask_description, expired, reopened, reopen_noted, reopen_not_found, reopen_legacy, help, status_pending, status_resolved or status_closed. Left out for the team's own."},` +
 			`"written_by_agent_token":{"type":"object","required":["label","scope"],"description":"Present when an AI agent wrote the message through an agent token: model output, not a human decision.",` +
 			`"properties":{"label":{"type":"string"},"scope":{"type":"string","enum":["read","draft","send","admin"]}}},"delivery":{"type":"string"},` +
 			`"body":{"type":"string","description":"Text written by the team. Customer text is under untrusted_customer_content."},"truncated":{"type":"boolean"},` +

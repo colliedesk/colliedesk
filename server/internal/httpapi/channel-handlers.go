@@ -43,8 +43,12 @@ type channelBody struct {
 	UnsentCount   int              `json:"unsent_count"`
 	LastInboundAt *string          `json:"last_inbound_at"`
 	IsDefault     bool             `json:"is_default"`
-	CreatedAt     time.Time        `json:"created_at"`
-	UpdatedAt     time.Time        `json:"updated_at"`
+	// ProcessingPausedAt is when the channel's processing was paused; null while it runs.
+	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
+	// PausedCount is how many messages wait while it is paused (0 while it runs).
+	PausedCount int       `json:"paused_count"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	// DeletedAt is set on a removed channel, which only the list with include_removed shows.
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
@@ -52,6 +56,19 @@ type channelBody struct {
 type channelDetailBody struct {
 	channelBody
 	Config any `json:"config"`
+	// Settings are what the channel stores over its type's defaults, EffectiveSettings the rules in
+	// force; both are left out for a removed channel.
+	Settings          json.RawMessage    `json:"settings,omitempty"`
+	EffectiveSettings *channels.Settings `json:"effective_settings,omitempty"`
+}
+
+func detailBody(a *API, public store.ChannelPublic) channelDetailBody {
+	body := channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config, Settings: public.Settings}
+	if public.Settings != nil {
+		effective := public.Channel.Settings
+		body.EffectiveSettings = &effective
+	}
+	return body
 }
 
 func optionalText(value string) *string {
@@ -70,11 +87,11 @@ func (a *API) channelJSON(public store.ChannelPublic) channelBody {
 	return channelBody{ID: channel.ID, Type: channel.Type, Name: channel.Name, Enabled: channel.Enabled,
 		Status:  channelStateBody{State: public.Status.State, ReasonCode: optionalText(public.Status.ReasonCode), Message: optionalText(public.Status.Message)},
 		Summary: public.Summary, Capabilities: capabilities, HeldCount: public.Held, UnsentCount: public.Unsent, LastInboundAt: public.LastSeen,
-		IsDefault: channel.IsDefault, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
+		IsDefault: channel.IsDefault, ProcessingPausedAt: channel.ProcessingPausedAt, PausedCount: public.Paused, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
 }
 
 func (a *API) writeChannelDetail(response http.ResponseWriter, status int, public store.ChannelPublic) {
-	writeJSON(response, status, channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config})
+	writeJSON(response, status, detailBody(a, public))
 }
 
 // writeChannelConflict answers a value another channel of the workspace has: 409 with the field and
@@ -268,7 +285,7 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 			return nil, errAnswered
 		}
 		a.recordActivation(workspaceID, nil, public)
-		return channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config}, nil
+		return detailBody(a, public), nil
 	})
 }
 
@@ -278,14 +295,16 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	var input struct {
-		Name      *string         `json:"name"`
-		Enabled   *bool           `json:"enabled"`
-		IsDefault *bool           `json:"is_default"`
-		Config    json.RawMessage `json:"config"`
-		Settings  json.RawMessage `json:"settings"`
+		Name             *string         `json:"name"`
+		Enabled          *bool           `json:"enabled"`
+		IsDefault        *bool           `json:"is_default"`
+		Config           json.RawMessage `json:"config"`
+		Settings         json.RawMessage `json:"settings"`
+		ProcessingPaused *bool           `json:"processing_paused"`
 	}
-	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.IsDefault == nil && input.Config == nil && input.Settings == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config or settings.")
+	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.IsDefault == nil && input.Config == nil && input.Settings == nil &&
+		input.ProcessingPaused == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config, settings or processing_paused.")
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
@@ -295,7 +314,8 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	if _, err := a.store.UpdateChannel(request.Context(), workspaceID, id,
-		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request)); err != nil {
+		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings,
+			ProcessingPaused: input.ProcessingPaused}, channelActor(request)); err != nil {
 		writeChannelError(response, err)
 		return
 	}
@@ -518,6 +538,21 @@ func (k channelRouteKit) FindChannel(ctx context.Context, account string) (chann
 
 func (k channelRouteKit) WriteError(w http.ResponseWriter, status int, code, message string) {
 	writeError(w, status, code, message)
+}
+
+func (k channelRouteKit) Credential(ctx context.Context, channel channels.Channel, name string) (string, bool, error) {
+	if channel.Type != k.kind {
+		return "", false, channels.ErrNotFound
+	}
+	value, _, found, err := k.api.store.OpenChannelCredential(ctx, channel.WorkspaceID, channel.ID, name)
+	return value, found, err
+}
+
+func (k channelRouteKit) InWorkspace(ctx context.Context, channel channels.Channel, fn func(pgx.Tx) error) error {
+	if channel.Type != k.kind {
+		return channels.ErrNotFound
+	}
+	return k.api.store.InWorkspace(ctx, channel.WorkspaceID, fn)
 }
 
 func (k channelRouteKit) Channel(ctx context.Context, workspaceID, id string) (channels.Channel, bool, error) {

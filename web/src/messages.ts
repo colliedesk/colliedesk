@@ -1,3 +1,8 @@
+// "A", "A and B", "A, B and C".
+// A sentence starts with a capital, a channel's name or "the channel" alike.
+const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
+const listWords = (words: string[]) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
+
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
@@ -73,6 +78,9 @@ export const messages = {
   emailNav: 'Email',
   webFormNav: 'Web form',
   helpChatNav: 'Help chat',
+  zaloNav: 'Zalo OA',
+  conversationNumbers: 'Conversation numbers',
+  responseTargets: 'Response targets',
   connectAIAgent: 'Connect an AI agent',
   mcpURL: 'https://colliedesk.com/docs/mcp',
   conversationList: 'Conversation list',
@@ -101,6 +109,46 @@ export const messages = {
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
+  // The header's Resolve / Reopen when the change would tell the customer in their chat.
+  resolveAndTell: 'Resolve and tell',
+  reopenAndTell: 'Reopen and tell',
+  resolveAndTellName: (channel: string) => `Resolve and tell the customer on ${channel}`,
+  reopenAndTellName: (channel: string) => `Reopen and tell the customer on ${channel}`,
+  moreWaysToResolve: 'More ways to resolve',
+  moreWaysToReopen: 'More ways to reopen',
+  resolveQuietly: 'Resolve without telling the customer',
+  reopenQuietly: 'Reopen without telling the customer',
+  reopenQuietlyUse: 'To add a note or fix a detail',
+  // The timeline's line for the last status change not made by a person on the team.
+  statusEvent: {
+    token: (name: string, to: 'open' | 'pending' | 'resolved' | 'closed') =>
+      `${name} ${to === 'resolved' ? 'resolved it' : to === 'closed' ? 'closed it' : to === 'open' ? 'reopened it' : 'set it to Pending'}`,
+    aiAgent: 'An AI agent',
+    customer: 'Reopened when the customer wrote',
+    command: 'Reopened by the customer’s Reopen command',
+    autoClose: 'Closed by itself after staying resolved',
+    setting: 'setting',
+    imported: (status: string) => `Set to ${status} by the import`,
+  },
+  // Details · Status on a chat that tells its customer.
+  tellCustomer: 'Tell the customer',
+  tellWhich: (channel: string, told: string[], quiet: string[]) =>
+    `${capital(channel)} tells ${listWords(told)}${quiet.length ? `; ${listWords(quiet)} ${quiet.length === 1 ? 'stays' : 'stay'} quiet` : ''}.`,
+  tellUnticked: 'Unticked: the status you pick now is set quietly.',
+  tellUnknown: (channel: string) => `${capital(channel)} may tell the customer the status you pick.`,
+  tellNone: (channel: string) => `${capital(channel)} has no words for these statuses: they are set quietly.`,
+  theChannel: 'the channel',
+  // A status as a change to it reads: open is reopening.
+  statusChange: { open: 'Reopened', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
+  // Telling customers in a chat when the team sets a status (a chat channel's status notices).
+  tellCustomers: 'Tell customers',
+  tellCustomersTip: 'Customers in a chat whose channel has words for the new status are told',
+  resolveAndTellBulk: 'Resolve and tell customers',
+  resolveQuietlyBulk: 'Resolve quietly',
+  setStatusQuietly: 'Set status quietly',
+  bulkMayHaveTold: ' Customers in a chat were told where their channel has a message for that status.',
+  customersTold: (count: number, status: 'open' | 'pending' | 'resolved' | 'closed', told: number) =>
+    `${count} conversation${count === 1 ? '' : 's'} ${status === 'resolved' || status === 'closed' ? status : `set to ${status === 'open' ? 'Open' : 'Pending'}`}; ${told === 0 ? 'no customer is told' : `${told} customer${told === 1 ? '' : 's'} will be told in a few seconds`}.`,
   bulkUpdateFailed: 'The conversations could not be updated. Nothing was changed; try again.',
   clearFilters: 'Clear filters',
   showContactConversations: (name: string) => `All conversations of ${name}`,
@@ -127,6 +175,7 @@ export const messages = {
   sendShortcut: 'to send',
   reply: 'Send reply',
   sendAndResolve: 'Send and resolve',
+  sendAndResolveTells: (channel: string) => ` · ${channel} also tells the customer`,
   resolveShortcutAdd: ', add',
   resolveShortcut: 'to resolve',
   resolvedAfterReplyFailed: 'Your reply was sent, but the conversation could not be resolved. Press Resolve to try again.',
@@ -141,6 +190,18 @@ export const messages = {
   useOtherTabDraft: 'Use it',
   keepMyDraft: 'Keep mine',
   replyMode: 'Reply',
+  channelNotice: 'Sent by the channel · not a reply',
+  channelNoticeAuthor: 'Channel',
+  copyReference: (ref: string) => `Copy reference ${ref}`,
+  targets: 'Targets',
+  targetFirstReply: 'First reply',
+  targetResolve: 'Resolve',
+  targetsFoot: 'Counted in business hours; the clock runs while the conversation is Open.',
+  editTargets: 'Edit targets',
+  tagCount: (count: number) => `${count} ${count === 1 ? 'tag' : 'tags'}`,
+  // CopyButton's words, shared by every page that copies (features/settings/copy-button.tsx).
+  copyDone: 'Copied',
+  copyFailed: 'Could not copy. Select the text and copy it yourself.',
   incoming: 'Incoming',
   noteMode: 'Private note',
   attachments: 'Attachments',
@@ -289,6 +350,8 @@ export const messages = {
   minutes: (count: number) => `${count} minute${count === 1 ? '' : 's'}`,
   requests: 'Requests',
   requestsWaiting: (count: number) => `Requests, ${count} waiting`,
+  review: 'Review',
+  reviewWaiting: (count: number) => `Review, ${count} waiting`,
   someone: 'someone',
   replyDraftBy: (person: string, token: string) => `Reply draft by ${person} via ${token}`,
   draftText: 'Draft text',

@@ -7,6 +7,9 @@ import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
+import { ownRef } from './conversation-ref';
+import { slaMark, slaOf } from '../../lib/sla';
+import { ClockIcon } from '../../ui/icons';
 import { presenceViewPart } from './presence-part';
 import { useListKeys } from './use-list-keys';
 
@@ -110,6 +113,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
         // The tooltip names the timezone when it is not the browser's, so 5:42 AM is never read as local time.
         const full = formatDate(item.updated_at, timezone, now) + zoneSuffix(item.updated_at, timezone);
         const open = viewers?.get(item.id);
+        // A row with a target mark counts its tags, so its meta stays one line; the code and the mark are never cut.
+        const mark = slaMark(slaOf(item), timezone, now);
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
@@ -125,13 +130,16 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
               <span className="time-full">{full}</span>
             </time>
             <span className="conversation-meta">
+              {ownRef(item) && <span className="conv-ref">{ownRef(item)}</span>}
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
+              {mark && <span className={`sla-mark sla-${mark.tone}`} aria-label={mark.full} data-tip={mark.full}><ClockIcon />{mark.short}</span>}
               {channelLabel?.(item) && <span className="channel-pill">{channelLabel(item)}</span>}
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
               {open && open.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ViewerStack viewers={open} timezone={timezone} />} />}
-              {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
-              {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}
+              {mark && item.tags.length > 0 ? <span className="tag-pill tag-count" data-tip={item.tags.map((tag) => tag.name).join(', ')}>{messages.tagCount(item.tags.length)}</span>
+                : <>{item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
+                  {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}</>}
             </span>
           </button>
           </div>

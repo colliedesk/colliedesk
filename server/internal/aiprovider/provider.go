@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -62,6 +63,16 @@ const (
 )
 
 var imageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
+
+// Sendable says whether every provider takes the image: a known type, not empty, at most MaxImageBytes.
+func (i Image) Sendable() bool {
+	return imageTypes[i.MediaType] && len(i.Data) > 0 && len(i.Data) <= MaxImageBytes
+}
+
+// EscapeData keeps text inside its section: a customer cannot close the tag the prompt wraps them in.
+func EscapeData(text string) string {
+	return strings.NewReplacer("<", "‹", ">", "›").Replace(text)
+}
 
 // Request is everything a feature sends. System holds Colliedesk's own instructions only; text
 // written by a customer goes in Messages, wrapped by the feature.

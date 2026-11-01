@@ -46,7 +46,7 @@ func Catalog() []Spec {
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
-		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), microsoftConnectRequestSpec(), microsoftDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
+		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), microsoftConnectRequestSpec(), microsoftDisconnectRequestSpec(), workspaceSlugRequestSpec(), numberSeriesListSpec(), numberSeriesSetRequestSpec(), responseTargetsGetSpec(), responseTargetsSetRequestSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), helpCenterSearchConsoleUpdateSpec(), helpCenterDomainSetSpec(), helpCenterDomainCheckSpec(), helpCenterDomainRemoveSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), emailTestMessageSendSpec(), emailForwardingConfirmationGetSpec(), billingGetSpec(),
@@ -55,7 +55,8 @@ func Catalog() []Spec {
 		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
 		aiChatUsageGetSpec(), aiChatSessionsListSpec(), aiChatSessionGetSpec(), aiChatSessionDeleteRequestSpec(), aiChatPreviewSpec(),
 		channelAIGetSpec(), channelAISetSpec(), aiSourceConsentRequestSpec(), aiSourceConsentRemoveSpec(),
-		conversationChatGetSpec(), channelThreadsListSpec(), channelThreadItemsSpec(), channelUnresolvedItemsSpec(),
+		channelAIIntakeReadinessSpec(), channelAIIntakeEvaluationsListSpec(), channelAIIntakeEvaluationRecordSpec(),
+		conversationChatGetSpec(), channelThreadsListSpec(), channelThreadItemsSpec(), channelSendersSpec(), channelUnresolvedItemsSpec(),
 		intakeListSpec(), intakeGetSpec(), intakeDecideSpec(), intakeRequeueSpec(), intakeSummarySpec(), intakeStatsSpec(), conversationIntakeGetSpec(),
 		messagesMoveSpec(), messageMovesListSpec(), messageMoveUndoSpec(),
 		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
@@ -98,11 +99,14 @@ const (
 
 // conversationRowSchema lists how a conversation started from the registry (channel-values.go), so it is not a constant.
 var conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
-	`"id":{"type":"string"},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
+	`"id":{"type":"string"},"display_ref":{"type":"string","description":"The code customers see and type back (#12); find one with ref."},` +
+	`"sla":{"type":"object","description":"Its response clocks (state overdue, due_soon, ok, paused, stopped or met; first_response and resolution with due_at, overdue, business_minutes_left); left out when it has none."},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
 	`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
 	`"tags":{"type":"array","items":{"type":"string"}},` +
 	`"channel":{"type":"string","enum":` + conversationChannelEnum + `,"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +
 	`"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
 	`"contact_id":{"type":"string"},` +
+	`"last_status_change":{"type":"object","description":"The newest change of its status: to, at, by (agent, token, customer, command, auto_close or import) and the name of the team member or token; left out when it never changed."},` +
+	`"may_tell_customer":{"type":"boolean","description":"true: a status set now may tell its customer in their chat (colliedesk_conversation_update notify); left out when it would not."},` +
 	`"untrusted_customer_content":{"type":"object","required":["subject","contact"],"properties":{"subject":{"type":"string"},` +
 	`"contact":{"type":["object","null"],"properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}}}`

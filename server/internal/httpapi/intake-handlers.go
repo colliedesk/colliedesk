@@ -44,6 +44,8 @@ func writeIntakeError(response http.ResponseWriter, err error) {
 		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, body)})
 	case errors.Is(err, store.ErrGatheringNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No intake card with that id in this workspace.")
+	case errors.Is(err, intake.ErrNotASuggestion):
+		writeError(response, http.StatusBadRequest, "invalid_request", "follows_decision_id is not an AI suggestion of this card.")
 	case errors.Is(err, store.ErrNotACandidate):
 		writeError(response, http.StatusBadRequest, "invalid_request", "conversation_id is not one this card may join: it is of another place, customer or channel, or merged away. Nothing was decided.")
 	case errors.Is(err, intake.ErrInvalid):
@@ -147,9 +149,9 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 	if who.IsToken() {
 		actor.TokenID = who.SessionID
 	}
-	a.decideOnce(response, request, decideIntakeOperation, []string{input.Action, input.ConversationID, input.Command, input.Subject, input.IgnoreReason}, func(ctx context.Context) error {
+	a.decideOnce(response, request, decideIntakeOperation, []string{input.Action, input.ConversationID, input.Command, input.Subject, input.IgnoreReason, input.FollowsDecisionID}, func(ctx context.Context) error {
 		_, err := a.intakeService().Decide(ctx, who.Workspace.ID, id, intake.Decision{Action: input.Action, ConversationID: input.ConversationID,
-			Command: input.Command, Subject: input.Subject, IgnoreReason: input.IgnoreReason}, store.DecidedByAgent, actor)
+			Command: input.Command, Subject: input.Subject, IgnoreReason: input.IgnoreReason, FollowsDecisionID: input.FollowsDecisionID}, store.DecidedByAgent, actor)
 		return err
 	})
 }
@@ -186,6 +188,11 @@ func withoutCustomerText(detail store.IntakeGatheringDetail) store.IntakeGatheri
 	if detail.Place != nil {
 		detail.Place = &store.IntakePlace{Kind: detail.Place.Kind}
 	}
+	if detail.Suggestion != nil {
+		suggestion := *detail.Suggestion
+		suggestion.Subject, suggestion.Reason, suggestion.TargetSubject, suggestion.RunnerUpSubject = nil, nil, nil, nil
+		detail.Suggestion = &suggestion
+	}
 	decisions := make([]store.IntakeDecisionView, len(detail.Decisions))
 	for i, decision := range detail.Decisions {
 		decision.Subject, decision.Reason = nil, nil
@@ -201,6 +208,8 @@ type intakeDecisionInput struct {
 	Command        string `json:"command"`
 	Subject        string `json:"subject"`
 	IgnoreReason   string `json:"ignore_reason"`
+	// FollowsDecisionID is the AI suggestion of the card the decision follows.
+	FollowsDecisionID string `json:"follows_decision_id"`
 }
 
 // ignoreReasons are why a person may say a card is set aside.
@@ -217,6 +226,9 @@ func readIntakeDecision(response http.ResponseWriter, request *http.Request) ([]
 	case input.Action != intake.Create && (input.Command != "" || input.Subject != ""):
 	case input.IgnoreReason != "" && (input.Action != intake.Ignore || !slices.Contains(ignoreReasons, input.IgnoreReason)):
 	case len([]rune(input.Subject)) > 200 || len(input.Command) > 40:
+	case input.FollowsDecisionID != "" && !uuidShape.MatchString(input.FollowsDecisionID):
+		writeError(response, http.StatusBadRequest, "invalid_request", "follows_decision_id is not an AI suggestion of this card.")
+		return nil, input, false
 	default:
 		return body, input, true
 	}

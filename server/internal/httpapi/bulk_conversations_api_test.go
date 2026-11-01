@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5"
 )
@@ -96,7 +98,7 @@ func TestBulkUpdateSetsStatusAssigneeAndTags(t *testing.T) {
 	targets := f.ids[:2]
 
 	code, body := f.patch(t, targets, map[string]any{"status": "resolved"})
-	if code != http.StatusOK || body != `{"updated":2}`+"\n" {
+	if code != http.StatusOK || body != `{"told":0,"updated":2}`+"\n" {
 		t.Fatalf("set status: status=%d body=%q, want 200 {\"updated\":2}", code, body)
 	}
 	code, body = f.patch(t, targets, map[string]any{"assignee_id": f.agentID})
@@ -261,9 +263,25 @@ func TestBulkUpdateNeedsASessionAndTheWritePermission(t *testing.T) {
 
 func TestBulkUpdateOfFiftyConversationsCostsNoMoreStatementsThanOneAndStaysInBudget(t *testing.T) {
 	counter := &queryCounter{}
-	api, service, _, _ := testAPIOnPool(t, testPoolTraced(t, counter), nil)
+	pool := testPoolTraced(t, counter)
+	// Every conversation is in a chat whose channel tells each status: the notices follow the commit, so
+	// they cost the update nothing (docs/internals/performance.md).
+	loop := channeltest.NewLoopback(statusChat, channels.Async)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO channel_types(type,connectable) VALUES($1,true)`, string(statusChat)); err != nil {
+		t.Fatal(err)
+	}
+	api, service, _, _ := testAPIOnPool(t, pool, func(config *httpapi.Config) { config.ExtraChannelTypes = []channels.Adapter{loop} })
 	f := seedBulkFixture(t, api, service, 50)
 	tag := create(t, api, f.token, "/api/v1/tags", map[string]any{"name": "Budget tag"})
+	chat := create(t, api, f.token, "/api/v1/channels", map[string]any{"type": string(statusChat), "config": map[string]any{"account": "budget"},
+		"settings": map[string]any{"notices": map[string]any{"status_pending": "{ref}: waiting.", "status_resolved": "{ref}: fixed.", "status_closed": "{ref}: closed.", "reopened": "{ref}: open."}}})
+	if _, err := pool.Exec(context.Background(), `WITH thread AS (
+			INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id) SELECT workspace_id,$2::uuid,'direct','user:'||id FROM conversations WHERE id=ANY($1::uuid[]) RETURNING workspace_id,id,external_id),
+		item AS (INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,body,disposition,occurred_at)
+			SELECT workspace_id,$2::uuid,id,'in','customer',external_id,'conversation',now() FROM thread RETURNING workspace_id,id,body)
+		INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason) SELECT workspace_id,substr(body,6)::uuid,id,'opened' FROM item`, f.ids, chat); err != nil {
+		t.Fatal(err)
+	}
 
 	run := func(ids []string, status string) (int, time.Duration) {
 		counter.mu.Lock()
@@ -294,6 +312,10 @@ func TestBulkUpdateOfFiftyConversationsCostsNoMoreStatementsThanOneAndStaysInBud
 	}
 	if best > bulkLatencyBudget {
 		t.Errorf("best of 5 runs for 50 ids took %s, want at most %s", best, bulkLatencyBudget)
+	}
+	if marked := queryString(t, pool, `SELECT count(*)::text FROM conversations c WHERE status_notice_due IS NOT NULL
+		AND EXISTS(SELECT 1 FROM conversation_thread_items l WHERE l.conversation_id=c.id)`); marked != "50" {
+		t.Errorf("chat conversations marked to tell = %s, want 50", marked)
 	}
 	t.Logf("bulk update of 50 ids: %d statements (1 id: %d), best of 5 %s", fifty, one, best)
 }

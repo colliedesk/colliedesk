@@ -46,9 +46,20 @@ func (s *Store) UpdateWorkspaceName(ctx context.Context, workspaceID, name strin
 func (s *Store) UpdateWorkspaceTimezone(ctx context.Context, workspaceID, timezone string) (domain.Workspace, error) {
 	var workspace domain.Workspace
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `UPDATE workspaces SET timezone=$2 WHERE id=$1
+		if err := tx.QueryRow(ctx, `UPDATE workspaces SET timezone=$2 WHERE id=$1
 			RETURNING id::text,slug,name,timezone`, workspaceID, timezone).
-			Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone)
+			Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone); err != nil {
+			return err
+		}
+		// Response targets counted in the workspace's timezone count their clocks again.
+		var own bool
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT timezone IS NOT NULL FROM response_targets WHERE workspace_id=$1),true)`, workspaceID).Scan(&own); err != nil {
+			return err
+		}
+		if own {
+			return nil
+		}
+		return targetsChanged(ctx, tx, workspaceID)
 	})
 	if err != nil {
 		return domain.Workspace{}, fmt.Errorf("update workspace timezone: %w", err)

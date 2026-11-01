@@ -240,3 +240,60 @@ test('the assign menu lists only active agents', () => {
   expect(assign.getByRole('button', { name: 'Sam Teammate' })).toBeInTheDocument();
   expect(assign.queryByRole('button', { name: 'Gone Teammate' })).not.toBeInTheDocument();
 });
+
+const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+const chatRow = (id: string, subject: string): Conversation => ({ ...row(id, subject), channel: 'chat' as Conversation['channel'], channel_ref: zalo });
+const chatA = chatRow('13131313-1313-4313-8313-131313131313', 'Chat one');
+const chatB = chatRow('14141414-1414-4414-8414-141414141414', 'Chat two');
+function renderChats(onBulkUpdate = vi.fn().mockResolvedValue({ updated: 2 })) {
+  render(<InboxPage conversations={[alpha, chatA, chatB]} agents={[colleague]} tags={[billing]} currentAgentId={me} onBulkUpdate={onBulkUpdate} />);
+  return onBulkUpdate;
+}
+
+test('email alone offers no Tell customers; a chat in the selection offers it ticked, before the actions', () => {
+  renderChats();
+  pick(/alpha request/i);
+  expect(within(bar()).queryByRole('checkbox', { name: 'Tell customers' })).not.toBeInTheDocument();
+  pick(/chat one/i);
+  const tell = within(bar()).getByRole('checkbox', { name: 'Tell customers' });
+  expect(tell).toBeChecked();
+  expect(tell.closest('label')).toHaveAttribute('data-tip', 'Customers in a chat whose channel has words for the new status are told');
+  expect(within(bar()).getByRole('button', { name: 'Resolve and tell customers' })).toBeInTheDocument();
+  expect(tell.compareDocumentPosition(within(bar()).getByRole('button', { name: 'Resolve and tell customers' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('unticked, Resolve and Set status change quietly; ticked, they send no notify', async () => {
+  const onBulkUpdate = renderChats();
+  pick(/chat one/i);
+  pick(/chat two/i);
+  fireEvent.click(within(bar()).getByRole('button', { name: 'Resolve and tell customers' }));
+  await waitFor(() => expect(onBulkUpdate).toHaveBeenCalledWith([chatA.id, chatB.id], { status: 'resolved' }));
+  expect(await screen.findByText(/Customers in a chat were told where their channel has a message for that status\./)).toBeInTheDocument();
+  pick(/chat one/i);
+  fireEvent.click(within(bar()).getByRole('checkbox', { name: 'Tell customers' }));
+  fireEvent.click(within(bar()).getByRole('button', { name: 'Resolve quietly' }));
+  await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([chatA.id], { status: 'resolved', notify: false }));
+  expect(screen.queryByText(/were told/)).not.toBeInTheDocument();
+  pick(/chat two/i);
+  expect(within(bar()).getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
+  fireEvent.click(within(bar()).getByRole('checkbox', { name: 'Tell customers' }));
+  const status = within(within(bar()).getByRole('group', { name: 'Set status quietly' }));
+  fireEvent.click(status.getByRole('button', { name: /pending/i }));
+  await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([chatB.id], { status: 'pending', notify: false }));
+});
+
+test('the count of customers told is said when the server gives it', async () => {
+  renderChats(vi.fn().mockResolvedValue({ updated: 2, told: 1 }));
+  pick(/chat one/i);
+  pick(/chat two/i);
+  fireEvent.click(within(bar()).getByRole('button', { name: 'Resolve and tell customers' }));
+  expect(await screen.findByText('2 conversations resolved; 1 customer will be told in a few seconds.')).toBeInTheDocument();
+});
+
+test('the server’s word on each row decides Tell customers: an email row a chat message moved into, never a chat that tells nothing', () => {
+  render(<InboxPage conversations={[{ ...alpha, may_tell_customer: true }, { ...chatA, may_tell_customer: false }]} agents={[colleague]} tags={[billing]} currentAgentId={me} onBulkUpdate={vi.fn()} />);
+  pick(/chat one/i);
+  expect(within(bar()).queryByRole('checkbox', { name: 'Tell customers' })).not.toBeInTheDocument();
+  pick(/alpha request/i);
+  expect(within(bar()).getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
+});

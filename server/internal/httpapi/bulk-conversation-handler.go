@@ -15,9 +15,11 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 			AssigneeID   json.RawMessage `json:"assignee_id"`
 			AddTagIDs    []string        `json:"add_tag_ids"`
 			RemoveTagIDs []string        `json:"remove_tag_ids"`
+			Notify       *bool           `json:"notify"`
 		} `json:"changes"`
 	}
-	if err := decodeJSON(request, &input); err != nil || input.Changes == nil {
+	raw, err := readBody(request)
+	if err != nil || decodeJSON(request, &input) != nil || input.Changes == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Conversation changes are invalid.")
 		return
 	}
@@ -48,7 +50,11 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 			return
 		}
 	}
-	update := store.BulkConversationUpdate{Status: changes.Status, AddTagIDs: changes.AddTagIDs, RemoveTagIDs: changes.RemoveTagIDs, ActorID: principal(request).Agent.ID}
+	quiet := changes.Notify != nil && !*changes.Notify
+	if a.statusNeedsApproval(response, request, Route{Method: http.MethodPatch, Pattern: "/api/v1/conversations"}, principal(request), raw, input.IDs, changes.Status, quiet) {
+		return
+	}
+	update := store.BulkConversationUpdate{Status: changes.Status, AddTagIDs: changes.AddTagIDs, RemoveTagIDs: changes.RemoveTagIDs, ActorID: principal(request).Agent.ID, TokenID: tokenOf(request), Quiet: quiet}
 	if len(changes.AssigneeID) > 0 {
 		var value *string
 		if string(changes.AssigneeID) != "null" && json.Unmarshal(changes.AssigneeID, &value) != nil {
@@ -57,10 +63,10 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 		}
 		update.AssigneeID = &value
 	}
-	updated, err := a.store.BulkUpdateConversations(request.Context(), principal(request).Workspace.ID, input.IDs, update)
+	result, err := a.store.BulkUpdateConversationsTelling(request.Context(), principal(request).Workspace.ID, input.IDs, update)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]int{"updated": updated})
+	writeJSON(response, http.StatusOK, map[string]int{"updated": result.Updated, "told": result.Told})
 }

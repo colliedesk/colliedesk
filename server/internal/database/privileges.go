@@ -16,6 +16,9 @@ const (
 	// PrivilegeAgentRequestPrune clears the call and answer of agent requests decided more than 90
 	// days ago, in every workspace; the audit rows stay.
 	PrivilegeAgentRequestPrune Privilege = "agent-request-prune"
+	// PrivilegeIntakeReasonPrune erases, in every workspace, the reason AI gave for an intake decision
+	// more than 90 days ago; the decision stays.
+	PrivilegeIntakeReasonPrune Privilege = "intake-reason-prune"
 	// PrivilegeSavedReplyPurge deletes, in every workspace, the saved replies that have been in the
 	// trash for more than 30 days, with their history.
 	PrivilegeSavedReplyPurge Privilege = "saved-reply-purge"
@@ -57,6 +60,16 @@ const (
 	// failed, or collected until their flush time) for the inbound worker; each is then processed in its
 	// own workspace.
 	PrivilegeChannelInboundClaim Privilege = "channel-inbound-claim"
+	// PrivilegeSLAClaim lists the conversations of every workspace whose response clocks are stale, or due
+	// a reminder, for the response clock worker; each is then counted or sent in its own workspace.
+	PrivilegeSLAClaim Privilege = "sla-claim"
+	// PrivilegeAutoCloseClaim lists the resolved conversations of every workspace whose chat channel closes
+	// them by itself and whose time came, for the auto-close worker; each is then closed in its own
+	// workspace.
+	PrivilegeAutoCloseClaim Privilege = "auto-close-claim"
+	// PrivilegeStatusNoticeClaim lists the conversations of every workspace a bulk status change marked to
+	// tell their customers, for the status notice worker; each is then told in its own workspace.
+	PrivilegeStatusNoticeClaim Privilege = "status-notice-claim"
 	// PrivilegeIntakeDueClaim lists the gatherings of chat intake of every workspace past their time to
 	// be decided, for the rules' decision to apply; each is then applied in its own workspace.
 	PrivilegeIntakeDueClaim Privilege = "intake-due-claim"
