@@ -1,0 +1,36 @@
+name: Milestone closed, update AGENTS.md
+
+# A milestone is a goal. When one closes, what it made true belongs in AGENTS.md, which every
+# contributor and agent reads first. This opens that issue, assigned to whoever closed the milestone
+# (.github/scripts/milestone-agents-md.sh; tests/milestone-agents-md-test.sh).
+on:
+  milestone:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: Milestone number
+        required: true
+      dry_run:
+        description: Print the issue instead of filing it
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  file-issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open the AGENTS.md issue for the closed milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.milestone.number || inputs.milestone }}
+          ASSIGNEE: ${{ github.event.sender.login }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: sh .github/scripts/milestone-agents-md.sh "$NUMBER"

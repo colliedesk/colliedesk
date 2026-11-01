@@ -95,6 +95,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.Billing = fakePolar.config()
 		hostedConfig(config)
 		config.Email.ResendWebhookSecret = resendWebhookSecret
+		config.Email.MailFromDomain = "mail.contract.example"
+		config.AlertMailer = &recordingMailer{}
 		config.ProblemReportWorkspace = "contract-support"
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Keys: keys, Base: "http://127.0.0.1:1"}
