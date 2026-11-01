@@ -24,10 +24,10 @@ export const zaloMessages = {
   verification: 'Domain verification',
   verificationLead: 'Zalo takes the webhook URL only on a verified address. Colliedesk serves Zalo’s file for you: no DNS change or upload.',
   verificationSteps: [
-    'In Zalo for Developers → your app → Domain verification, choose URL prefix and paste this prefix:',
-    'Choose the HTML file method. Zalo shows a file named zalo_verifier<code>.html.',
+    'In Zalo for Developers → your app → Domain verification (Xác thực domain), choose URL prefix (Tiền tố URL) and paste this prefix:',
+    'Choose the HTML file method (Tải tệp HTML). Zalo shows a file named zalo_verifier<code>.html.',
     'Paste the code, or the file’s name, below and save it.',
-    'Press Verify in Zalo, then paste the webhook URL below.',
+    'Press Verify (Xác thực) in Zalo, then paste the webhook URL below.',
   ],
   copyPrefix: 'Copy prefix',
   prefixCopied: 'Prefix copied',
