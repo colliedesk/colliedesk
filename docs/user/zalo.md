@@ -117,7 +117,8 @@ for you, also on Colliedesk Cloud's address. An admin, in this order:
    verified; then paste the **Webhook URL** in the app's webhook settings.
 
 The file is served while the channel holds the code: **Remove code** stops it, and so does removing the
-channel. Several Zalo apps can each verify the same address with their own code, one per channel. Any
+channel. Keep it after Zalo verified the prefix, as Zalo may check the file again: turning the channel off
+keeps serving it, and so does another channel that holds the same code. Several Zalo apps can each verify the same address with their own code, one per channel. Any
 other name below the prefix answers as an address the server does not have.
 
 ## The Messages tab

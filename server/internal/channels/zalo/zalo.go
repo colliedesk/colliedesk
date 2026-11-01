@@ -220,8 +220,7 @@ func (config) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.
 		if strings.TrimSpace(*value.SiteVerification) != "" {
 			var ok bool
 			if code, ok = SiteVerificationCode(*value.SiteVerification); !ok {
-				return channels.ConfigChange{}, fieldError("site_verification",
-					"Paste the code Zalo shows for the HTML file method (the part of zalo_verifier<code>.html between zalo_verifier and .html), or the file's name; an empty value clears it.")
+				return channels.ConfigChange{}, fieldError("site_verification", SiteVerificationRule)
 			}
 		}
 		value.SiteVerification, change.Detail["site_verification"] = &code, code != ""

@@ -157,7 +157,9 @@ test('a code the server refuses says why next to the box', async () => {
   const block = screen.getByRole('region', { name: 'Domain verification' });
   fireEvent.change(within(block).getByLabelText('Verification code'), { target: { value: 'not a code' } });
   fireEvent.click(within(block).getByRole('button', { name: 'Save code' }));
-  await waitFor(() => expect(within(block).getByLabelText('Verification code')).toHaveAccessibleDescription(/Paste the code Zalo shows for the HTML file method/));
+  await waitFor(() => expect(within(block).getByLabelText('Verification code')).toHaveAccessibleDescription('Paste the code Zalo shows for the HTML file method.'));
+  // Said once: neither the hint nor the form's generic refusal repeats it.
+  expect(within(block).queryByText('Check the Zalo channel.')).toBeNull();
 });
 
 test('an agent sees whether the prefix can be verified and changes nothing', () => {

@@ -183,6 +183,8 @@ function Verification({ channel, canManage }: ChannelPanelProps) {
   const id = useId();
   const file = current ? `zalo_verifier${current}.html` : undefined;
   const removing = save.isPending && save.variables === '';
+  // The server's refusal of the code says the rule itself; the hint and the form's own words would repeat it.
+  const codeError = save.variables !== '' ? fieldErrors(save.error).site_verification : undefined;
   return <section className="zl-block" aria-labelledby={`${id}-verify`}><h3 id={`${id}-verify`}>{m.verification}</h3>
     <p className="lead">{m.verificationLead}</p>
     <ol className="zl-steps">
@@ -195,12 +197,12 @@ function Verification({ channel, canManage }: ChannelPanelProps) {
       event.preventDefault();
       if (!feedback.pending && pasted.trim()) save.mutate(pasted.trim());
     }}>
-      <Field id={`${id}-code`} label={m.verificationCode} error={save.variables !== '' ? fieldErrors(save.error).site_verification : undefined} help={m.verificationCodeHint}>
+      <Field id={`${id}-code`} label={m.verificationCode} error={codeError} help={codeError ? undefined : m.verificationCodeHint}>
         {(props) => <input {...props} className="zl-mono-input" autoComplete="off" spellCheck={false} maxLength={2000} value={pasted}
           onChange={(event) => { feedback.touch(); setPasted(event.target.value); }} />}</Field>
       <span className="button-row"><button type="submit" disabled={feedback.pending || !pasted.trim()}>{feedback.saveLabel(m.saveCode)}</button>
         {current && <button type="button" disabled={feedback.pending} onClick={() => save.mutate('')}>{removing ? m.removingCode : m.removeCode}</button>}
-        {feedback.status}</span>
+        {!codeError && feedback.status}</span>
     </form>}
   </section>;
 }

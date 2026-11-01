@@ -15,6 +15,10 @@ import (
 // it cannot change (Colliedesk Cloud) still sets the webhook. Zalo fetches zalo_verifier<code>.html in it.
 const VerificationDir = "/channels/zalo"
 
+// SiteVerificationRule says what a code is and what may be pasted for it, when what was pasted is not one.
+const SiteVerificationRule = "No code found: Zalo's code is 8 to 100 letters, digits, _ or -; paste it, the TXT line " +
+	"(zalo-platform-site-verification=<code>), the meta tag or the file's name (zalo_verifier<code>.html), or leave it empty to clear it."
+
 // MaxSiteVerificationPaste bounds what may be pasted for a code (the whole file fits).
 const MaxSiteVerificationPaste = 2000
 
