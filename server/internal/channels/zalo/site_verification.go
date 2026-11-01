@@ -19,9 +19,10 @@ const VerificationDir = "/channels/zalo"
 const MaxSiteVerificationPaste = 2000
 
 var (
-	siteCode     = regexp.MustCompile(`^[A-Za-z0-9_-]{8,100}$`)
-	siteFile     = regexp.MustCompile(`^zalo_verifier([A-Za-z0-9_-]{8,100})\.html$`)
-	pastedFile   = regexp.MustCompile(`zalo_verifier([A-Za-z0-9_-]+)\.html`)
+	siteCode = regexp.MustCompile(`^[A-Za-z0-9_-]{8,100}$`)
+	siteFile = regexp.MustCompile(`^zalo_verifier([A-Za-z0-9_-]{8,100})\.html$`)
+	// The file's name, with or without .html, alone or at the end of its address.
+	pastedFile   = regexp.MustCompile(`zalo_verifier([A-Za-z0-9_-]+)(?:\.html)?$`)
 	pastedMeta   = regexp.MustCompile(`(?is)<meta[^>]*zalo-platform-site-verification[^>]*>`)
 	metaContent  = regexp.MustCompile(`(?is)\bcontent\s*=\s*["']([^"']*)["']`)
 	pastedRecord = regexp.MustCompile(`(?i)^zalo-platform-site-verification\s*=\s*"?([^"\s]*)"?$`)

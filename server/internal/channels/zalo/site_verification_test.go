@@ -17,6 +17,9 @@ func TestASiteVerificationCodeIsReadFromWhateverZaloShows(t *testing.T) {
 		`<meta property="zalo-platform-site-verification" content="` + code + `" />`,
 		`<meta name='zalo-platform-site-verification' content='` + code + `'>`,
 		"zalo_verifier" + code + ".html",
+		"zalo_verifier" + code,
+		" zalo_verifier" + code + ".html ",
+		"https://desk.example.com/api/v1/channels/zalo/zalo_verifier" + code,
 		"https://desk.example.com/api/v1/channels/zalo/zalo_verifier" + code + ".html",
 		`<!DOCTYPE html><html lang="en"><head><meta property="zalo-platform-site-verification" content="` + code +
 			`" /></head><body>There Is No Limit To What You Can Accomplish Using Zalo!</body></html>`,
