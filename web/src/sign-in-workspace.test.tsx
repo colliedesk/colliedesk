@@ -196,6 +196,22 @@ test.each([
   for (const answer of ['goal', 'role', 'source']) expect(body).not.toHaveProperty(answer);
 });
 
+test('a sign-up from an ad link sends the post and the click it came from, then forgets them', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  open('/sign-in?intent=trial&plan=team25&utm_source=tiktok&utm_content=post-07&fbclid=IwAR_x&token_like=drop%20me');
+  const body = await submitSignup('Start free trial');
+  expect(body.attribution).toEqual({ utm_source: 'tiktok', utm_content: 'post-07', fbclid: 'IwAR_x', click_id_seen_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) as unknown });
+  await waitFor(() => expect(window.sessionStorage.getItem('colliedesk.signup-attribution')).toBeNull());
+});
+
+test('a sign-up without an ad link sends no attribution', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  open('/sign-in?intent=trial&plan=team25');
+  expect(await submitSignup('Start free trial')).not.toHaveProperty('attribution');
+});
+
 test('a plain trial sign-up still asks the three questions and refuses to go on without them', async () => {
   clerk.signedIn = true;
   serve({ signedIn: false, config: config(false), exchange: notAnAgent() });

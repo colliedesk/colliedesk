@@ -11,6 +11,7 @@ import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
 import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
+import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
@@ -377,8 +378,10 @@ const signInRoute = createRoute({
     ...(typeof search.next === 'string' ? { next: search.next } : {}),
   }),
   // `buy` and `plan` stay in the address through the identity provider's round trip, so the address decides
-  // which plan, if any, this sign-in is for (see signInCheckoutIntent, signInPlanIntent).
-  beforeLoad: ({ search }) => { signInCheckoutIntent(search); signInPlanIntent(search); },
+  // which plan, if any, this sign-in is for (see signInCheckoutIntent, signInPlanIntent). The utm_* keys and
+  // ad click IDs of the website's links are kept for the sign-up from the raw address: the parsed search
+  // would turn `utm_content=07` into a number (see rememberSignupAttribution).
+  beforeLoad: ({ search, location }) => { signInCheckoutIntent(search); signInPlanIntent(search); rememberSignupAttribution(location.searchStr); },
   component: function SignIn() {
     const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
     const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });

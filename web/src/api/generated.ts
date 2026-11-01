@@ -319,7 +319,7 @@ export interface paths {
         put?: never;
         /**
          * Start a cloud trial
-         * @description Creates a workspace on a 14 day trial with the verified email of the identity provider's bearer token as its first admin, and signs that person in (session cookie, as for the cloud exchange). The route exists only on the hosted cloud, where cloud sign-in and billing are both configured; everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person. At most 3 sign-ups per client address in a rolling 24 hours. The web form also asks what the team wants first (`goal`), the person's `role` and where they heard of Colliedesk (`source`); each is optional, is stored with the workspace and is counted with the trial. A value outside its list answers 400 `invalid_request` and creates nothing.
+         * @description Creates a workspace on a 14 day trial with the verified email of the identity provider's bearer token as its first admin, and signs that person in (session cookie, as for the cloud exchange). The route exists only on the hosted cloud, where cloud sign-in and billing are both configured; everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person. At most 3 sign-ups per client address in a rolling 24 hours. The web form also asks what the team wants first (`goal`), the person's `role` and where they heard of Colliedesk (`source`); each is optional, is stored with the workspace and is counted with the trial. A value outside its list answers 400 `invalid_request` and creates nothing. `attribution` carries the post or ad the sign-in link came from; values the server does not accept are dropped instead.
          */
         post: operations["signUpCloud"];
         delete?: never;
@@ -6545,6 +6545,23 @@ export interface components {
          * @enum {string}
          */
         OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
+        /** @description The post or ad a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys and the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links. A value is kept only when it matches `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. Stored with the onboarding answers and counted with the trial and the first payment. */
+        SignupAttribution: {
+            utm_source?: string;
+            utm_medium?: string;
+            utm_campaign?: string;
+            utm_content?: string;
+            utm_term?: string;
+            ttclid?: string;
+            fbclid?: string;
+            /**
+             * Format: date-time
+             * @description When the browser first saw `ttclid` or `fbclid`. Missing, in the future or older than 7 days, the sign-up time stands in.
+             */
+            click_id_seen_at?: string;
+        } & {
+            [key: string]: string;
+        };
         Me: {
             /** @description True when this agent hid the setup guide in the inbox. */
             setup_guide_hidden: boolean;
@@ -10161,6 +10178,7 @@ export interface operations {
                     source?: components["schemas"]["OnboardingSource"];
                     timezone?: components["schemas"]["SignInTimezone"];
                     next?: components["schemas"]["SignInNext"];
+                    attribution?: components["schemas"]["SignupAttribution"];
                 };
             };
         };
