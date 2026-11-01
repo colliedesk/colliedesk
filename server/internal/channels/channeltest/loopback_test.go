@@ -233,6 +233,35 @@ func TestReceivedNoticeIsSentThroughTheOutbox(t *testing.T) {
 	}
 }
 
+// The received notice is the channel's, not the team's: it is marked, the conversation still waits for
+// a first reply (the inbox's awaiting filter, Results, the setup step), and a teammate who saw the
+// conversation before it is not told someone replied.
+func TestTheReceivedNoticeIsNoReplyOfTheTeam(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	loop.Defaults.Notices.Received = "Thanks, we got your message."
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "n1", From: "u1", Text: "help"})
+	conversationID := d.one(t, `SELECT id::text FROM conversations WHERE workspace_id=$1`)
+	if got := d.one(t, `SELECT COALESCE(notice_kind,'none') FROM messages WHERE workspace_id=$1 AND kind='outgoing'`); got != "received" {
+		t.Fatalf("notice_kind = %s", got)
+	}
+	if got := d.one(t, `SELECT last_public_kind FROM conversations WHERE workspace_id=$1`); got != "incoming" {
+		t.Fatalf("last public kind after the notice = %s, want incoming", got)
+	}
+	seen := 0
+	reply, err := d.store.CreateReply(ctx, d.workspaceID, conversationID, store.Actor{AgentID: d.agentID}, "outgoing", "Looking into it", nil, &seen)
+	if err != nil {
+		t.Fatalf("a reply after only the notice: %v", err)
+	}
+	if reply.NoticeKind != nil {
+		t.Fatalf("the team's reply is marked %s", *reply.NoticeKind)
+	}
+	if got := d.one(t, `SELECT last_public_kind FROM conversations WHERE workspace_id=$1`); got != "outgoing" {
+		t.Fatalf("last public kind after the team replied = %s", got)
+	}
+}
+
 // A reply sent in parts that fails halfway keeps what went: the retry sends only the rest, and every
 // part's id is known, so the copies the channel sends back are dropped as our own.
 func TestReplySentInPartsResumesAndKnowsItsEchoes(t *testing.T) {

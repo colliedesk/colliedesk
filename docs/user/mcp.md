@@ -148,6 +148,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_microsoft_connect_request` | Asks an admin to connect Microsoft 365 for sending replies; the approver gets Microsoft's sign-in page | `read` |
 | `colliedesk_microsoft_disconnect_request` | Asks to disconnect Microsoft 365 | `read` |
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
+| `colliedesk_number_series_list` | Lists the series conversations are numbered in, with their code format and next number | `read` |
+| `colliedesk_number_series_set_request` | Asks to add a number series or change its format, next number or start | `read` |
+| `colliedesk_response_targets_get` | Reads the business hours and the response targets by priority | `read` |
+| `colliedesk_response_targets_set_request` | Asks to change the business hours or the response targets | `read` |
+| `colliedesk_my_sla_alerts_set` | Turns your own reminder and overdue emails on or off | `draft` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |
@@ -204,9 +209,13 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope; a raise waits for a person (admin token) | `admin` |
 | `colliedesk_ai_source_consent_request` | Asks to let AI intake send images, a contact's profile or an integration's data | `read` |
 | `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data (admin token) | `admin` |
+| `colliedesk_channel_ai_intake_readiness_get` | Shows, per action, whether intake's AI may act on its own on a chat scope, and what keeps it a suggestion | `read` |
+| `colliedesk_channel_ai_intake_evaluations_list` | Lists the offline evaluations recorded for a chat channel's intake | `read` |
+| `colliedesk_channel_ai_intake_evaluation_record_request` | Asks a person to record an offline evaluation of a chat scope's intake, which can open a gate | `read` |
 | `colliedesk_conversation_chat_get` | Reads what was said in the chat places a conversation came from, and which messages are its own | `read` |
 | `colliedesk_channel_threads_list` | Lists a chat channel's one-to-one chats and groups | `read` |
 | `colliedesk_channel_thread_items` | Reads everything said in one chat place | `read` |
+| `colliedesk_channel_senders` | Lists everyone who wrote in a chat channel's places, each once, most recent first | `read` |
 | `colliedesk_channel_unresolved_items` | Lists chat messages nobody concluded on yet | `read` |
 | `colliedesk_intake_list` | Lists the cards of the intake queue of chat channels: waiting, being decided, set aside or decided | `read` |
 | `colliedesk_intake_get` | Reads an intake card with what its customer said and every decision made on it | `read` |

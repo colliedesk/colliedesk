@@ -20,6 +20,22 @@ func TestInboxListLatencyBudget(t *testing.T) {
 	seedInboxBudget(t, pool, "Performance Workspace A", "budget-needle")
 	seedInboxBudget(t, pool, "Performance Workspace B", "other-workspace")
 
+	// The chats are there, and the inbox reads them: a page has rows that may tell their customer.
+	var page struct {
+		Items []struct {
+			MayTellCustomer bool `json:"may_tell_customer"`
+		} `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations?status=open&page_size=100", nil, tokenA, nil), &page)
+	telling := 0
+	for _, item := range page.Items {
+		if item.MayTellCustomer {
+			telling++
+		}
+	}
+	if telling == 0 || telling == len(page.Items) {
+		t.Fatalf("rows that may tell = %d of %d, want some", telling, len(page.Items))
+	}
 	statusP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?status=open&page_size=100")
 	searchP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?search=budget-needle&page_size=100")
 	t.Logf("inbox p95: status=%s search=%s", statusP95, searchP95)
@@ -87,6 +103,26 @@ func seedInboxBudget(t *testing.T, pool *pgxpool.Pool, workspaceName, messageBod
 	SELECT $1,id,tag_id FROM seeded CROSS JOIN (VALUES ($3::uuid),($4::uuid),($5::uuid)) AS tags(tag_id)`,
 		workspaceID, contactID, firstTagID, secondTagID, thirdTagID, messageBody)
 	if err != nil {
+		t.Fatal(err)
+	}
+	// A workspace that came from a chat desk: three conversations in ten are in a chat, with 5 to 20 of its
+	// items each, one to one or in one of 50 groups, on a live Zalo channel or on one removed since. Each row
+	// of the inbox reads its chat's channel (may_tell_customer).
+	if _, err := pool.Exec(ctx, `WITH chans AS (
+			INSERT INTO channels(workspace_id,type,name,settings,external_account,enabled,disabled_at,deleted_at)
+			VALUES ($1::uuid,'zalo','Load Zalo','{"notices":{"status_resolved":"{ref}: fixed."}}','load-live-'||$1::uuid::text,true,NULL,NULL),
+				($1::uuid,'zalo','Load Zalo old','{}','load-gone-'||$1::uuid::text,false,now(),now()) RETURNING id,deleted_at IS NOT NULL AS gone),
+		placed AS (SELECT c.id AS conversation_id,n,(SELECT id FROM chans WHERE gone=(n%3=0)) AS channel_id,
+				CASE WHEN n%4=0 THEN 'group:g'||(n%50) ELSE 'user:'||n END AS place
+			FROM conversations c CROSS JOIN LATERAL (SELECT substr(c.subject,21)::int AS n) number
+			WHERE c.workspace_id=$1::uuid AND c.subject LIKE 'Budget conversation %' AND n%10<3),
+		threads AS (INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id)
+			SELECT DISTINCT $1::uuid,channel_id,CASE WHEN place LIKE 'group:%' THEN 'group' ELSE 'direct' END,place FROM placed RETURNING id,channel_id,external_id),
+		items AS (INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,sender_kind,sender_value,body,disposition,occurred_at)
+			SELECT $1::uuid,p.channel_id,t.id,'in','customer','zalo_user','u'||p.n,'chat '||p.n||' '||k,'conversation',now()-(p.n||' seconds')::interval+(k||' milliseconds')::interval
+			FROM placed p JOIN threads t ON t.channel_id=p.channel_id AND t.external_id=p.place CROSS JOIN LATERAL generate_series(1,5+p.n%16) AS k RETURNING id,body)
+		INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason)
+		SELECT $1::uuid,p.conversation_id,i.id,'opened' FROM items i JOIN placed p ON p.n=split_part(i.body,' ',2)::int`, workspaceID); err != nil {
 		t.Fatal(err)
 	}
 }

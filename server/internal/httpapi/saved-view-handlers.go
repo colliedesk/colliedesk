@@ -39,12 +39,13 @@ type conversationFilters struct {
 	UpdatedBefore   string   `json:"updated_before,omitempty"`
 	Sort            string   `json:"sort,omitempty"`
 	Search          string   `json:"search,omitempty"`
+	SLA             []string `json:"sla,omitempty"`
 }
 
 // query is the same filters as GET /conversations takes them.
 func (f conversationFilters) query() url.Values {
 	query := url.Values{}
-	lists := map[string][]string{"status": f.Status, "priority": f.Priority, "assignee": f.Assignee, "tag": f.Tag, "channel": f.Channel, "channel_id": f.ChannelID}
+	lists := map[string][]string{"status": f.Status, "priority": f.Priority, "assignee": f.Assignee, "tag": f.Tag, "channel": f.Channel, "channel_id": f.ChannelID, "sla": f.SLA}
 	for key, values := range lists {
 		if len(values) > 0 {
 			query.Set(key, strings.Join(values, ","))

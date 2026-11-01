@@ -49,6 +49,25 @@ cannot be loaded, it says so with **Try again** instead.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
   You do not need to reload to see new mail.
 
+## Conversation numbers
+
+Every conversation has a number and a code its customer sees and can type back: `#12` in the workspace's
+default series. A channel can number what it opens in a series of its own (`settings.number_series` of
+the channel), with its own code format, for example `REF-{yyyy}-{n:04}` for `REF-2026-0170`: letters,
+digits, `#`, `-`, `_`, `/` and `.`, with `{n}` once (`{n:04}` pads it to four digits, 2 to 8), and `{yyyy}`
+for the year it was opened in the workspace's timezone. A series counts on and never restarts with the
+year; its next number can be raised, never lowered. When you move to Colliedesk from a system that
+numbered its own way, set the series' next number (and `start`, `start_year`) to where that system
+stopped: codes below it that are not here belong to the system before.
+
+`GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
+adds or changes one (admins; an agent token asks a person first). MCP: `colliedesk_number_series_list`,
+`colliedesk_number_series_set_request`.
+
+Find a conversation by its code with `?ref=` on `GET /api/v1/conversations` (MCP `ref` of
+`colliedesk_inbox_search`): another case, spaces around it or more or fewer leading zeros match, a code of
+another year does not. Search words that are a code find that conversation, ahead of the rest.
+
 ## Filter and sort
 
 **Filter** (next to the search box) holds every filter. Ticking several values of one filter shows
@@ -262,6 +281,16 @@ A customer's message that landed in the wrong conversation can be moved, with it
 conversation, into a new conversation of its own (a split), or, for a message of a chat channel's group or
 chat, back to the [intake queue](channels.md#intake-queue) as a card to be decided again. Only customer
 messages move; the team's replies and notes stay where they are. Nothing is sent to the customer.
+
+In the timeline, the menu beside a customer message's time offers **Move to another conversation…**,
+**Split into a new conversation…** and, for a chat message, **Take back to Review**. Moving shows the
+customer's other conversations first, or finds one by subject, customer or text; tick the other customer
+messages to move with it. When every customer message goes, the move can close this conversation as no new
+request. A chat conversation nobody replied in or wrote a note in yet also offers **Not a new request?
+Move it…** above its messages (closing is still refused once a person assigned it). The moves out of and into a conversation are listed above its
+messages, newest first, with who moved what and where, and **Undo** while the move can be undone; a chat
+message says why it is in the conversation (a reply to a message here, a command, a person in
+[Review](review.md)). A message taken back waits in Review as a card that says who took it back.
 - A message taken back to the queue leaves the conversation (it is kept, not deleted). Until its card is
   decided it is in no timeline, search, AI suggestion or reply thread, and a customer's reply quoting it
   does not find that conversation. Deciding the card adds the message to the conversation chosen, or opens

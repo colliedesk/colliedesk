@@ -9,7 +9,7 @@ import type { ChannelUI, ConnectProps } from '../../../channels/registry';
 import { formatDate } from '../../../lib/format-date';
 import { messages } from '../../../messages';
 import { Dialog } from '../../../ui/dialog';
-import { PlusIcon } from '../../../ui/icons';
+import { ChatIcon, PlusIcon } from '../../../ui/icons';
 import { Part, PartUnavailable } from '../../../ui/lazy-part';
 import { panelID, tabID, Tabs } from '../../../ui/tabs';
 import { NameForm } from '../name-form';
@@ -360,20 +360,21 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   if (isMissing(detail.error)) return <><p role="alert" className="error-copy">{m.notFound}</p><a href={base}>{m.backToChannels}</a></>;
   if (detail.isError) return <LoadFailed onRetry={() => void detail.refetch()} />;
   if (!channel) return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
-  if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
-  const tabs = [...ui.tabs, { id: 'ai', label: m.tabAI }, { id: 'history', label: m.tabHistory }];
+  // A type with no screens here (a chat type before its own, a test build's stand-in) keeps the frame's
+  // tabs: what AI does on it and its history.
+  const tabs = [...(ui?.tabs ?? []), { id: 'ai', label: m.tabAI }, { id: 'history', label: m.tabHistory }];
   const open = tabs.find((item) => item.id === tab)?.id ?? tabs[0].id;
-  const capabilities = channel.capabilities.map(ui.capabilityLabel).filter(Boolean);
+  const capabilities = ui ? channel.capabilities.map(ui.capabilityLabel).filter(Boolean) : [];
   return <>
     <a href={base} className="ch-back">{m.backToChannels}</a>
     <section className="settings-card ch-detail" aria-labelledby="ch-detail-heading">
       <div className="ch-detail-head">
-        <div className="ch-row-name"><ui.Icon /><span><h2 id="ch-detail-heading">{channel.name}</h2>{channel.summary && <small>{channel.summary}</small>}</span></div>
+        <div className="ch-row-name">{ui ? <ui.Icon /> : <ChatIcon />}<span><h2 id="ch-detail-heading">{channel.name}</h2>{channel.summary && <small>{channel.summary}</small>}</span></div>
         <div className="ch-row-actions"><StatePill channel={channel} />{isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{ui?.waitingHelp ?? m.waitingHelp}</span></p>}
-      <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />
+      {ui && <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />}
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
       {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count, heldDone.skipped ?? 0) : m.heldDiscarded(heldDone.count)}</span>
@@ -382,23 +383,23 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
       <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
-          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} />
-          : <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
+          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
+          : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
               return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
             }} />}
       </div>
       {isAdmin && <div className="button-row ch-remove">
-        <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui.removal?.label ?? m.remove}</button>
+        <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui?.removal?.label ?? m.remove}</button>
         {remove.isError && <span role="alert" className="error-copy">{remove.error instanceof InvalidRequestError ? remove.error.message : m.actionFailed}</span>}
       </div>}
     </section>
-    {removing && <Dialog alert title={ui.removal?.title ?? m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
+    {removing && <Dialog alert title={ui?.removal?.title ?? m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
       onSubmit={() => { if (channel.held_count > 0) return; setRemoving(false); remove.mutate(); }}
       footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button>
-        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{ui.removal?.confirm ?? m.removeConfirm}</button></>}>
-      <p>{ui.removal?.body(channel) ?? m.removeBody}</p>
-      {channel.is_default && <p>{nextDefault ? m.removeDefaultNext(nextDefault.name) : m.removeDefaultNone(ui.label)}</p>}
+        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{ui?.removal?.confirm ?? m.removeConfirm}</button></>}>
+      <p>{ui?.removal?.body(channel) ?? m.removeBody}</p>
+      {channel.is_default && <p>{nextDefault ? m.removeDefaultNext(nextDefault.name) : m.removeDefaultNone(ui?.label ?? channel.type)}</p>}
       {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;

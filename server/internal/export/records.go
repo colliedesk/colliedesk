@@ -52,6 +52,8 @@ type Channel struct {
 	DeletedAt       *time.Time      `json:"deleted_at"`
 	// IsDefault marks its type's default channel.
 	IsDefault bool `json:"is_default"`
+	// ProcessingPausedAt is when its processing was paused; null while it runs.
+	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
 }
 
 // ChannelAILevel is the level a channel sets for an AI feature on one of its scopes (” is the
@@ -127,6 +129,20 @@ type MessageMove struct {
 	UndoneByTokenID     *string         `json:"undone_by_token_id"`
 }
 
+// IntakeEvalRun is one recorded offline evaluation of a channel scope's intake.
+type IntakeEvalRun struct {
+	ID            string          `json:"id"`
+	ChannelID     string          `json:"channel_id"`
+	Scope         string          `json:"scope"`
+	Model         string          `json:"model"`
+	PromptVersion string          `json:"prompt_version"`
+	DatasetSHA256 string          `json:"dataset_sha256"`
+	Counts        json.RawMessage `json:"counts"`
+	RunByAgentID  *string         `json:"run_by_agent_id"`
+	RunByTokenID  *string         `json:"run_by_token_id"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
 // IntakeDecision is one time AI or a person decided a gathering, as it was.
 type IntakeDecision struct {
 	ID                     string          `json:"id"`
@@ -149,6 +165,7 @@ type IntakeDecision struct {
 	ItemsSeen              []string        `json:"items_seen"`
 	Fallback               bool            `json:"fallback"`
 	CorrectsDecisionID     *string         `json:"corrects_decision_id"`
+	FollowsDecisionID      *string         `json:"follows_decision_id"`
 	Manifest               json.RawMessage `json:"manifest"`
 	TaskID                 *string         `json:"task_id"`
 	Model                  *string         `json:"model"`
@@ -198,6 +215,17 @@ type ChannelThreadItem struct {
 	AlertedAt         *time.Time `json:"alerted_at"`
 }
 
+// ChannelSender is someone who wrote in a channel's chat places: where and when they last wrote.
+type ChannelSender struct {
+	ChannelID   string    `json:"channel_id"`
+	SenderKind  string    `json:"sender_kind"`
+	SenderValue string    `json:"sender_value"`
+	Name        *string   `json:"name"`
+	Role        string    `json:"role"`
+	LastAt      time.Time `json:"last_at"`
+	ThreadID    string    `json:"thread_id"`
+}
+
 // ConversationThreadItem says an item is, or was, part of a conversation, and how it came to it.
 type ConversationThreadItem struct {
 	ID                string     `json:"id"`
@@ -241,6 +269,8 @@ type ChannelInboundEvent struct {
 	// the rule's name); null for what the frame handled before them or what is still being collected.
 	DecisionBasis *string `json:"decision_basis"`
 	DecisionRule  *string `json:"decision_rule"`
+	// Command is the channel command a collected message named.
+	Command *string `json:"command"`
 	// GatheringID is the batch of intake it belongs to.
 	GatheringID *string              `json:"gathering_id"`
 	ReceivedAt  time.Time            `json:"received_at"`
@@ -931,15 +961,22 @@ type Message struct {
 	// channel's rules decided (match, default, person; new_thread, thread_key…). Null for the others.
 	DecisionBasis *string `json:"decision_basis"`
 	DecisionRule  *string `json:"decision_rule"`
+	// Command is the channel command its collected batch named (a chat's "report a bug").
+	Command *string `json:"command"`
 	// GatheringID is the batch of a chat's intake it came from.
 	GatheringID *string `json:"gathering_id"`
 	// OtherContactID is the contact whose conversation a customer message was moved from; DetachedAt when a
 	// chat message was taken back to the intake queue (it is out of the timeline, not deleted).
-	OtherContactID    *string      `json:"other_contact_id"`
-	DetachedAt        *time.Time   `json:"detached_at"`
-	DetachedByAgentID *string      `json:"detached_by_agent_id"`
-	CreatedAt         time.Time    `json:"created_at"`
-	Attachments       []Attachment `json:"attachments"`
+	OtherContactID    *string    `json:"other_contact_id"`
+	DetachedAt        *time.Time `json:"detached_at"`
+	DetachedByAgentID *string    `json:"detached_by_agent_id"`
+	// IntakeReplyKind is what intake said a chat message added to its conversation (acknowledgement:
+	// it kept a resolved conversation resolved).
+	IntakeReplyKind *string `json:"intake_reply_kind"`
+	// NoticeKind marks a reply the channel sent by itself (received), not one of the team.
+	NoticeKind  *string      `json:"notice_kind"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Attachments []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -962,6 +999,29 @@ type ConversationHead struct {
 	TagIDs       []string                   `json:"tag_ids"`
 	CreatedAt    time.Time                  `json:"created_at"`
 	UpdatedAt    time.Time                  `json:"updated_at"`
+	// NumberSeries, Number and NumberYear number it; DisplayRef is the code its customer saw.
+	NumberSeries string `json:"number_series"`
+	Number       int64  `json:"number"`
+	NumberYear   int    `json:"number_year"`
+	DisplayRef   string `json:"display_ref"`
+	// NumberFormat is the format its code was made with.
+	NumberFormat string `json:"number_format"`
+	// SLAApplies says response targets apply to it; SLA is its clocks as last counted.
+	SLAApplies bool            `json:"sla_applies"`
+	SLA        json.RawMessage `json:"sla"`
+}
+
+// NumberSeries is a series conversations are numbered in.
+type NumberSeries struct {
+	Series    string `json:"series"`
+	Format    string `json:"format"`
+	Next      int64  `json:"next"`
+	Start     int64  `json:"start"`
+	StartYear *int   `json:"start_year"`
+	// Formats are every format the series has had, which read the codes it gave.
+	Formats   []string  `json:"formats"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // StatusChange is one change of a conversation's status (conversation_status_changes). Source is
@@ -984,7 +1044,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -1026,9 +1086,12 @@ type Sink interface {
 	ChannelInboundEvent(ChannelInboundEvent) error
 	ChannelThread(ChannelThread) error
 	ChannelThreadItem(ChannelThreadItem) error
+	ChannelSender(ChannelSender) error
+	NumberSeries(NumberSeries) error
 	ConversationThreadItem(ConversationThreadItem) error
 	IntakeGathering(IntakeGathering) error
 	IntakeDecision(IntakeDecision) error
+	IntakeEvalRun(IntakeEvalRun) error
 	MessageMove(MessageMove) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

@@ -388,6 +388,43 @@ func channelAIGet(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"channel_ai": levels}, nil
 }
 
+func channelAIIntakeReadiness(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	scope, _ := arguments["scope"].(string)
+	c.notFound = channelNotFound
+	var readiness json.RawMessage
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/readiness", url.Values{"scope": {scope}}, &readiness); err != nil {
+		return nil, err
+	}
+	return map[string]any{"readiness": readiness}, nil
+}
+
+func channelAIIntakeEvaluationsList(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	query := url.Values{}
+	if scope, _ := arguments["scope"].(string); scope != "" {
+		query.Set("scope", scope)
+	}
+	c.notFound = channelNotFound
+	var page json.RawMessage
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/evaluations", query, &page); err != nil {
+		return nil, err
+	}
+	return page, nil
+}
+
+func channelAIIntakeEvaluationRecord(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	body := map[string]any{}
+	for key, value := range arguments {
+		if key != "channel_id" {
+			body[key] = value
+		}
+	}
+	c.notFound = channelNotFound
+	return ask(c, http.MethodPost, "/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/evaluations", body)
+}
+
 func channelAISet(c *call, arguments map[string]any) (any, error) {
 	id, _ := arguments["channel_id"].(string)
 	slot, _ := arguments["slot"].(string)

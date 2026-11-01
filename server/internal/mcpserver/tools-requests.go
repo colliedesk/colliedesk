@@ -291,6 +291,39 @@ func microsoftDisconnectRequest(c *call, arguments map[string]any) (any, error) 
 	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/microsoft"), nil)
 }
 
+func numberSeriesList(c *call, _ map[string]any) (any, error) {
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := c.get("/api/v1/conversation-number-series", nil, &page); err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": page.Items}, nil
+}
+
+func numberSeriesSetRequest(c *call, arguments map[string]any) (any, error) {
+	series, _ := arguments["series"].(string)
+	body := map[string]any{}
+	for key, value := range arguments {
+		if key != "series" {
+			body[key] = value
+		}
+	}
+	return ask(c, http.MethodPut, "/api/v1/conversation-number-series/"+url.PathEscape(series), body)
+}
+
+func responseTargetsGet(c *call, _ map[string]any) (any, error) {
+	var targets map[string]any
+	if err := c.get("/api/v1/response-targets", nil, &targets); err != nil {
+		return nil, err
+	}
+	return targets, nil
+}
+
+func responseTargetsSetRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodPut, "/api/v1/response-targets", arguments)
+}
+
 func workspaceSlugRequest(c *call, arguments map[string]any) (any, error) {
 	return ask(c, http.MethodPatch, "/api/v1/workspace/slug", arguments)
 }

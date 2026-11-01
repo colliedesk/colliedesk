@@ -320,7 +320,11 @@ func (w *Worker) run(ctx context.Context, item claimedTask) {
 	case errors.As(err, new(*TaskError)):
 		var taskErr *TaskError
 		errors.As(err, &taskErr)
-		stop(TaskFailed, taskErr.Code)
+		if taskErr.Cancelled {
+			stop(TaskCancelled, taskErr.Code)
+		} else {
+			stop(TaskFailed, taskErr.Code)
+		}
 	case errors.As(err, &providerErr) && providerErr.Retryable() && task.Attempts < w.options.MaxAttempts && ctx.Err() == nil:
 		w.retry(ctx, item, task, providerErr)
 	case errors.As(err, &providerErr):
@@ -334,13 +338,13 @@ func (w *Worker) run(ctx context.Context, item claimedTask) {
 func (w *Worker) load(ctx context.Context, item claimedTask) (Task, error) {
 	task := Task{ID: item.id, WorkspaceID: item.workspaceID}
 	err := w.db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
-		var conversation, agent, token *string
-		if err := tx.QueryRow(ctx, `SELECT kind,conversation_id::text,automatic,requested_by_agent_id::text,requested_by_token_id::text,attempts,created_at
+		var conversation, gathering, agent, token *string
+		if err := tx.QueryRow(ctx, `SELECT kind,conversation_id::text,gathering_id::text,automatic,requested_by_agent_id::text,requested_by_token_id::text,attempts,created_at
 			FROM ai_tasks WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token).
-			Scan(&task.Kind, &conversation, &task.Automatic, &agent, &token, &task.Attempts, &task.CreatedAt); err != nil {
+			Scan(&task.Kind, &conversation, &gathering, &task.Automatic, &agent, &token, &task.Attempts, &task.CreatedAt); err != nil {
 			return err
 		}
-		task.ConversationID, task.Actor.AgentID, task.Actor.TokenID = deref(conversation), deref(agent), deref(token)
+		task.ConversationID, task.GatheringID, task.Actor.AgentID, task.Actor.TokenID = deref(conversation), deref(gathering), deref(agent), deref(token)
 		return nil
 	})
 	return task, err
@@ -429,7 +433,7 @@ func (s *Service) automaticDraftWanted(ctx context.Context, tx pgx.Tx, workspace
 	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT ai_level($1,c.channel_id,c.channel_scope,'draft')='suggest' FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2),false),
 			(SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2),
 			COALESCE((SELECT kind<>'incoming' FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind IN ('incoming','outgoing')
-				AND detached_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 1),false)`, workspaceID, task.ConversationID).Scan(&on, &status, &answered)
+				AND detached_at IS NULL AND notice_kind IS NULL ORDER BY created_at DESC,id DESC LIMIT 1),false)`, workspaceID, task.ConversationID).Scan(&on, &status, &answered)
 	switch {
 	case err != nil:
 		return "", err
@@ -501,9 +505,18 @@ func (w *Worker) endIfReplaced(ctx context.Context, tx pgx.Tx, item claimedTask)
 
 func (w *Worker) finish(ctx context.Context, item claimedTask, state, code string) {
 	ctx = context.WithoutCancel(ctx)
+	now := w.service.now().UTC()
 	err := w.db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE ai_tasks SET state=$4,error_code=$5,claim_token=NULL,lease_until=NULL,finished_at=$6
-			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, state, nullable(code), w.service.now().UTC())
+		tag, err := tx.Exec(ctx, `UPDATE ai_tasks SET state=$4,error_code=$5,claim_token=NULL,lease_until=NULL,finished_at=$6
+			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, state, nullable(code), now)
+		if err != nil || tag.RowsAffected() == 0 || state == TaskDone {
+			return err
+		}
+		// An intake card AI will not decide (a limit, the feature off, a failure) is the rules' now, not
+		// when its time to wait runs out.
+		_, err = tx.Exec(ctx, `UPDATE intake_gatherings g SET decide_by=$3 FROM ai_tasks t
+			WHERE t.workspace_id=$1 AND t.id=$2 AND t.kind='intake' AND g.workspace_id=t.workspace_id AND g.id=t.gathering_id AND g.state='deciding' AND g.decide_by>$3`,
+			item.workspaceID, item.id, now)
 		return err
 	})
 	if err != nil {

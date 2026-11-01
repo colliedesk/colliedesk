@@ -15,7 +15,11 @@ import (
 )
 
 // TaskError fails a task with its own code (a refused or cut-off answer), which the worker records.
-type TaskError struct{ Code string }
+type TaskError struct {
+	Code string
+	// Cancelled says the task was not wanted any more rather than failed.
+	Cancelled bool
+}
 
 func (e *TaskError) Error() string { return "AI task failed: " + e.Code }
 
@@ -147,11 +151,6 @@ func cut(text string, runes int) string {
 	return string([]rune(text)[:runes]) + "…"
 }
 
-// escapeData keeps text inside its section: a customer cannot close the tag the prompt wraps them in.
-func escapeData(text string) string {
-	return strings.NewReplacer("<", "‹", ">", "›").Replace(text)
-}
-
 // writeSources puts the retrieved articles and past conversations in the prompt, each with the id the
 // model cites it by (kb1, past1, …), and records those ids. about adds a line to a past conversation.
 func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[string]store.AIRetrievedDoc, about func(store.AIRetrievedDoc) string) {
@@ -162,7 +161,7 @@ func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[st
 			k++
 			id := fmt.Sprintf("kb%d", k)
 			ids[id] = doc
-			fmt.Fprintf(b, "<kb_article id=%q title=%q>\n%s\n</kb_article>\n", id, escapeData(doc.Title), escapeData(doc.Text))
+			fmt.Fprintf(b, "<kb_article id=%q title=%q>\n%s\n</kb_article>\n", id, aiprovider.EscapeData(doc.Title), aiprovider.EscapeData(doc.Text))
 		case store.AIRetrievedConversation:
 			p++
 			id := fmt.Sprintf("past%d", p)
@@ -173,7 +172,7 @@ func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[st
 					text += "\n" + line
 				}
 			}
-			fmt.Fprintf(b, "<past_conversation id=%q>\n%s\n</past_conversation>\n", id, escapeData(text))
+			fmt.Fprintf(b, "<past_conversation id=%q>\n%s\n</past_conversation>\n", id, aiprovider.EscapeData(text))
 		}
 	}
 }
@@ -200,17 +199,17 @@ func citedSources(ids map[string]store.AIRetrievedDoc, cited []string) []DraftSo
 func draftUserTurn(c draftContext) (string, map[string]store.AIRetrievedDoc) {
 	ids := map[string]store.AIRetrievedDoc{}
 	var b strings.Builder
-	b.WriteString("<untrusted_customer_content>\nSubject: " + escapeData(c.subject) + "\n")
+	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(c.subject) + "\n")
 	if c.contactName != "" {
-		b.WriteString("Customer name: " + escapeData(c.contactName) + "\n")
+		b.WriteString("Customer name: " + aiprovider.EscapeData(c.contactName) + "\n")
 	}
-	b.WriteString(escapeData(c.threadText) + "\n</untrusted_customer_content>\n")
+	b.WriteString(aiprovider.EscapeData(c.threadText) + "\n</untrusted_customer_content>\n")
 	writeSources(&b, c.sources, ids, nil)
 	prompt := c.prompt
 	if prompt == "" {
 		prompt = "Draft a helpful reply to the customer's newest message."
 	}
-	b.WriteString("<agent_request>\n" + escapeData(prompt) + "\n</agent_request>")
+	b.WriteString("<agent_request>\n" + aiprovider.EscapeData(prompt) + "\n</agent_request>")
 	return b.String(), ids
 }
 
@@ -366,7 +365,7 @@ func (s *Service) runDraft(ctx context.Context, run *Run) error {
 		// while it was written is not wanted (one still being written may yet be stopped by a limit): it is set aside unseen (its call is spent and metered).
 		var overtaken bool
 		if err := tx.QueryRow(ctx, `SELECT d.automatic AND (EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id=d.workspace_id AND m.conversation_id=d.conversation_id
-				AND m.kind='outgoing' AND m.created_at>=COALESCE((SELECT a.created_at FROM messages a WHERE a.workspace_id=d.workspace_id AND a.id=d.answers_message_id),d.created_at))
+				AND m.kind='outgoing' AND m.notice_kind IS NULL AND m.created_at>=COALESCE((SELECT a.created_at FROM messages a WHERE a.workspace_id=d.workspace_id AND a.id=d.answers_message_id),d.created_at))
 				OR EXISTS (SELECT 1 FROM ai_drafts n WHERE n.workspace_id=d.workspace_id AND n.conversation_id=d.conversation_id AND n.automatic AND n.id<>d.id
 					AND (n.created_at,n.id)>(d.created_at,d.id) AND n.status='ready' AND n.outcome IS NULL))
 			FROM ai_drafts d WHERE d.workspace_id=$1 AND d.id=$2`, run.Task.WorkspaceID, c.draftID).Scan(&overtaken); err != nil {

@@ -40,6 +40,10 @@ interface TimelinePanelProps {
   onBack?: () => void;
   // The server runs Autofix: narrow screens get the fix's one line under the header.
   autofix?: boolean;
+  // Above the messages: what moved out of or into the conversation. Per message: where it came from, and its menu.
+  before?: ReactNode;
+  messageLabel?: (item: Message) => ReactNode;
+  messageMenu?: (item: Message) => ReactNode;
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
@@ -62,7 +66,7 @@ function StatusButton({ status, onSetStatus }: { status: Conversation['status'];
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onBack, autofix = false }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onBack, autofix = false, before, messageLabel, messageMenu }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
@@ -92,8 +96,9 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
+          {before}
           {items.map((item, index) => <Fragment key={item.id}><MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
-            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} />
+            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>

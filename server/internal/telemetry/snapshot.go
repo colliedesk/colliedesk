@@ -72,7 +72,7 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 		count(*) FILTER (WHERE created_at >= $1::timestamptz - interval '7 days'),
 		count(*),
 		count(*) FILTER (WHERE created_at >= $1::timestamptz - interval '7 days' AND agent_token_id IS NOT NULL)
-		FROM messages WHERE kind = 'outgoing' AND origin IS NULL AND created_at >= $1::timestamptz - interval '30 days'
+		FROM messages WHERE kind = 'outgoing' AND origin IS NULL AND notice_kind IS NULL AND created_at >= $1::timestamptz - interval '30 days'
 		GROUP BY workspace_id`, now)
 	if err != nil {
 		return nil, fmt.Errorf("count replies: %w", err)

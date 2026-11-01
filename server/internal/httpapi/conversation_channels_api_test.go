@@ -14,6 +14,7 @@ type routedConversation struct {
 		ID         string `json:"id"`
 		RepliesVia *struct {
 			ID        string `json:"id"`
+			Type      string `json:"type"`
 			InsteadOf *struct {
 				ID string `json:"id"`
 			} `json:"instead_of"`
@@ -66,6 +67,10 @@ func TestAConversationStartsFromTheChannelChosenAndKeepsIt(t *testing.T) {
 	}
 	fromBilling := start(map[string]any{"channel_id": billing})
 	fromDefault := start(map[string]any{})
+	// The web app reads how replies leave from the type of the channel they leave through.
+	if via := conversationOf(t, api, admin, fromBilling.ID).ChannelRef.RepliesVia; via == nil || via.ID != billing || via.Type != "email" {
+		t.Fatalf("replies_via of a conversation started from billing: %+v, want billing by email", via)
+	}
 	if got := deliveryChannel(t, pool, fromBilling.ID); got != billing {
 		t.Fatalf("started from billing, the reply leaves from %s", got)
 	}

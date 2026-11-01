@@ -19,14 +19,44 @@ type BulkConversationUpdate struct {
 	RemoveTagIDs []string
 	// ActorID is the agent making the change; it is recorded in the status history.
 	ActorID string
+	// TokenID is the AI agent's token making the change on ActorID's behalf, if one is.
+	TokenID string
+	// Quiet changes the status without telling the customers (the channel's status notices).
+	Quiet bool
 }
 
 // BulkUpdateConversations applies update to every conversation in ids in one transaction and
-// returns how many it changed. An id that is missing or belongs to another workspace fails the
+// returns how many it changed. A status the team sets is told to each customer in its chat after the
+// change commits, unless it is quiet: the change marks the conversations (SendDueStatusNotices), so it
+// costs the same for 50 as for one. An id that is missing or belongs to another workspace fails the
 // whole update with a "not found" error and changes nothing.
 func (s *Store) BulkUpdateConversations(ctx context.Context, workspaceID string, ids []string, update BulkConversationUpdate) (int, error) {
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (int, error) {
-		return bulkUpdateConversations(ctx, tx, workspaceID, ids, update)
+	result, err := s.BulkUpdateConversationsTelling(ctx, workspaceID, ids, update)
+	return result.Updated, err
+}
+
+// BulkUpdateResult is how many conversations a bulk update changed, and how many customers its status
+// change tells (shortly after it commits).
+type BulkUpdateResult struct {
+	Updated, Told int
+}
+
+// BulkUpdateConversationsTelling is BulkUpdateConversations that also says how many customers are told.
+func (s *Store) BulkUpdateConversationsTelling(ctx context.Context, workspaceID string, ids []string, update BulkConversationUpdate) (BulkUpdateResult, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (BulkUpdateResult, error) {
+		var result BulkUpdateResult
+		if update.Status != nil && !update.Quiet && len(ids) <= MaxBulkConversations {
+			previews, err := s.statusNoticePreview(ctx, tx, workspaceID, ids, *update.Status)
+			if err != nil {
+				return result, err
+			}
+			for _, preview := range previews {
+				result.Told += preview.Told
+			}
+		}
+		updated, err := bulkUpdateConversations(ctx, tx, workspaceID, ids, update)
+		result.Updated = updated
+		return result, err
 	})
 }
 
@@ -67,16 +97,17 @@ func bulkUpdateConversations(ctx context.Context, tx pgx.Tx, workspaceID string,
 		return 0, fmt.Errorf("validate conversation tag: unknown tag")
 	}
 	if update.Status != nil {
-		if err := setStatusActor(ctx, tx, update.ActorID); err != nil {
+		if err := setStatusCause(ctx, tx, statusChange{ActorID: update.ActorID, TokenID: update.TokenID, Cause: tokenCause(update.TokenID), Quiet: update.Quiet}); err != nil {
 			return 0, err
 		}
 	}
 	if update.Status != nil || update.AssigneeID != nil {
 		if _, err := tx.Exec(ctx, `UPDATE conversations SET
 			status=COALESCE($3,status),
+			status_notice_due=CASE WHEN $6 AND status IS DISTINCT FROM $3 THEN $3 ELSE status_notice_due END,
 			assignee_id=CASE WHEN $4 THEN $5::uuid ELSE assignee_id END,updated_at=now()
 			WHERE workspace_id=$1 AND id=ANY($2::uuid[])`,
-			workspaceID, ids, update.Status, update.AssigneeID != nil, nullableString(update.AssigneeID)); err != nil {
+			workspaceID, ids, update.Status, update.AssigneeID != nil, nullableString(update.AssigneeID), update.Status != nil && !update.Quiet); err != nil {
 			return 0, fmt.Errorf("bulk update conversations: %w", err)
 		}
 	}

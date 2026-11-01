@@ -41,6 +41,12 @@ const (
 	ReviewHold             = "review_hold"
 	IntoConversation       = "into_conversation"
 	ReferenceOtherCustomer = "reference_other_customer"
+	// UnmatchedJoinOpen joined a message that named no command to its sender's only open conversation;
+	// UnmatchedKept kept it unresolved in its chat, the sender having none or several; UnmatchedNotice
+	// kept it in its chat and answered it with the channel's unmatched notice.
+	UnmatchedJoinOpen = "unmatched_join_open"
+	UnmatchedKept     = "unmatched_kept"
+	UnmatchedNotice   = "unmatched_notice"
 )
 
 // Thread is what looking up the conversation a message continues found.
@@ -72,6 +78,12 @@ type Facts struct {
 	// to what is being collected for its sender or to an open conversation its thread finds.
 	CommandsOnly bool
 	Joins        bool
+	// JoinOpen: the scope joins a message that names no command to its sender's only open conversation,
+	// OpenConversation (empty when the sender has none or several).
+	JoinOpen         bool
+	OpenConversation string
+	// Notice: the scope answers a message that names no command with the channel's unmatched notice.
+	Notice bool
 	// Flushing: collected messages are being stored as one; Review: the scope holds collected messages
 	// that named no command for a person.
 	Flushing bool
@@ -96,6 +108,12 @@ func Decide(f Facts) Decision {
 		return Decision{Action: Ignore, Basis: Match, Rule: CommandCancel}
 	case f.IntoConversation != "":
 		return Decision{Action: Attach, Basis: Person, Rule: IntoConversation, ConversationID: f.IntoConversation}
+	case f.CommandsOnly && !f.Commanded && !f.Replay && !f.Joins && f.JoinOpen && f.OpenConversation != "":
+		return Decision{Action: Attach, Basis: Default, Rule: UnmatchedJoinOpen, ConversationID: f.OpenConversation}
+	case f.CommandsOnly && !f.Commanded && !f.Replay && !f.Joins && f.JoinOpen:
+		return Decision{Action: Archive, Basis: Default, Rule: UnmatchedKept}
+	case f.CommandsOnly && !f.Commanded && !f.Replay && !f.Joins && f.Notice:
+		return Decision{Action: Archive, Basis: Default, Rule: UnmatchedNotice}
 	case f.CommandsOnly && !f.Commanded && !f.Replay && !f.Joins:
 		return Decision{Action: Archive, Basis: Default, Rule: ScopeArchive}
 	case f.Flushing && f.Review && !f.Commanded:

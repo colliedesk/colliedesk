@@ -70,6 +70,11 @@ It prints `migrations applied`. If it prints an error instead, do not start the 
 (below) and report the error. Each migration runs in its own transaction, so a failed upgrade can
 leave the database between two releases, and only the backup brings it back.
 
+A migration that rewrites every row of a large table takes time in proportion: numbering the existing
+conversations (`20261031150100-conversation-numbers-backfill`) took about 20 to 70 seconds for a million
+conversations on a laptop. While it runs, conversations stay readable; a change to one of the existing
+conversations waits for it.
+
 ## 4. Start and check
 
 ```sh

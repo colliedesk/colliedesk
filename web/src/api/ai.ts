@@ -12,6 +12,9 @@ const intakeOptionsSchema = z.object({
   create_threshold: z.number().optional(), attach_threshold: z.number().optional(), ignore_threshold: z.number().optional(),
   attach_requires_single_candidate: z.boolean().optional(), auto_max_age_seconds: z.number().int().optional(), reopen_window_days: z.number().int().optional(),
   sources: z.record(z.string(), z.boolean()).optional(), instructions: z.string().optional(), redact_keywords: z.array(z.string()).optional(),
+  contact_labels: z.object({ account: z.array(z.string()).optional(), id: z.array(z.string()).optional() }).optional(),
+  redact_patterns: z.array(z.object({ pattern: z.string(), mask: z.enum(['phone', 'id_number', 'account_number', 'hidden']) })).optional(),
+  gate_override: z.array(z.enum(['create', 'attach', 'ignore'])).optional(), gate_override_reason: z.string().optional(),
 }) satisfies z.ZodType<Generated<'IntakeOptions'>>;
 const aiChannelLevelSchema = z.object({
   channel_id: z.string().uuid(), channel_name: z.string(), scope: z.string(), slot: aiSlotNameSchema, level: aiLevelSchema, effective_level: aiLevelSchema,
@@ -77,9 +80,12 @@ const channelAISchema = z.object({
     slots: z.array(z.object({
       slot: aiSlotNameSchema, level: aiLevelSchema.nullable(), effective_level: aiLevelSchema, source: z.enum(['scope', 'channel', 'workspace']),
       off_reason: z.enum(['workspace_off']).nullable(), options: intakeOptionsSchema.nullable(),
+      // The server's last lowering of the level; an older server sends nothing.
+      lowered: z.object({ at: z.string().datetime(), reason: z.enum(['model_changed', 'recipient_changed']) }).nullable().optional(),
     })),
   })),
 }) satisfies z.ZodType<JsonResponse<'getChannelAI', 200>>;
+const removedConsentSchema = z.object({ removed: z.boolean() }) satisfies z.ZodType<JsonResponse<'removeAISourceConsent', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 const aiModelListSchema = z.object({ models: z.array(z.string()) }) satisfies z.ZodType<JsonResponse<'listAIModels', 200>>;
 
@@ -128,6 +134,19 @@ export type AIEvent = z.infer<typeof aiEventSchema>;
 export type AISlotName = z.infer<typeof aiSlotNameSchema>;
 export type AILevel = z.infer<typeof aiLevelSchema>;
 export type AIChannelLevel = z.infer<typeof aiChannelLevelSchema>;
+const labelCountsSchema = z.object({ labels: z.number().int(), correct: z.number().int(), wrong: z.number().int(), severe: z.number().int() });
+const intakeReadinessSchema = z.object({
+  channel_id: z.string().uuid(), scope: z.string(), model: z.string(), prompt_version: z.string(),
+  actions: z.array(labelCountsSchema.extend({
+    action: z.enum(['create', 'attach', 'ignore']), gate: z.enum(['open', 'closed', 'overridden']), needed: z.number().int(), accuracy_needed: z.number(),
+    missing: z.array(z.enum(['labels', 'accuracy', 'severe', 'junk'])), live: labelCountsSchema,
+    evaluation: labelCountsSchema.extend({ run_at: z.string().datetime() }).nullable(),
+  })),
+  applied: z.object({ decisions: z.number().int(), corrected: z.number().int(), correction_rate: z.number().nullable() }),
+  estimate: z.object({ days: z.number().int(), cards: z.number().int(), ai_calls: z.number().int(),
+    cost_per_call: z.object({ micro_usd: z.number().int().nullable(), provider_cost: z.number().nullable() }) }),
+}) satisfies z.ZodType<Generated<'IntakeReadiness'>>;
+export type IntakeReadiness = z.infer<typeof intakeReadinessSchema>;
 export type ChannelAI = z.infer<typeof channelAISchema>;
 export type ChannelAIInput = RequestBody<'setChannelAI'>;
 export type AIUsage = z.infer<typeof aiUsageSchema>;
@@ -148,9 +167,13 @@ export const aiApi = {
   setKey: (id: string, apiKey: string) => request(`/api/v1/ai/providers/${id}/key`, aiProviderSchema, { method: 'PUT', body: json<'setAIProviderKey'>({ api_key: apiKey }) }),
   check: (id: string) => request(`/api/v1/ai/providers/${id}/check`, aiProviderSchema, { method: 'POST' }),
   remove: (id: string) => request(`/api/v1/ai/providers/${id}`, removedSchema, { method: 'DELETE' }),
+  // What intake may send besides the conversation's text: images customers sent, the customer's profile.
+  setSourceConsent: (source: string) => request(`/api/v1/ai/source-consents/${encodeURIComponent(source)}`, aiSourceConsentSchema, { method: 'PUT' }),
+  removeSourceConsent: (source: string) => request(`/api/v1/ai/source-consents/${encodeURIComponent(source)}`, removedConsentSchema, { method: 'DELETE' }),
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
   // A channel's levels on each of its scopes; setting one answers the levels after the change.
   channel: (id: string) => request(`/api/v1/channels/${id}/ai`, channelAISchema),
+  readiness: (id: string, scope: string) => request(`/api/v1/channels/${id}/ai/intake/readiness?scope=${encodeURIComponent(scope)}`, intakeReadinessSchema),
   setChannel: (id: string, slot: AISlotName, input: ChannelAIInput) =>
     request(`/api/v1/channels/${id}/ai/${slot}`, channelAISchema, { method: 'PUT', body: json<'setChannelAI'>(input) }),
   usage: (month: string) => request(`/api/v1/ai/usage?month=${encodeURIComponent(month)}`, aiUsageSchema),

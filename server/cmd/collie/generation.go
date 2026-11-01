@@ -12,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/autoclose"
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
@@ -31,6 +32,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
+	"github.com/colliedesk/colliedesk/server/internal/sla"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/colliedesk/colliedesk/server/internal/trialreminder"
@@ -170,17 +172,19 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
-	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes}
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
 	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig), helpchat.Config{})).
 		WithSealKeys(googleConfig.Keys).WithPlanLimits(billingOn)
 	var sender emailoutbox.Sender
 	if emailConfig.SMTP.Configured() {
 		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
+	// The journal wakes the outbox when it queued something, so a notice goes out as soon as it is due.
+	wake := make(chan struct{}, 1)
 	if httpapi.Outbound(channelConfig).Worker {
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
+			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
 				SwitchedOff: map[string]bool{domain.MailboxGoogle: off[serverconfig.FeatureGmail], domain.MailboxMicrosoft: off[serverconfig.FeatureMicrosoft]}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
@@ -191,10 +195,22 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		}
 	} else {
 		// Without either, email waits for a server that can send it; every other channel is sent here.
-		worker := outbox.New(channelStore, outbox.Options{Skip: []channels.Type{channelemail.Type}})
+		worker := outbox.New(channelStore, outbox.Options{Wake: wake, Skip: []channels.Type{channelemail.Type}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 	}
-	journal := pipeline.New(channelStore, nil)
+	journal := pipeline.New(channelStore, nil).WithWake(wake)
+	// Response clocks a change made stale are counted again (docs/user/response-targets.md).
+	g.Go(func(ctx context.Context) { sla.Worker{Store: channelStore}.Run(ctx, 15*time.Second) })
+	// A chat channel's resolved conversations close by themselves after its auto_close_hours.
+	g.Go(func(ctx context.Context) { autoclose.Worker{Store: channelStore}.Run(ctx, time.Minute) })
+	// A bulk status change tells its customers in their chats a few seconds after it commits.
+	g.Go(func(ctx context.Context) { autoclose.Notices{Store: channelStore}.Run(ctx, 5*time.Second) })
+	// Their reminder and overdue emails go from the platform address, on a server that sends mail.
+	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
+		alerts := sla.Alerts{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
+			Origin: origin, HelpCenterDomain: helpCenterDomain}
+		g.Go(func(ctx context.Context) { alerts.Run(ctx, time.Minute) })
+	}
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
 	intakeSweep := intake.New(channelStore, journal, nil)
@@ -266,7 +282,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
-		ExtraChannelTypes: e2eChannelTypes}
+		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {
@@ -284,6 +300,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	aiWorker := ai.NewWorker(api.AI(), db, ai.WorkerOptions{})
 	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
 	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
+	aiWorker.Handle(ai.SlotIntake, api.IntakeHandler(nil))
 	g.Go(aiWorker.Run)
 	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach. Switched off,
 	// nothing new is sent (the API refuses it) but the fixes already sent are still followed to their end.

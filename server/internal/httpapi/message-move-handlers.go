@@ -23,7 +23,7 @@ func writeMoveError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "No conversation or move with that id in this workspace.")
 	case errors.Is(err, store.ErrMoveSourceHasActivity):
 		writeError(response, http.StatusConflict, "source_has_activity",
-			"Someone replied in this conversation, wrote a note or assigned it, so it is not closed: move its messages without close_source.")
+			"Someone replied in this conversation, wrote a note or assigned it, so it is not closed: move its messages and leave it open.")
 	case errors.Is(err, store.ErrMoveSuperseded):
 		writeError(response, http.StatusConflict, "move_superseded", "A later move took some of these messages; undo that one first. Nothing changed.")
 	case errors.Is(err, store.ErrMoveDecided):

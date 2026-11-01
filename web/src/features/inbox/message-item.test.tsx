@@ -173,6 +173,12 @@ test('a reply whose channel was removed, or whose customer has no address on it,
   }
 });
 
+test('a reply that would fail the same way again shows why and offers no retry', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 1, last_error: "moving.gif: GIF isn't supported yet. Send a JPEG or PNG picture instead.", sent_at: null, reason_code: 'zalo_no_files', retryable: false } }} timezone="UTC" />);
+  expect(screen.getByText('Delivery failed')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Retry delivery' })).toBeNull();
+});
+
 test('a reply saved before any channel could carry it reads as not sent yet, with Retry for once it is connected', () => {
   render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Email is not connected: this reply is saved but not sent. Connect it, then retry.', sent_at: null, reason_code: 'channel_not_connected' } }} timezone="UTC" />);
   expect(screen.getByText('Saved, not sent')).toHaveClass('badge-delivery-queued');

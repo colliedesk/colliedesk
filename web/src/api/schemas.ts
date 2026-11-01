@@ -9,7 +9,10 @@ const nullableDate = z.string().datetime().nullable();
 export const roleSchema = z.enum(['admin', 'agent']);
 export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
-export const channelSchema = z.enum(['email', 'web_form', 'help_chat', 'imported', 'agent', 'problem_report']);
+// How a conversation started: the values known today, which the filters offer, and any other channel type the
+// server's registry names (a chat type), which the inbox shows by its name instead of failing to load.
+export const knownChannels = ['email', 'web_form', 'help_chat', 'zalo', 'imported', 'agent', 'problem_report'] as const;
+export const channelSchema = z.string().regex(/^[a-z_]{1,40}$/);
 export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest']);
 
 export const workspaceSchema = z.object({
@@ -115,13 +118,15 @@ export const conversationSchema = z.object({
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   latest_reply_number: z.number().int().nonnegative(),
+  number: z.number().int().positive().optional(), number_series: z.string().optional(), display_ref: z.string().optional(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
-    replies_via: z.object({ id: z.string(), name: z.string(), enabled: z.boolean(),
+    // A server from before chat channels sends no type: its replies always left by email.
+    replies_via: z.object({ id: z.string(), type: z.string().catch('email'), name: z.string(), enabled: z.boolean(),
       instead_of: z.object({ id: z.string(), name: z.string() }).nullable().optional() }).nullable() }).nullable().optional(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({
-  status: deliveryStatusSchema, attempts: z.number().int().min(0), last_error: z.string().nullable(), sent_at: nullableDate, reason_code: z.string().nullable().optional(),
+  status: deliveryStatusSchema, attempts: z.number().int().min(0), last_error: z.string().nullable(), sent_at: nullableDate, reason_code: z.string().nullable().optional(), retryable: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'MessageDelivery'>>;
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
@@ -154,6 +159,8 @@ export const messageSchema = z.object({
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(), reply_number: z.number().int().positive().nullable(),
   // A customer message moved in from another contact's conversation; an older server sends nothing.
   other_contact_id: z.string().uuid().nullable().optional(),
+  intake_reply_kind: z.enum(['substantive', 'acknowledgement']).nullable().optional(),
+  notice_kind: z.string().nullable().optional(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),

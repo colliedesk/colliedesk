@@ -40,6 +40,29 @@ type IntakeGathering struct {
 	Place             *IntakePlace `json:"place"`
 	// Preview is the beginning of what the customer wrote first.
 	Preview string `json:"preview"`
+	// Suggestion is what AI suggested and did not do, the newest, while the card waits or the rules
+	// decided it, unless a person decided since.
+	Suggestion *IntakeSuggestion `json:"suggestion"`
+}
+
+// IntakeSuggestion is what AI suggested of a card and did not do, with the conversations it names.
+type IntakeSuggestion struct {
+	DecisionID             string    `json:"decision_id"`
+	Action                 string    `json:"action"`
+	TargetConversationID   *string   `json:"target_conversation_id"`
+	TargetSubject          *string   `json:"target_subject"`
+	TargetStatus           *string   `json:"target_status"`
+	RunnerUpConversationID *string   `json:"runner_up_conversation_id"`
+	RunnerUpSubject        *string   `json:"runner_up_subject"`
+	RunnerUpConfidence     *float64  `json:"runner_up_confidence"`
+	Confidence             *float64  `json:"confidence"`
+	Command                *string   `json:"command"`
+	Subject                *string   `json:"subject"`
+	ReplyKind              *string   `json:"reply_kind"`
+	IgnoreReason           *string   `json:"ignore_reason"`
+	Reason                 *string   `json:"reason"`
+	NotAppliedReason       string    `json:"not_applied_reason"`
+	CreatedAt              time.Time `json:"created_at"`
 }
 
 // IntakeRules is what the channel's rules decided when the gathering closed.
@@ -72,27 +95,30 @@ type IntakeCandidate struct {
 
 // IntakeDecisionView is one decision of a gathering as the API shows it.
 type IntakeDecisionView struct {
-	ID                     string    `json:"id"`
-	Decider                string    `json:"decider"`
-	Basis                  string    `json:"basis"`
-	Action                 string    `json:"action"`
-	TargetConversationID   *string   `json:"target_conversation_id"`
-	RunnerUpConversationID *string   `json:"runner_up_conversation_id"`
-	RunnerUpConfidence     *float64  `json:"runner_up_confidence"`
-	Command                *string   `json:"command"`
-	Subject                *string   `json:"subject"`
-	ReplyKind              *string   `json:"reply_kind"`
-	Confidence             *float64  `json:"confidence"`
-	Reason                 *string   `json:"reason"`
-	Applied                bool      `json:"applied"`
-	IgnoreReason           *string   `json:"ignore_reason"`
-	NotAppliedReason       *string   `json:"not_applied_reason"`
-	Fallback               bool      `json:"fallback"`
-	CorrectsDecisionID     *string   `json:"corrects_decision_id"`
-	Model                  *string   `json:"model"`
-	AgentID                *string   `json:"agent_id"`
-	ViaToken               bool      `json:"via_token"`
-	CreatedAt              time.Time `json:"created_at"`
+	ID                     string   `json:"id"`
+	Decider                string   `json:"decider"`
+	Basis                  string   `json:"basis"`
+	Action                 string   `json:"action"`
+	TargetConversationID   *string  `json:"target_conversation_id"`
+	RunnerUpConversationID *string  `json:"runner_up_conversation_id"`
+	RunnerUpConfidence     *float64 `json:"runner_up_confidence"`
+	Command                *string  `json:"command"`
+	Subject                *string  `json:"subject"`
+	ReplyKind              *string  `json:"reply_kind"`
+	Confidence             *float64 `json:"confidence"`
+	Reason                 *string  `json:"reason"`
+	Applied                bool     `json:"applied"`
+	IgnoreReason           *string  `json:"ignore_reason"`
+	NotAppliedReason       *string  `json:"not_applied_reason"`
+	Fallback               bool     `json:"fallback"`
+	CorrectsDecisionID     *string  `json:"corrects_decision_id"`
+	FollowsDecisionID      *string  `json:"follows_decision_id"`
+	// ErrorCode says what failed when AI's answer was not a decision (target_invalid, invalid_answer).
+	ErrorCode *string   `json:"error_code"`
+	Model     *string   `json:"model"`
+	AgentID   *string   `json:"agent_id"`
+	ViaToken  bool      `json:"via_token"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // IntakeGatheringDetail is a card with everything its customer said and every decision made on it.
@@ -122,25 +148,57 @@ const (
 // MaxIntakePage is the most cards a page holds.
 const MaxIntakePage = 50
 
+// gatheringItemRows are the items of card g, as i: those it holds now, and those that came in it and were
+// taken back to the queue since (the journal still names the card they came in), so a decided card keeps
+// showing what it decided on. Each branch reads its own index: the item of each event is looked up one by
+// one (LIMIT 1 keeps the planner from hashing every item of the workspace).
+const gatheringItemRows = `(SELECT i.* FROM channel_thread_items i WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id
+	UNION ALL SELECT i.* FROM channel_inbound_events e CROSS JOIN LATERAL (SELECT * FROM channel_thread_items i
+		WHERE i.workspace_id=e.workspace_id AND i.inbound_event_id=e.id LIMIT 1) i
+	WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id AND i.gathering_id IS DISTINCT FROM g.id) i`
+
 const gatheringColumns = `g.id::text,g.channel_id::text,g.scope,g.thread_id::text,g.lane_key,g.contact_id::text,g.state,g.review_reason,g.rules_action,g.rules_rule,
 	g.rules_basis,g.rules_target::text,g.conversation_id::text,g.decided_by,g.decided_at,g.decided_by_agent_id::text,g.ignore_reason,g.fallback,g.opened_at,g.closed_at,
 	g.decide_by,g.requeued_at,g.requeued_by_agent_id::text,
-	(SELECT count(*) FROM channel_thread_items i WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id),
-	f.sender_kind,f.sender_value,f.sender_name,t.kind,t.name,COALESCE(left(f.body,280),'')`
+	(SELECT count(*) FROM ` + gatheringItemRows + `),
+	f.sender_kind,f.sender_value,f.sender_name,t.kind,t.name,COALESCE(left(f.body,280),''),
+	s.id::text,s.action,s.target_conversation_id::text,s.target_subject,s.target_status,s.runner_up_conversation_id::text,s.runner_up_subject,
+	s.runner_up_confidence::float8,s.confidence::float8,s.command,s.subject,s.reply_kind,s.ignore_reason,s.reason,s.not_applied_reason,s.created_at`
 
-const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM channel_thread_items i
-	WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id ORDER BY i.occurred_at,i.id LIMIT 1) f ON true
-	LEFT JOIN channel_threads t ON t.workspace_id=g.workspace_id AND t.id=g.thread_id`
+const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM ` + gatheringItemRows + `
+	ORDER BY i.occurred_at,i.id LIMIT 1) f ON true
+	LEFT JOIN channel_threads t ON t.workspace_id=g.workspace_id AND t.id=g.thread_id
+	LEFT JOIN LATERAL (SELECT d.id,d.action,d.target_conversation_id,tc.subject AS target_subject,tc.status AS target_status,d.runner_up_conversation_id,
+			rc.subject AS runner_up_subject,d.runner_up_confidence,d.confidence,d.command,d.subject,d.reply_kind,d.ignore_reason,d.reason,d.not_applied_reason,d.created_at
+		FROM intake_decisions d
+		LEFT JOIN conversations tc ON tc.workspace_id=d.workspace_id AND tc.id=d.target_conversation_id
+		LEFT JOIN conversations rc ON rc.workspace_id=d.workspace_id AND rc.id=d.runner_up_conversation_id
+		WHERE g.state IN ('deciding','review','applied') AND d.workspace_id=g.workspace_id AND d.gathering_id=g.id AND d.decider='ai' AND NOT d.applied
+			AND d.action<>'review' AND NOT EXISTS(SELECT 1 FROM intake_decisions p WHERE p.workspace_id=d.workspace_id AND p.gathering_id=d.gathering_id
+				AND p.decider='agent' AND p.created_at>d.created_at)
+		ORDER BY d.created_at DESC,d.id DESC LIMIT 1) s ON true`
 
 func scanGathering(row pgx.Row) (IntakeGathering, error) {
 	var g IntakeGathering
-	var placeKind, placeName *string
+	var placeKind, placeName, suggestionID, suggestionAction, notApplied *string
+	var suggestion IntakeSuggestion
+	var suggestedAt *time.Time
 	err := row.Scan(&g.ID, &g.ChannelID, &g.Scope, &g.ThreadID, &g.LaneKey, &g.ContactID, &g.State, &g.ReviewReason, &g.Rules.Action, &g.Rules.Rule,
 		&g.Rules.Basis, &g.Rules.TargetConversationID, &g.ConversationID, &g.DecidedBy, &g.DecidedAt, &g.DecidedByAgentID, &g.IgnoreReason, &g.Fallback,
 		&g.OpenedAt, &g.ClosedAt, &g.DecideBy, &g.RequeuedAt, &g.RequeuedByAgentID, &g.ItemCount, &g.Sender.Kind, &g.Sender.Value, &g.Sender.Name,
-		&placeKind, &placeName, &g.Preview)
+		&placeKind, &placeName, &g.Preview,
+		&suggestionID, &suggestionAction, &suggestion.TargetConversationID, &suggestion.TargetSubject, &suggestion.TargetStatus, &suggestion.RunnerUpConversationID,
+		&suggestion.RunnerUpSubject, &suggestion.RunnerUpConfidence, &suggestion.Confidence, &suggestion.Command, &suggestion.Subject, &suggestion.ReplyKind,
+		&suggestion.IgnoreReason, &suggestion.Reason, &notApplied, &suggestedAt)
 	if placeKind != nil {
 		g.Place = &IntakePlace{Kind: *placeKind, Name: placeName}
+	}
+	if suggestionID != nil {
+		suggestion.DecisionID, suggestion.Action, suggestion.CreatedAt = *suggestionID, *suggestionAction, domain.UTC(*suggestedAt)
+		if notApplied != nil {
+			suggestion.NotAppliedReason = *notApplied
+		}
+		g.Suggestion = &suggestion
 	}
 	g.DecidedAt, g.DecideBy, g.RequeuedAt = domain.UTCOptional(g.DecidedAt), domain.UTCOptional(g.DecideBy), domain.UTCOptional(g.RequeuedAt)
 	g.OpenedAt, g.ClosedAt = domain.UTC(g.OpenedAt), domain.UTC(g.ClosedAt)
@@ -362,8 +420,8 @@ func (s *Store) IntakeSummaryOf(ctx context.Context, workspaceID string) (Intake
 }
 
 func gatheringItems(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]ChatItem, error) {
-	rows, err := tx.Query(ctx, `SELECT `+chatItemColumns+` FROM channel_thread_items i WHERE i.workspace_id=$1 AND i.gathering_id=$2::uuid
-		ORDER BY i.occurred_at,i.id`, workspaceID, id)
+	rows, err := tx.Query(ctx, `SELECT `+chatItemColumns+` FROM intake_gatherings g CROSS JOIN LATERAL `+gatheringItemRows+`
+		WHERE g.workspace_id=$1 AND g.id=$2::uuid ORDER BY i.occurred_at,i.id`, workspaceID, id)
 	if err != nil {
 		return nil, fmt.Errorf("read gathering items: %w", err)
 	}
@@ -381,7 +439,8 @@ func gatheringItems(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]C
 
 func gatheringDecisions(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) ([]IntakeDecisionView, error) {
 	rows, err := tx.Query(ctx, `SELECT id::text,decider,basis,action,target_conversation_id::text,runner_up_conversation_id::text,runner_up_confidence::float8,
-			command,subject,reply_kind,confidence::float8,reason,applied,ignore_reason,not_applied_reason,fallback,corrects_decision_id::text,model,agent_id::text,token_id IS NOT NULL,created_at
+			command,subject,reply_kind,confidence::float8,reason,applied,ignore_reason,not_applied_reason,fallback,corrects_decision_id::text,follows_decision_id::text,error_code,model,agent_id::text,
+			token_id IS NOT NULL,created_at
 		FROM intake_decisions WHERE workspace_id=$1 AND gathering_id=ANY($2::uuid[]) ORDER BY created_at DESC,id DESC`, workspaceID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("read intake decisions: %w", err)
@@ -389,7 +448,7 @@ func gatheringDecisions(ctx context.Context, tx pgx.Tx, workspaceID string, ids 
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (IntakeDecisionView, error) {
 		var d IntakeDecisionView
 		err := row.Scan(&d.ID, &d.Decider, &d.Basis, &d.Action, &d.TargetConversationID, &d.RunnerUpConversationID, &d.RunnerUpConfidence, &d.Command,
-			&d.Subject, &d.ReplyKind, &d.Confidence, &d.Reason, &d.Applied, &d.IgnoreReason, &d.NotAppliedReason, &d.Fallback, &d.CorrectsDecisionID, &d.Model, &d.AgentID,
+			&d.Subject, &d.ReplyKind, &d.Confidence, &d.Reason, &d.Applied, &d.IgnoreReason, &d.NotAppliedReason, &d.Fallback, &d.CorrectsDecisionID, &d.FollowsDecisionID, &d.ErrorCode, &d.Model, &d.AgentID,
 			&d.ViaToken, &d.CreatedAt)
 		d.CreatedAt = domain.UTC(d.CreatedAt)
 		return d, err
@@ -442,7 +501,7 @@ func (s *Store) IntakeStatsOf(ctx context.Context, workspaceID, channelID string
 		if err := rows.Err(); err != nil {
 			return stats, err
 		}
-		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE d.decider='ai'),
+		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE d.decider='ai' AND d.action<>'review'),
 				count(*) FILTER (WHERE d.decider='ai' AND EXISTS(SELECT 1 FROM intake_decisions c WHERE c.workspace_id=d.workspace_id AND c.corrects_decision_id=d.id))
 			FROM intake_decisions d JOIN intake_gatherings g ON g.workspace_id=d.workspace_id AND g.id=d.gathering_id
 			WHERE d.workspace_id=$1 AND g.closed_at>=$2 AND (NULLIF($3,'') IS NULL OR g.channel_id=NULLIF($3,'')::uuid)`, workspaceID, since, channelID).

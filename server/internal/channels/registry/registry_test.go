@@ -27,10 +27,7 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 		t.Fatal(err)
 	}
 	contract := string(source)
-	channelTypeEnum := ""
-	if start := strings.Index(contract, "\n    ChannelType:\n"); start >= 0 {
-		channelTypeEnum = contract[start : start+200]
-	}
+	shipped := contractValues(t, contract, "ChannelType", "Shipped types")
 	types := registry.New(registry.Config{})
 	for _, definition := range types.Definitions() {
 		kind := string(definition.Type)
@@ -68,28 +65,22 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 		if !strings.Contains(contract, "- {$ref: '#/components/schemas/"+schema+"'}") || !strings.Contains(contract, "\n    "+schema+":") {
 			t.Errorf("%s: contracts/openapi.yaml has no %s schema in the oneOf of ChannelConfig", kind, schema)
 		}
-		if !strings.Contains(channelTypeEnum, kind) {
-			t.Errorf("%s: the ChannelType enum of contracts/openapi.yaml does not list it", kind)
+		if !slices.Contains(shipped, kind) {
+			t.Errorf("%s: the shipped types of ChannelType in contracts/openapi.yaml do not list it", kind)
 		}
 	}
 }
 
 // How a conversation started is a channel type or one of the origins that come through no channel. The
-// contract lists exactly those (ConversationChannel): the web app parses every conversation against it,
-// so a type missing there breaks the inbox, and one listed there that no type runs is a filter for nothing.
+// contract documents exactly those (ConversationChannel "Values: …"): clients name and filter by them, and a
+// type documented there that no type runs is a filter for nothing. The schema takes any type's name, so a
+// type a client does not know yet never breaks its list.
 func TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins(t *testing.T) {
 	source, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "contracts", "openapi.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	enum := regexp.MustCompile(`\n    ConversationChannel:\n      type: string\n      enum: \[([^\]]*)\]`).FindStringSubmatch(string(source))
-	if enum == nil {
-		t.Fatal("contracts/openapi.yaml has no ConversationChannel enum")
-	}
-	var listed []string
-	for _, value := range strings.Split(enum[1], ",") {
-		listed = append(listed, strings.TrimSpace(value))
-	}
+	listed := contractValues(t, string(source), "ConversationChannel", "Values")
 	var want []string
 	for _, kind := range registry.New(registry.Config{}).Types() {
 		want = append(want, string(kind))
@@ -98,8 +89,28 @@ func TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins(t *testin
 	slices.Sort(listed)
 	slices.Sort(want)
 	if !slices.Equal(listed, want) {
-		t.Fatalf("ConversationChannel enum %v, want the registered types and the origins %v", listed, want)
+		t.Fatalf("ConversationChannel values %v, want the registered types and the origins %v", listed, want)
 	}
+}
+
+// contractValues reads the values a schema of contracts/openapi.yaml documents in its description as
+// "<label>: a, b, c." The schema itself takes any type's name (a test build runs a chat stand-in), so the
+// list is what clients name and filter by, kept equal to the registry here.
+func contractValues(t *testing.T, contract, schema, label string) []string {
+	t.Helper()
+	block := regexp.MustCompile(`\n    ` + schema + `:\n((?:      .*\n|        .*\n)*)`).FindStringSubmatch(contract)
+	if block == nil {
+		t.Fatalf("contracts/openapi.yaml has no %s schema", schema)
+	}
+	match := regexp.MustCompile(label + `: ([a-z_, ]+)\.`).FindStringSubmatch(strings.Join(strings.Fields(block[1]), " "))
+	if match == nil {
+		t.Fatalf("the description of %s does not say %q", schema, label+": …")
+	}
+	var values []string
+	for _, value := range strings.Split(match[1], ",") {
+		values = append(values, strings.TrimSpace(value))
+	}
+	return values
 }
 
 // pascal writes a type as its schema names it: web_form is WebForm.

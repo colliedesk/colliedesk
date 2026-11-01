@@ -305,6 +305,52 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"attach_threshold": 0.8}}); response.Code != http.StatusAccepted {
 		t.Fatalf("loosen: %+v", response)
 	}
+	// Masking more is a tightening; masking less a raise; a label is a word, not a sentence.
+	labels := map[string]any{"attach_threshold": 0.95, "contact_labels": map[string]any{"account": []string{"stk", "số tài khoản"}, "id": []string{"cccd"}}}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": labels}); response.Code != http.StatusOK {
+		t.Fatalf("mask more: %+v", response)
+	}
+	fewer := map[string]any{"attach_threshold": 0.95, "contact_labels": map[string]any{"account": []string{"stk"}, "id": []string{"cccd"}}}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": fewer}); response.Code != http.StatusAccepted {
+		t.Fatalf("mask less: %+v", response)
+	}
+	// A channel's own patterns: adding one tightens, taking one out is a raise, a pattern that would mask
+	// everywhere, does not compile or is too large is refused.
+	patterns := []map[string]any{{"pattern": `\b\d{12}\b`, "mask": "id_number"}, {"pattern": `\b84\d{9}\b`, "mask": "phone"}}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns}}); response.Code != http.StatusOK {
+		t.Fatalf("add patterns: %+v", response)
+	}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns[:1]}}); response.Code != http.StatusAccepted {
+		t.Fatalf("take a pattern out: %+v", response)
+	}
+	for _, pattern := range []string{`\d*`, `\b`, `\b\d*`, `(?:\b)`, `\d*\b`, `(`, `[a-z]{999}[a-z]{999}[a-z]{999}`, strings.Repeat("a", 201)} {
+		body := map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"redact_patterns": []map[string]any{{"pattern": pattern, "mask": "phone"}}}}
+		if response := d.setLevel(t, d.adminA, d.chatA, "intake", body); response.Code != http.StatusBadRequest {
+			t.Fatalf("pattern %q: %+v", pattern[:min(len(pattern), 20)], response)
+		}
+	}
+	// The settings page shows a refusal as it comes: it names the setting as the page does, and which pattern.
+	for _, tc := range []struct {
+		options map[string]any
+		says    string
+	}{
+		{map[string]any{"create_threshold": 0.3}, "threshold to open a conversation"},
+		{map[string]any{"redact_patterns": []map[string]any{{"pattern": `\b\d{12}\b`, "mask": "id_number"}, {"pattern": `(`, "mask": "phone"}}}, "Pattern 2 "},
+		{map[string]any{"redact_patterns": []map[string]any{{"pattern": `\d*`, "mask": "phone"}}}, "Pattern 1 "},
+		{map[string]any{"redact_patterns": []map[string]any{{"pattern": `\d{12}`, "mask": "name"}}}, "Pattern 1 "},
+	} {
+		response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": tc.options})
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body, tc.says) ||
+			strings.Contains(response.Body, "redact_patterns") || strings.Contains(response.Body, "_threshold") {
+			t.Fatalf("refusal of %v = %+v, want it to say %q without a field name", tc.options, response, tc.says)
+		}
+	}
+	bad := map[string]any{"contact_labels": map[string]any{"account": []string{" stk "}}}
+	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": bad}); response.Code != http.StatusBadRequest {
+		t.Fatalf("a label with spaces at its ends: %+v", response)
+	}
 	// A person who is not an admin cannot change a level.
 	agent := joinAsAgent(t, d.api, d.adminA, "agent@level-a.example.com")
 	if response := d.setLevel(t, agent, d.chatA, "triage", map[string]any{"scope": "", "level": "off"}); response.Code != http.StatusForbidden {
@@ -312,6 +358,43 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 	}
 	if response := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA+"/ai", nil, agent, nil); response.Code != http.StatusOK {
 		t.Fatalf("an agent reads the levels: %d", response.Code)
+	}
+}
+
+// A channel's own settings never become another channel's: every channel of a type reads the type's
+// defaults, and a chat type's defaults hold maps (its commands) that one channel's settings must not write
+// into. A card of workspace B lists the commands of its own chat only. (A web form's default tags are a
+// new list each time the type is read, so they are no such path.)
+func TestAChannelsSettingsNeverReachAnotherWorkspacesChannel(t *testing.T) {
+	d := newLevelDesk(t)
+	ctx := context.Background()
+	if response := request(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.chatA, map[string]any{"settings": json.RawMessage(
+		`{"default_tags":["alpha-vip"],"commands":{"vip":{"phrases":["alpha vip please"],"tags":["alpha-vip"]}}}`)}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("set chat A's settings: %d %s", response.Code, response.Body.String())
+	}
+	cardOf := func(workspace, channel string) string {
+		var id string
+		if err := d.pool.QueryRow(ctx, `WITH th AS (INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id,opens_conversations)
+				VALUES($1,$2,'group','group:1',true) RETURNING id)
+			INSERT INTO intake_gatherings(workspace_id,channel_id,scope,lane_key,thread_id,state,review_reason,rules_action,rules_rule,opened_at,closed_at)
+			SELECT $1,$2,'group','thread:'||th.id||':u',th.id,'review','no_command','create','new_thread',now(),now() FROM th RETURNING id::text`,
+			workspace, channel).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	for _, card := range []struct{ token, id, want string }{
+		{d.adminB, cardOf(d.workspaceB, d.chatB), `["bug"]`},
+		{d.adminA, cardOf(d.workspaceA, d.chatA), `["bug","vip"]`},
+	} {
+		response := request(t, d.api, http.MethodGet, "/api/v1/intake/gatherings/"+card.id, nil, card.token, nil)
+		var detail struct {
+			Commands json.RawMessage `json:"commands"`
+		}
+		decode(t, response, &detail)
+		if string(detail.Commands) != card.want {
+			t.Fatalf("commands of card %s = %s, want %s", card.id, detail.Commands, card.want)
+		}
 	}
 }
 
@@ -557,6 +640,19 @@ func TestAnotherModelLowersIntakeOnly(t *testing.T) {
 	if got := queryString(t, d.pool, `SELECT count(*)::text FROM channel_events WHERE workspace_id=$1 AND kind='ai_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
 		t.Fatalf("channel model_changed events = %s", got)
 	}
+	// The channel says when and why the server lowered it, until a person changes the level again.
+	if item, _ := effective(levels, "group", "intake"); item.Lowered == nil || item.Lowered.Reason != "model_changed" {
+		t.Fatalf("intake lowered = %+v", item.Lowered)
+	}
+	if item, _ := effective(levels, "group", "triage"); item.Lowered != nil {
+		t.Fatalf("triage lowered = %+v", item.Lowered)
+	}
+	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "off"}); response.Code != http.StatusOK {
+		t.Fatalf("a person turns intake off: %+v", response)
+	}
+	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Lowered != nil {
+		t.Fatalf("lowered after a person's change = %+v", item.Lowered)
+	}
 }
 
 // Right at 16 KiB, options are either kept or refused with the limit named, never refused by the
@@ -582,5 +678,33 @@ func TestIntakeOptionsAtTheLimitAreKeptOrRefusedPlainly(t *testing.T) {
 	}
 	if kept == 0 || refused == 0 {
 		t.Fatalf("the sweep missed the limit: kept %d, refused %d", kept, refused)
+	}
+}
+
+// A channel's detail reads back what its settings store (what a change of settings replaces whole) and
+// the rules in force with its type's defaults, for one workspace's channel only.
+func TestAChannelsDetailShowsItsSettingsAndTheRulesInForce(t *testing.T) {
+	d := newLevelDesk(t)
+	if response := request(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.chatA, map[string]any{"settings": json.RawMessage(
+		`{"commands":{"cancel":{"action":"cancel","match":"exact","phrases":["stop"]}}}`)}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("set chat A's settings: %d %s", response.Code, response.Body.String())
+	}
+	response := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA, nil, d.adminA, nil)
+	var detail struct {
+		Settings          map[string]json.RawMessage `json:"settings"`
+		EffectiveSettings struct {
+			Commands   map[string]map[string]any `json:"commands"`
+			RateLimits map[string]any            `json:"rate_limits"`
+		} `json:"effective_settings"`
+	}
+	decode(t, response, &detail)
+	if len(detail.Settings) != 1 || !strings.Contains(string(detail.Settings["commands"]), `"match":"exact"`) {
+		t.Fatalf("settings = %v", detail.Settings)
+	}
+	if detail.EffectiveSettings.Commands["cancel"]["match"] != "exact" || detail.EffectiveSettings.RateLimits == nil {
+		t.Fatalf("effective settings = %+v", detail.EffectiveSettings)
+	}
+	if other := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA, nil, d.adminB, nil); other.Code != http.StatusNotFound {
+		t.Fatalf("B reads A's channel: %d", other.Code)
 	}
 }

@@ -1,9 +1,8 @@
-import { useRef } from 'react';
-import type { ReactNode } from 'react';
 import type { BulkConversationChanges } from '../../api/client';
 import type { Conversation, TeamMember, Tag } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, CheckIcon, ChevronDownIcon, CircleDotIcon, MinusIcon, TagIcon, UserIcon, XIcon } from '../../ui/icons';
+import { CheckCircleIcon, CheckIcon, CircleDotIcon, MinusIcon, TagIcon, UserIcon, XIcon } from '../../ui/icons';
+import { ActionMenu } from './action-menu';
 import { StatusLabel } from './conversation-labels';
 
 interface BulkActionBarProps {
@@ -14,46 +13,6 @@ interface BulkActionBarProps {
   busy: boolean;
   onApply: (changes: BulkConversationChanges) => void;
   onClear: () => void;
-}
-
-interface ActionMenuProps {
-  label: string;
-  icon: ReactNode;
-  disabled: boolean;
-  children: (apply: (changes: BulkConversationChanges) => void) => ReactNode;
-  onApply: (changes: BulkConversationChanges) => void;
-}
-
-// A menu of choices that each apply at once. A button per choice, not a select: a select fires on
-// every arrow key in some browsers, and one stray key would rewrite fifty conversations.
-function ActionMenu({ label, icon, disabled, children, onApply }: ActionMenuProps) {
-  const menu = useRef<HTMLDetailsElement>(null);
-  const apply = (changes: BulkConversationChanges) => {
-    if (menu.current) {
-      menu.current.open = false;
-      // The pressed button is about to be hidden; keep focus on the menu that opened it.
-      menu.current.querySelector('summary')?.focus();
-    }
-    onApply(changes);
-  };
-  // Escape closes an open menu and stops there; the bar treats a second Escape as clearing the selection.
-  const closeOnEscape = (event: React.KeyboardEvent<HTMLDetailsElement>) => {
-    if (event.key !== 'Escape' || !menu.current?.open) return;
-    event.stopPropagation();
-    menu.current.open = false;
-    menu.current.querySelector('summary')?.focus();
-  };
-  const closeOnFocusOut = (event: React.FocusEvent<HTMLDetailsElement>) => {
-    if (menu.current?.open && !menu.current.contains(event.relatedTarget as Node | null)) menu.current.open = false;
-  };
-  return (
-    <details className="action-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} data-disabled={disabled || undefined}>
-      <summary aria-label={label} data-tip={label} aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}>
-        {icon}<ChevronDownIcon />
-      </summary>
-      <div className="action-popover" role="group" aria-label={label}>{children(apply)}</div>
-    </details>
-  );
 }
 
 // tagState says whether every, some or none of the selected conversations carry the tag.
