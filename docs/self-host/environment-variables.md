@@ -17,7 +17,7 @@ console. With the installer, add a variable to `.env` next to `compose.yaml`, th
 | `OPERATOR_ORIGIN` | empty | The operator console's own address, such as `https://ops.example.com` (https; http only for localhost). Empty serves the console at `APP_ORIGIN/operator/`. See [operator console](operator-console.md#its-own-address). |
 | `LISTEN_ADDR` | `:8080` | Address the HTTP server listens on inside the container. The compose files set `:8080` and map the port; `collie serve --listen` overrides it. |
 | `ATTACHMENTS_DIR` | `data/attachments`, relative to the working directory; the compose files set `/data/attachments` | Where attachment files are stored. Keep it on a volume, and give `collie serve` and `collie import` the same one. |
-| `MAILBOX_TOKEN_KEYS` | set by the installer on new installs; empty on older ones | Key ring that encrypts what the server stores for later: the secrets among the settings (SMTP password, API keys, client secrets), the Gmail and Microsoft 365 access, the Freshdesk API key of an import running in the app, and the API keys of the AI providers a workspace adds. `k1:` followed by 32 random bytes in base64 (`k1:$(openssl rand -base64 32)`). Keep a copy; to change it, put the new key first (`k2:<new>,k1:<old>`), run `collie config reseal`, and never drop a key something is still sealed with. Without it, secret settings stay in the environment (see [no key ring](#no-key-ring)), an import keeps its key in memory only, and no workspace can add an AI provider. |
+| `MAILBOX_TOKEN_KEYS` | set by the installer on new installs; empty on older ones | Key ring that encrypts what the server stores for later: the secrets among the settings (SMTP password, API keys, client secrets), the Gmail and Microsoft 365 access, the Freshdesk API key of an import running in the app, the API keys of the AI providers a workspace adds, and the secrets and tokens of a Zalo OA channel. `k1:` followed by 32 random bytes in base64 (`k1:$(openssl rand -base64 32)`). Keep a copy; to change it, put the new key first (`k2:<new>,k1:<old>`), run `collie config reseal`, and never drop a key something is still sealed with. Without it, secret settings stay in the environment (see [no key ring](#no-key-ring)), an import keeps its key in memory only, and no workspace can add an AI provider or store a Zalo OA's secrets. |
 | `DISABLE_TELEMETRY`, `DO_NOT_TRACK` | empty | Turn off the usage report and product analytics. See [usage report](#usage-report). |
 | `COLLIE_DESK_IMAGE` | set by the installer | Image the installer's `compose.yaml` runs. See [upgrading](README.md#upgrading). |
 
@@ -38,7 +38,12 @@ docker compose exec server /app/collie config doctor                # 0 clean, 1
 Each change is checked the way the server reads it at start (a half-configured group is refused,
 naming what is missing) and saved as a new version; a running server applies it within seconds
 (restart it to apply it at once). `collie config history` lists the versions and `collie config
-restore <version>` brings one back. Secrets are write-only: no command, export or log shows them
+restore <version>` brings one back. `collie config unset KEY…` returns settings to their default,
+`collie config import FILE` (or `--from-env`, `--stdin`) takes settings written as an `.env` file
+(by default only the groups of settings the database does not hold yet; `--replace` replaces the
+groups the file sets), and `collie config apply FILE`
+(`--dry-run` prints what would change) makes the configuration match a JSON file as `collie config export --format json`
+writes it. Secrets are write-only: no command, export or log shows them
 again, except `collie config export --include-secrets`. More: [operator console and settings](operator-console.md).
 
 | Variable before | Setting | Group |

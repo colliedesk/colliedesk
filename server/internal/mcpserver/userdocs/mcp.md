@@ -386,3 +386,7 @@ approves it in the console with their authenticator code.
 - `colliedesk_conversations_bulk_update` is all or nothing: if one id is not a conversation of the
   workspace, nothing changes. It takes only existing tag names and cannot set priority; use
   `colliedesk_conversation_update` for those.
+- A status set with `colliedesk_conversation_update` or `colliedesk_conversations_bulk_update` on a
+  conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); with
+  a token below the send tier that change waits for a person. `notify: false` sets the status quietly,
+  without asking.
