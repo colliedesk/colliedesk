@@ -2,6 +2,14 @@
 
 <!-- One or two sentences. Write "Closes #N" for the issue this ships. -->
 
+<!-- If the issue has a comment starting "Design spec", add this section (CI checks it):
+## Design spec
+
+- done: <mechanism>
+- changed: <mechanism>, because <reason>
+- not in this PR: <mechanism> (#issue)
+-->
+
 ## Checklist
 
 - [ ] Tests written first and passing (`make test`; `make e2e` for user-visible flows)
