@@ -26,11 +26,17 @@ type SetupStep struct {
 }
 
 // SetupProgress is where a workspace stands on getting started, the goal's step first.
+type SetupHelpCenter struct {
+	Action string `json:"action"`
+	URL    string `json:"url"`
+}
+
 type SetupProgress struct {
-	Steps       []SetupStep `json:"steps"`
-	Complete    bool        `json:"complete"`
-	Recommended *string     `json:"recommended"`
-	NextURL     *string     `json:"next_url"`
+	HelpCenter  *SetupHelpCenter `json:"help_center,omitempty"`
+	Steps       []SetupStep      `json:"steps"`
+	Complete    bool             `json:"complete"`
+	Recommended *string          `json:"recommended"`
+	NextURL     *string          `json:"next_url"`
 }
 
 // setupFirstStep is the step each sign-up goal starts with; any other goal keeps the usual order.

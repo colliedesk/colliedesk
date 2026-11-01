@@ -12,6 +12,7 @@ const (
 		`"created_at":{"type":["string","null"]},"verified_at":{"type":["string","null"]},"checked_at":{"type":["string","null"]},` +
 		`"check_error":{"type":["string","null"]},"certificate_requested_at":{"type":["string","null"]},` +
 		`"failing_since":{"type":["string","null"]},"pending_reason":{"type":["string","null"],"enum":["proof_lost","taken_over",null]},"awaiting_payment":{"type":"boolean"},` +
+		`"next_step":{"type":["object","null"],"required":["key","url"],"properties":{"key":{"type":"string","enum":["import","enable"]},"url":{"type":"string"}}},` +
 		`"address_url":{"type":["string","null"]},"address_checked_at":{"type":["string","null"]},"address_error":{"type":["string","null"]}}}`
 	helpCenterDomainOutput = `{"type":"object","required":["domain"],"properties":{"domain":` + helpCenterDomainSchema + `}}`
 
@@ -33,7 +34,7 @@ func helpCenterDomainGetSpec() Spec {
 			`An active domain whose checks fail shows failing_since; after 7 days without proof it goes back to pending with pending_reason proof_lost, ` +
 			`or taken_over when another workspace proved the host name while this domain's records did not. ` +
 			`awaiting_payment is true while the workspace is on its trial (or locked after it): the domain can be set and verified, ` +
-			`but the help center serves on it only once the workspace is paid. ` + helpCenterAddressRule + "\n\nTier: read.",
+			`but the help center serves on it only once the workspace is paid. next_step names a missing import or enable action; an imported empty help center needs enabling, not another import. ` + helpCenterAddressRule + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET " + helpCenterDomainPath},
 		Input:  noArguments,

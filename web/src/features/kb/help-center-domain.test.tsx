@@ -139,7 +139,7 @@ test('on the trial an admin verifies a domain, and the card says it serves there
   fireEvent.click(screen.getByRole('button', { name: 'Set domain' }));
   expect(await screen.findByText(/help.acme.example is waiting for its DNS records/)).toHaveAttribute('role', 'status');
   fireEvent.click(screen.getByRole('button', { name: 'Check now' }));
-  expect(await screen.findByText('help.acme.example is verified. After the help center is ready, choose a plan; then change the CNAME and press Check now.'))
+  expect(await screen.findByText(/DNS checked.*help.acme.example is verified.*once you choose a plan/))
     .toHaveAttribute('role', 'status');
   expect(screen.queryByText('The help center is served on help.acme.example.')).not.toBeInTheDocument();
 });
@@ -206,4 +206,17 @@ test('a verified domain with an empty help center names import before the plan',
   open(true);
   expect(await screen.findByRole('link', { name: 'Turn on the help center' })).toHaveAttribute('href', '/settings#help-center-heading');
   expect(screen.getByRole('status')).toHaveAttribute('data-on', 'false');
+});
+
+
+test('Check now on a verified trial domain explains serving and links to choosing a plan', async () => {
+  serve({
+    'GET /api/v1/help-center/domain': () => json(200, { ...active, awaiting_payment: true }),
+    'POST /api/v1/help-center/domain/check': () => json(200, { ...active, awaiting_payment: true }),
+  });
+  open(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Check now' }));
+  expect(await screen.findByText(/DNS checked.*serves.*once you choose a plan/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Choose a plan' })).toHaveAttribute('href', '/settings/billing');
+  expect(screen.queryByText('The help center is served on help.acme.example.')).not.toBeInTheDocument();
 });

@@ -2928,7 +2928,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Where the workspace stands on getting started. For leave_helpdesk the six move steps are import, preview, custom_domain, plan, cname and search_console. Other goals keep the email, import, invite and first_reply guide. Each step includes its next action URL; next_url is the first unfinished step's URL. Reads existing import, billing and help center state without making external calls. Confirmed milestones stay done; optional domain steps may be skipped. */
+        /** @description Where the workspace stands on getting started. For leave_helpdesk the five move steps are import, custom_domain, plan, cname and search_console. Other goals keep the email, import, invite and first_reply guide. Each step includes its next action URL; next_url is the first unfinished step's URL. Reads existing import, billing and help center state without making external calls. Confirmed milestones stay done; optional domain steps may be skipped. */
         get: operations["getSetupProgress"];
         put?: never;
         post?: never;
@@ -2946,7 +2946,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Confirm a help center preview or Search Console verification and sitemap submission. The server requires a public article and an enabled help center for preview, and a successful custom-domain address check for Search Console. Use custom_domain skipped to skip the four optional domain steps, or none to restore skipped steps. Completed steps never regress. Safe to repeat; lower-tier tokens file an approval request. */
+        /** @description Confirm Search Console verification and sitemap submission. The server requires a successful custom-domain address check for Search Console. Use custom_domain skipped to skip the four optional domain steps, or none to restore skipped steps. Completed steps never regress. Safe to repeat; lower-tier tokens file an approval request. */
         put: operations["setSetupMoveStep"];
         post?: never;
         delete?: never;
@@ -6477,11 +6477,18 @@ export interface components {
         };
         SetupMoveStepInput: {
             /** @enum {string} */
-            step: "preview" | "custom_domain" | "search_console";
+            step: "custom_domain" | "search_console";
             /** @enum {string} */
             state: "done" | "skipped" | "none";
         };
+        SetupHelpCenter: {
+            /** @enum {string} */
+            action: "view" | "enable";
+            url: string;
+        };
         SetupProgress: {
+            /** @description Optional help center action after a successful move import; enabling needs no new import. */
+            help_center?: components["schemas"]["SetupHelpCenter"];
             steps: components["schemas"]["SetupStep"][];
             /** @description True when every step is done or skipped. */
             complete: boolean;
@@ -6489,13 +6496,13 @@ export interface components {
              * @description The next move step, or the first step suggested by another sign-up goal; null when none.
              * @enum {string|null}
              */
-            recommended: "email" | "import" | "invite" | "preview" | "custom_domain" | "plan" | "cname" | "search_console" | null;
+            recommended: "email" | "import" | "invite" | "custom_domain" | "plan" | "cname" | "search_console" | null;
             /** @description Action URL for the first unfinished step; null when complete. */
             next_url: string | null;
         };
         SetupStep: {
             /** @enum {string} */
-            key: "email" | "import" | "invite" | "first_reply" | "preview" | "custom_domain" | "plan" | "cname" | "search_console";
+            key: "email" | "import" | "invite" | "first_reply" | "custom_domain" | "plan" | "cname" | "search_console";
             /**
              * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent. Move steps use none, done or skipped.
              * @enum {string}
@@ -7232,7 +7239,7 @@ export interface components {
             /** @description Missing help center prerequisite, shown before plan advice on a verified domain. */
             next_step?: {
                 /** @enum {string} */
-                key: "import" | "enable" | "preview";
+                key: "import" | "enable";
                 url: string;
             } | null;
             /** @description The custom host name in ASCII (punycode) form; null when none is set. */

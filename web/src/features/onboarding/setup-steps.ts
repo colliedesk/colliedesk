@@ -2,9 +2,9 @@ import type { SetupProgress, SetupStepKey } from '../../api/schemas';
 
 // The state each step ends in. Kept apart from the checklist so the inbox can decide, without loading
 // it, whether the guide has anything left to show.
-export const doneStates: Record<SetupStepKey, string> = { email: 'working', import: 'done', invite: 'joined', first_reply: 'sent', preview: 'done', custom_domain: 'done', plan: 'done', cname: 'done', search_console: 'done' };
+export const doneStates: Record<SetupStepKey, string> = { email: 'working', import: 'done', invite: 'joined', first_reply: 'sent', custom_domain: 'done', plan: 'done', cname: 'done', search_console: 'done' };
 
-const adminSteps: ReadonlySet<SetupStepKey> = new Set(['email', 'import', 'invite', 'preview', 'custom_domain', 'plan', 'cname', 'search_console']);
+const adminSteps: ReadonlySet<SetupStepKey> = new Set(['email', 'import', 'invite', 'custom_domain', 'plan', 'cname', 'search_console']);
 
 // visibleSteps are the steps this agent can take: admins have all, an agent only answers email.
 export function visibleSteps(progress: SetupProgress, admin: boolean) {

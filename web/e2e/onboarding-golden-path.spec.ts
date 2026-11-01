@@ -36,7 +36,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
       await expect(guide.or(launcher)).toBeVisible();
       if (!await guide.isVisible()) await launcher.click();
     };
-    await expect(guide.getByRole('listitem')).toHaveCount(6);
+    await expect(guide.getByRole('listitem')).toHaveCount(5);
     await expect(guide).toContainText('knowledge base with images');
     await expect(guide).toContainText('old article links keep working');
     await guide.getByRole('link', { name: /Import from Freshdesk/ }).click();
@@ -54,16 +54,28 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     const imports = await (await page.request.get(`${baseURL}/api/v1/imports`)).json() as { items: Array<{ kind: string; status: string | null }> };
     expect(imports.items.filter((job) => job.kind === 'import').map((job) => job.status)).toEqual(['OK']);
 
-    // The move guide follows real import state and points to the public preview.
+    const notice = await waitForMail(adminEmail, 30_000, 'Freshdesk import complete');
+    expect(notice.from).toBe('noreply@mail.example.net');
+    expect(notice.text).toContain('300 of 300 tickets, 120 of 120 contacts and 3 of 3 articles imported.');
+    expect(notice.text).toContain('0 of 18 old help-center addresses');
+    expect(notice.text).toContain(`Open the inbox: ${baseURL}/`);
+    expect(notice.text).toContain('Next step: Turn on the help center');
+    expect(notice.text).toContain(`${baseURL}/settings#help-center-heading`);
+    expect(notice.text).not.toContain('then run the import again');
+
+    // Import completion keeps the move guide open; viewing the help center is optional.
     await page.goto(baseURL);
-    await openGuide();
+    await expect(guide).toBeVisible();
+    await expect(guide.getByRole('listitem')).toHaveCount(5);
+    await expect(guide.locator('[data-step="preview"]')).toHaveCount(0);
+    await expect(guide.getByRole('button', { name: 'I checked the preview' })).toHaveCount(0);
     await expect(guide.locator('[data-step="import"]')).toHaveAttribute('data-state', 'done');
     const me = await (await page.request.get(`${baseURL}/api/v1/auth/me`)).json() as { workspace: { slug: string } };
-    await expect(guide.getByRole('link', { name: /Preview the help center/ })).toHaveAttribute('href', '/settings#help-center-heading');
+    await expect(guide.getByRole('link', { name: 'Turn on the help center' })).toHaveAttribute('href', '/settings#help-center-heading');
     const headers = { Origin: baseURL };
     expect((await page.request.put(`${baseURL}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Golden help', locale: 'en' } })).status()).toBe(200);
     await page.reload();
-    await expect(guide.getByRole('link', { name: /Preview the help center/ })).toHaveAttribute('href', `${baseURL}/help/${me.workspace.slug}`);
+    await expect(guide.getByRole('link', { name: 'View help center' })).toHaveAttribute('href', `${baseURL}/help/${me.workspace.slug}`);
     const preview = await page.request.get(`${baseURL}/help/${me.workspace.slug}`);
     expect(preview.status()).toBe(200);
     expect(await preview.text()).toContain('Start');
@@ -71,8 +83,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     expect(oldArticle.status()).toBe(301);
     expect(oldArticle.headers().location).toContain(`/help/${me.workspace.slug}/a/`);
     expect((await page.request.get(oldArticle.headers().location)).status()).toBe(200);
-    await guide.getByRole('button', { name: 'I checked the preview' }).click();
-    await expect(guide.locator('[data-step="preview"]')).toHaveAttribute('data-state', 'done');
+    await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'todo');
 
     // TXT proof completes verification without sending visitors away from the old helpdesk.
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
@@ -91,12 +102,19 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'done');
     await guide.getByRole('button', { name: 'Minimize' }).click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
-    // A verified but empty/off help center still points to import before billing.
+    // A CNAME check on the trial explains why the domain is not serving yet.
+    const cname = page.getByRole('group', { name: /CNAME record/ });
+    const target = await cname.getByRole('textbox', { name: 'Value' }).inputValue();
+    setDNS({ txt: { [`_help-center-verify.${host}`]: [token] }, cname: { [host]: target } });
+    await page.getByRole('button', { name: 'Check now' }).click();
+    await expect(page.getByRole('status').filter({ hasText: /DNS checked.*once you choose a plan/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Choose a plan', exact: true })).toHaveAttribute('href', '/settings/billing');
+    // An imported but empty/off help center points to enabling, without importing twice.
     expect((await page.request.put(`${baseURL}/api/v1/help-center`, { headers, data: { enabled: false, title: 'Golden help', locale: 'en' } })).status()).toBe(200);
     const articles = await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: Array<{ id: string; updated_at: string }> };
     for (const article of articles.items) expect((await page.request.delete(`${baseURL}/api/v1/kb/articles/${article.id}?updated_at=${encodeURIComponent(article.updated_at)}`, { headers })).status()).toBe(204);
     await page.reload();
-    await expect(page.getByRole('link', { name: /Import.*knowledge base/ })).toHaveAttribute('href', '/settings/import-freshdesk');
+    await expect(page.getByRole('link', { name: 'Turn on the help center' })).toHaveAttribute('href', '/settings#help-center-heading');
     await page.goto(baseURL);
     await openGuide();
     await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'done');

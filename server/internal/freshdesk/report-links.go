@@ -100,7 +100,7 @@ func (l *LinksReport) finish(open bool, origin bool) {
 	case !origin:
 		l.Detail = append(l.Detail, "The server's address (APP_ORIGIN) was not set for this run, so no link was rewritten: set APP_ORIGIN as the server has it, then run the import again.")
 	case !open:
-		l.Detail = append(l.Detail, "The help center is off, so no old address redirects and no link was rewritten: turn the help center on, then run the import again.")
+		l.Detail = append(l.Detail, "Turn on the help center to make the imported old addresses redirect. You do not need to run the import again.")
 	}
 	if n := len(l.OldAddresses.Unmapped); n > 0 {
 		l.Detail = append(l.Detail, fmt.Sprintf("%d old address(es) lead to no public page; visitors get the help center search with the old address's words.", n))

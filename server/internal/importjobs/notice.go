@@ -2,13 +2,10 @@ package importjobs
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"strings"
+	"errors"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/email"
-	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -29,84 +26,71 @@ var noticeMessages = map[string]string{
 	CodeNoProgress:       "The import stopped several times without getting further. Start a new import, or report a problem.",
 }
 
-// notifyAdmins mails, one message each, the person who started an import and every active admin when it ends on its own
-// (finished or failed), from the platform address. A preview (the person is on the page), a cancel (a
-// person did it) and an undo send nothing. Without a mailer the page alone says it. It is sent once,
-// after the end is committed; a failure to send is logged, never retried.
-func (r *jobRun) notifyAdmins(ctx context.Context, state, status, code string, report []byte) {
-	w := r.worker
-	if w.options.Mailer == nil || w.options.MailFrom == "" || r.job.Kind != KindImport || r.job.Phase == PhasePreview ||
-		(state != StateFinished && state != StateFailed) {
+// sendNotices resumes durable notices after a restart or relay failure.
+func (w *Worker) sendNotices(ctx context.Context) {
+	if w.options.Mailer == nil || w.options.MailFrom == "" {
 		return
 	}
-	ctx = context.WithoutCancel(ctx)
-	var name string
-	var to []string
-	err := w.options.DB.InWorkspace(ctx, r.item.workspaceID, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `SELECT name FROM workspaces WHERE id=$1`, r.item.workspaceID).Scan(&name); err != nil {
-			return err
-		}
-		rows, err := tx.Query(ctx, `SELECT DISTINCT lower(email) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL
-			AND (role='admin' OR id=(SELECT created_by FROM import_jobs WHERE workspace_id=$1 AND id=$2)) ORDER BY 1`, r.item.workspaceID, r.item.id)
-		if err != nil {
-			return err
-		}
-		to, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
-	})
-	if err != nil || len(to) == 0 {
-		if err != nil {
-			w.options.Logger.Error("import notice", "job", r.item.id, "error", err)
-		}
+	jobs, err := dueNotices(ctx, w.options.DB, w.options.Now().UTC())
+	if err != nil {
+		w.options.Logger.Error("import notices", "error", err)
 		return
 	}
-	for _, address := range to {
-		message, err := r.composeNotice(name, address, state, status, code, report)
-		if err == nil {
-			err = w.options.Mailer.Send(ctx, w.options.MailFrom, []string{address}, message)
-		}
-		if err != nil {
-			w.options.Logger.Error("import notice", "job", r.item.id, "error", err)
-		}
+	for _, job := range jobs {
+		w.sendNotice(ctx, job)
 	}
 }
 
-func (r *jobRun) composeNotice(workspace, to string, state, status, code string, report []byte) ([]byte, error) {
-	from := r.worker.options.MailFrom
-	id, err := email.NewMessageID(from[strings.LastIndex(from, "@")+1:])
-	if err != nil {
-		return nil, err
+type notice struct {
+	id, workspaceID, workspace, slug, domain, state, status, code, to string
+	report                                                            []byte
+}
+
+// sendNotice locks one pending job until the relay answers and its result is committed. A competing
+// worker skips it. A failed or interrupted delivery stays pending across restarts. Message-ID is stable
+// across retries; SMTP cannot atomically commit with PostgreSQL, so a lost relay acknowledgement may retry.
+func (w *Worker) sendNotice(ctx context.Context, item claimed) {
+	if w.options.Mailer == nil || w.options.MailFrom == "" {
+		return
 	}
-	page := workspacehost.Origin(r.worker.options.Origin, r.worker.options.HelpCenterDomain, r.job.slug) + "/settings/import-freshdesk"
-	var subject, body string
-	if state == StateFinished {
-		headline := map[string]string{"OK": "complete", "FAILED": "incomplete", "UNVERIFIED": "done, not verified"}[status]
-		subject = fmt.Sprintf("Freshdesk import %s: %s", headline, r.job.Domain)
-		var counts struct {
-			Tickets struct {
-				Source   int `json:"source"`
-				Imported int `json:"imported"`
-			} `json:"tickets"`
-			Missing []string `json:"missing"`
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	err := w.options.DB.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
+		n := notice{id: item.id, workspaceID: item.workspaceID}
+		err := tx.QueryRow(ctx, `SELECT w.name,w.slug,j.domain,j.state,COALESCE(j.status,''),COALESCE(j.error_code,''),
+			COALESCE(a.email,''),COALESCE(j.report,j.interim_report)
+			FROM import_jobs j JOIN workspaces w ON w.id=j.workspace_id
+			LEFT JOIN agents a ON a.workspace_id=j.workspace_id AND a.id=j.created_by AND a.deactivated_at IS NULL
+			WHERE j.workspace_id=$1 AND j.id=$2 AND j.kind='import' AND j.phase<>'preview' AND j.state IN ('finished','failed')
+			AND j.notice_state='pending' AND j.notice_next_attempt_at<=$3 FOR UPDATE OF j SKIP LOCKED`, item.workspaceID, item.id, w.options.Now().UTC()).
+			Scan(&n.workspace, &n.slug, &n.domain, &n.state, &n.status, &n.code, &n.to, &n.report)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
 		}
-		_ = json.Unmarshal(report, &counts)
-		explain := map[string]string{
-			"OK":         "Every item Freshdesk holds is in Colliedesk, checked against Freshdesk's own totals.",
-			"FAILED":     "Some items were not imported; the report lists them. Start a new import to try them again: nothing is copied twice.",
-			"UNVERIFIED": "Nothing failed, but Freshdesk's totals could not confirm that everything was imported. The report says what to check.",
-		}[status]
-		body = fmt.Sprintf("The import of %s into the Colliedesk workspace \"%s\" has ended: %s.\n\n%d of %d tickets are in Colliedesk. %s\n\nThe report, to read or download, and the undo: %s\n",
-			r.job.Domain, workspace, status, counts.Tickets.Imported, counts.Tickets.Source, explain, page)
-	} else {
-		subject = fmt.Sprintf("Freshdesk import stopped: %s", r.job.Domain)
-		next := noticeMessages[code]
-		if next == "" {
-			next = "It stopped on an error; the import page shows the details."
+		if err != nil {
+			return err
 		}
-		body = fmt.Sprintf("The import of %s into the Colliedesk workspace \"%s\" stopped before it finished. What it imported stays.\n\n%s\n\nDetails, a new import or the undo: %s\n",
-			r.job.Domain, workspace, next, page)
+		state := "sent"
+		if n.to == "" {
+			state = "rejected"
+		} else {
+			message, err := w.composeNotice(ctx, n)
+			if err == nil {
+				err = w.options.Mailer.Send(ctx, w.options.MailFrom, []string{n.to}, message)
+			}
+			if err != nil {
+				state = "pending"
+				if email.IsPermanent(err) {
+					state = "rejected"
+				}
+				w.options.Logger.Error("import notice", "job", item.id, "error", err)
+			}
+		}
+		_, err = tx.Exec(ctx, `UPDATE import_jobs SET notice_state=$3,notice_next_attempt_at=$4 WHERE workspace_id=$1 AND id=$2`,
+			item.workspaceID, item.id, state, w.options.Now().UTC().Add(time.Minute))
+		return err
+	})
+	if err != nil && ctx.Err() == nil {
+		w.options.Logger.Error("import notice", "job", item.id, "error", err)
 	}
-	body += "\nYou get this message because you are an admin of the workspace or started the import.\n"
-	return email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: to, Subject: subject, Body: body,
-		MessageID: id, Date: r.now().Truncate(time.Second), Standalone: true})
 }

@@ -10,24 +10,26 @@ finished items are never copied twice. Your Freshdesk account is not changed.
 ## Finish the move
 
 If you chose **Move off Freshdesk** when signing up, the inbox's [setup guide](setup-guide.md)
-shows six steps in order. The next unfinished step is the main action:
+shows five steps in order. The next unfinished step is the main action:
 
 1. **Import from Freshdesk.** Tickets, contacts and the knowledge base with images come together.
    [Old article links keep working](#old-help-center-links) on Colliedesk's help center addresses.
    Only an import whose reconcile report is **OK** completes this step.
-2. **Preview the help center.** Turn it on in Settings and open its own address,
-   `<slug>.colliedesk.com/help` on Cloud. Check the articles and images, then press
-   **I checked the preview** in the guide. With no published article, the guide links to import first.
-3. **Verify your domain by TXT.** Set the domain in **Settings → Help center**. Add only the TXT
+2. **Verify your domain by TXT.** Set the domain in **Settings → Help center**. Add only the TXT
    record and press **Check now**. Your visitors still reach Freshdesk.
-4. **Choose a plan.** Cloud serves the help center on your custom domain only on a paid plan.
-5. **Change the CNAME.** Use the target in the domain card, then press **Check now**. This step
+3. **Choose a plan.** Cloud serves the help center on your custom domain only on a paid plan.
+4. **Change the CNAME.** Use the target in the domain card, then press **Check now**. This step
    completes only when the server opens the address and finds this workspace's help center.
-6. **Keep Search Console verification and submit the sitemap.** The import carries supported
+5. **Keep Search Console verification and submit the sitemap.** The import carries supported
    verification tags; keep existing DNS verification records too. Check verification on the same
    domain in Search Console, then submit its `sitemap.xml`. In the guide, press
    **Verification kept and sitemap submitted** after doing both. This confirms your work;
    Colliedesk does not submit to Google for you.
+
+After import, **View help center** is optional; no preview confirmation is required. If the help
+center is off or has no published article, its action says **Turn on the help center**. Turn it on
+in Settings; you do not need another import for the imported old addresses to redirect.
+The guide stays open while move steps remain, unless you minimize or hide it.
 
 If you do not want a custom domain, press **No custom domain needed** to skip the four domain
 steps. Completed steps stay done across visits and later domain changes. On a server you run
@@ -293,10 +295,13 @@ once in their row with **Copy link** and when it expires: send it to them. When 
 linked by their email, before or after the import. **Revoke invite** takes a waiting invite back. To link someone whose email differs, choose
 the agent and select **Link**; **Unlink** takes it back. A link is applied within seconds.
 
-When an import ends on its own (complete, incomplete or stopped by an error), the admins of the
-workspace and the person who started it get an email with the result and a link to the page, on
-Colliedesk Cloud and on a server whose operator set up outgoing email (SMTP and the mail domain). A preview and
-an import you stop yourself send none.
+When an import ends on its own (complete, incomplete or stopped by an error), only the admin who
+started it gets an email. It includes ticket, contact and article counts, the old-address redirect
+result, the inbox, an optional help-center action and the same next step as the setup guide.
+An incomplete or failed import names what did not come over and how to recover; read its report
+before closing Freshdesk. This works on Cloud and self-hosted servers with outgoing system email
+configured (SMTP and the mail domain). Delivery is recorded per job and retried after a temporary
+relay failure or restart. A preview, an undo and an import you stop yourself send no email.
 
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
 undo it. Only one import or undo runs in a workspace at a time.

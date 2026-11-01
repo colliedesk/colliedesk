@@ -12,7 +12,7 @@ export function ImportLinksSummary({ links }: { links: ImportLinks }) {
     <p className="import-status" data-status={links.status}>{ok ? m.linksOK : m.linksUnverified}</p>
     <p>{m.linksRedirected(links.old_addresses.redirected, links.old_addresses.found, links.help_center)}</p>
     <p>{m.linksRewritten(links.rewritten.links, links.rewritten.articles, links.rewritten.translations ?? 0, links.rewritten.saved_replies)}</p>
-    {!ok && <ul>{(links.detail ?? []).map((line) => <li key={line}>{line}</li>)}</ul>}
+    {!ok && <ul>{(links.detail ?? []).map((line) => <li key={line}>{line.startsWith('The help center is off,') ? m.linksTurnOn : line}</li>)}</ul>}
     {!ok && <p>{m.linksReportNote}</p>}
   </section>;
 }

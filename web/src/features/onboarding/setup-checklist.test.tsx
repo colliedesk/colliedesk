@@ -152,21 +152,22 @@ test('Escape inside the open guide folds it', () => {
   expect(screen.getByRole('button', { name: /Finish setting up/ })).toHaveFocus();
 });
 
-test('a moving team sees six server links and can confirm preview or skip its optional domain', () => {
+test('a moving team sees five steps, an optional help center link and stays open after import', () => {
   const move = {
     steps: [
       { key: 'import', state: 'done', detail: null, url: '/settings/import-freshdesk' },
-      { key: 'preview', state: 'none', detail: null, url: 'https://acme.colliedesk.com/help' },
       { key: 'custom_domain', state: 'none', detail: null, url: '/settings#help-center-domain-heading' },
       { key: 'plan', state: 'none', detail: null, url: '/settings/billing' },
       { key: 'cname', state: 'none', detail: null, url: '/settings#help-center-domain-heading' },
       { key: 'search_console', state: 'none', detail: null, url: '/settings#help-center-search-console-heading' },
-    ], complete: false, recommended: 'preview', next_url: 'https://acme.colliedesk.com/help',
+    ], complete: false, recommended: 'custom_domain', next_url: '/settings#help-center-domain-heading',
+    help_center: { action: 'view', url: 'https://acme.colliedesk.com/help' },
   } as unknown as SetupProgress;
-  render(<SetupChecklist progress={move} admin goal="leave_helpdesk" defaultOpen onHide={vi.fn()} />);
-  expect(rows()).toHaveLength(6);
-  expect(screen.getByRole('link', { name: /Preview the help center/ })).toHaveAttribute('href', 'https://acme.colliedesk.com/help');
-  expect(screen.getByRole('button', { name: 'I checked the preview' })).toBeEnabled();
+  render(<SetupChecklist progress={move} admin goal="leave_helpdesk" onHide={vi.fn()} />);
+  expect(rows()).toHaveLength(5);
+  expect(screen.getByRole('link', { name: 'View help center' })).toHaveAttribute('href', 'https://acme.colliedesk.com/help');
+  expect(screen.queryByRole('button', { name: 'I checked the preview' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Preview the help center')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'No custom domain needed' })).toBeEnabled();
 });
 

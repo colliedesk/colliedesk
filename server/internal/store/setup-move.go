@@ -63,7 +63,7 @@ func rememberMoveStep(ctx context.Context, tx pgx.Tx, workspaceID, key, state st
 	return err
 }
 
-// SetSetupMoveStep stores only what cannot be inferred: preview checked, the external Search Console
+// SetSetupMoveStep stores only what cannot be inferred: external Search Console
 // work confirmed, or choosing no custom domain. Automatic milestones cannot be manually completed.
 func (s *Store) SetSetupMoveStep(ctx context.Context, workspaceID, key, state string, now time.Time) error {
 	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -89,7 +89,7 @@ func (s *Store) SetSetupMoveStep(ctx context.Context, workspaceID, key, state st
 			}
 			return nil
 		}
-		if state != "done" || (key != "preview" && key != "search_console") {
+		if state != "done" || key != "search_console" {
 			return ErrSetupMove
 		}
 		r, err := s.moveReadiness(ctx, tx, workspaceID, now)
@@ -98,9 +98,6 @@ func (s *Store) SetSetupMoveStep(ctx context.Context, workspaceID, key, state st
 		}
 		if r.Saved[key] == "done" {
 			return nil
-		}
-		if key == "preview" && (!r.Enabled || !r.Published) {
-			return fmt.Errorf("%w: turn on the help center and import or publish an article before confirming the preview", ErrSetupMove)
 		}
 		if key == "search_console" && !r.Live && r.Saved["cname"] != "done" {
 			return fmt.Errorf("%w: change the CNAME and press Check now successfully before confirming Search Console", ErrSetupMove)
@@ -121,7 +118,14 @@ func (s *Store) setupMove(ctx context.Context, workspaceID string, now time.Time
 		}
 	}
 	progress := SetupProgress{Complete: true}
-	for _, key := range []string{"import", "preview", "custom_domain", "plan", "cname", "search_console"} {
+	if r.Imported == "done" {
+		action := "view"
+		if !r.Enabled || !r.Published {
+			action = "enable"
+		}
+		progress.HelpCenter = &SetupHelpCenter{Action: action}
+	}
+	for _, key := range []string{"import", "custom_domain", "plan", "cname", "search_console"} {
 		state := states[key]
 		if state == "" {
 			state = "none"
@@ -130,18 +134,6 @@ func (s *Store) setupMove(ctx context.Context, workspaceID string, now time.Time
 			state = saved
 		}
 		step := SetupStep{Key: key, State: state}
-		if key == "preview" && state != "done" {
-			var detail string
-			switch {
-			case !r.Published:
-				detail = "import"
-			case !r.Enabled:
-				detail = "enable"
-			}
-			if detail != "" {
-				step.Detail = &detail
-			}
-		}
 		if key == "search_console" && state == "none" && r.VerificationPresent {
 			detail := "verification_present"
 			step.Detail = &detail
@@ -150,6 +142,10 @@ func (s *Store) setupMove(ctx context.Context, workspaceID string, now time.Time
 		if state != "done" && state != "skipped" {
 			progress.Complete = false
 			if progress.Recommended == nil {
+				if r.Imported == "done" && (!r.Enabled || !r.Published) {
+					detail := "enable"
+					progress.Steps[len(progress.Steps)-1].Detail = &detail
+				}
 				next := key
 				progress.Recommended = &next
 			}

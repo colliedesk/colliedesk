@@ -30,7 +30,7 @@ func TestMoveGuideFollowsRealStateAndKeepsCompletedSteps(t *testing.T) {
 	for _, s := range v["steps"].([]any) {
 		keys = append(keys, s.(map[string]any)["key"].(string))
 	}
-	if fmt.Sprint(keys) != "[import preview custom_domain plan cname search_console]" {
+	if fmt.Sprint(keys) != "[import custom_domain plan cname search_console]" {
 		t.Fatalf("move steps=%v", keys)
 	}
 	if v["next_url"] != "/settings/import-freshdesk" {
@@ -48,19 +48,27 @@ func TestMoveGuideFollowsRealStateAndKeepsCompletedSteps(t *testing.T) {
 	update("preview", "done", 422)
 	insertImport(t, pool, slug, "finished")
 	v = read()
-	if v["recommended"] != "preview" || v["next_url"] != "/settings/import-freshdesk" {
-		t.Fatalf("preview prerequisites=%v", v)
+	if v["recommended"] != "custom_domain" || v["next_url"] != "/settings#help-center-heading" {
+		t.Fatalf("enable prerequisites=%v", v)
 	}
-	// Import can finish without public articles: the next step must explain that instead of a dead preview.
+	if center := v["help_center"].(map[string]any); center["action"] != "enable" || center["url"] != "/settings#help-center-heading" {
+		t.Fatalf("empty imported help center=%v", center)
+	}
+	// An old preview confirmation must not create an extra step or block the move.
+	if _, err := pool.Exec(t.Context(), `UPDATE workspace_onboarding SET move_steps='{"preview":"done"}' WHERE workspace_id=(SELECT id FROM workspaces WHERE slug=$1)`, slug); err != nil {
+		t.Fatal(err)
+	}
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
 	kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "First article", "body_md": "Hello.", "status": "published"})
 	kbCall(t, api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": true, "title": "Move Desk", "locale": "en"}, admin, 200, nil)
 	v = read()
-	if v["next_url"] != "https://"+slug+".help.example.net/help" {
-		t.Fatalf("preview link=%v", v["next_url"])
+	if v["next_url"] != "/settings#help-center-domain-heading" {
+		t.Fatalf("domain link=%v", v["next_url"])
 	}
-	update("preview", "done", 200)
-	update("preview", "done", 200)
+	if center := v["help_center"].(map[string]any); center["action"] != "view" || center["url"] != "https://"+slug+".help.example.net/help" {
+		t.Fatalf("optional help center=%v", center)
+	}
+	update("preview", "done", 422)
 	domain := setDomain(t, api, admin, "help.move.example", 200)
 	dns.set("_help-center-verify.help.move.example", domain.token())
 	checkDomain(t, api, admin, 200)
@@ -75,14 +83,14 @@ func TestMoveGuideFollowsRealStateAndKeepsCompletedSteps(t *testing.T) {
 	}
 	kbCall(t, api, http.MethodPut, "/api/v1/help-center/search-console", map[string]any{"google_site_verification": "abcdefghijklmnop123456"}, admin, 200, nil)
 	v = read()
-	last := v["steps"].([]any)[5].(map[string]any)
+	last := v["steps"].([]any)[4].(map[string]any)
 	if last["detail"] != "verification_present" || last["state"] != "none" {
 		t.Fatalf("Search Console should show existing verification without claiming sitemap submission: %v", last)
 	}
 	update("search_console", "done", 200)
 	kbCall(t, api, http.MethodDelete, domainPath, nil, admin, 200, nil)
 	kbCall(t, api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": false, "title": "Move Desk", "locale": "en"}, admin, 200, nil)
-	for _, key := range []string{"preview", "custom_domain", "cname", "search_console"} {
+	for _, key := range []string{"custom_domain", "cname", "search_console"} {
 		if got := readSetup(t, api, admin).state(t, key); got != "done" {
 			t.Fatalf("completed %s regressed to %s", key, got)
 		}
@@ -145,5 +153,24 @@ func TestMoveGuidePaymentComesFromTheBillingWebhook(t *testing.T) {
 	f.billing.mustDeliver(t, "move-canceled", sub.event("subscription.canceled"))
 	if got := readSetup(t, f.api, f.adminA).state(t, "plan"); got != "done" {
 		t.Fatalf("completed plan regressed=%s", got)
+	}
+}
+
+func TestVerifiedDomainAfterImportNeedsEnablingInsteadOfAnotherImport(t *testing.T) {
+	api, service, pool, dns := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Imported Domain", "admin@imported-domain.example")
+	slug := workspaceSlug(t, api, admin)
+	domain := setDomain(t, api, admin, "help.imported-domain.example", 200)
+	dns.set("_help-center-verify.help.imported-domain.example", domain.token())
+	checkDomain(t, api, admin, 200)
+	var view map[string]any
+	kbCall(t, api, http.MethodGet, domainPath, nil, admin, 200, &view)
+	if next := view["next_step"].(map[string]any); next["key"] != "import" {
+		t.Fatalf("before import: %v", next)
+	}
+	insertImport(t, pool, slug, "finished")
+	kbCall(t, api, http.MethodGet, domainPath, nil, admin, 200, &view)
+	if next := view["next_step"].(map[string]any); next["key"] != "enable" || next["url"] != "/settings#help-center-heading" {
+		t.Fatalf("after import: %v", next)
 	}
 }

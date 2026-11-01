@@ -242,7 +242,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `admin` |
 | `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `draft` |
 | `colliedesk_setup_progress_get` | Shows the [setup guide](setup-guide.md), including all six Freshdesk move steps and the next action link | `read` |
-| `colliedesk_setup_move_step_set` | Confirms the preview or Search Console step, or skips and restores optional custom-domain steps | `admin` |
+| `colliedesk_setup_move_step_set` | Confirms Search Console, or skips and restores optional custom-domain steps | `admin` |
 | `colliedesk_setup_guide_set` | Hides the [setup guide](setup-guide.md) from your inbox, or shows it again | `draft` |
 | `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `read` |
 | `colliedesk_channels_get` | Shows one channel and its configuration | `read` |

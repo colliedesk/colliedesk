@@ -229,7 +229,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	importOptions := importjobs.WorkerOptions{Pool: p.pool, DB: db, Keys: p.importKeys, Storage: storage,
 		Cloud: billingOn, PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin, HelpCenterDomain: helpCenterDomain}
-	// The admins hear when an import ends, from the platform address, as for retention notices.
+	// The initiating admin hears when an import ends, from the same platform SMTP path as trial reminders.
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		importOptions.Mailer, importOptions.MailFrom = email.SMTPSender{Config: emailConfig.SMTP}, "noreply@"+emailConfig.MailFromDomain
 	}

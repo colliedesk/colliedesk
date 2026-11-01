@@ -120,12 +120,10 @@ func (a *API) writeHelpCenterDomain(response http.ResponseWriter, request *http.
 			return
 		}
 		switch {
-		case !ready.Published:
+		case !ready.Published && ready.Imported != "done":
 			view.NextStep = &helpCenterNextStep{Key: "import", URL: "/settings/import-freshdesk"}
-		case !ready.Enabled:
+		case !ready.Enabled || !ready.Published:
 			view.NextStep = &helpCenterNextStep{Key: "enable", URL: "/settings#help-center-heading"}
-		case !ready.Live && ready.Saved["preview"] != "done":
-			view.NextStep = &helpCenterNextStep{Key: "preview", URL: helpcenter.URL(a.config.Origin, a.config.HelpCenterDomain, who.Workspace.Slug)}
 		}
 	}
 	writeJSON(response, http.StatusOK, view)

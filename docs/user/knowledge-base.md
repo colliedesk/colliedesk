@@ -438,17 +438,20 @@ address name** (Settings → Email) changes every help center address, and old l
 ### Moving the help center from Freshdesk
 
 Follow the [move guide](import-freshdesk.md#finish-the-move): **import** tickets, contacts and the
-knowledge base with images (old article links keep working), **preview** the help center at its own
-address, **verify the domain by TXT**, **choose a plan**, **change the CNAME**, then **keep Search
-Console verification and submit the sitemap**. Your own Cloud preview is `<slug>.colliedesk.com/help`.
+knowledge base with images (old article links keep working), **verify the domain by TXT**,
+**choose a plan**, **change the CNAME**, then **keep Search Console verification and submit the sitemap**.
+After import, **View help center** opens its own address, `<slug>.colliedesk.com/help` on Cloud.
+Viewing it is optional and requires no confirmation. The admin who started the import gets the
+result and the next guide action by email when outgoing system email is configured.
 
-The inbox's setup guide shows the real state and the next link. It asks you to confirm checking the
-preview and, after cutover works, finishing Search Console and sitemap submission. These confirmations
-stay done. Choose **No custom domain needed** to skip the four optional domain steps.
+The inbox's setup guide shows the real state and the next link. It stays open while move steps remain,
+unless you minimize or hide it. After cutover works, confirm finishing Search Console and sitemap
+submission. Choose **No custom domain needed** to skip the four optional domain steps.
 
-A verified domain alone does not mean the help center is ready. If it is empty, the domain card
-links to importing the knowledge base; if it is off, it links to turning it on. Otherwise it links
-to the preview. This guidance comes before the plan advice, so you can check the content first.
+A verified domain alone does not mean the help center is ready. Before an import, an empty help
+center links to importing the knowledge base. After import, an off or empty help center links to
+**Turn on the help center**, without asking for another import. A trial **Check now** confirms the
+DNS check and links **Choose a plan**: the custom domain serves only once the workspace is paid.
 
 ### Custom domain
 

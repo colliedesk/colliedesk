@@ -16,7 +16,7 @@ button on the right.
   open the steps.
 - **Open**, it shows every step. **Minimize** (the arrow in its header) or **Esc** folds it again.
 - A new workspace with no conversation and no mailbox yet opens the guide on its own: there is
-  nothing for it to cover. Once a mailbox or a conversation exists it starts folded, so it never
+  nothing for it to cover. For other goals, once a mailbox or a conversation exists it starts folded, so it never
   covers **Send yourself a test message** or a conversation.
 - Your browser remembers whether you left it open or folded. This is separate from **Hide**.
 - On a phone the guide shows on the conversation list and steps aside while a conversation is open.
@@ -33,13 +33,15 @@ you should do next has the main button.
 
 ## Moving from Freshdesk
 
-A workspace that chose **Move off Freshdesk** sees six steps instead of the four email setup steps:
-import, preview, TXT verification, plan, CNAME and Search Console. Follow
+A workspace that chose **Move off Freshdesk** sees five steps instead of the four email setup steps:
+import, TXT verification, plan, CNAME and Search Console. Follow
 [Finish the move](import-freshdesk.md#finish-the-move) for the full order and what each step checks.
 
 The import text says the knowledge base and images come along and old article links keep working.
-The next link names any prerequisite: import when there are no public articles, or turn the help
-center on before opening its preview. Confirm the preview after checking it. TXT verification and
+After import, the optional **View help center** link opens its own address. If it is off or empty,
+**Turn on the help center** replaces it and becomes the next prerequisite. No new import or preview
+confirmation is needed. The guide stays open while move steps remain, unless you fold or hide it.
+TXT verification and
 a successful custom-domain address check complete their steps automatically; paying completes the
 plan step. Search Console is done only after you confirm preserving verification and submitting
 the sitemap there. When a Google verification tag is already present, the guide says so. Saving a verification token
@@ -67,10 +69,10 @@ test message** stays: it puts a first conversation in the inbox so you can answe
 
 - `GET /api/v1/workspace/setup` returns the steps with their states (`email`: `none`, `waiting`,
   `working`, `needs_attention`; `import`: `none`, `running`, `done`; `invite`: `alone`, `invited`,
-  `joined`; `first_reply`: `none`, `sent`), `complete`, the `recommended` step and `next_url`. Each step carries its `url`. Move steps use `none`, `done`, or `skipped` (import can also be `running`). The MCP tool is
+  `joined`; `first_reply`: `none`, `sent`), `complete`, the `recommended` step and `next_url`. Each step carries its `url`. After a successful move import, `help_center` offers an optional `view` or `enable` action and URL. Move steps use `none`, `done`, or `skipped` (import can also be `running`). The MCP tool is
   `colliedesk_setup_progress_get`.
-- `PUT /api/v1/workspace/setup/move` with `step` (`preview`, `custom_domain`, `search_console`) and
-  `state` confirms or skips a move step. Use `done` for preview or Search Console, `skipped` for
+- `PUT /api/v1/workspace/setup/move` with `step` (`custom_domain`, `search_console`) and
+  `state` confirms or skips a move step. Use `done` for Search Console, `skipped` for
   custom_domain, or `none` to restore skipped domain steps. The MCP tool is
   `colliedesk_setup_move_step_set` (admin; lower-tier tokens file an approval request). It returns
   all the steps and the next URL. Automatic import, payment and domain milestones cannot be

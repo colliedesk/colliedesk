@@ -19,7 +19,7 @@ const domainSchema = z.object({
   created_at: date, verified_at: date, checked_at: date, check_error: z.string().nullable(), certificate_requested_at: date,
   failing_since: date, pending_reason: z.enum(['proof_lost', 'taken_over']).nullable(), awaiting_payment: z.boolean(),
   address_url: z.string().nullable(), address_checked_at: date, address_error: z.string().nullable(),
-  next_step: z.object({ key: z.enum(['import', 'enable', 'preview']), url: z.string() }).nullable().optional(),
+  next_step: z.object({ key: z.enum(['import', 'enable']), url: z.string() }).nullable().optional(),
 }) satisfies z.ZodType<Generated<'HelpCenterDomain'>>;
 
 export type HelpCenterDomain = z.infer<typeof domainSchema>;
@@ -76,7 +76,9 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
     {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}
     {domain.status !== 'active' && <p className="muted-copy"><strong>{domainMessages.cutoverHeading}</strong> {domainMessages.cutover}</p>}
     <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment && domain.next_step?.key !== 'import' && domain.next_step?.key !== 'enable' ? 'true' : 'false'}>
-      {domain.status === 'active' && domain.hostname && (domain.awaiting_payment || domain.next_step?.key === 'import' || domain.next_step?.key === 'enable')
+      {check.isSuccess && domain.status === 'active' && domain.awaiting_payment && !domain.check_error
+        ? <>{domainMessages.checkedTrial(domain.hostname)} <a href="/settings/billing">{domainMessages.choosePlan}</a></>
+        : domain.status === 'active' && domain.hostname && (domain.awaiting_payment || domain.next_step?.key === 'import' || domain.next_step?.key === 'enable')
         ? domainMessages.verifiedState(domain.hostname, domain.awaiting_payment) : domainMessages.state(domain.status, domain.hostname)}</p>
     {domain.status === 'active' && domain.address_checked_at && domain.address_url && (domain.address_error
       ? <p className="warning-note">{domain.address_error}</p>

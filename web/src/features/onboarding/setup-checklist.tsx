@@ -14,7 +14,7 @@ import { stepIsDone, visibleSteps } from './setup-steps';
 import './setup-checklist.css';
 
 // Where each step is finished.
-const targets: Record<SetupStepKey, string> = { email: '/settings/channels/type/email', import: '/settings/import-freshdesk', invite: '/settings', first_reply: '/', preview: '/settings#help-center-heading', custom_domain: '/settings#help-center-domain-heading', plan: '/settings/billing', cname: '/settings#help-center-domain-heading', search_console: '/settings#help-center-search-console-heading' };
+const targets: Record<SetupStepKey, string> = { email: '/settings/channels/type/email', import: '/settings/import-freshdesk', invite: '/settings', first_reply: '/', custom_domain: '/settings#help-center-domain-heading', plan: '/settings/billing', cname: '/settings#help-center-domain-heading', search_console: '/settings#help-center-search-console-heading' };
 
 // Whether the agent left the guide open or folded, kept by this browser; without a stored choice, none.
 const storageKey = 'colliedesk-setup-dock-v1';
@@ -44,7 +44,7 @@ interface SetupChecklistProps {
 export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onHide }: SetupChecklistProps) {
   const client = useQueryClient();
   const update = useMutation({
-    mutationFn: (body: { step: 'preview' | 'custom_domain' | 'search_console'; state: 'done' | 'skipped' | 'none' }) =>
+    mutationFn: (body: { step: 'custom_domain' | 'search_console'; state: 'done' | 'skipped' | 'none' }) =>
       request('/api/v1/workspace/setup/move', setupProgressSchema, { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: (saved) => client.setQueryData(['setup'], saved),
   });
@@ -53,7 +53,7 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
   const domainSkipped = steps.some((step) => step.state === 'skipped');
   const firstTodo = steps.find((step) => !stepIsDone(step))?.key;
   const [choice, setChoice] = useState(storedChoice);
-  const open = choice ?? defaultOpen;
+  const open = choice ?? (defaultOpen || (goal === 'leave_helpdesk' && !progress.complete));
   const launcher = useRef<HTMLButtonElement>(null);
   const minimize = useRef<HTMLButtonElement>(null);
   // Focus follows the agent's own open or fold, never a guide that arrives open.
@@ -131,10 +131,13 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
                   </span>
                 </a>
                 {!finished && <span className="setup-time">{setupMessages.time[step.key]}</span>}
-                {!finished && ((step.key === 'preview' && !step.detail) || (step.key === 'search_console' && primary)) &&
-                  <button type="button" className="link-action" disabled={update.isPending} onClick={() => update.mutate({ step: step.key as 'preview' | 'search_console', state: 'done' })}>
-                    {step.key === 'preview' ? setupMessages.previewChecked : setupMessages.searchSubmitted}
+                {!finished && step.key === 'search_console' && primary &&
+                  <button type="button" className="link-action" disabled={update.isPending} onClick={() => update.mutate({ step: 'search_console', state: 'done' })}>
+                    {setupMessages.searchSubmitted}
                   </button>}
+                {step.key === 'import' && progress.help_center && <a href={progress.help_center.url}>
+                  {progress.help_center.action === 'view' ? setupMessages.viewHelpCenter : setupMessages.turnOnHelpCenter}
+                </a>}
                 {step.key === 'custom_domain' && <button type="button" className="link-action" disabled={update.isPending}
                   onClick={() => update.mutate({ step: 'custom_domain', state: domainSkipped ? 'none' : 'skipped' })}>
                   {domainSkipped ? setupMessages.restoreDomain : setupMessages.skipDomain}

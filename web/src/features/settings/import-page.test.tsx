@@ -346,3 +346,16 @@ test('undo is a quiet link below the report, not a button beside the downloads, 
   fireEvent.click(screen.getByRole('button', { name: 'Remove imported data' }));
   expect(onUndo).toHaveBeenCalledWith(job().id);
 });
+
+
+test('an old saved report about an off help center says to turn it on without another import', () => {
+  const links = {
+    status: 'UNVERIFIED', detail: ['The help center is off, so no old address redirects and no link was rewritten: turn the help center on, then run the import again.'], help_center: 'https://desk.example.com/help/acme',
+    old_addresses: { found: 4, redirected: 0, languages: [], unmapped: [] },
+    rewritten: { articles: 0, saved_replies: 0, links: 0 }, left: [],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  const section = screen.getByRole('region', { name: 'Old help center links' });
+  expect(section).not.toHaveTextContent('then run the import again');
+  expect(section).toHaveTextContent('Turn on the help center');
+});
