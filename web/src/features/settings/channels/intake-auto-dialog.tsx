@@ -19,7 +19,7 @@ function gateText(action: Action) {
   if (action.gate === 'open') return m.intakeGateReady(name, action.correct, action.labels);
   if (action.gate === 'overridden') return m.intakeGateOverridden(name);
   if (action.missing.includes('labels')) return m.intakeGateLabels(name, action.needed, action.labels);
-  if (action.missing.includes('severe')) return m.intakeGateSevere(name, action.severe);
+  if (action.missing.includes('severe')) return m.intakeGateSevere(name, action.action, action.severe);
   if (action.missing.includes('junk')) return m.intakeGateJunk(name);
   return m.intakeGateAccuracy(name, action.wrong, action.labels, percent(action.accuracy_needed));
 }

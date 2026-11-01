@@ -296,8 +296,8 @@ is not a label.
 | Action | Opens with | Never with |
 |---|---|---|
 | Open a conversation | 30 labels, 90 % right | more than one conversation opened for chatter in a week |
-| Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (in the last 30 days) |
-| Set aside | 30 labels, 95 % right | a request set aside (in the last 30 days) |
+| Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (by people's labels in the last 30 days, or in an evaluation) |
+| Set aside | 30 labels, 95 % right | a request set aside (by people's labels in the last 30 days, or in an evaluation) |
 
 People's labels count for 30 days; an evaluation counts only for the model and prompt version it ran, and
 a newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most

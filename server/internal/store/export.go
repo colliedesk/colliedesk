@@ -93,10 +93,16 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportImportPeople(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportImportItems(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := exportAI(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
 	if err := exportResultsBaseline(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
+	if err := exportWorkspaceSettings(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
 	if err := exportAutofix(ctx, tx, workspaceID, sink); err != nil {
@@ -109,17 +115,18 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 }
 
 func exportWorkspaceRow(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	var workspace domain.Workspace
-	err := tx.QueryRow(ctx, `SELECT id::text,slug,name,timezone FROM workspaces WHERE id=$1`, workspaceID).
-		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone)
+	var workspace export.Workspace
+	err := tx.QueryRow(ctx, `SELECT id::text,slug,name,timezone,status_history_since FROM workspaces WHERE id=$1`, workspaceID).
+		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone, &workspace.StatusHistorySince)
 	if err != nil {
 		return fmt.Errorf("export workspace: %w", err)
 	}
+	workspace.StatusHistorySince = domain.UTC(workspace.StatusHistorySince)
 	return sink.Workspace(workspace)
 }
 
 func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override,created_at,deactivated_at
+	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override,created_at,sla_alert_email,results_email,deactivated_at
 		FROM agents WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export agents: %w", err)
@@ -127,7 +134,7 @@ func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	defer rows.Close()
 	for rows.Next() {
 		var record export.Agent
-		if err := rows.Scan(&record.ID, &record.Email, &record.DisplayName, &record.Role, &record.TimezoneOverride, &record.CreatedAt, &record.DeactivatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Email, &record.DisplayName, &record.Role, &record.TimezoneOverride, &record.CreatedAt, &record.SLAAlertEmail, &record.ResultsEmail, &record.DeactivatedAt); err != nil {
 			return fmt.Errorf("export agents: %w", err)
 		}
 		record.CreatedAt = domain.UTC(record.CreatedAt)
@@ -279,7 +286,7 @@ func exportSavedReplyVersions(ctx context.Context, tx pgx.Tx, workspaceID string
 
 func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
 	rows, err := tx.Query(ctx, `SELECT id::text,kind,status,method,route,path,body,edited_body,summary,conversation_id::text,token_id::text,token_label,token_scope,COALESCE(token_permissions,'{}'),
-		requested_by_agent_id::text,decided_by_agent_id::text,decided_at,reason,result_status,result_note,created_at,expires_at,saved_reply_id::text,saved_reply_before
+		requested_by_agent_id::text,decided_by_agent_id::text,decided_at,reason,result_status,result_note,created_at,expires_at,saved_reply_id::text,saved_reply_before,notices
 		FROM agent_requests WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export agent requests: %w", err)
@@ -287,13 +294,13 @@ func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sin
 	defer rows.Close()
 	for rows.Next() {
 		var record export.AgentRequest
-		var body, edited, replyBefore []byte
+		var body, edited, replyBefore, notices []byte
 		if err := rows.Scan(&record.ID, &record.Kind, &record.Status, &record.Method, &record.Route, &record.Path, &body, &edited, &record.Summary,
 			&record.ConversationID, &record.TokenID, &record.TokenLabel, &record.TokenScope, &record.TokenPermissions, &record.RequestedByAgentID, &record.DecidedByAgentID,
-			&record.DecidedAt, &record.Reason, &record.ResultStatus, &record.ResultNote, &record.CreatedAt, &record.ExpiresAt, &record.SavedReplyID, &replyBefore); err != nil {
+			&record.DecidedAt, &record.Reason, &record.ResultStatus, &record.ResultNote, &record.CreatedAt, &record.ExpiresAt, &record.SavedReplyID, &replyBefore, &notices); err != nil {
 			return fmt.Errorf("export agent requests: %w", err)
 		}
-		record.Body, record.EditedBody, record.SavedReplyBefore = body, edited, replyBefore
+		record.Body, record.EditedBody, record.SavedReplyBefore, record.Notices = body, edited, replyBefore, notices
 		record.CreatedAt, record.ExpiresAt, record.DecidedAt = domain.UTC(record.CreatedAt), domain.UTC(record.ExpiresAt), domain.UTCOptional(record.DecidedAt)
 		if err := sink.AgentRequest(record); err != nil {
 			return err
@@ -349,6 +356,53 @@ func exportImportPeople(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 	return rowsError("export import people", rows)
 }
 
+// exportImportItems writes the imports' ledger: each record of the old helpdesk and what the import made
+// of it, which a later run and an undo read.
+func exportImportItems(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT source,entity,source_id,parent_source_id,target_id::text,status,error,source_updated_at,meta,updated_at
+		FROM import_items WHERE workspace_id=$1 ORDER BY source,entity,source_id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export import items: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.ImportItem
+		var meta []byte
+		if err := rows.Scan(&record.Source, &record.Entity, &record.SourceID, &record.ParentSourceID, &record.TargetID, &record.Status, &record.Error,
+			&record.SourceUpdatedAt, &meta, &record.UpdatedAt); err != nil {
+			return fmt.Errorf("export import items: %w", err)
+		}
+		record.Meta, record.SourceUpdatedAt, record.UpdatedAt = meta, domain.UTCOptional(record.SourceUpdatedAt), domain.UTC(record.UpdatedAt)
+		if err := sink.ImportItem(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export import items", rows)
+}
+
+// exportThreadKeys writes the keys that join a channel's next message to a conversation. An email reply
+// token is an address that lets mail into the conversation, so it stays on this server; replies still
+// thread by the Message-IDs the messages keep.
+func exportThreadKeys(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT conversation_id::text,channel_type,key,message_id::text,created_at FROM conversation_thread_keys
+		WHERE workspace_id=$1 AND NOT (channel_type='email' AND starts_with(key,'reply-token:')) ORDER BY created_at,conversation_id,channel_type,key`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export thread keys: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.ConversationThreadKey
+		if err := rows.Scan(&record.ConversationID, &record.ChannelType, &record.Key, &record.MessageID, &record.CreatedAt); err != nil {
+			return fmt.Errorf("export thread keys: %w", err)
+		}
+		record.CreatedAt = domain.UTC(record.CreatedAt)
+		if err := sink.ConversationThreadKey(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export thread keys", rows)
+}
+
 func rowsError(what string, rows pgx.Rows) error {
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("%s: %w", what, err)
@@ -395,7 +449,7 @@ type conversationPage struct {
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.merged_into_id::text,c.origin,c.created_at,c.updated_at,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.merged_into_id::text,c.origin,c.created_at,c.updated_at,c.assigned_at,c.assigned_by_agent_id::text,c.held_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id),c.number_series,COALESCE(c.number,0),COALESCE(c.number_year,0),COALESCE(c.display_ref,''),COALESCE(c.number_format,''),COALESCE(c.sla_applies,false),
 		CASE WHEN c.sla_applies THEN json_build_object('first_response',json_build_object('state',c.sla_first_state,'due_at',c.sla_first_due_at,'warn_at',c.sla_first_warn_at,'met_at',c.sla_first_met_at),
 			'resolution',json_build_object('state',c.sla_resolution_state,'due_at',c.sla_resolution_due_at,'warn_at',c.sla_resolution_warn_at),
@@ -411,7 +465,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages,
+			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &head.AssignedAt, &head.AssignedByAgentID, &head.HeldAt, &messages,
 			&head.NumberSeries, &head.Number, &head.NumberYear, &head.DisplayRef, &head.NumberFormat, &head.SLAApplies, &head.SLA); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
@@ -421,6 +475,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		}
 		total += messages
 		head.CreatedAt, head.UpdatedAt = domain.UTC(head.CreatedAt), domain.UTC(head.UpdatedAt)
+		head.AssignedAt, head.HeldAt = domain.UTCOptional(head.AssignedAt), domain.UTCOptional(head.HeldAt)
 		head.TagIDs = []string{}
 		page.heads = append(page.heads, head)
 	}
@@ -510,7 +565,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		(SELECT e.decision_rule FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.decision_rule IS NOT NULL LIMIT 1),
 		(SELECT e.command FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.command IS NOT NULL ORDER BY e.received_at LIMIT 1),
 		(SELECT e.gathering_id::text FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.gathering_id IS NOT NULL LIMIT 1),
-		other_contact_id::text,detached_at,detached_by_agent_id::text,intake_reply_kind,notice_kind
+		other_contact_id::text,detached_at,detached_by_agent_id::text,intake_reply_kind,notice_kind,agent_token_id::text
 		FROM messages m WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
 		return fmt.Errorf("export messages: %w", err)
@@ -522,7 +577,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		if err := rows.Scan(&record.ID, &record.ConversationID, &record.AuthorAgentID, &record.AuthorName, &record.Kind, &record.Body,
 			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt, &record.AgentRequestID, &record.AIDraftID,
 			&record.ChannelID, &record.ExternalID, &channelMeta, &record.DecisionBasis, &record.DecisionRule, &record.Command, &record.GatheringID,
-			&record.OtherContactID, &record.DetachedAt, &record.DetachedByAgentID, &record.IntakeReplyKind, &record.NoticeKind); err != nil {
+			&record.OtherContactID, &record.DetachedAt, &record.DetachedByAgentID, &record.IntakeReplyKind, &record.NoticeKind, &record.AgentTokenID); err != nil {
 			return fmt.Errorf("export messages: %w", err)
 		}
 		record.CreatedAt, record.DetachedAt = domain.UTC(record.CreatedAt), domain.UTCOptional(record.DetachedAt)
@@ -990,7 +1045,7 @@ func exportAIChats(ctx context.Context, tx pgx.Tx, workspaceID string, sink expo
 }
 
 func exportPageStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, into map[string][]export.StatusChange) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,from_status,to_status,changed_at,actor_agent_id::text,source
+	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,from_status,to_status,changed_at,actor_agent_id::text,source,cause,actor_token_id::text,quiet
 		FROM conversation_status_changes WHERE workspace_id=$1 AND conversation_id=ANY($2::text[]::uuid[]) ORDER BY conversation_id,changed_at,id`, workspaceID, ids)
 	if err != nil {
 		return fmt.Errorf("export status changes: %w", err)
@@ -999,7 +1054,7 @@ func exportPageStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string,
 	for rows.Next() {
 		var item export.StatusChange
 		var conversationID string
-		if err := rows.Scan(&item.ID, &conversationID, &item.FromStatus, &item.ToStatus, &item.ChangedAt, &item.ActorAgentID, &item.Source); err != nil {
+		if err := rows.Scan(&item.ID, &conversationID, &item.FromStatus, &item.ToStatus, &item.ChangedAt, &item.ActorAgentID, &item.Source, &item.Cause, &item.ActorTokenID, &item.Quiet); err != nil {
 			return fmt.Errorf("export status changes: %w", err)
 		}
 		item.ChangedAt = domain.UTC(item.ChangedAt)
@@ -1013,10 +1068,10 @@ func exportPageStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string,
 func exportResultsBaseline(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
 	var record export.ResultsBaseline
 	var numbers []byte
-	err := tx.QueryRow(ctx, `SELECT s.baseline_source,s.baseline_anchor_at,s.baseline_import_status,b.computed_at,b.data
+	err := tx.QueryRow(ctx, `SELECT s.baseline_source,s.baseline_anchor_at,s.baseline_import_status,s.baseline_import_cause,b.computed_at,b.data
 		FROM results_state s LEFT JOIN LATERAL (SELECT computed_at,data FROM results_snapshots
 			WHERE workspace_id=s.workspace_id AND kind='baseline' ORDER BY computed_at DESC LIMIT 1) b ON true
-		WHERE s.workspace_id=$1 AND s.baseline_source IS NOT NULL`, workspaceID).Scan(&record.Source, &record.AnchorAt, &record.ImportStatus, &record.ComputedAt, &numbers)
+		WHERE s.workspace_id=$1 AND s.baseline_source IS NOT NULL`, workspaceID).Scan(&record.Source, &record.AnchorAt, &record.ImportStatus, &record.ImportCause, &record.ComputedAt, &numbers)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -1030,16 +1085,68 @@ func exportResultsBaseline(ctx context.Context, tx pgx.Tx, workspaceID string, s
 	return sink.ResultsBaseline(record)
 }
 
+// exportWorkspaceSettings writes the settings a person saved that no other file holds: the automatic AI
+// limits, the response targets, and the requests for migration help.
+func exportWorkspaceSettings(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	var limits export.AIAutomaticLimits
+	err := tx.QueryRow(ctx, `SELECT per_day,per_minute,draft_per_day,intake_per_day,updated_by::text,updated_at FROM ai_automatic_limits WHERE workspace_id=$1`, workspaceID).
+		Scan(&limits.PerDay, &limits.PerMinute, &limits.DraftPerDay, &limits.IntakePerDay, &limits.UpdatedBy, &limits.UpdatedAt)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("export automatic AI limits: %w", err)
+	default:
+		limits.UpdatedAt = domain.UTC(limits.UpdatedAt)
+		if err := sink.AIAutomaticLimits(limits); err != nil {
+			return err
+		}
+	}
+	var targets export.ResponseTargets
+	var hours, holidays, goals []byte
+	err = tx.QueryRow(ctx, `SELECT enabled,timezone,hours,holidays,targets,warn_before_minutes,channel_ids::text[],alert_email,enabled_at,alerts_since,updated_at,updated_by_agent_id::text
+		FROM response_targets WHERE workspace_id=$1`, workspaceID).Scan(&targets.Enabled, &targets.Timezone, &hours, &holidays, &goals, &targets.WarnBeforeMinutes,
+		&targets.ChannelIDs, &targets.AlertEmail, &targets.EnabledAt, &targets.AlertsSince, &targets.UpdatedAt, &targets.UpdatedByAgentID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("export response targets: %w", err)
+	default:
+		targets.Hours, targets.Holidays, targets.Targets = hours, holidays, goals
+		targets.EnabledAt, targets.AlertsSince, targets.UpdatedAt = domain.UTCOptional(targets.EnabledAt), domain.UTCOptional(targets.AlertsSince), domain.UTC(targets.UpdatedAt)
+		if err := sink.ResponseTargets(targets); err != nil {
+			return err
+		}
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text,requested_by::text,freshdesk_address,times,requested_at FROM workspace_migration_requests
+		WHERE workspace_id=$1 ORDER BY requested_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export migration requests: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.MigrationRequest
+		if err := rows.Scan(&record.ID, &record.RequestedBy, &record.FreshdeskAddress, &record.Times, &record.RequestedAt); err != nil {
+			return fmt.Errorf("export migration requests: %w", err)
+		}
+		record.RequestedAt = domain.UTC(record.RequestedAt)
+		if err := sink.MigrationRequest(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export migration requests", rows)
+}
+
 // exportChannels writes every channel (its configuration as its type shows it, never a secret), the
 // channels' history, and the events they received that are not messages, with their raw payloads.
 func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+`,auto_close_since FROM channels WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export channels: %w", err)
 	}
 	type stored struct {
-		channel  channels.Channel
-		settings []byte
+		channel        channels.Channel
+		settings       []byte
+		autoCloseSince *time.Time
 	}
 	var list []stored
 	for rows.Next() {
@@ -1047,7 +1154,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		var kind, external string
 		if err := rows.Scan(&item.channel.ID, &item.channel.WorkspaceID, &kind, &item.channel.Name, &item.channel.Enabled, &item.settings, &external,
 			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt, &item.channel.IsDefault,
-			&item.channel.ProcessingPausedAt); err != nil {
+			&item.channel.ProcessingPausedAt, &item.autoCloseSince); err != nil {
 			rows.Close()
 			return fmt.Errorf("export channels: %w", err)
 		}
@@ -1062,7 +1169,8 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		channel := item.channel
 		record := export.Channel{ID: channel.ID, Type: string(channel.Type), Name: channel.Name, Enabled: channel.Enabled, Settings: item.settings,
 			CreatedAt: domain.UTC(channel.CreatedAt), UpdatedAt: domain.UTC(channel.UpdatedAt), DisabledAt: domain.UTCOptional(channel.DisabledAt),
-			DeletedAt: domain.UTCOptional(channel.DeletedAt), IsDefault: channel.IsDefault, ProcessingPausedAt: domain.UTCOptional(channel.ProcessingPausedAt)}
+			DeletedAt: domain.UTCOptional(channel.DeletedAt), IsDefault: channel.IsDefault, ProcessingPausedAt: domain.UTCOptional(channel.ProcessingPausedAt),
+			AutoCloseSince: domain.UTCOptional(item.autoCloseSince)}
 		if channel.ExternalAccount != "" {
 			record.ExternalAccount = &channel.ExternalAccount
 		}
@@ -1263,6 +1371,9 @@ func exportChatThreads(ctx context.Context, tx pgx.Tx, workspaceID string, sink 
 		return err
 	}
 	links.Close()
+	if err := exportThreadKeys(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	return exportIntake(ctx, tx, workspaceID, sink)
 }
 

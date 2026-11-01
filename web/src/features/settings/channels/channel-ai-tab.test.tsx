@@ -148,6 +148,24 @@ test('raising intake to Auto asks first: what each action does alone, what is no
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'auto', options: { create_threshold: 0.8 } }));
 });
 
+// Severe is what the server counts (docs/user/ai.md "When AI acts on its own"): a request set aside that
+// people took back, or a new request merged into an old conversation that people moved to a new one.
+test('a serious mistake says which one: a request set aside, or a new request merged into an old conversation', async () => {
+  const base = readiness();
+  aiApi.readiness.mockResolvedValue({ ...base, actions: [
+    base.actions[0],
+    { action: 'attach', gate: 'closed', ...counts(40, 39, 1, 1), needed: 30, accuracy_needed: 0.95, missing: ['severe'], live: counts(40, 39, 1, 1), evaluation: null },
+    { action: 'ignore', gate: 'closed', ...counts(40, 38, 2, 2), needed: 30, accuracy_needed: 0.95, missing: ['severe'], live: counts(40, 38, 2, 2), evaluation: null },
+  ] });
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Let AI decide on its own · Groups' });
+  const rows = (await within(dialog).findAllByRole('listitem')).map((row) => row.textContent);
+  expect(rows[1]).toContain('Add to a conversation: stays a suggestion: 1 new request merged into an old conversation');
+  expect(rows[2]).toContain('Set aside: stays a suggestion: 2 requests set aside by mistake');
+  expect(dialog).not.toHaveTextContent('password');
+});
+
 test('an admin may let a closed action decide alone with a reason, sent with the level in one change', async () => {
   aiApi.readiness.mockResolvedValue(readiness());
   view();

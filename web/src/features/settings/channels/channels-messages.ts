@@ -78,7 +78,12 @@ export const channelsMessages = {
   intakeGateOverridden: (action: string) => `${action}: on its own, allowed by an admin before it was ready`,
   intakeGateLabels: (action: string, needed: number, labels: number) => `${action}: stays a suggestion until ${needed} decisions are labelled (${labels} of ${needed})`,
   intakeGateAccuracy: (action: string, wrong: number, labels: number, needed: string) => `${action}: stays a suggestion: ${wrong} wrong of ${labels} (needs ${needed} right)`,
-  intakeGateSevere: (action: string, severe: number) => `${action}: stays a suggestion: ${severe} serious ${severe === 1 ? 'mistake' : 'mistakes'} (a message of another customer, a password)`,
+  // Severe as the server counts it (store/intake-readiness.go): a set-aside request people took back, or a
+  // new request merged into an old conversation that people moved to a new one.
+  intakeGateSevere: (action: string, kind: 'create' | 'attach' | 'ignore', severe: number) =>
+    kind === 'ignore'
+      ? `${action}: stays a suggestion: ${severe} ${severe === 1 ? 'request' : 'requests'} set aside by mistake`
+      : `${action}: stays a suggestion: ${severe} new ${severe === 1 ? 'request' : 'requests'} merged into an old conversation`,
   intakeGateJunk: (action: string) => `${action}: stays a suggestion: it opened conversations for chatter this week`,
   intakeGateHelp: 'A decision is labelled when a person followed or changed what AI suggested in Review. An action not ready yet stays a suggestion, and becomes automatic by itself once it is.',
   intakeOverride: 'Before it is ready',

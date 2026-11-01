@@ -190,7 +190,7 @@ func (s *Store) MoveMessages(ctx context.Context, workspaceID, fromID string, in
 			return MoveResult{}, err
 		}
 		if in.CloseSource {
-			if err := setStatusActor(ctx, tx, actor.AgentID); err != nil {
+			if err := setStatusActor(ctx, tx, actor, true); err != nil {
 				return MoveResult{}, err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE conversations SET status='closed',merged_into_id=$3,updated_at=$4 WHERE workspace_id=$1 AND id=$2`,
@@ -380,7 +380,7 @@ func moveIntoConversation(ctx context.Context, tx pgx.Tx, workspaceID string, so
 		return err
 	}
 	if !move.created && (target.status == "resolved" || target.status == "closed") {
-		if err := setStatusActor(ctx, tx, move.actor.AgentID); err != nil {
+		if err := setStatusActor(ctx, tx, move.actor, true); err != nil {
 			return err
 		}
 		move.targetStatus = target.status
@@ -619,13 +619,22 @@ func undoMove(ctx context.Context, tx pgx.Tx, workspaceID string, in undoInput, 
 	if err := relinkItems(ctx, tx, workspaceID, in.ids, in.toID, in.fromID, "agent", actor.AgentID, now); err != nil {
 		return err
 	}
-	if err := setStatusActor(ctx, tx, actor.AgentID); err != nil {
-		return err
+	// restored names who gives a conversation its status back, and records it quiet unless it gives back a
+	// resolve, which keeps how the team resolved it.
+	restored := func(conversationID, status string) error {
+		quiet, err := movedStatusQuiet(ctx, tx, workspaceID, conversationID, status)
+		if err != nil {
+			return err
+		}
+		return setStatusActor(ctx, tx, actor, quiet)
 	}
 	// A status the move set comes back while nobody changed it since: the target is still open (its reopen
 	// is the move's only change to open) and no customer wrote in it since; the source is still closed
 	// pointing where its messages went.
 	if in.targetStatus != "" {
+		if err := restored(in.toID, in.targetStatus); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE conversations c SET status=$3 WHERE c.workspace_id=$1 AND c.id=$2 AND c.status='open'
 			AND NOT EXISTS(SELECT 1 FROM conversation_status_changes s WHERE s.workspace_id=c.workspace_id AND s.conversation_id=c.id AND s.changed_at>$4
 				AND s.to_status<>'open')
@@ -635,12 +644,18 @@ func undoMove(ctx context.Context, tx pgx.Tx, workspaceID string, in undoInput, 
 		}
 	}
 	if in.closed {
+		if err := restored(in.fromID, in.sourceStatus); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE conversations c SET status=$3,merged_into_id=NULL WHERE c.workspace_id=$1 AND c.id=$2 AND c.status='closed'
 			AND c.merged_into_id=$4`, workspaceID, in.fromID, in.sourceStatus, in.toID); err != nil {
 			return fmt.Errorf("reopen the source conversation: %w", err)
 		}
 	}
 	if in.created {
+		if err := setStatusActor(ctx, tx, actor, true); err != nil {
+			return err
+		}
 		// The conversation the split opened is left without customer messages: closed, pointing back.
 		if _, err := tx.Exec(ctx, `UPDATE conversations c SET status='closed',merged_into_id=$3 WHERE c.workspace_id=$1 AND c.id=$2
 			AND NOT EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming')`,

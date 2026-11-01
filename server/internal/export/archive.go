@@ -31,18 +31,18 @@ const (
 // error, because a ZIP entry is written in one piece.
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
-	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson",
-	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-source-consents.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson",
+	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson", "import-items.ndjson",
+	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-source-consents.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson", "ai-automatic-limits.ndjson", "response-targets.ndjson", "migration-requests.ndjson",
 	"autofix-installations.ndjson", "autofix-repos.ndjson", "autofix-connectors.ndjson", "fixes.ndjson", "fix-events.ndjson",
-	"channels.ndjson", "channel-events.ndjson", "channel-ai-levels.ndjson", "channel-inbound-events.ndjson", "channel-threads.ndjson", "channel-thread-items.ndjson", "channel-senders.ndjson", "number-series.ndjson", "conversation-thread-items.ndjson", "intake-gatherings.ndjson", "intake-decisions.ndjson", "intake-eval-runs.ndjson", "message-moves.ndjson", "conversations.ndjson"}
+	"channels.ndjson", "channel-events.ndjson", "channel-ai-levels.ndjson", "channel-inbound-events.ndjson", "channel-threads.ndjson", "channel-thread-items.ndjson", "channel-senders.ndjson", "number-series.ndjson", "conversation-thread-items.ndjson", "conversation-thread-keys.ndjson", "intake-gatherings.ndjson", "intake-decisions.ndjson", "intake-eval-runs.ndjson", "message-moves.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
-	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people",
-	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-source-consents.ndjson": "ai_source_consents", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines",
+	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people", "import-items.ndjson": "import_items",
+	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-source-consents.ndjson": "ai_source_consents", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines", "ai-automatic-limits.ndjson": "ai_automatic_limits", "response-targets.ndjson": "response_targets", "migration-requests.ndjson": "migration_requests",
 	"autofix-installations.ndjson": "autofix_installations", "autofix-repos.ndjson": "autofix_repos", "autofix-connectors.ndjson": "autofix_connectors", "fixes.ndjson": "fixes", "fix-events.ndjson": "fix_events",
-	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-ai-levels.ndjson": "channel_ai_levels", "channel-inbound-events.ndjson": "channel_inbound_events", "channel-threads.ndjson": "channel_threads", "channel-thread-items.ndjson": "channel_thread_items", "channel-senders.ndjson": "channel_senders", "number-series.ndjson": "conversation_number_series", "conversation-thread-items.ndjson": "conversation_thread_items", "intake-gatherings.ndjson": "intake_gatherings", "intake-decisions.ndjson": "intake_decisions", "intake-eval-runs.ndjson": "intake_eval_runs", "message-moves.ndjson": "message_moves",
+	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-ai-levels.ndjson": "channel_ai_levels", "channel-inbound-events.ndjson": "channel_inbound_events", "channel-threads.ndjson": "channel_threads", "channel-thread-items.ndjson": "channel_thread_items", "channel-senders.ndjson": "channel_senders", "number-series.ndjson": "conversation_number_series", "conversation-thread-items.ndjson": "conversation_thread_items", "conversation-thread-keys.ndjson": "conversation_thread_keys", "intake-gatherings.ndjson": "intake_gatherings", "intake-decisions.ndjson": "intake_decisions", "intake-eval-runs.ndjson": "intake_eval_runs", "message-moves.ndjson": "message_moves",
 	"conversations.ndjson": "conversations",
 }
 
@@ -68,7 +68,7 @@ type Writer struct {
 	opener      Opener
 	workspaceID string
 	exportedAt  time.Time
-	workspace   domain.Workspace
+	workspace   Workspace
 
 	current    int // index into recordFiles of the open entry, -1 before the first
 	entry      io.Writer
@@ -92,7 +92,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 	}
 }
 
-func (w *Writer) Workspace(workspace domain.Workspace) error {
+func (w *Writer) Workspace(workspace Workspace) error {
 	w.workspace = workspace
 	return nil
 }
@@ -264,6 +264,26 @@ func (w *Writer) AIChatSession(record AIChatSession) error {
 
 func (w *Writer) ResultsBaseline(record ResultsBaseline) error {
 	return w.record("results-baselines.ndjson", record)
+}
+
+func (w *Writer) ImportItem(record ImportItem) error {
+	return w.record("import-items.ndjson", record)
+}
+
+func (w *Writer) ConversationThreadKey(record ConversationThreadKey) error {
+	return w.record("conversation-thread-keys.ndjson", record)
+}
+
+func (w *Writer) AIAutomaticLimits(record AIAutomaticLimits) error {
+	return w.record("ai-automatic-limits.ndjson", record)
+}
+
+func (w *Writer) ResponseTargets(record ResponseTargets) error {
+	return w.record("response-targets.ndjson", record)
+}
+
+func (w *Writer) MigrationRequest(record MigrationRequest) error {
+	return w.record("migration-requests.ndjson", record)
 }
 
 func (w *Writer) AutofixInstallation(record AutofixInstallation) error {
@@ -546,11 +566,11 @@ type manifestFile struct {
 }
 
 type manifestHead struct {
-	Format     string           `json:"format"`
-	Version    int              `json:"version"`
-	ExportedAt time.Time        `json:"exported_at"`
-	Workspace  domain.Workspace `json:"workspace"`
-	Counts     map[string]int   `json:"counts"`
+	Format     string         `json:"format"`
+	Version    int            `json:"version"`
+	ExportedAt time.Time      `json:"exported_at"`
+	Workspace  Workspace      `json:"workspace"`
+	Counts     map[string]int `json:"counts"`
 }
 
 // Finish writes the attachment files, then the manifest, then the ZIP directory. It stops at the

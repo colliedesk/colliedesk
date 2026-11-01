@@ -87,21 +87,30 @@ func (s *Store) AutoCloseDue(ctx context.Context, now time.Time, limit int) ([]A
 // since: the system before had told them.
 func (s *Store) AutoClose(ctx context.Context, conversation AutoCloseCandidate, now time.Time) (bool, error) {
 	return scoped(ctx, s, conversation.WorkspaceID, func(tx pgx.Tx) (bool, error) {
-		if err := setStatusCause(ctx, tx, statusChange{Cause: CauseAutoClose}); err != nil {
-			return false, err
-		}
+		// Whether the close tells the customer is read first, with the row locked, so the history records it
+		// (quiet) with the close.
 		var quiet bool
-		err := tx.QueryRow(ctx, `UPDATE conversations c SET status='closed',updated_at=now()
-			WHERE c.workspace_id=$2 AND c.id::text=$3 AND `+autoCloseDue("$4::int", "$5::timestamptz")+`
-			RETURNING NOT EXISTS(SELECT 1 FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id AND h.source='colliedesk')
+		err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id AND h.source='colliedesk')
 				OR COALESCE((SELECT h.quiet FROM conversation_status_changes h WHERE h.workspace_id=c.workspace_id AND h.conversation_id=c.id AND h.to_status='resolved'
-					ORDER BY h.changed_at DESC,h.id DESC LIMIT 1),false)`,
-			now, conversation.WorkspaceID, conversation.ConversationID, conversation.Hours, conversation.Since).Scan(&quiet)
+					ORDER BY h.changed_at DESC,h.id DESC LIMIT 1),false)
+			FROM conversations c WHERE c.workspace_id=$1 AND c.id::text=$2 FOR UPDATE`, conversation.WorkspaceID, conversation.ConversationID).Scan(&quiet)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
 		if err != nil {
+			return false, fmt.Errorf("read how a resolved conversation closes: %w", err)
+		}
+		if err := setStatusCause(ctx, tx, statusChange{Cause: CauseAutoClose, Quiet: quiet}); err != nil {
+			return false, err
+		}
+		tag, err := tx.Exec(ctx, `UPDATE conversations c SET status='closed',updated_at=now()
+			WHERE c.workspace_id=$2 AND c.id::text=$3 AND `+autoCloseDue("$4::int", "$5::timestamptz"),
+			now, conversation.WorkspaceID, conversation.ConversationID, conversation.Hours, conversation.Since)
+		if err != nil {
 			return false, fmt.Errorf("close a resolved conversation: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return false, nil
 		}
 		if !quiet {
 			if err := s.sendStatusNotices(ctx, tx, conversation.WorkspaceID, map[string]string{conversation.ConversationID: "resolved"}, "closed"); err != nil {

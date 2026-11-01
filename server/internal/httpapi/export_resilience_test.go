@@ -203,7 +203,7 @@ type idleSink struct {
 	sleep time.Duration
 }
 
-func (s idleSink) Workspace(domain.Workspace) error                                { return nil }
+func (s idleSink) Workspace(export.Workspace) error                                { return nil }
 func (s idleSink) Agent(export.Agent) error                                        { time.Sleep(s.sleep); return nil }
 func (s idleSink) Contact(export.Contact) error                                    { return nil }
 func (s idleSink) ContactMerge(export.ContactMerge) error                          { return nil }
@@ -222,6 +222,7 @@ func (s idleSink) HelpCenter(export.HelpCenter) error                           
 func (s idleSink) AgentRequest(export.AgentRequest) error                          { return nil }
 func (s idleSink) ImportJob(export.ImportJob) error                                { return nil }
 func (s idleSink) ImportPerson(export.ImportPerson) error                          { return nil }
+func (s idleSink) ImportItem(export.ImportItem) error                              { return nil }
 func (s idleSink) AIProvider(export.AIProvider) error                              { return nil }
 func (s idleSink) AISlot(export.AISlot) error                                      { return nil }
 func (s idleSink) AISettingsEvent(export.AISettingsEvent) error                    { return nil }
@@ -234,6 +235,7 @@ func (s idleSink) ChannelThreadItem(export.ChannelThreadItem) error             
 func (s idleSink) ChannelSender(export.ChannelSender) error                        { return nil }
 func (s idleSink) NumberSeries(export.NumberSeries) error                          { return nil }
 func (s idleSink) ConversationThreadItem(export.ConversationThreadItem) error      { return nil }
+func (s idleSink) ConversationThreadKey(export.ConversationThreadKey) error        { return nil }
 func (s idleSink) IntakeGathering(export.IntakeGathering) error                    { return nil }
 func (s idleSink) IntakeDecision(export.IntakeDecision) error                      { return nil }
 func (s idleSink) IntakeEvalRun(export.IntakeEvalRun) error                        { return nil }
@@ -244,6 +246,9 @@ func (s idleSink) AIDraft(export.AIDraft) error                                 
 func (s idleSink) AITriage(export.AITriage) error                                  { return nil }
 func (s idleSink) AIChatSession(export.AIChatSession) error                        { return nil }
 func (s idleSink) ResultsBaseline(export.ResultsBaseline) error                    { return nil }
+func (s idleSink) AIAutomaticLimits(export.AIAutomaticLimits) error                { return nil }
+func (s idleSink) ResponseTargets(export.ResponseTargets) error                    { return nil }
+func (s idleSink) MigrationRequest(export.MigrationRequest) error                  { return nil }
 func (s idleSink) AutofixInstallation(export.AutofixInstallation) error            { return nil }
 func (s idleSink) AutofixRepo(export.AutofixRepo) error                            { return nil }
 func (s idleSink) AutofixConnector(export.AutofixConnector) error                  { return nil }
