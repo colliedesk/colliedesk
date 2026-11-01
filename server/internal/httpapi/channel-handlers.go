@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
@@ -555,6 +558,13 @@ func (k channelRouteKit) InWorkspace(ctx context.Context, channel channels.Chann
 	return k.api.store.InWorkspace(ctx, channel.WorkspaceID, fn)
 }
 
+func (k channelRouteKit) SiteVerificationHeld(ctx context.Context, code string) (bool, error) {
+	if k.kind != zalo.Type {
+		return false, nil
+	}
+	return k.api.store.ZaloSiteVerificationHeld(ctx, code)
+}
+
 func (k channelRouteKit) Channel(ctx context.Context, workspaceID, id string) (channels.Channel, bool, error) {
 	if id == "" {
 		channel, found, err := k.api.store.DefaultChannelOfType(ctx, workspaceID, k.kind)
@@ -607,6 +617,64 @@ func (a *API) channelHelpCenterAdditions() func(ctx context.Context, at channels
 		}
 		return channels.HelpCenterAdditions{}, nil
 	}
+}
+
+// channelFiles answers the channel types' public files (channels.File) before the mux: GET or HEAD of a
+// name a type's File matches in its directory, charged to the client address before the lookup. A name
+// the type does not find, another method and every other path go on to next, so they answer exactly as a
+// path the server does not have. Like the types' Routes they are outside Routes() and tokenTiers: no
+// session and no token reaches them.
+func (a *API) channelFiles(next http.Handler) http.Handler {
+	type served struct {
+		dir   string
+		file  channels.File
+		serve func(context.Context, string) (channels.PublicFile, bool, error)
+	}
+	var files []served
+	for _, definition := range a.store.Channels().Definitions() {
+		for _, file := range definition.Files {
+			files = append(files, served{dir: "/api/v1" + file.Dir + "/", file: file, serve: file.Serve(channelRouteKit{api: a, kind: definition.Type})})
+		}
+	}
+	if len(files) == 0 {
+		return next
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet && request.Method != http.MethodHead {
+			next.ServeHTTP(response, request)
+			return
+		}
+		for _, f := range files {
+			name, below := strings.CutPrefix(request.URL.Path, f.dir)
+			if !below || !f.file.Name.MatchString(name) {
+				continue
+			}
+			if allowed, wait := a.channelFileLookups.allow(clientAddress(request, a.config.TrustedProxies), a.now()); !allowed {
+				response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+				writeError(response, http.StatusTooManyRequests, "too_many_requests", "Too many requests from this address; try again shortly.")
+				return
+			}
+			file, found, err := f.serve(request.Context(), name)
+			if err != nil {
+				slog.Error("serve a channel file", "path", request.URL.Path, "error", err)
+				writeError(response, http.StatusInternalServerError, "internal_error", "Try again.")
+				return
+			}
+			if !found {
+				break
+			}
+			response.Header().Set("Content-Type", file.ContentType)
+			response.Header().Set("X-Content-Type-Options", "nosniff")
+			response.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(file.MaxAge.Seconds())))
+			response.Header().Set("Content-Length", strconv.Itoa(len(file.Body)))
+			response.WriteHeader(http.StatusOK)
+			if request.Method == http.MethodGet {
+				_, _ = response.Write(file.Body)
+			}
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
 }
 
 // channelTypeRoutes are the routes the registered types declare, mounted under /api/v1 with the

@@ -656,7 +656,8 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 			return public, fmt.Errorf("check first channel message: %w", err)
 		}
 		if !received {
-			public.Status = channels.Status{State: channels.StateWaiting, ReasonCode: channels.ReasonNoMessageYet}
+			// The type's hint of what may keep the first message away stays.
+			public.Status = channels.Status{State: channels.StateWaiting, ReasonCode: channels.ReasonNoMessageYet, Message: public.Status.Message}
 		}
 	}
 	return public, nil

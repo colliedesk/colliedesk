@@ -135,6 +135,7 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
   };
   return <div className="settings-body">
     {!tokensAny && <p className="notice notice-plain" role="status"><span>{m.firstSteps}</span></p>}
+    <Verification channel={channel} canManage={canManage} timezone={timezone} />
     <section className="zl-block" aria-labelledby={`${channel.id}-webhook`}><h3 id={`${channel.id}-webhook`}>{m.webhook}</h3>
       <p className="lead">{m.webhookLead}</p>
       <div className="zl-url"><code>{url}</code><CopyButton value={url} copiedText={m.urlCopied}>{m.copyURL}</CopyButton></div>
@@ -163,6 +164,47 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
     {editing && editing !== 'tokens' && <SecretDialog channel={channel} name={editing} hint={credential(editing)?.hint ?? null} replace={Boolean(credential(editing)?.set_at)}
       onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); setDone(m.secretSaved(m.secretLabel[editing])); }} />}
   </div>;
+}
+
+// Verification: Zalo takes the webhook only on a verified address, and a team on Colliedesk Cloud cannot
+// change its DNS. The team verifies the URL prefix of the webhook with Zalo's HTML file method: it pastes
+// Zalo's code here, and the server serves zalo_verifier<code>.html below the prefix while the code is set.
+function Verification({ channel, canManage }: ChannelPanelProps) {
+  const config = configOf(channel);
+  const prefix = `${window.location.origin}${config.verification_prefix_path}`;
+  const current = config.site_verification;
+  const [pasted, setPasted] = useState('');
+  const reload = useReload(channel.id);
+  const save = useMutation({
+    mutationFn: (code: string) => channelsApi.update(channel.id, { config: { site_verification: code } }),
+    onSuccess: async () => { setPasted(''); await reload(); },
+  });
+  const feedback = useSaveFeedback(saveState(save));
+  const id = useId();
+  const file = current ? `zalo_verifier${current}.html` : undefined;
+  const removing = save.isPending && save.variables === '';
+  // The server's refusal of the code says the rule itself; the hint and the form's own words would repeat it.
+  const codeError = save.variables !== '' ? fieldErrors(save.error).site_verification : undefined;
+  return <section className="zl-block" aria-labelledby={`${id}-verify`}><h3 id={`${id}-verify`}>{m.verification}</h3>
+    <p className="lead">{m.verificationLead}</p>
+    <ol className="zl-steps">
+      {m.verificationSteps.map((step, index) => <li key={step}>{step}
+        {index === 0 && <div className="zl-url"><code>{prefix}</code><CopyButton value={prefix} copiedText={m.prefixCopied}>{m.copyPrefix}</CopyButton></div>}</li>)}
+    </ol>
+    {file ? <p className="zl-verified">{m.serving} <a className="mono" href={`${prefix}${file}`} target="_blank" rel="noreferrer">{file}</a>. {m.servingNext}</p>
+      : <p className="zl-state zl-state-warn">{m.noCode}</p>}
+    {canManage && <form className="zl-series" noValidate onSubmit={(event) => {
+      event.preventDefault();
+      if (!feedback.pending && pasted.trim()) save.mutate(pasted.trim());
+    }}>
+      <Field id={`${id}-code`} label={m.verificationCode} error={codeError} help={codeError ? undefined : m.verificationCodeHint}>
+        {(props) => <input {...props} className="zl-mono-input" autoComplete="off" spellCheck={false} maxLength={2000} value={pasted}
+          onChange={(event) => { feedback.touch(); setPasted(event.target.value); }} />}</Field>
+      <span className="button-row"><button type="submit" disabled={feedback.pending || !pasted.trim()}>{feedback.saveLabel(m.saveCode)}</button>
+        {current && <button type="button" disabled={feedback.pending} onClick={() => save.mutate('')}>{removing ? m.removingCode : m.removeCode}</button>}
+        {!codeError && feedback.status}</span>
+    </form>}
+  </section>;
 }
 
 // References: the number series the channel numbers what it opens in, and the code the next one gets.

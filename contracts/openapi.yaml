@@ -11687,7 +11687,7 @@ components:
         widget_origins: {type: array, maxItems: 20, items: {type: string}, description: 'Exact origins (scheme://host[:port]) whose pages may embed the chat.'}
     ZaloChannelConfig:
       type: object
-      required: [oa_id, app_id, staff_user_ids, groups, webhook_path, credentials]
+      required: [oa_id, app_id, staff_user_ids, groups, webhook_path, webhook_url, site_verification, verification_prefix_path, verification_prefix_url, credentials]
       description: >-
         A Zalo Official Account channel (docs/user/zalo.md). Its secrets (app_secret, oa_secret_key,
         access_token, refresh_token) go through PUT /api/v1/channels/{id}/credentials and are never shown.
@@ -11697,6 +11697,22 @@ components:
         staff_user_ids: {type: array, items: {type: string}, description: 'The team''s Zalo user ids: what they write in a group is the team''s, never a customer''s request.'}
         groups: {type: object, additionalProperties: {type: string}, description: Group id to the organization its members are customers of.}
         webhook_path: {type: string, description: 'The app''s one webhook, below the server''s address, for the Zalo app''s settings (/api/v1/channels/zalo/webhook).'}
+        site_verification:
+          type: [string, 'null']
+          description: >-
+            The code Zalo gave the app to verify the URL prefix of its webhook with the HTML file method, or
+            null. While a live channel of the server holds it, GET (and HEAD) {verification_prefix_path}zalo_verifier{code}.html
+            answers Zalo's file (text/html) to anyone, as the file is public; any other name below the prefix
+            answers the server's 404 for a path it does not have. Not a secret.
+        verification_prefix_path: {type: string, description: 'The URL prefix to verify in the Zalo app (Domain verification › URL prefix), below the server''s address (/api/v1/channels/zalo/); it covers the webhook.'}
+        verification_prefix_url:
+          type: [string, 'null']
+          description: >-
+            verification_prefix_path on the workspace's public address (its own host, else APP_ORIGIN), as the
+            person pastes it in the Zalo app (URL prefix, HTML file method). null when the server knows no address.
+        webhook_url:
+          type: [string, 'null']
+          description: 'webhook_path on the same address, for the Zalo app''s webhook settings once the prefix is verified. null when the server knows no address.'
         credentials:
           type: array
           description: 'The four secrets in order (app_secret, oa_secret_key, access_token, refresh_token): whether each is set, its last four characters and when it was last written (a token refresh too). Never a value.'
@@ -11779,6 +11795,13 @@ components:
         app_id: {type: string, pattern: '^[0-9]{1,40}$'}
         staff_user_ids: {type: array, maxItems: 200, items: {type: string, pattern: '^[0-9]{1,40}$'}}
         groups: {type: object, maxProperties: 500, additionalProperties: {type: string, maxLength: 200}}
+        site_verification:
+          type: string
+          maxLength: 2000
+          description: >-
+            Zalo's site verification code (letters, digits, _ and -, 8 to 100 characters). The TXT value
+            (zalo-platform-site-verification=<code>), the meta tag, the file's name or address, or the whole
+            file may be pasted instead: the code is read from it. An empty string clears it.
     ChannelConfigInput:
       description: A channel's configuration as its type takes it.
       oneOf:

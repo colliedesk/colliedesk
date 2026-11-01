@@ -135,6 +135,21 @@ func (s *Store) ChannelByPublicID(ctx context.Context, kind channels.Type, id st
 	return channel, err == nil, err
 }
 
+// ZaloSiteVerificationHeld says whether a live Zalo channel of any workspace holds a site verification
+// code, for the public file Zalo fetches to verify the URL prefix of the app's webhook. The code is public
+// (Zalo's checker reads it in that file); only the yes or no leaves the transaction.
+func (s *Store) ZaloSiteVerificationHeld(ctx context.Context, code string) (bool, error) {
+	var held bool
+	err := s.db.Privileged(ctx, database.PrivilegeChannelRoute, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM zalo_channels z JOIN channels c ON c.workspace_id=z.workspace_id AND c.id=z.channel_id
+			WHERE z.site_verification=$1 AND c.deleted_at IS NULL)`, code).Scan(&held)
+	})
+	if err != nil {
+		return false, fmt.Errorf("zalo site verification: %w", err)
+	}
+	return held, nil
+}
+
 // lockChannelType serializes the changes that add, remove or move the default of a workspace's
 // channels of one type: the first channel of a type has no row yet to lock.
 func lockChannelType(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type) error {

@@ -29,6 +29,7 @@ const channel = (config: Record<string, unknown> = {}, change: Partial<ChannelDe
   id: ID, type: 'zalo', name: 'Hảo Đạt OA', enabled: true, status: { state: 'working', reason_code: null, message: null }, summary: 'OA 4318…2207 · 1 group linked',
   capabilities: ['threads'], held_count: 0, unsent_count: 0, last_inbound_at: null, created_at: '2026-10-30T00:00:00Z', updated_at: '2026-10-30T00:00:00Z',
   config: { oa_id: '4318002291772207', app_id: '1188200455', staff_user_ids: [], groups: {}, webhook_path: '/api/v1/channels/zalo/webhook',
+    site_verification: null, verification_prefix_path: '/api/v1/channels/zalo/', verification_prefix_url: null, webhook_url: null,
     credentials: credentials({ app_secret: 'a1f9', oa_secret_key: '7c20' }), ...config },
   settings: {}, effective_settings: {}, ...change,
 } as ChannelDetail);
@@ -117,10 +118,56 @@ test('connection shows the webhook, the ids and which secrets are set, never a v
   expect(screen.getByText('4318002291772207')).toBeInTheDocument();
   expect(screen.getByText(/Set · ••••a1f9/)).toBeInTheDocument();
   expect(screen.getByText('Not set: messages arrive, replies are not sent')).toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Paste this webhook URL in your Zalo app, then add the tokens.');
+  expect(screen.getByRole('status')).toHaveTextContent('Verify the URL prefix in your Zalo app, paste the webhook URL there, then add the tokens.');
   expect(screen.getByRole('button', { name: 'Add tokens' })).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: 'Replace' })).toHaveLength(2);
   expect(screen.getByText('Running')).toBeInTheDocument();
+});
+
+test('domain verification shows the URL prefix to verify and saves the code pasted from Zalo', async () => {
+  const pasted = 'zalo_verifierOOMiTAgDDsCXlvT2meuJUq6BicIj_Ma_DJKs.html';
+  view(<Tabs.connection channel={channel()} canManage timezone="UTC" />);
+  const block = screen.getByRole('region', { name: 'Domain verification' });
+  expect(within(block).getByText(`${window.location.origin}/api/v1/channels/zalo/`)).toBeInTheDocument();
+  expect(within(block).getByRole('button', { name: 'Copy prefix' })).toBeInTheDocument();
+  expect(within(block).getByText(/URL prefix/)).toBeInTheDocument();
+  expect(within(block).getByText(/HTML file/)).toBeInTheDocument();
+  expect(within(block).getByText('No code yet: Zalo cannot verify the prefix.')).toBeInTheDocument();
+  const save = within(block).getByRole('button', { name: 'Save code' });
+  expect(save).toBeDisabled();
+  fireEvent.change(within(block).getByLabelText('Verification code'), { target: { value: `  ${pasted} ` } });
+  fireEvent.click(save);
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { config: { site_verification: pasted } }));
+});
+
+test('a saved code shows the file Zalo will fetch, and Remove code clears it', async () => {
+  const code = 'OOMiTAgDDsCXlvT2meuJUq6BicIj_Ma_DJKs';
+  view(<Tabs.connection channel={channel({ site_verification: code })} canManage timezone="UTC" />);
+  const block = screen.getByRole('region', { name: 'Domain verification' });
+  const file = within(block).getByRole('link', { name: `zalo_verifier${code}.html` });
+  expect(file).toHaveAttribute('href', `${window.location.origin}/api/v1/channels/zalo/zalo_verifier${code}.html`);
+  expect(within(block).getByText(/Zalo can fetch/)).toBeInTheDocument();
+  fireEvent.click(within(block).getByRole('button', { name: 'Remove code' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { config: { site_verification: '' } }));
+});
+
+test('a code the server refuses says why next to the box', async () => {
+  channelsApi.update.mockRejectedValueOnce(new mocks.InvalidRequestError('Check the Zalo channel.', { fields: { site_verification: 'Paste the code Zalo shows for the HTML file method.' } }));
+  view(<Tabs.connection channel={channel()} canManage timezone="UTC" />);
+  const block = screen.getByRole('region', { name: 'Domain verification' });
+  fireEvent.change(within(block).getByLabelText('Verification code'), { target: { value: 'not a code' } });
+  fireEvent.click(within(block).getByRole('button', { name: 'Save code' }));
+  await waitFor(() => expect(within(block).getByLabelText('Verification code')).toHaveAccessibleDescription('Paste the code Zalo shows for the HTML file method.'));
+  // Said once: neither the hint nor the form's generic refusal repeats it.
+  expect(within(block).queryByText('Check the Zalo channel.')).toBeNull();
+});
+
+test('an agent sees whether the prefix can be verified and changes nothing', () => {
+  view(<Tabs.connection channel={channel({ site_verification: 'OOMiTAgDDsCXlvT2meuJUq6BicIj_Ma_DJKs' })} canManage={false} timezone="UTC" />);
+  const block = screen.getByRole('region', { name: 'Domain verification' });
+  expect(within(block).queryByLabelText('Verification code')).toBeNull();
+  expect(within(block).queryByRole('button', { name: 'Remove code' })).toBeNull();
+  expect(within(block).getByRole('link', { name: /zalo_verifier/ })).toBeInTheDocument();
 });
 
 test('connection says since when processing is paused and how many messages are kept', () => {

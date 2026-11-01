@@ -237,6 +237,8 @@ type API struct {
 	operatorSignIns, operatorSignInIPs *webFormLimiter
 	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
 	helpCenterHostLookups *webFormLimiter
+	// channelFileLookups counts each client address's requests for a channel type's public file.
+	channelFileLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
@@ -328,7 +330,9 @@ func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Co
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: config.Zalo})
+	zaloConfig := config.Zalo
+	zaloConfig.Origin, zaloConfig.HostDomain = config.Origin, config.HelpCenterDomain
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: zaloConfig})
 	if len(config.ExtraChannelTypes) == 0 {
 		return registered
 	}
@@ -374,7 +378,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
 		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
-		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
@@ -485,7 +489,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
-	return &Server{Handler: withRequestID(api.observeTrial(mux)), api: api}
+	return &Server{Handler: withRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
 }
 
 // observeTrial counts, while a trial change runs, the distinct client addresses this process sees, so the

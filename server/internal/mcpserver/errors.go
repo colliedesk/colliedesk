@@ -46,9 +46,8 @@ func (c *call) refuse(err error, notFound string) error {
 		return &toolError{"Colliedesk could not find that."}
 	case failure.Status == 409:
 		return &toolError{"Colliedesk refused this: " + failure.Message}
-	case failure.Status == 400:
-		return &toolError{"Colliedesk rejected the request: " + failure.Message}
-	case failure.Status == 422:
+	case failure.Status == 400 || failure.Status == 422:
+		// Each refused field with why, so the next call fixes it.
 		text := "Colliedesk rejected the request: " + failure.Message
 		for _, field := range slices.Sorted(maps.Keys(failure.Fields)) {
 			text += " " + field + ": " + failure.Fields[field]
