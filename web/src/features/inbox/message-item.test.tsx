@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { MessageItem } from './message-item';
@@ -144,17 +144,27 @@ function declared(element: Element, property: 'list-style-type' | 'padding-left'
   return rules.filter((rule) => element.matches(rule.selectorText) && rule.style.getPropertyValue(property)).at(-1)?.style.getPropertyValue(property);
 }
 
-test('a reply or note written as a Markdown list keeps its numbers and bullets on the timeline', () => {
+// The Markdown renderer loads on its own chunk (markdown-body.tsx), so each case waits for the list to render.
+test('a reply or note written as a Markdown list keeps its numbers and bullets on the timeline', async () => {
   for (const kind of ['outgoing', 'note'] as const) {
     const { container, unmount } = render(<MessageItem item={{ ...base, kind, email: null, body: 'Steps:\n\n1. Open settings\n2. Turn it on\n   - first\n   - second\n\nThanks' }} timezone="UTC" />);
-    const ol = container.querySelector('.markdown-body ol')!;
+    const ol = await waitFor(() => {
+      const found = container.querySelector('.markdown-body ol');
+      expect(found).not.toBeNull();
+      return found!;
+    });
     expect(declared(ol, 'list-style-type')).toBe('decimal');
     expect(declared(ol, 'padding-left')).toBe('var(--space-6)');
     expect(declared(ol.querySelector('ul')!, 'list-style-type')).toBe('circle');
     unmount();
   }
   const { container } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, body: '- one\n- two' }} timezone="UTC" />);
-  expect(declared(container.querySelector('.markdown-body ul')!, 'list-style-type')).toBe('disc');
+  const ul = await waitFor(() => {
+    const found = container.querySelector('.markdown-body ul');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(declared(ul, 'list-style-type')).toBe('disc');
 });
 
 test('a reply saved while its channel was off reads as not sent yet, not as a failure, and can be retried', () => {
