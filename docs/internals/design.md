@@ -99,6 +99,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 - Details · Status is an `ActionMenu` on every conversation, never a select: arrow keys on a closed select
   fire `change` per step in some browsers, each a change of the conversation (and on a chat a message to
   the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
+  Every Priority value has a mark before its word, on the field and in its menu: red ↑ Urgent, grey ↑ High,
+  a quiet dash for Normal, ↓ Low. The mark column has no gap (Linear marks every priority); list rows still hide Normal.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
   is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
@@ -213,7 +215,11 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   not marked in a row. Menus and Properties lead each option with the same marks (Low a down arrow).
 - Menus: one recipe for Filter, Views, bulk menus and every select picker: radius 10, 4 px inside, 30 px rows,
   a leading mark, a trailing check, groups split by space, `--shadow-2`. Native selects keep their element and
-  take the recipe through `appearance: base-select`; other browsers keep the native picker.
+  take the recipe through `appearance: base-select`, written once for every `select` in `components.css` and opened
+  below the field when it fits. Only with a fine pointer: touch screens keep the phone's own picker, and so do
+  browsers without `base-select`, list boxes and forced-colour mode. The operator console keeps the native picker (its
+  CSS budget). A styled select is as wide as its chosen option, so a long list whose options vary (timezone) sets a
+  fixed width. `web/scripts/form-controls.test.mjs` fails when the recipe is scoped to a class again.
 - Properties: label (84 px, `--text-3`) and value on one edge after a 16 px mark; no select chrome until hover.
 - A disabled primary keeps its shape at 30 % opacity.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.

@@ -51,30 +51,44 @@
   content: "" / ""; margin-left: auto; width: 14px; height: 14px; flex: none; background: var(--text-1); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .filter-popover fieldset + fieldset, .filter-popover fieldset + .field, .filter-popover .field + fieldset { border-top: 0; margin-top: var(--space-1); padding-top: 0; }
-/* Native selects keep their element; where the browser supports it the picker takes the menu recipe. */
+/* Every select keeps its element. Where the browser can style the picker and a mouse points, the list opens as the
+   menu recipe (docs/internals/design.md). Touch screens, other browsers and list boxes keep the system picker.
+   Not in base-plain.css: the operator console imports that file and keeps the system picker within its CSS budget.
+   Sort and Properties draw their own chevron and take the recipe on every pointer. */
 @supports (appearance: base-select) {
+  @media (pointer: fine) and (forced-colors: none) {
+    select:not([multiple]):not([size]) { appearance: base-select; align-items: center; }
+    :where(select)::picker-icon { content: none; }
+    /* A styled select is as wide as its chosen option. The timezone list keeps the width the system picker gave it,
+       so the field does not jump when the zone changes. */
+    .input-with-actions select { width: 17rem; max-width: 100%; }
+  }
+  ::picker(select) {
+    appearance: base-select; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2);
+    padding: var(--space-1); margin-top: var(--space-1); min-width: max(12rem, anchor-size(width)); max-height: 20rem; overflow-y: auto;
+    /* Below the field when it fits; Chrome otherwise opens toward the larger side, often upward. */
+    position-try-order: normal;
+  }
+  select option { display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2);
+    border-radius: var(--radius); background: transparent; color: var(--text-1); font-size: var(--fs-small); }
+  select option:is(:hover, :focus-visible) { background: var(--surface-2); outline: 0; }
+  select option:disabled { color: var(--text-3); }
+  select option::checkmark { order: 2; margin-left: auto; content: "" / ""; width: 14px; height: 14px;
+    background: var(--text-2); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat; }
   .sort-field, .property-row select { appearance: base-select; }
   .sort-field { display: inline-flex; align-items: center; gap: var(--space-2); field-sizing: content; background-image: none; }
   .sort-field::picker-icon, .property-row select::picker-icon { content: ""; width: 10px; height: 10px; background: var(--text-3); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
   .property-row select { display: flex; align-items: center; }
   .property-row select::picker-icon { opacity: 0; }
   .property-row select:is(:hover, :focus-visible)::picker-icon { opacity: 1; }
-  .property-row select:hover:not(:disabled) { background-image: none; }
-  .sort-field::picker(select), .property-row select::picker(select) {
-    appearance: base-select; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2);
-    padding: var(--space-1); margin-top: var(--space-1); min-width: 12rem;
-  }
-  .sort-field option, .property-row select option { display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2);
-    border-radius: var(--radius); background: transparent; color: var(--text-1); font-size: var(--fs-small); }
-  .sort-field option:is(:hover, :focus-visible), .property-row select option:is(:hover, :focus-visible) { background: var(--surface-2); outline: 0; }
-  .sort-field option::checkmark, .property-row select option::checkmark { order: 2; margin-left: auto; content: ""; width: 14px; height: 14px;
-    background: var(--text-2); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat; }
+  /* One chevron on hover: the picker icon. The extra :not() outranks the hover chevron of the plain row below. */
+  .property-row select:hover:not(:disabled):not([multiple]) { background-image: none; }
   .property-row select option:is([value="open"], [value="pending"], [value="resolved"], [value="closed"])::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--dot); }
   .property-row option[value="open"] { --dot: var(--open); } .property-row option[value="pending"] { --dot: var(--pending); }
   .property-row option[value="resolved"] { --dot: var(--ok); } .property-row option[value="closed"] { --dot: var(--text-3); }
   .property-row option[value="urgent"]::before { content: "↑" / ""; width: 8px; color: var(--danger); font-weight: 600; }
   .property-row option[value="high"]::before { content: "↑" / ""; width: 8px; color: var(--text-2); font-weight: 600; }
-  .property-row option[value="normal"]::before { content: "" / ""; width: 8px; }
+  .property-row option[value="normal"]::before { content: "–" / ""; width: 8px; color: var(--text-3); }
   .property-row option[value="low"]::before { content: "↓" / ""; width: 8px; color: var(--text-3); }
 }
 .filter-match { margin-top: var(--space-1); color: var(--text-2); }
@@ -445,6 +459,8 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .property-row:has(option[value="urgent"]:checked) select { color: var(--danger); }
 .property-row:has(option[value="high"]:checked)::after { content: "↑" / ""; color: var(--text-2); }
 .property-row:has(option[value="low"]:checked)::after { content: "↓" / ""; color: var(--text-3); }
+/* Normal is a quiet dash, as Linear marks every priority: the mark column never has a gap. Rows in the list still hide it. */
+.property-row:has(option[value="normal"]:checked)::after { content: "–" / ""; color: var(--text-3); font-weight: 400; }
 .tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .tag-check { position: relative; display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
 .tag-check input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
