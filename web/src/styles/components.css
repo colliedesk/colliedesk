@@ -335,16 +335,25 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-files li button { --control: 24px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .composer-files li button svg { width: 12px; height: 12px; }
 .composer-attachments-problem, .composer-attachments-warning { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
-.composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
-/* A narrow reply box keeps every tool on screen: the tools show their icon only (the label stays their
-   accessible name) and their keycaps go. The shortcut hint lives in the composer head. */
+.composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
+/* Attach is the first tool of the reply box: its picker's own box dissolves into the row, and the chosen files and
+   their notes take a full line above the tools, as Plain and Front do. */
+.composer-actions > .composer-attachments { display: contents; }
+.composer-actions .composer-files { display: flex; flex-wrap: wrap; gap: var(--space-2); flex-basis: 100%; order: -1; }
+.composer-actions :is(.composer-attachments-problem, .composer-attachments-warning) { order: -1; }
+/* The writing tools are icons at every width, as in Plain, Intercom and Front: the label stays their accessible
+   name and the tooltip says it. Send and resolve and Send reply then always share one row. Draft with AI keeps
+   its words: the automatic draft and its notices point people to it by name. */
+.composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.composer-actions .saved-reply-button kbd { display: none; }
+.composer-actions .ai-tool .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+/* Off, shown to admins only, keeps the name where it fits, so the icon is not left with a bare "Off". */
+@container (min-width: 36rem) {
+  .composer-actions :has(> .ai-off-label) .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+}
+/* A narrow box keeps the send keys only; Send and resolve shows its own keys on hover. */
 @container (max-width: 40rem) {
-  /* A narrow box keeps the send keys only; Send and resolve shows its own keys on hover. */
   .composer-keys-resolve { display: none; }
-  .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .composer-actions .saved-reply-button kbd { display: none; }
-  /* Draft with AI keeps its words: the automatic draft and its notices point people to it by name. */
-  .composer-actions .ai-tool .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
 }
 /* A phone-wide box has no room beside the tabs: the keys stay in the buttons' tooltips. */
 @container (max-width: 28rem) {

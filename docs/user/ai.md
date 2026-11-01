@@ -106,7 +106,7 @@ meanwhile is dropped without calling anyone. A locked workspace runs none.
 ## Reply drafts
 
 With **Reply drafts** on, the reply box of a conversation has **Draft with AI**; while they are off it
-says **Off**, and takes an admin to **Settings → Built-in AI** (others are told to ask an admin). Say what the reply
+shows **Off** to admins only, as a link to **Settings → Built-in AI**; agents see no AI tool until it is on. Say what the reply
 should say (optional, up to 2,000 characters: "offer a refund", "ask for the order number"), or leave
 it empty for a reply to the customer's newest message. You keep working while it is written; the
 conversation never waits for the model.
