@@ -72,6 +72,8 @@ sent_at, last_error FROM meta_conversion_events` shows what the worker did.
 
 ### Ad links
 
-The sign-in page reads `fbclid` from its own address. Until colliedesk.com forwards `utm_*`,
-`ttclid` and `fbclid` to its trial links, an ad that lands on colliedesk.com loses the click ID and
-no event is sent. Point Meta ads at the app sign-in link, or ship the site forwarding first.
+The sign-in page reads `fbclid` from its own address. colliedesk.com carries an ad link's `utm_*`,
+`ttclid` and `fbclid` to its sign-in and Founding links (`public/attribution.js` in the site repo,
+colliedesk.com#131; kept in the tab's `sessionStorage` at most a day, no cookie). The Founding link's
+redirect to sign-in keeps them too. A visitor who closes the tab and comes back later without the ad
+link signs up without a click ID, so no event is sent for them.
