@@ -16,20 +16,32 @@ import (
 const plugin = "../../../plugins/colliedesk"
 
 // The skills in plugins/colliedesk follow the Agent Skills format (agentskills.io), so Codex,
-// Cursor, VS Code and claude.ai load them as they are, and they name only tools the server has,
-// at the tier the server gives them.
-func TestSkillsNameRealToolsAtTheirTier(t *testing.T) {
+// Cursor, VS Code and claude.ai load them as they are. A skill says what it is for and links the
+// colliedesk.com guides; it never copies a feature's details, tools or tiers, which change with
+// Colliedesk. The agent learns them at run time from colliedesk_whoami, the tool descriptions and
+// the linked pages (colliedesk_docs_search returns the same guides from the person's server).
+func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
 	dirs, err := filepath.Glob(filepath.Join(plugin, "skills", "*"))
 	if err != nil || len(dirs) == 0 {
 		t.Skipf("plugins/colliedesk is not next to this module: %v", err)
 	}
-	tiers := map[string]string{}
-	for _, spec := range mcpserver.Catalog() {
-		tiers[spec.Name] = spec.Tier
-	}
 	name := regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 	tool := regexp.MustCompile(`colliedesk_[a-z_]*[a-z]`)
-	row := regexp.MustCompile("(?m)^\\| `(colliedesk_[a-z_]+)` \\| ([a-z]+) \\|$")
+	heading := regexp.MustCompile(`(?m)^#{1,6} .*$`)
+	link := regexp.MustCompile(`\]\((https?://[^)\s]+)\)`)
+	guide := regexp.MustCompile(`^https://colliedesk\.com/docs/((?:self-host/)?[a-z0-9-]+)\.md$`)
+	sections := []string{"## What it is for", "## When to use", "## Boundaries", "## Before you start", "## Reference"}
+	mayName := []string{"colliedesk_whoami", "colliedesk_docs_search"}
+	for _, spec := range mcpserver.Catalog() {
+		if slices.Contains(mayName, spec.Name) && spec.Tier != "any" {
+			t.Errorf("%s has tier %s; a skill tells every agent to call it first, so it must work with any token", spec.Name, spec.Tier)
+		}
+	}
+	for _, want := range mayName {
+		if !slices.ContainsFunc(mcpserver.Catalog(), func(spec mcpserver.Spec) bool { return spec.Name == want }) {
+			t.Errorf("%s is not a tool of the catalog", want)
+		}
+	}
 	allowed := []string{"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 	for _, dir := range dirs {
 		raw, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
@@ -57,31 +69,43 @@ func TestSkillsNameRealToolsAtTheirTier(t *testing.T) {
 		if description := fields["description"]; description == "" || len(description) > 1024 {
 			t.Errorf("%s: description of %d characters, want 1 to 1024", skill, len(description))
 		}
-		if lines := strings.Count(string(raw), "\n"); lines > 500 {
-			t.Errorf("%s: %d lines; the spec asks for at most 500", skill, lines)
+		if lines := strings.Count(string(raw), "\n"); lines > 60 {
+			t.Errorf("%s: %d lines; a skill says what it is for and links the guides, at most 60 lines", skill, lines)
 		}
 
-		table := map[string]string{}
-		for _, match := range row.FindAllStringSubmatch(body, -1) {
-			table[match[1]] = match[2]
+		want := append([]string{"# "}, sections...)
+		got := heading.FindAllString(body, -1)
+		if len(got) != len(want) || !strings.HasPrefix(got[0], "# ") || !slices.Equal(got[1:], sections) {
+			t.Errorf("%s: headings %q; want a title, then exactly %q in that order", skill, got, sections)
 		}
-		if len(table) == 0 {
-			t.Errorf("%s has no Tools table of `tool` | tier rows", skill)
-		}
-		for _, used := range tool.FindAllString(body, -1) {
-			tier, real := tiers[used]
-			switch {
-			case !real:
-				t.Errorf("%s names %s, which is not a tool of the catalog", skill, used)
-			case table[used] == "":
-				t.Errorf("%s uses %s but its Tools table does not list it", skill, used)
-			case table[used] != tier:
-				t.Errorf("%s lists %s at tier %s; the catalog says %s", skill, used, table[used], tier)
+		seen := map[string]bool{}
+		for _, used := range tool.FindAllString(body+fields["description"], -1) {
+			if !seen[used] && !slices.Contains(mayName, used) {
+				seen[used] = true
+				t.Errorf("%s names %s: a skill names no tool but %v; tools, arguments and tiers come from colliedesk_whoami and the tool descriptions, so a change in Colliedesk never leaves a skill wrong", skill, used, mayName)
 			}
 		}
-		// The plugin follows main, a person's server may be older: every skill checks first.
-		if !strings.Contains(body, "Call `colliedesk_whoami`") || !strings.Contains(body, "tools_you_can_use") {
-			t.Errorf("%s must start from colliedesk_whoami and its tools_you_can_use", skill)
+		if !strings.Contains(body, "colliedesk_whoami") || !strings.Contains(body, "tools_you_can_use") {
+			t.Errorf("%s must start from colliedesk_whoami and its tools_you_can_use: a person's server may be older than the skill", skill)
+		}
+		_, reference, _ := strings.Cut(body, "## Reference")
+		links := link.FindAllStringSubmatch(body, -1)
+		if !link.MatchString(reference) {
+			t.Errorf("%s: its Reference section links no guide", skill)
+		}
+		for _, match := range links {
+			page := guide.FindStringSubmatch(match[1])
+			if page == nil {
+				t.Errorf("%s links %s; link only the Markdown twin of a colliedesk.com guide, https://colliedesk.com/docs/<page>.md, without an anchor", skill, match[1])
+				continue
+			}
+			source := filepath.Join("../../../docs/user", page[1]+".md")
+			if strings.HasPrefix(page[1], "self-host/") {
+				source = filepath.Join("../../../docs", page[1]+".md")
+			}
+			if _, err := os.Stat(source); err != nil {
+				t.Errorf("%s links %s, but %s does not exist: the page was renamed or removed", skill, match[1], source)
+			}
 		}
 	}
 }
