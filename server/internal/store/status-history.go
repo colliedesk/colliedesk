@@ -8,11 +8,12 @@ import (
 )
 
 // setStatusActor names who changes a conversation's status in the rest of tx, for the status
-// history trigger (migration 20261023110000-conversation-status-changes). An empty actor is no one:
-// a customer reply that reopens. Set it before every status write, so a change in the same
-// transaction never carries the previous writer's name or cause.
-func setStatusActor(ctx context.Context, tx pgx.Tx, actorID string) error {
-	return setStatusCause(ctx, tx, statusChange{ActorID: actorID})
+// history trigger (migration 20261023110000-conversation-status-changes): the person, and the token
+// when an AI agent's token makes it. An empty actor is no one: a customer reply that reopens. Set it
+// before every status write, so a change in the same transaction never carries the previous writer's
+// name or cause.
+func setStatusActor(ctx context.Context, tx pgx.Tx, actor Actor) error {
+	return setStatusCause(ctx, tx, statusChange{ActorID: actor.AgentID, TokenID: actor.TokenID, Cause: tokenCause(actor.TokenID)})
 }
 
 // statusChange is who changes a conversation's status, and how: the person, the token when an AI agent's

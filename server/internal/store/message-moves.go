@@ -190,7 +190,7 @@ func (s *Store) MoveMessages(ctx context.Context, workspaceID, fromID string, in
 			return MoveResult{}, err
 		}
 		if in.CloseSource {
-			if err := setStatusActor(ctx, tx, actor.AgentID); err != nil {
+			if err := setStatusActor(ctx, tx, actor); err != nil {
 				return MoveResult{}, err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE conversations SET status='closed',merged_into_id=$3,updated_at=$4 WHERE workspace_id=$1 AND id=$2`,
@@ -380,7 +380,7 @@ func moveIntoConversation(ctx context.Context, tx pgx.Tx, workspaceID string, so
 		return err
 	}
 	if !move.created && (target.status == "resolved" || target.status == "closed") {
-		if err := setStatusActor(ctx, tx, move.actor.AgentID); err != nil {
+		if err := setStatusActor(ctx, tx, move.actor); err != nil {
 			return err
 		}
 		move.targetStatus = target.status
@@ -619,7 +619,7 @@ func undoMove(ctx context.Context, tx pgx.Tx, workspaceID string, in undoInput, 
 	if err := relinkItems(ctx, tx, workspaceID, in.ids, in.toID, in.fromID, "agent", actor.AgentID, now); err != nil {
 		return err
 	}
-	if err := setStatusActor(ctx, tx, actor.AgentID); err != nil {
+	if err := setStatusActor(ctx, tx, actor); err != nil {
 		return err
 	}
 	// A status the move set comes back while nobody changed it since: the target is still open (its reopen

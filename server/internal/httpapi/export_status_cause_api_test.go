@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -97,6 +98,9 @@ func TestExportKeepsWhoChangedAStatusAndTheWorkspaceSettings(t *testing.T) {
 		if response := request(t, api, http.MethodPatch, "/api/v1/agents/me/sla-alerts", map[string]any{"email": false}, admin, nil); response.Code != http.StatusOK {
 			t.Fatalf("sla alerts: %d %s", response.Code, response.Body.String())
 		}
+		if response := request(t, api, http.MethodPatch, "/api/v1/agents/me/results-email", map[string]any{"weekly": false}, admin, nil); response.Code != http.StatusOK {
+			t.Fatalf("results email: %d %s", response.Code, response.Body.String())
+		}
 	}
 	settings(a.admin, 123)
 	settings(b.admin, 77)
@@ -111,6 +115,21 @@ func TestExportKeepsWhoChangedAStatusAndTheWorkspaceSettings(t *testing.T) {
 		}
 		if _, err := pool.Exec(ctx, `INSERT INTO workspace_migration_requests(workspace_id,requested_by,freshdesk_address,times,requested_at)
 			SELECT c.workspace_id,a.id,$2,'Mornings, Lisbon time','2026-10-02T10:00:00Z' FROM conversations c JOIN agents a ON a.workspace_id=c.workspace_id WHERE c.id=$1`, row.conversation, row.freshdesk); err != nil {
+			t.Fatal(err)
+		}
+		// Assigned by its admin, held over the Free quota, joined by a chat key and a reply token, and
+		// imported from Freshdesk.
+		if _, err := pool.Exec(ctx, `UPDATE conversations c SET assigned_at='2026-10-03T09:00:00Z',assigned_by_agent_id=a.id,held_at='2026-10-04T09:00:00Z'
+			FROM agents a WHERE a.workspace_id=c.workspace_id AND c.id=$1`, row.conversation); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO conversation_thread_keys(workspace_id,conversation_id,channel_type,key)
+			SELECT workspace_id,id,'email','reply-token:SECRET-'||$2 FROM conversations WHERE id=$1
+			UNION ALL SELECT workspace_id,id,$3,'user:'||$2 FROM conversations WHERE id=$1`, row.conversation, row.freshdesk, string(statusChat)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status,meta)
+			SELECT workspace_id,'freshdesk','ticket','ticket-'||$2,id,'done','{"kept":true}' FROM conversations WHERE id=$1`, row.conversation, row.freshdesk); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := pool.Exec(ctx, `INSERT INTO results_state(workspace_id,baseline_source,baseline_anchor_at,baseline_import_status,baseline_import_cause)
@@ -179,8 +198,27 @@ func TestExportKeepsWhoChangedAStatusAndTheWorkspaceSettings(t *testing.T) {
 		t.Fatalf("results-baselines.ndjson = %v", baselines)
 	}
 	agents := ndjsonLines(t, entries["agents.ndjson"])
-	if len(agents) != 1 || agents[0]["sla_alert_email"] != false {
+	if len(agents) != 1 || agents[0]["sla_alert_email"] != false || agents[0]["results_email"] != false {
 		t.Fatalf("agents.ndjson = %v", agents)
+	}
+	if conversations[0]["assigned_at"] != "2026-10-03T09:00:00Z" || conversations[0]["assigned_by_agent_id"] != agents[0]["id"] || conversations[0]["held_at"] != "2026-10-04T09:00:00Z" {
+		t.Fatalf("conversation assignment and hold = %v %v %v", conversations[0]["assigned_at"], conversations[0]["assigned_by_agent_id"], conversations[0]["held_at"])
+	}
+	keys := ndjsonLines(t, entries["conversation-thread-keys.ndjson"])
+	if len(keys) != 1 || keys[0]["conversation_id"] != a.conversation || keys[0]["channel_type"] != string(statusChat) || keys[0]["key"] != "user:cause-a.freshdesk.com" {
+		t.Fatalf("conversation-thread-keys.ndjson = %v", keys)
+	}
+	items := ndjsonLines(t, entries["import-items.ndjson"])
+	if len(items) != 1 || items[0]["source_id"] != "ticket-cause-a.freshdesk.com" || items[0]["target_id"] != a.conversation || items[0]["status"] != "done" {
+		t.Fatalf("import-items.ndjson = %v", items)
+	}
+	var manifest struct {
+		Workspace struct {
+			StatusHistorySince string `json:"status_history_since"`
+		} `json:"workspace"`
+	}
+	if err := json.Unmarshal(entries["manifest.json"], &manifest); err != nil || !strings.HasSuffix(manifest.Workspace.StatusHistorySince, "Z") {
+		t.Fatalf("manifest workspace = %s", entries["manifest.json"])
 	}
 
 	var all bytes.Buffer
@@ -188,9 +226,72 @@ func TestExportKeepsWhoChangedAStatusAndTheWorkspaceSettings(t *testing.T) {
 		all.WriteString(name + "\n")
 		all.Write(content)
 	}
-	for _, foreign := range []string{b.channel, b.conversation, b.draft, b.send, b.request, "cause-b", "Pacific/Auckland"} {
+	for _, foreign := range []string{b.channel, b.conversation, b.draft, b.send, b.request, "cause-b", "Pacific/Auckland", "SECRET-"} {
 		if strings.Contains(all.String(), foreign) {
-			t.Errorf("workspace A export contains %q of workspace B", foreign)
+			t.Errorf("workspace A export contains %q (of workspace B, or a reply token)", foreign)
+		}
+	}
+}
+
+// A token's work is the token's in the export: a move that closes the conversation it empties, the undo
+// that opens it again, and the note it writes all name the token, not only its owner.
+func TestExportNamesTheTokenThatMovedMessagesAndWroteANote(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Token Moves", "admin@token-moves.example.com")
+	secret := connectEmail(t, api, admin, "support@token-moves.example.com")
+	response := request(t, api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "Claude moves", "scope": "send"}, admin, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("token: %d %s", response.Code, response.Body.String())
+	}
+	var created struct {
+		Token string `json:"token"`
+	}
+	decode(t, response, &created)
+	tokenID := queryString(t, pool, `SELECT id::text FROM sessions WHERE label='Claude moves'`)
+	first := inboundOK(t, api, secret, mail([]string{"From: kim@customer.example", "To: support@token-moves.example.com", "Subject: Printer", "Message-ID: <kim-1@customer.example>"}, "It jams"))
+	second := inboundOK(t, api, secret, mail([]string{"From: lee@customer.example", "To: support@token-moves.example.com", "Subject: Printer too", "Message-ID: <lee-1@customer.example>"}, "Mine too"))
+	printer, lee := *first.ConversationID, *second.ConversationID
+	response = request(t, api, http.MethodPost, "/api/v1/conversations/"+lee+"/messages/move",
+		map[string]any{"message_ids": []string{*second.MessageID}, "to": map[string]any{"conversation_id": printer}, "close_source": true}, created.Token, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("move: %d %s", response.Code, response.Body.String())
+	}
+	var moved moveResponse
+	decode(t, response, &moved)
+	if response := request(t, api, http.MethodPost, "/api/v1/message-moves/"+moved.Move.ID+"/undo", nil, created.Token, nil); response.Code != http.StatusOK {
+		t.Fatalf("undo: %d %s", response.Code, response.Body.String())
+	}
+	_ = create(t, api, created.Token, "/api/v1/conversations/"+printer+"/messages", map[string]any{"kind": "note", "body": "Same printer as Lee."})
+
+	response = request(t, api, http.MethodGet, "/api/v1/export", nil, admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("export status=%d", response.Code)
+	}
+	for _, conversation := range ndjsonLines(t, unzip(t, response.Body.Bytes())["conversations.ndjson"]) {
+		if conversation["id"] == lee {
+			changes, _ := conversation["status_changes"].([]any)
+			if len(changes) != 2 {
+				t.Fatalf("lee's status changes = %v, want closed by the move and opened by the undo", changes)
+			}
+			for _, change := range changes {
+				if c := change.(map[string]any); c["cause"] != "token" || c["actor_token_id"] != tokenID {
+					t.Fatalf("lee's change = %v, want cause token, actor_token_id %s", c, tokenID)
+				}
+			}
+		}
+		if conversation["id"] == printer {
+			found := false
+			for _, message := range conversation["messages"].([]any) {
+				if m := message.(map[string]any); m["kind"] == "note" {
+					found = true
+					if m["agent_token_id"] != tokenID {
+						t.Fatalf("the token's note = %v, want agent_token_id %s", m, tokenID)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("the token's note is not exported")
+			}
 		}
 	}
 }

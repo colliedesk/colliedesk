@@ -20,6 +20,8 @@ type Agent struct {
 	CreatedAt        time.Time `json:"created_at"`
 	// SLAAlertEmail is whether the agent gets the response-target reminder and overdue emails.
 	SLAAlertEmail bool `json:"sla_alert_email"`
+	// ResultsEmail is whether the agent gets the weekly results email.
+	ResultsEmail bool `json:"results_email"`
 	// DeactivatedAt is null for an active agent. A deactivated agent stays in the archive because
 	// conversations and messages still name it.
 	DeactivatedAt *time.Time `json:"deactivated_at"`
@@ -229,6 +231,38 @@ type ChannelSender struct {
 	Role        string    `json:"role"`
 	LastAt      time.Time `json:"last_at"`
 	ThreadID    string    `json:"thread_id"`
+}
+
+// ConversationThreadKey is a key that joins a channel's next message to a conversation, such as a chat
+// user's or group's id; MessageID is the message that recorded it. Email reply tokens are never exported.
+type ConversationThreadKey struct {
+	ConversationID string    `json:"conversation_id"`
+	ChannelType    string    `json:"channel_type"`
+	Key            string    `json:"key"`
+	MessageID      *string   `json:"message_id"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// ImportItem is one line of an import's ledger: a record of the old helpdesk (source, entity, source_id)
+// and what the import did with it (target_id, status, error), so a later run and an undo know it.
+type ImportItem struct {
+	Source          string          `json:"source"`
+	Entity          string          `json:"entity"`
+	SourceID        string          `json:"source_id"`
+	ParentSourceID  *string         `json:"parent_source_id"`
+	TargetID        *string         `json:"target_id"`
+	Status          string          `json:"status"`
+	Error           string          `json:"error"`
+	SourceUpdatedAt *time.Time      `json:"source_updated_at"`
+	Meta            json.RawMessage `json:"meta"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// Workspace is the workspace in manifest.json. StatusHistorySince is when its status history became
+// complete: a resolution or reopen before it was never recorded.
+type Workspace struct {
+	domain.Workspace
+	StatusHistorySince time.Time `json:"status_history_since"`
 }
 
 // ConversationThreadItem says an item is, or was, part of a conversation, and how it came to it.
@@ -1023,10 +1057,14 @@ type Message struct {
 	// IntakeReplyKind is what intake said a chat message added to its conversation (acknowledgement:
 	// it kept a resolved conversation resolved).
 	IntakeReplyKind *string `json:"intake_reply_kind"`
-	// NoticeKind marks a reply the channel sent by itself (received), not one of the team.
-	NoticeKind  *string      `json:"notice_kind"`
-	CreatedAt   time.Time    `json:"created_at"`
-	Attachments []Attachment `json:"attachments"`
+	// NoticeKind marks a reply the channel sent by itself (received, a reopen or help answer, a status
+	// notice), not one of the team.
+	NoticeKind *string `json:"notice_kind"`
+	// AgentTokenID is the API token that wrote it (an AI agent's), with AuthorAgentID its owner; null
+	// for one a person wrote.
+	AgentTokenID *string      `json:"agent_token_id"`
+	CreatedAt    time.Time    `json:"created_at"`
+	Attachments  []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -1049,6 +1087,12 @@ type ConversationHead struct {
 	TagIDs       []string                   `json:"tag_ids"`
 	CreatedAt    time.Time                  `json:"created_at"`
 	UpdatedAt    time.Time                  `json:"updated_at"`
+	// AssignedAt and AssignedByAgentID are when and by whom it was last assigned; null when nobody did.
+	AssignedAt        *time.Time `json:"assigned_at"`
+	AssignedByAgentID *string    `json:"assigned_by_agent_id"`
+	// HeldAt is when it was held over the Free plan's monthly quota (hidden until an upgrade or the month
+	// ends); null when it is not held.
+	HeldAt *time.Time `json:"held_at"`
 	// NumberSeries, Number and NumberYear number it; DisplayRef is the code its customer saw.
 	NumberSeries string `json:"number_series"`
 	Number       int64  `json:"number"`
@@ -1100,10 +1144,10 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, AIAutomaticLimits*, ResponseTargets*, MigrationRequest*, AutofixInstallation*, AutofixRepo*, AutofixConnector*, Fix*, FixEvent*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, ImportItem*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, AIAutomaticLimits*, ResponseTargets*, MigrationRequest*, AutofixInstallation*, AutofixRepo*, AutofixConnector*, Fix*, FixEvent*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, ConversationThreadKey*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
-	Workspace(domain.Workspace) error
+	Workspace(Workspace) error
 	Agent(Agent) error
 	Contact(Contact) error
 	ContactMerge(ContactMerge) error
@@ -1122,6 +1166,7 @@ type Sink interface {
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error
 	ImportPerson(ImportPerson) error
+	ImportItem(ImportItem) error
 	AIProvider(AIProvider) error
 	AISlot(AISlot) error
 	AISettingsEvent(AISettingsEvent) error
@@ -1148,6 +1193,7 @@ type Sink interface {
 	ChannelSender(ChannelSender) error
 	NumberSeries(NumberSeries) error
 	ConversationThreadItem(ConversationThreadItem) error
+	ConversationThreadKey(ConversationThreadKey) error
 	IntakeGathering(IntakeGathering) error
 	IntakeDecision(IntakeDecision) error
 	IntakeEvalRun(IntakeEvalRun) error

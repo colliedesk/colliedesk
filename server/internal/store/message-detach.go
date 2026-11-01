@@ -139,7 +139,7 @@ func attachDetached(ctx context.Context, tx pgx.Tx, workspaceID string, ids []st
 		workspaceID, ids); err != nil {
 		return fmt.Errorf("conclude taken back chat items: %w", err)
 	}
-	if err := setStatusActor(ctx, tx, actor.AgentID); err != nil {
+	if err := setStatusActor(ctx, tx, actor); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN $4 AND status IN ('resolved','closed') THEN 'open' ELSE status END,updated_at=$3
