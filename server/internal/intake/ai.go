@@ -337,7 +337,7 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions, images []a
 	}
 	for _, c := range snap.Candidates {
 		out.Candidates = append(out.Candidates, prompt.Candidate{ConversationID: c.ConversationID, Status: c.Status, UpdatedAt: c.UpdatedAt, Subject: c.Subject,
-			LastMessage: c.LastMessage, Reporter: prompt.Person{Key: "contact:" + c.ContactID, Name: c.ContactName}})
+			LastMessage: c.LastMessage, Reporter: prompt.Person{Key: "contact:" + c.ContactID, Name: c.ContactName}, Ref: c.DisplayRef})
 	}
 	if snap.Contact != nil {
 		if consented("contact_profile") {

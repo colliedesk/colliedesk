@@ -105,6 +105,17 @@ func (c Context) Restore(text string) string {
 	return replaceWords(text, issuedLabelPattern, func(found string) (string, bool) { name, ok := c.names[found]; return name, ok })
 }
 
+var conversationLabelPattern = regexp.MustCompile(`C\d+`)
+
+// RestoreConversations puts what people call a conversation (its code) in place of the labels C1..Cn this
+// prompt offered, so no reason or subject shows a label that means nothing outside the prompt.
+func (c Context) RestoreConversations(text string) string {
+	if len(c.refs) == 0 {
+		return text
+	}
+	return replaceWords(text, conversationLabelPattern, func(found string) (string, bool) { ref, ok := c.refs[found]; return ref, ok })
+}
+
 // replaceWords replaces the matches of pattern that stand as whole words and that replacement approves.
 func replaceWords(text string, pattern *regexp.Regexp, replacement func(found string) (string, bool)) string {
 	var out strings.Builder

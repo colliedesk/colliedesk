@@ -116,7 +116,7 @@ func (c Context) Parse(raw string) (Answer, error) {
 		return Answer{}, fmt.Errorf("%w: confidence is not between 0 and 1", ErrInvalidAnswer)
 	}
 	answer := Answer{Action: wire.Action, Confidence: *wire.Confidence, ReplyKind: wire.ReplyKind,
-		Reason: clipTo(oneLine(c.Restore(wire.Reason)), MaxReason)}
+		Reason: clipTo(oneLine(c.RestoreConversations(c.Restore(wire.Reason))), MaxReason)}
 	if answer.ReplyKind != ReplyAcknowledgement {
 		answer.ReplyKind = ReplySubstantive
 	}
@@ -128,7 +128,7 @@ func (c Context) Parse(raw string) (Answer, error) {
 		}
 		answer.ConversationID = id
 	case ActionCreate:
-		answer.Subject = clipTo(oneLine(c.Restore(wire.Subject)), MaxSubject)
+		answer.Subject = clipTo(oneLine(c.RestoreConversations(c.Restore(wire.Subject))), MaxSubject)
 		if slices.Contains(c.Commands, wire.Command) {
 			answer.Command = wire.Command
 		}
