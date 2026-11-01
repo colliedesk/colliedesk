@@ -23,7 +23,7 @@ var ErrCompGrantConflict = errors.New("another change of this workspace's compli
 // compSubscriptionColumns reads a complimentary plan in the shape of subscriptionColumns: forever
 // reads as active, one with an end reads as canceled and paid until that end.
 const compSubscriptionColumns = `plan,'` + domain.CompSubscriptionPrefix + `' || id::text,'',
-	CASE WHEN until IS NULL THEN 'active' ELSE 'canceled' END,until,false,NULL::timestamptz,granted_at`
+	CASE WHEN until IS NULL THEN 'active' ELSE 'canceled' END,until,false,NULL::timestamptz,granted_at,''`
 
 // PreviousGrant describes the grant a new grant found in force.
 type PreviousGrant struct {
