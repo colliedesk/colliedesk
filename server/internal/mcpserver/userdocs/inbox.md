@@ -92,13 +92,13 @@ conversations with any of them; each filter you add narrows the list further.
 - **Needs attention**: **Waiting on us** (the newest message that is not a private note came from the
   customer) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
   Reply drafts that wait for approval are on the [Requests](agent-requests.md) page.
-- **Channel**: how the conversation started. **Email**, **Web form** and **Help chat** are listed once the
-  workspace has a channel of that type. **Imported** (from another helpdesk) and **Started by the team**
+- **Channel**: how the conversation started. **Email**, **Web form**, **Help chat** and **Zalo OA** are
+  listed once the workspace has a channel of that type. **Imported** (from another helpdesk) and **Started by the team**
   (created in Colliedesk by a teammate or an agent token) are always listed.
   Conversations that existed before channels were recorded got theirs from their first message; one
   without a message from the customer first counts as started by the team.
-- **Email channels**, **Web form channels**: shown when the workspace has two or more channels of that
-  type. Each one lists the conversations that came through it or whose replies leave from it. The chip
+- **Email channels**, **Web form channels**, **Zalo OA channels**: shown when the workspace has two or
+  more live channels of that type. Each one lists the conversations that came through it or whose replies leave from it. The chip
   names the channel, with "(removed)" for a channel that was removed. In an address it is
   `?channel_id=<id>`, which **Settings → Channels** links use.
 - **All conversations of** *name* in the conversation details shows that customer's conversations in
@@ -163,6 +163,10 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - If your browser blocked notifications for this site, the checkbox is disabled and the section says so;
   allow them in the browser's site settings, then reload the page. The list refresh and the title count keep working.
 - Colliedesk does not email agents about new or assigned conversations.
+
+**Light or dark**
+- **Theme** in **Settings → Preferences** switches between **Light** (the default) and **Dark**. It is
+  stored in this browser only; other tabs you have open follow at once.
 
 **See who else is on a conversation**
 - A row in the list shows the initials of the teammates who have that conversation open right now,

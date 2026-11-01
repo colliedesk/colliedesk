@@ -55,7 +55,7 @@ several servers and even after the conversation was Pending and opened again (wh
 Turn yours off under Settings → Response targets (`PATCH /api/v1/agents/me/sla-alerts`, MCP
 `colliedesk_my_sla_alerts_set`); an admin turns them off for everyone (`alert_email`). A conversation shows
 the emails its clocks sent (`sla.alerts`). They go from the platform address of a server that sends mail
-(SMTP and `MAIL_FROM_DOMAIN`, docs/self-host); without one nothing is emailed, and the inbox still shows
+(SMTP and `MAIL_FROM_DOMAIN`, [self-host email](../self-host/email.md)); without one nothing is emailed, and the inbox still shows
 what is due. A conversation that came in already past a threshold (an import) is not emailed for it, nor
 is a threshold reached while the emails or the targets were off: turning them back on sends nothing late,
 and the inbox still shows it overdue.
