@@ -347,6 +347,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 			body: map[string]any{"message_ids": []string{"00000000-0000-4000-8000-000000000000"}, "to": map[string]any{"new": map[string]any{"subject": "Split"}}}, token: admin, status: 400},
 		"GET /api/v1/conversations/{id}/message-moves":            {path: "/api/v1/conversations/" + f.conversationID + "/message-moves", token: admin, status: 200},
 		"POST /api/v1/message-moves/{id}/undo":                    {path: "/api/v1/message-moves/00000000-0000-4000-8000-000000000000/undo", token: admin, status: 404},
+		"POST /api/v1/billing/migration-request":                  {path: "/api/v1/billing/migration-request", body: map[string]any{"freshdesk_address": "contract.freshdesk.com"}, token: admin, status: 200},
 		"DELETE /api/v1/ai/source-consents/{class}":               {path: "/api/v1/ai/source-consents/images", token: admin, status: 200},
 		"GET /api/v1/channels/{id}/email":                         {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email", token: admin, status: 200},
 		"GET /api/v1/channels/{id}/email/forwarding-confirmation": {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/forwarding-confirmation", token: admin, status: 404},

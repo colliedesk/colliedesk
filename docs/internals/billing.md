@@ -73,6 +73,15 @@ the API.
   paid, so cancelling or revoking the spare never drops the plan while the other still charges.
   `GET /api/v1/billing` returns `active_subscriptions`, and the page tells the admin to cancel the
   extra one when it is above 1.
+- **The product is kept, the price is read from it.** `workspace_billing.polar_product_id` holds the
+  Polar product the subscription runs on (a plan switch in the portal sends the new product, so it follows).
+  `GET /api/v1/billing` turns it into `purchased_plan`, a checkout plan name such as `team25_yearly`
+  (`polar.Products.CheckoutPlanOf`, the inverse of checkout's name-to-product table), and the web app
+  reads the price of the Plan row from `plan-options.ts` with it. It is null for a complimentary plan,
+  for a product no longer on sale (it may have sold at another price) and for a row stored before the
+  column existed; the page then shows the plan name and the charge date without a price. A second
+  period of one plan (a yearly Founding) needs only its product, its checkout name and its price.
+  The next subscription event or `collie billing reconcile` fills a row that has no product.
 - **Unknown means 200, and a warning.** An unknown workspace, a non-UUID or missing external id, a
   product we do not sell and a non-subscription event all return 200 `ignored` and store nothing.
   Polar stops retrying, and the endpoint reveals nothing about which workspaces exist. A
@@ -537,8 +546,9 @@ same `POLAR_*` variables as `serve` (and `BILLING_ALERT_EMAIL`, `SMTP_*`, `MAIL_
 - Write path: `store.ApplySubscription`, the webhook's own path. The same rule orders both: a row is
   replaced only by a subscription whose `modified_at` is not older, so a late reconcile cannot undo a
   newer webhook and a late webhook cannot undo a newer reconcile. The webhook id recorded is
-  `reconcile:<subscription>:<modified_at>`, so running twice applies once.
-- Applied: Polar's `modified_at` is newer than the stored `source_modified_at`, or the subscription
+  `reconcile:<subscription>:<modified_at>:<product>`, so running twice applies once.
+- Applied: Polar's `modified_at` is newer than the stored `source_modified_at`, the same but the stored
+  row has no product yet (a row from before `polar_product_id`), or the subscription
   is paid at Polar and was never stored. A subscription that was never stored and grants nothing
   (ended, unpaid) is skipped.
 - Reported, never written: an `active` or `past_due` subscription with no workspace (no external id,

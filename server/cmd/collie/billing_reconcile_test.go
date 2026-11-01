@@ -123,13 +123,31 @@ func newReconcileEnv(t *testing.T, name string, pages ...[]map[string]any) *reco
 // seed stores a subscription the way a webhook would have.
 func (e *reconcileEnv) seed(subscriptionID, status, modifiedAt string) {
 	e.t.Helper()
+	e.seedAs("seed-"+subscriptionID+"-"+modifiedAt, subscriptionID, status, modifiedAt, "prod_team_m")
+}
+
+// seedAs stores a subscription under the given webhook id and product ("" is a row written before the
+// product id was kept).
+func (e *reconcileEnv) seedAs(webhookID, subscriptionID, status, modifiedAt, productID string) {
+	e.t.Helper()
 	modified := mustTime(e.t, modifiedAt)
 	end := mustTime(e.t, "2026-11-16T00:00:00Z")
-	result, err := store.New(e.pool).ApplySubscription(context.Background(), e.workspaceID, "seed-"+subscriptionID+"-"+modifiedAt, "subscription.updated",
-		domain.Subscription{Plan: domain.PlanTeam, SubscriptionID: subscriptionID, CustomerID: "cus_" + subscriptionID, Status: status, CurrentPeriodEnd: &end, ModifiedAt: modified})
+	result, err := store.New(e.pool).ApplySubscription(context.Background(), e.workspaceID, webhookID, "subscription.updated",
+		domain.Subscription{Plan: domain.PlanTeam, SubscriptionID: subscriptionID, CustomerID: "cus_" + subscriptionID, ProductID: productID, Status: status, CurrentPeriodEnd: &end, ModifiedAt: modified})
 	if err != nil || result != store.SubscriptionApplied {
 		e.t.Fatalf("seed %s: result %q err %v", subscriptionID, result, err)
 	}
+}
+
+// storedProduct is the Polar product id kept for a subscription of the workspace.
+func (e *reconcileEnv) storedProduct(subscriptionID string) string {
+	e.t.Helper()
+	var product string
+	if err := e.pool.QueryRow(context.Background(), `SELECT polar_product_id FROM workspace_billing WHERE workspace_id=$1 AND polar_subscription_id=$2`,
+		e.workspaceID, subscriptionID).Scan(&product); err != nil {
+		e.t.Fatal(err)
+	}
+	return product
 }
 
 func (e *reconcileEnv) billing() domain.Billing {
@@ -204,6 +222,36 @@ func TestReconcileInSyncChangesNothingAndSendsNoMail(t *testing.T) {
 	}
 	if got := env.billing(); got.Plan != domain.PlanTeam || got.Status != "active" {
 		t.Fatalf("plan=%q status=%q, want team and active", got.Plan, got.Status)
+	}
+}
+
+func TestReconcileFillsTheProductOfARowStoredBeforeItWasKept(t *testing.T) {
+	env := newReconcileEnv(t, "Legacy Row")
+	// The first row came from a webhook, the second from a reconcile run of an earlier release: both
+	// carry the state Polar still holds, so only the missing product tells them from Polar's copy.
+	env.seedAs("seed-sub_webhook-old", "sub_webhook", "active", "2026-10-16T10:00:00Z", "")
+	env.seedAs("reconcile:sub_reconciled:2026-10-16T10:00:00Z", "sub_reconciled", "active", "2026-10-16T10:00:00Z", "")
+	env.polar.pages = [][]map[string]any{{
+		polarSub("sub_webhook", "active", "prod_team_y", env.workspaceID, "2026-10-16T10:00:00Z", nil),
+		polarSub("sub_reconciled", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil),
+	}}
+	if got := env.storedProduct("sub_reconciled"); got != "" {
+		t.Fatalf("setup: product=%q, want a row with none", got)
+	}
+
+	output := env.mustRun("billing", "reconcile")
+
+	if !strings.Contains(output, "2 applied") {
+		t.Fatalf("want both rows with no product applied:\n%s", output)
+	}
+	for subscription, want := range map[string]string{"sub_webhook": "prod_team_y", "sub_reconciled": "prod_team_m"} {
+		if got := env.storedProduct(subscription); got != want {
+			t.Fatalf("product of %s after reconcile=%q, want %q", subscription, got, want)
+		}
+	}
+	// The next run finds nothing to do.
+	if second := env.mustRun("billing", "reconcile"); !strings.Contains(second, "in sync") {
+		t.Fatalf("second run:\n%s", second)
 	}
 }
 

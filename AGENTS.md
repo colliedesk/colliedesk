@@ -23,6 +23,15 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink (ceilings in the test).
    `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
    `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
+7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
+   A person finishes the task in the fewest steps and screens, and every screen says the next step.
+   An AI agent finishes the same task in the fewest MCP calls: a tool's name and description say
+   when to use it, answers carry names and not only ids, and a refused or invalid call says how to
+   fix it. A PR that adds or changes a feature states both counts (person steps, agent calls),
+   before and after. Gates: `TestEveryToolHasADocSentence`, `TestLookupToolsReturnNamesNotJustIDs`,
+   `TestToolArgumentsAreValidatedAgainstTheSchema`,
+   `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
+   the onboarding journeys below; agent journeys with call budgets are tracked in #374.
 
 ## Glossary
 
@@ -153,6 +162,10 @@ the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; foll
   from ROADMAP.md in the same PR (or move it under Now without the link). CI fails otherwise.
 - **Adding to the roadmap:** link the issue and label it to match the section:
   `gh issue edit N --add-label planned` for Next/Then, `accepted` for Later.
+- **Milestones are goals.** Each is titled `Goal: …` with a measurable "Done when". When one closes,
+  AGENTS.md records what it made true: each guarantee becomes a rule naming its gate, and text it
+  made stale is updated. `milestone-agents-md.yml` opens that issue, assigned to whoever closed the
+  milestone; the PR that updates AGENTS.md closes it.
 - **New ideas from users** belong in Discussions → Ideas, not Issues. When a maintainer accepts
   one, open an issue that links the discussion.
 - Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
