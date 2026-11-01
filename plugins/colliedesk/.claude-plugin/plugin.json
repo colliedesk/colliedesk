@@ -20,7 +20,7 @@
     "token": {
       "type": "string",
       "title": "Agent token",
-      "description": "Create one in Colliedesk under Settings → Sessions. It starts with cdk_agent_.",
+      "description": "Create one in Colliedesk under Settings → External AI agents. It starts with cdk_agent_.",
       "sensitive": true,
       "required": true
     }

@@ -14,7 +14,7 @@ token=$(cat)
 
 usage() {
   echo "$1"
-  echo "Usage: /colliedesk-token cdk_agent_... (create the token in Colliedesk under Settings → Sessions)."
+  echo "Usage: /colliedesk-token cdk_agent_... (create the token in Colliedesk under Settings → External AI agents)."
   exit 0
 }
 
@@ -63,7 +63,7 @@ case $status in
 2??) ;;
 401 | 403)
   echo "Colliedesk refused this token (revoked, expired or from another workspace). Nothing was saved."
-  echo "Create a new one under Settings → Sessions and run /colliedesk-token again."
+  echo "Create a new one under Settings → External AI agents and run /colliedesk-token again."
   exit 0
   ;;
 000)

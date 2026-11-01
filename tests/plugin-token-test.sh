@@ -56,6 +56,7 @@ for status in 401 403; do
   run "$status" "$URL" "$TOKEN"
   saved && fail "a refused token ($status) was saved"
   grep -qi "refused" "$WORK/out" || fail "a refused token ($status) is not explained"
+  grep -q "Settings → External AI agents" "$WORK/out" || fail "does not say where to create a token ($status)"
   leaked && fail "token printed ($status)"
 done
 
@@ -72,6 +73,7 @@ cdk_agent_def"; do
   saved && fail "saved \"$bad\""
   [ -f "$WORK/curl.args" ] && fail "checked \"$bad\" against the server"
   grep -q "/colliedesk-token cdk_agent_" "$WORK/out" || fail "no usage for \"$bad\""
+  grep -q "Settings → External AI agents" "$WORK/out" || fail "usage does not say where to create a token"
   [ -e "$WORK/injected" ] && fail "ran a command from \"$bad\""
 done
 
