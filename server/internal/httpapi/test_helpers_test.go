@@ -110,10 +110,14 @@ func testAPIOnPool(t *testing.T, pool *pgxpool.Pool, mutate func(*httpapi.Config
 		FromPolicy:        email.FromPolicyAny,
 		TrustedAuthServID: "mx.example.net",
 	}}
+	// A custom domain's address is opened on the API's own help center, never on the network.
+	var server *httpapi.Server
+	config.HelpCenterAddressTransport = servedBy(func() http.Handler { return helpCenterSite(server) })
 	if mutate != nil {
 		mutate(&config)
 	}
-	return httpapi.New(pool, config), auth.New(pool, testOrigin), pool, dns
+	server = httpapi.New(pool, config)
+	return server, auth.New(pool, testOrigin), pool, dns
 }
 
 // testAPIWithStorage is testAPIWithConfig with local-disk attachment storage.

@@ -212,6 +212,9 @@ func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
 var (
 	lookupCNAME func(ctx context.Context, host string) (string, error)
 	lookupTXT   func(ctx context.Context, name string) ([]string, error)
+	// helpCenterAddressTransport opens a custom domain's address after its DNS check; nil dials public
+	// addresses only. End-to-end builds reach the local server instead (e2e_dns.go).
+	helpCenterAddressTransport http.RoundTripper
 )
 
 // recheckHelpCenterDomainsDaily looks up the DNS of every active custom help center domain at start

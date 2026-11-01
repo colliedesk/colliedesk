@@ -46,6 +46,11 @@ type HelpCenterDomain struct {
 	// PendingReason says why an active domain went back to pending (HelpCenterDomainProofLost,
 	// HelpCenterDomainTakenOver); nil otherwise.
 	PendingReason *string
+	// AddressCheckedAt is when a check last opened the help center's address on the domain, after DNS
+	// proved the claim; AddressError the plain cause when the answer was not this help center's. Both
+	// are nil while no check opened it (pending, a check DNS did not prove, a help center not served there).
+	AddressCheckedAt *time.Time
+	AddressError     *string
 }
 
 // HelpCenterDomainProof is what DNS showed for a host name in one check: the claim its CNAME chain

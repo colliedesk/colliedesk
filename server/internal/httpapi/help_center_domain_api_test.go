@@ -33,6 +33,9 @@ type domainView struct {
 	CheckedAt              *string            `json:"checked_at"`
 	CheckError             *string            `json:"check_error"`
 	CertificateRequestedAt *string            `json:"certificate_requested_at"`
+	AddressURL             *string            `json:"address_url"`
+	AddressCheckedAt       *string            `json:"address_checked_at"`
+	AddressError           *string            `json:"address_error"`
 }
 
 // token is the TXT record's value: the proof a workspace owns the host name.

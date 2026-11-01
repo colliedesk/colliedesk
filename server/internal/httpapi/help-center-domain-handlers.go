@@ -20,6 +20,9 @@ const (
 	helpCenterLiveCheckTimeout = 2 * time.Second
 	// helpCenterRecheckTimeout bounds each domain's daily re-check.
 	helpCenterRecheckTimeout = 5 * time.Second
+	// helpCenterAddressTimeout bounds opening the help center's address after a check DNS proved: long
+	// enough for the reverse proxy to get the domain's certificate on the first visit.
+	helpCenterAddressTimeout = 8 * time.Second
 	// Live checks of the certificate question: at most this many at once, one per host name per
 	// back-off, and this many host names remembered.
 	helpCenterLiveChecks       = 4
@@ -40,6 +43,9 @@ type helpCenterDomainView struct {
 	FailingSince           *time.Time                `json:"failing_since"`
 	PendingReason          *string                   `json:"pending_reason"`
 	AwaitingPayment        bool                      `json:"awaiting_payment"`
+	AddressURL             *string                   `json:"address_url"`
+	AddressCheckedAt       *time.Time                `json:"address_checked_at"`
+	AddressError           *string                   `json:"address_error"`
 }
 
 // awaitingPayment reports whether the workspace's custom domain waits for a paid plan before it serves:
@@ -53,11 +59,17 @@ func noHelpCenterDomain(access domain.Access) helpCenterDomainView {
 }
 
 func (a *API) helpCenterDomainView(d domain.HelpCenterDomain, access domain.Access) helpCenterDomainView {
-	host, created := d.Hostname, d.CreatedAt
-	return helpCenterDomainView{Hostname: &host, Status: d.Status,
+	host, created, address := d.Hostname, d.CreatedAt, a.domainAddress(d.Hostname)
+	return helpCenterDomainView{Hostname: &host, Status: d.Status, AddressURL: &address, AddressCheckedAt: d.AddressCheckedAt, AddressError: d.AddressError,
 		Records:   helpcenter.Records(d.Hostname, d.Claim, d.Token, a.config.Origin, a.config.HelpCenterDomain),
 		CreatedAt: &created, VerifiedAt: d.VerifiedAt, CheckedAt: d.CheckedAt, CheckError: d.CheckError, CertificateRequestedAt: d.CertificateRequestedAt,
 		FailingSince: d.FailingSince, PendingReason: d.PendingReason, AwaitingPayment: awaitingPayment(access)}
+}
+
+// domainAddress is the help center's address on the custom domain host, as the API hands it out once the
+// domain is active: the scheme and port of APP_ORIGIN, so a server without TLS opens it over http.
+func (a *API) domainAddress(host string) string {
+	return helpcenter.SiteURL(a.config.Origin, a.config.HelpCenterDomain, "", host)
 }
 
 func (a *API) resolvers() helpcenter.Resolvers {
@@ -159,9 +171,9 @@ func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http
 	writeJSON(response, http.StatusOK, noHelpCenterDomain(principal(request).Access))
 }
 
-// checkHelpCenterDomain looks the custom domain up in DNS now and records the result. Every check
-// makes the server ask DNS, so one workspace's checks share the hourly bound of the email domain
-// check, whether a person or an agent token asks.
+// checkHelpCenterDomain looks the custom domain up in DNS now, opens its address once DNS proves it
+// (checkAddress) and records the results. Every check makes the server ask DNS, so one workspace's
+// checks share the hourly bound of the email domain check, whether a person or an agent token asks.
 func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
 	if a.askUnlessHeld(response, request, Route{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
 		return
@@ -182,7 +194,10 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 		writeError(response, http.StatusNotFound, "not_found", "No custom domain is set.")
 		return
 	}
-	_, err = a.recordCheck(ctx, who.Workspace.ID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterDomainCheckTimeout), false)
+	after, err := a.recordCheck(ctx, who.Workspace.ID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterDomainCheckTimeout), false)
+	if err == nil {
+		err = a.checkAddress(ctx, who.Workspace.ID, after)
+	}
 	switch {
 	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
 		writeDomainTaken(response)
@@ -217,6 +232,40 @@ func (a *API) recordCheck(ctx context.Context, workspaceID string, current domai
 		a.helpCenter.ForgetDomain(released, current.Hostname, "")
 	}
 	return after, err
+}
+
+// checkAddress opens the help center's address on the workspace's custom domain d, as a visitor would,
+// and records what it showed. It runs only after a check whose DNS proved the claim (so the name points
+// at this service, never at a name the workspace does not control) and while the help center serves
+// there (open and paid); otherwise it clears an earlier result. Like the DNS check, only a check a person
+// or an agent asks for (rate limited) and the daily re-check get here. What the network answered stays
+// in the server's log.
+func (a *API) checkAddress(ctx context.Context, workspaceID string, d domain.HelpCenterDomain) error {
+	var at *time.Time
+	var failure *string
+	if d.Status == domain.HelpCenterDomainActive && d.CheckError == nil {
+		site, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
+		if open && site.CustomHost == d.Hostname {
+			opened := a.now()
+			check, cancel := context.WithTimeout(ctx, helpCenterAddressTimeout)
+			err := helpcenter.CheckAddress(check, a.config.HelpCenterAddressTransport, a.domainAddress(d.Hostname), workspaceID, d.Hostname)
+			cancel()
+			at = &opened
+			if err != nil {
+				slog.Info("help center address did not open", "workspace_id", workspaceID, "hostname", d.Hostname, "error", errors.Unwrap(err))
+				message := err.Error()
+				failure = &message
+			}
+		}
+	}
+	if at == nil && d.AddressCheckedAt == nil {
+		return nil
+	}
+	_, err := a.store.RecordHelpCenterAddressCheck(ctx, workspaceID, d.Claim, at, failure)
+	return err
 }
 
 // certifyClaimHost reports whether the reverse proxy may get a certificate for a claim's CNAME target
@@ -316,6 +365,9 @@ func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed,
 			continue
 		}
 		after, err := a.recordCheck(ctx, workspaceID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterRecheckTimeout), false)
+		if err == nil {
+			err = a.checkAddress(ctx, workspaceID, after)
+		}
 		if errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
 		}

@@ -10592,7 +10592,7 @@ components:
             slug addresses, and links to the old slug stop working.
     HelpCenterDomain:
       type: object
-      required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason, awaiting_payment]
+      required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason, awaiting_payment, address_url, address_checked_at, address_error]
       properties:
         hostname: {type: [string, 'null'], description: 'The custom host name in ASCII (punycode) form; null when none is set.'}
         status:
@@ -10631,6 +10631,25 @@ components:
             but the help center serves on it, and the reverse proxy gets its certificate, only once the
             workspace is paid. Until then the help center stays on its own address. Always false on a server
             without billing.
+        address_url:
+          type: [string, 'null']
+          description: >-
+            The help center's address on this host name, such as https://help.example.com (the scheme and port
+            of the app's own address, so http on a server without TLS); null when no domain is set.
+        address_checked_at:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            When a check last opened `address_url` as a visitor would, after DNS proved the domain while the
+            help center serves there (the button and the daily re-check). Behind TLS the first one also gets the
+            domain its certificate. Null while no check opened it: pending, a check DNS did not prove, the help
+            center off, or `awaiting_payment`.
+        address_error:
+          type: [string, 'null']
+          description: >-
+            Why `address_url` did not open with this help center at `address_checked_at`, and what to do: no
+            valid certificate yet, another server answers on the name, no answer in time, or not reachable. Null
+            when it opened (the answer proved it came from this workspace's help center) or was not opened.
     HelpCenterDomainRecord:
       type: object
       required: [type, name, value, purpose]

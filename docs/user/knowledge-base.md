@@ -467,6 +467,23 @@ checks and removes it.
 
 The certificate (`https://`) is issued automatically the first time someone opens the address.
 
+**Does the address really open?** When a check finds the records and the help center serves on the
+domain, the server then opens the address once, as a visitor would. That first visit also gets the
+certificate issued, so your first real visitor does not wait. The line under the state shows the result:
+
+- *HTTPS works: https://help.example.com opens this help center.* Everything is in place.
+- *… has no valid certificate yet …*: the certificate is not issued yet. Press **Check now** again in a
+  minute. If it still fails on a server you run yourself, its reverse proxy cannot get a certificate
+  for the name.
+- *… answers, but not with this help center …*: another server answers on the name, for example an
+  old DNS record or a proxy such as a CDN in front of it. Point the name at Colliedesk only.
+- *… did not answer in time* or *… could not be reached*: check that the name points at Colliedesk
+  and press **Check now** again.
+
+The daily check opens the address too and updates the line. A server without TLS opens it over
+`http://`, and the line does not mention HTTPS. During the trial the address is not opened, since the
+help center does not serve there yet.
+
 **Moving from Freshdesk: verify by TXT first, then change the CNAME.** Add only the `TXT` record and
 press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Change the
 `CNAME` afterwards, to the target the card shows. The domain is already verified, so the first visit
@@ -498,7 +515,7 @@ to serve on the domain again.
   record is still there), **Check now** says the name is taken. In the same way, if another workspace
   proves your domain while your records are gone, the domain moves there, and your card says so.
 - **Check now** can run 10 times an hour per workspace (people and AI agents together); the server
-  asks DNS each time.
+  asks DNS each time, and opens the address only after DNS proves the domain is yours.
 - **Refused names:** an IP address, a single word such as `help`, more than 253 characters, the
   Colliedesk address itself, and names below it. A name with accents, such as `hilfe.bücher.de`, is
   stored in its ASCII form (`hilfe.xn--bcher-kva.de`), which is the form DNS uses.

@@ -7245,6 +7245,15 @@ export interface components {
             pending_reason: "proof_lost" | "taken_over" | null;
             /** @description True while the workspace is on its trial or locked after it: the domain can be set and verified, but the help center serves on it, and the reverse proxy gets its certificate, only once the workspace is paid. Until then the help center stays on its own address. Always false on a server without billing. */
             awaiting_payment: boolean;
+            /** @description The help center's address on this host name, such as https://help.example.com (the scheme and port of the app's own address, so http on a server without TLS); null when no domain is set. */
+            address_url: string | null;
+            /**
+             * Format: date-time
+             * @description When a check last opened `address_url` as a visitor would, after DNS proved the domain while the help center serves there (the button and the daily re-check). Behind TLS the first one also gets the domain its certificate. Null while no check opened it: pending, a check DNS did not prove, the help center off, or `awaiting_payment`.
+             */
+            address_checked_at: string | null;
+            /** @description Why `address_url` did not open with this help center at `address_checked_at`, and what to do: no valid certificate yet, another server answers on the name, no answer in time, or not reachable. Null when it opened (the answer proved it came from this workspace's help center) or was not opened. */
+            address_error: string | null;
         };
         HelpCenterDomainRecord: {
             /** @enum {string} */
