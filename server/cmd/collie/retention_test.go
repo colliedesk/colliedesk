@@ -32,13 +32,16 @@ func TestRetentionRefusesOnAnInstanceWithoutBilling(t *testing.T) {
 
 func TestRetentionPlanListsDueWorkspacesAndChangesNothing(t *testing.T) {
 	env := newTrialEnv(t, "Old Shop")
-	env.mustRun("trial", "set", "--workspace", "old-shop", "--ends", "2026-11-01T00:00:00Z")
-	service := retention.New(retention.Config{DB: database.New(env.pool), Now: func() time.Time { return time.Date(2027, 10, 2, 0, 0, 0, 0, time.UTC) }})
+	// The dates are far ahead of the real clock: "trial set" records its change at the real time, and a
+	// lock never starts before the last trial change, so a trial end the real clock has passed (this test
+	// held 2026-11-01 and failed from that day) moves the lock start and the notice is no longer due.
+	env.mustRun("trial", "set", "--workspace", "old-shop", "--ends", "2036-11-01T00:00:00Z")
+	service := retention.New(retention.Config{DB: database.New(env.pool), Now: func() time.Time { return time.Date(2037, 10, 2, 0, 0, 0, 0, time.UTC) }})
 	var output bytes.Buffer
 	if err := runRetention(context.Background(), service, false, &output); err != nil {
 		t.Fatal(err)
 	}
-	want := "notice\told-shop\t" + env.workspaceID + "\tlocked_since=2026-11-01T00:00:00Z\tnotice_at=2027-10-02T00:00:00Z\tdelete_at=2027-11-01T00:00:00Z\n"
+	want := "notice\told-shop\t" + env.workspaceID + "\tlocked_since=2036-11-01T00:00:00Z\tnotice_at=2037-10-02T00:00:00Z\tdelete_at=2037-11-01T00:00:00Z\n"
 	if !strings.Contains(output.String(), want) || !strings.Contains(output.String(), "workspace(s) to act on") {
 		t.Fatalf("plan output:\n%s\nwant a line %q", output.String(), want)
 	}
