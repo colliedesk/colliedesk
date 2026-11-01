@@ -209,7 +209,8 @@ const (
 
 // notApplied is why AI's decision is not applied on its own, "" when it is: only at auto, on a card that
 // waits for it, through an open gate, sure enough, about what it could read without a credential, soon
-// enough, and for attach the one conversation of the customer it could mean. Whether that conversation is
+// enough, and for attach, when the scope asks for it (attach_requires_single_candidate), while the customer has
+// at most one unresolved conversation among the candidates, however sure AI is. Whether that conversation is
 // still one the card may join is checked when the decision is applied (store.ErrNotACandidate).
 func (s *Service) notApplied(ctx context.Context, workspaceID, model string, snap store.IntakeSnapshot, options ai.IntakeOptions, built prompt.Context, d Decision, code string) string {
 	g := snap.Gathering

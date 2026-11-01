@@ -390,7 +390,7 @@ const (
 	intakeOptionsInput  = `"options":{"type":"object","additionalProperties":false,"description":"Intake only; a field left out keeps its default.","properties":{` +
 		`"create_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.85."},"attach_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.90."},` +
 		`"ignore_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.95."},` +
-		`"attach_requires_single_candidate":{"type":"boolean","description":"Never attach by itself while the customer has two or more open conversations it hesitates between. Default true."},` +
+		`"attach_requires_single_candidate":{"type":"boolean","description":"Never attach by itself while the customer has two or more unresolved conversations among the candidates, however sure AI is (not_applied_reason several_candidates). Default false: AI sure enough attaches to the conversation it names."},` +
 		`"auto_max_age_seconds":{"type":"integer","minimum":60,"maximum":86400,"description":"Older batches are only suggested. Default 7200."},` +
 		`"reopen_window_days":{"type":"integer","minimum":0,"maximum":90,"description":"How long a resolved conversation stays a candidate. Default 7."},` +
 		`"sources":{"type":"object","additionalProperties":{"type":"boolean"},"description":"Context sources on or off: incoming, thread_window, open_conversations, corrections (off by default), contact, kb, images."},` +

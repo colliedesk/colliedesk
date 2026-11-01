@@ -64,7 +64,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     create_threshold: saved.create_threshold?.toString() ?? '', attach_threshold: saved.attach_threshold?.toString() ?? '',
     ignore_threshold: saved.ignore_threshold?.toString() ?? '',
     reopen: saved.reopen_window_days?.toString() ?? '', age: saved.auto_max_age_seconds === undefined ? '' : String(Math.round(saved.auto_max_age_seconds / 60)),
-    single: saved.attach_requires_single_candidate ?? true, sources: { ...(saved.sources ?? {}) }, instructions: saved.instructions ?? '',
+    single: saved.attach_requires_single_candidate ?? false, sources: { ...(saved.sources ?? {}) }, instructions: saved.instructions ?? '',
     patterns: (saved.redact_patterns ?? []).map((item) => ({ ...item })),
     keywords: (saved.redact_keywords ?? []).join('\n'), accounts: (saved.contact_labels?.account ?? []).join('\n'), ids: (saved.contact_labels?.id ?? []).join('\n'),
   }));
@@ -80,7 +80,8 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     event.preventDefault();
     const next: IntakeOptions = Object.fromEntries(Object.entries(saved).filter(([key]) => !edited.includes(key)));
     for (const item of thresholds) { const value = number(values[item.key]); if (value !== undefined) next[item.key] = value; }
-    if (!values.single) next.attach_requires_single_candidate = false;
+    // Off by default: only a ticked box is saved.
+    if (values.single) next.attach_requires_single_candidate = true;
     if (number(values.reopen) !== undefined) next.reopen_window_days = number(values.reopen);
     // Shown in whole minutes: a value set in seconds goes back as it was unless the field was changed.
     if (ageTouched && number(values.age) !== undefined) next.auto_max_age_seconds = Math.round((number(values.age) ?? 0) * 60);

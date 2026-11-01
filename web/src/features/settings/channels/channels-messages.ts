@@ -27,7 +27,7 @@ export const channelsMessages = {
   intakeCreateThreshold: 'Open a conversation',
   intakeAttachThreshold: 'Add to a conversation',
   intakeIgnoreThreshold: 'Set aside as not a request',
-  intakeSingleCandidate: 'Never add on its own while the customer has two or more open conversations it could join',
+  intakeSingleCandidate: 'Never add on its own while the customer has two or more open conversations, however sure AI is',
   intakeReopenWindow: 'Reopen a resolved conversation within (days)',
   intakeMaxAge: 'Too old to decide alone after (minutes)',
   intakeSources: 'What AI reads besides the messages',

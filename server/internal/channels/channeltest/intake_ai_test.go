@@ -672,3 +672,48 @@ func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
 		t.Fatalf("after a thank-you to a closed conversation it is %s", got)
 	}
 }
+
+// AI sure enough joins a customer's batch to the conversation it names even while the customer has other
+// open conversations, as it does with one; attach_requires_single_candidate (off by default) holds every
+// such attach back for a person, however sure AI is.
+func TestAISureEnoughAttachesAmongSeveralOpenConversationsUnlessTheScopeAsksForOne(t *testing.T) {
+	for _, c := range []struct {
+		options, want string
+	}{{"", "create/applied,create/applied,attach/applied"}, {`{"attach_requires_single_candidate":true}`, "create/applied,create/applied,attach/several_candidates"}} {
+		t.Run(c.want, func(t *testing.T) {
+			d := newAIDesk(t, intake.OpenGate)
+			d.intakeAt(t, "auto")
+			if c.options != "" {
+				if _, err := d.pool.Exec(context.Background(), `UPDATE channel_ai_levels SET options=$2::jsonb WHERE workspace_id=$1 AND slot='intake'`, d.workspaceID, c.options); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Without the thread's key each batch of the customer is held for AI.
+			forget := func() {
+				if _, err := d.pool.Exec(context.Background(), `DELETE FROM conversation_thread_keys WHERE workspace_id=$1`, d.workspaceID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
+			d.flush(t)
+			d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.97})
+			d.runAI(t)
+			forget()
+			d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Name: "Lan", Group: "g1", Text: "and the invoice printer is offline"})
+			d.flush(t)
+			d.answers(map[string]any{"action": "create", "subject": "Printer", "confidence": 0.97})
+			d.runAI(t)
+			forget()
+			d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Name: "Lan", Group: "g1", Text: "the printer is a Xprinter on USB"})
+			d.flush(t)
+			if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1 AND status='open'`); got != "2" {
+				t.Fatalf("open conversations = %s", got)
+			}
+			d.answers(map[string]any{"action": "attach", "target": "C1", "runner_up": "C2", "runner_up_confidence": 0.02, "confidence": 0.97})
+			d.runAI(t)
+			if got := d.decisions(t); got != c.want {
+				t.Fatalf("decisions = %s", got)
+			}
+		})
+	}
+}

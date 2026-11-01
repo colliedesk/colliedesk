@@ -54,7 +54,7 @@ test('intake at Suggest has its settings: defaults as hints, and Save sends what
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   expect(within(form).getByLabelText('Open a conversation')).toHaveValue(0.8);
   expect(within(form).getByLabelText('Add to a conversation')).toHaveAttribute('placeholder', '0.90');
-  expect(within(form).getByRole('checkbox', { name: /Never add on its own/ })).toBeChecked();
+  expect(within(form).getByRole('checkbox', { name: /Never add on its own/ })).not.toBeChecked();
   fireEvent.change(within(form).getByLabelText('Add to a conversation'), { target: { value: '0.93' } });
   fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
   fireEvent.click(within(form).getByRole('checkbox', { name: /Past corrections by people/ }));
@@ -109,6 +109,21 @@ test('a chat channel with intake on says how its last 7 days went and links its 
   await waitFor(() => expect(block).toHaveTextContent('12 cards · AI decided 5 by itself · people changed 1 of 9 AI decisions · 2 waiting'));
   expect(intakeApi.stats).toHaveBeenCalledWith(CHAT);
   expect(within(block).getByRole('link', { name: 'Open Review' })).toHaveAttribute('href', `/review?channel=${CHAT}&scope=group`);
+});
+
+test('adding alone while the customer has several open conversations is allowed by default; ticked, the box is saved as true and unticked it is left out', async () => {
+  view();
+  const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  fireEvent.click(within(form).getByRole('checkbox', { name: /Never add on its own/ }));
+  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: {
+    create_threshold: 0.8, attach_requires_single_candidate: true,
+  } }));
+  const saved = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  expect(within(saved).getByRole('checkbox', { name: /Never add on its own/ })).toBeChecked();
+  fireEvent.click(within(saved).getByRole('checkbox', { name: /Never add on its own/ }));
+  fireEvent.click(within(saved).getByRole('button', { name: 'Save intake settings' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenLastCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { create_threshold: 0.8 } }));
 });
 
 test('saving the settings keeps what this form does not show, since the server takes the options whole', async () => {

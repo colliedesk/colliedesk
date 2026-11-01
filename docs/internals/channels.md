@@ -153,9 +153,11 @@ Email and web forms declare none, so their path gains no row and no query beyond
 3. **A gate per action.** `intake.Gate` decides whether AI may act on its own; the default opens an
    action only when the scope's readiness does (13 below), else `gate_closed`. AI applies only at `auto`, on a
    card still `deciding`, through an open gate, at or above the scope's threshold, without a credential,
-   with something to read, within `auto_max_age_seconds`, and for attach while the customer has one open
-   conversation it could mean (`attach_requires_single_candidate`). Otherwise its decision is recorded
-   with `applied=false` and why, and a card that waited at `auto` gets the rules' decision at once
+   with something to read, within `auto_max_age_seconds`, and, for attach with
+   `attach_requires_single_candidate` on, while the customer has at most one unresolved conversation among
+   the candidates, whatever AI's confidence and runner-up (`several_candidates`). It is off by default: a
+   busy customer often has several open conversations, and the check held back even an attach AI was sure
+   of. Otherwise its decision is recorded with `applied=false` and why, and a card that waited at `auto` gets the rules' decision at once
    (`fallback=false`; true when the model failed): the customer never waits for AI that may not act. A
    commands-only scope's chatter then waits for a person with the reason AI did not act.
 4. **Who decided first wins.** The suggestion is written in the task's own transaction (`Run.Record`), so a

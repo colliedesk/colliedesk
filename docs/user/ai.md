@@ -255,8 +255,9 @@ settings) always becomes a [request a person approves](agent-requests.md).
 
 On a chat channel, the AI tab has an **Intake** row for each scope that collects messages, and under the
 table, for each scope where intake does more than the rules, its **Intake settings**: how sure AI must be
-to open, add or set aside on its own (each with its default shown), never adding alone while the customer
-has two or more open conversations, how long a resolved conversation can be reopened, when a card is too
+to open, add or set aside on its own (each with its default shown), whether it may add alone while the
+customer has two or more open conversations (it may by default: sure enough, it adds to the one it names;
+ticked, every such card waits for a person however sure AI is), how long a resolved conversation can be reopened, when a card is too
 old to decide alone, what AI reads besides the messages (a source that needs a consent says so, with a link
 to Built-in AI), the words and patterns to hide or mask (below) and the channel's own instructions. A
 **Last 7 days** line says how many cards came, how many AI decided by itself, how many of its decisions

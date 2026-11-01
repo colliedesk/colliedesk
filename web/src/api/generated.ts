@@ -4878,7 +4878,7 @@ export interface components {
             attach_threshold?: number;
             /** @description Confidence to set a message aside as not a request. Default 0.95. */
             ignore_threshold?: number;
-            /** @description Never attach by itself while the customer has two or more open conversations it hesitates between. Default true. */
+            /** @description Never attach by itself while the customer has two or more unresolved conversations among the candidates, however sure AI is (not_applied_reason several_candidates). Default false: AI sure enough attaches to the conversation it names. */
             attach_requires_single_candidate?: boolean;
             /** @description A batch older than this when decided is only suggested. Default 7200. */
             auto_max_age_seconds?: number;
@@ -5169,7 +5169,7 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             reason: string | null;
             /**
-             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read).
              * @enum {string}
              */
             not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";

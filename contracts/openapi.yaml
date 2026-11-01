@@ -8402,7 +8402,7 @@ components:
         create_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to open a conversation by itself. Default 0.85.'}
         attach_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to add a message to an open conversation by itself; a wrong one hides a new request. Default 0.90.'}
         ignore_threshold: {type: number, minimum: 0.5, maximum: 0.99, description: 'Confidence to set a message aside as not a request. Default 0.95.'}
-        attach_requires_single_candidate: {type: boolean, description: 'Never attach by itself while the customer has two or more open conversations it hesitates between. Default true.'}
+        attach_requires_single_candidate: {type: boolean, description: 'Never attach by itself while the customer has two or more unresolved conversations among the candidates, however sure AI is (not_applied_reason several_candidates). Default false: AI sure enough attaches to the conversation it names.'}
         auto_max_age_seconds: {type: integer, minimum: 60, maximum: 86400, description: 'A batch older than this when decided is only suggested. Default 7200.'}
         reopen_window_days: {type: integer, minimum: 0, maximum: 90, description: 'How long after its last change a resolved conversation is a candidate. Default 7.'}
         sources:
@@ -8627,7 +8627,7 @@ components:
         reason: {type: [string, 'null']}
         not_applied_reason: {type: string, enum: [level_suggest, below_threshold, too_old, credential, person_first, target_changed, lane_blocked, gate_closed, limit, error,
             several_candidates, no_content],
-          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).'}
+          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read).'}
         created_at: {type: string, format: date-time}
     IntakeCounts:
       type: object
