@@ -143,3 +143,40 @@ func TestPluginKeepsTheTokenOutOfItsFiles(t *testing.T) {
 		t.Error(".mcp.json holds a token")
 	}
 }
+
+// /colliedesk-token <token> replaces a revoked token from inside Claude Code. It is a Claude Code
+// skill, not an Agent Skill (other hosts keep the token in their own settings), so it lives outside
+// skills/; only a person runs it, and the script checks the token before saving it
+// (tests/plugin-token-test.sh).
+func TestPluginReplacesTheTokenOnlyWhenAPersonAsks(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(plugin, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		t.Skipf("plugins/colliedesk is not next to this module: %v", err)
+	}
+	var manifest struct {
+		Skills []string `json:"skills"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(manifest.Skills, "./claude-code-skills/") {
+		t.Errorf("plugin.json skills %v does not load ./claude-code-skills/", manifest.Skills)
+	}
+	skill, err := os.ReadFile(filepath.Join(plugin, "claude-code-skills", "colliedesk-token", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"name: colliedesk-token\n",
+		"disable-model-invocation: true\n",
+		"!`sh \"${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh\" '${user_config.url}' '$ARGUMENTS'`",
+		"never repeat the token",
+	} {
+		if !strings.Contains(string(skill), want) {
+			t.Errorf("colliedesk-token/SKILL.md lacks %q", want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(plugin, "scripts", "colliedesk-token.sh")); err != nil {
+		t.Error(err)
+	}
+}

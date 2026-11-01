@@ -9,6 +9,7 @@
   "repository": "https://github.com/colliedesk/colliedesk",
   "license": "AGPL-3.0-only",
   "keywords": ["helpdesk", "support", "mcp"],
+  "skills": ["./claude-code-skills/"],
   "userConfig": {
     "url": {
       "type": "string",

@@ -23,6 +23,20 @@ the token in your system's credential store, not in a settings file.
 
 `/mcp` in Claude Code lists `{{.ServerName}}` as connected.
 
+### Change the token
+
+When `/mcp` shows `{{.ServerName}}` as failed with HTTP 401, the token was revoked or has expired.
+Create a new one in **Settings → External AI agents** and give it to Claude Code:
+
+```text
+/colliedesk-token <your token>
+```
+
+Colliedesk checks the new token first and Claude Code saves it only when Colliedesk accepts it, so a
+mistyped token never replaces a working one. Then run `/reload-plugins` to reconnect. What you type
+stays in the session's history; `{{index .Snippets "claudeCodeToken"}}` asks for the token without
+showing it.
+
 ### Without the plugin
 
 The MCP server alone, with the token in an environment variable. Put the `export` line in your
