@@ -774,6 +774,18 @@ func TestACardAIDecidedSaysHowSureWhyAndWhichModel(t *testing.T) {
 	if got := decided().AIDecision; got == nil || got.FallbackModel == nil || *got.FallbackModel != "claude-opus-5-5" {
 		t.Fatalf("re-run ai decision = %+v", got)
 	}
+	// A re-run on the same model, named as asked or with a date, is no fallback.
+	for i, last := range []string{"claude-haiku-5-5", "claude-haiku-5-5-20261001"} {
+		d.send(t, channeltest.LoopbackEvent{ID: fmt.Sprintf("s-%d", i), From: fmt.Sprintf("s%d", i), Name: "Mai", Group: "g1", Text: "the scale is off"})
+		d.flush(t)
+		same := answer("claude-haiku-5-5-20261001", "Scale is off")
+		same.Response.Hops = []aiprovider.Hop{{Model: "claude-haiku-5-5-20261001", Usage: same.Response.Usage}, {Model: last, Usage: same.Response.Usage}}
+		d.fake.Script(same)
+		d.runAI(t)
+		if got := decided().AIDecision; got == nil || got.FallbackModel != nil {
+			t.Fatalf("same-model re-run to %s = %+v", last, got)
+		}
+	}
 	// A card the rules decided has none.
 	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Name: "Hoa", Group: "g1", Text: "hello"})
 	d.flush(t)

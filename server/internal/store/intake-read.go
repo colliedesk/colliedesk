@@ -63,13 +63,15 @@ type IntakeAIDecision struct {
 
 // fallbackModel is the model that answered decision d's task instead of the one it asked, null when that one
 // answered: a call of the task that went to another model than d's (the binding's fallback, ai.Run.Metered), else
-// the last hop of a call the provider re-ran on another model. A provider naming the asked model otherwise (a
+// the last hop of a call the provider re-ran on another model (a re-run on the same model, named as d's or as
+// the call's first hop, is none). A provider naming the asked model otherwise (a
 // dated id) is no fallback, so served_model is never compared. Calls of one task can finish in the same instant,
 // so none is picked by time alone.
 const fallbackModel = `COALESCE((SELECT u.model FROM ai_usage u WHERE u.workspace_id=d.workspace_id AND u.task_id=d.task_id AND u.status='ok'
 		AND u.model IS DISTINCT FROM d.model ORDER BY u.finished_at DESC LIMIT 1),
 	(SELECT u.hops->-1->>'model' FROM ai_usage u WHERE u.workspace_id=d.workspace_id AND u.task_id=d.task_id AND u.status='ok'
-		AND jsonb_typeof(u.hops)='array' AND jsonb_array_length(u.hops)>1 ORDER BY u.finished_at DESC LIMIT 1))`
+		AND jsonb_typeof(u.hops)='array' AND jsonb_array_length(u.hops)>1 AND u.hops->-1->>'model' IS DISTINCT FROM d.model
+		AND u.hops->-1->>'model' IS DISTINCT FROM u.hops->0->>'model' ORDER BY u.finished_at DESC LIMIT 1))`
 
 // IntakeSuggestion is what AI suggested of a card and did not do, with the conversations it names.
 type IntakeSuggestion struct {
