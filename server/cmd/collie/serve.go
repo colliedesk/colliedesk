@@ -18,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
@@ -45,6 +46,10 @@ var cursorBaseURL = ""
 // microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
 // end-to-end builds set it.
 var microsoftBaseURL = ""
+
+// e2eChannelTypes are channel types run after the shipped ones; only end-to-end builds set them (a
+// loopback chat type whose groups collect messages for intake).
+var e2eChannelTypes []channels.Adapter
 
 func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)

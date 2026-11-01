@@ -8,7 +8,7 @@ INSERT INTO channel_threads (id, workspace_id, channel_id, kind, external_id, na
 INSERT INTO channel_thread_items (id, workspace_id, channel_id, thread_id, direction, role, sender_kind, sender_value, sender_name, contact_id, agent_id,
         external_id, quote_external_id, body, inbound_event_id, message_id, gathering_id, disposition, disposition_reason, occurred_at, created_at, alerted_at)
     SELECT md5('item-beta-1')::uuid, e.workspace_id, e.channel_id, md5('thread-beta-1')::uuid, 'in', 'customer', 'chat_user', '4410233', 'Minh',
-        c.contact_id, md5('agent-beta-admin')::uuid, 'chat-1', 'chat-0', 'Pricing?', e.id, e.message_id, md5('gathering-beta-1')::uuid,
+        c.contact_id, md5('agent-beta-admin')::uuid, 'chat-1', 'chat-0', 'Pricing?', e.id, e.message_id, NULL,
         'conversation', 'gathered', '2026-10-25 12:00:00+00', '2026-10-25 12:00:00+00', '2026-10-25 12:15:00+00'
     FROM channel_inbound_events e JOIN conversations c ON c.workspace_id = e.workspace_id AND c.id = e.conversation_id
     WHERE e.id = md5('chin-beta-1')::uuid;

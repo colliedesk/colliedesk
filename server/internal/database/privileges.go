@@ -57,6 +57,9 @@ const (
 	// failed, or collected until their flush time) for the inbound worker; each is then processed in its
 	// own workspace.
 	PrivilegeChannelInboundClaim Privilege = "channel-inbound-claim"
+	// PrivilegeIntakeDueClaim lists the gatherings of chat intake of every workspace past their time to
+	// be decided, for the rules' decision to apply; each is then applied in its own workspace.
+	PrivilegeIntakeDueClaim Privilege = "intake-due-claim"
 	// PrivilegeImportJobClaim leases due in-app import jobs of every workspace for the import worker,
 	// and discards previews nobody started within the hour.
 	PrivilegeImportJobClaim Privilege = "import-job-claim"

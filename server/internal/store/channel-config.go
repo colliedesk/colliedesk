@@ -407,13 +407,15 @@ func (s *Store) removeChannel(ctx context.Context, tx pgx.Tx, workspaceID, id st
 	}
 	// What it holds is opened or discarded first. The row lock above keeps a message from being held
 	// between this count and the removal (IngestInbound locks the channel FOR SHARE).
-	var held int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='held'`,
-		workspaceID, id).Scan(&held); err != nil {
+	// Messages of cards of the intake queue are decided there, not opened or discarded one by one.
+	var held, queued int
+	if err := tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE NOT `+inIntakeQueue+`('deciding','review')))
+		FROM channel_inbound_events e WHERE workspace_id=$1 AND channel_id=$2 AND state='held'`,
+		workspaceID, id).Scan(&held, &queued); err != nil {
 		return nil, fmt.Errorf("count held messages: %w", err)
 	}
 	if held > 0 {
-		return nil, &channels.HeldError{Count: held}
+		return nil, &channels.HeldError{Count: held, Queued: queued}
 	}
 	adapter, err := s.adapterOf(channel.Type)
 	if err != nil {

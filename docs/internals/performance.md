@@ -77,6 +77,18 @@ case. Five warm-up searches, then 20 timed: 50–65 ms locally beside the other 
 window was cut twice instead of raising the budget: 20,000 conversations took 160–280 ms locally, and
 10,000 took 210 ms p95 on the CI runner. If this gate fails, cut the window again.
 
+## Intake queue budget
+
+`TestIntakeQueueLatencyBudget` holds the store calls behind the intake queue to 100 ms p95 for a page
+of 50 cards (`IntakeGatherings`: review, decided, review of one channel and scope, decided by the
+rules) and 20 ms p95 for one card with its items, decisions and the 30 conversations it may join
+(`IntakeGatheringByID`) and for the queue's summary (`IntakeSummaryOf`). The fixture is two workspaces
+with 20,000 gatherings of three chat items each (a quarter waiting) in 200 groups, and the card's group
+has 300 conversations. The candidates start from the group's items (`channel_thread_items_thread`), never
+from the workspace's conversations. Five warm-up calls, then 40
+timed. A card and its items are found by uuid: comparing `id::text` to a parameter skips the index and
+took 17 ms on the dev host; the uuid compare takes 2 ms. Do not widen either budget.
+
 ## AI draft read budget
 
 `TestAIDraftReadLatencyBudget` holds the reads the reply box polls, `ai.Service.GetDraft` and

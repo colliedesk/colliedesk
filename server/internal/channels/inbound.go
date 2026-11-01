@@ -266,6 +266,8 @@ const (
 const (
 	HoldChannelOff = "channel_off"
 	HoldReview     = "review"
+	// HoldIntake keeps a chat's batch the rules decided only by default for intake to decide.
+	HoldIntake = "intake"
 )
 
 // InboundPart is the type's input: raw events in, normalized messages out.

@@ -20,7 +20,7 @@ function sources(dir: string): string[] {
   });
 }
 
-const files = sources(root).map((path) => ({ name: relative(root, path), text: readFileSync(path, 'utf8') }));
+const files = sources(root).map((path) => { const text = readFileSync(path, 'utf8'); return { name: relative(root, path), text, lines: text.split('\n') }; });
 
 test('only the create hooks and the reply box make an Idempotency-Key', () => {
   const makers = files.filter((file) => file.name !== 'api/submit-key.ts' && /from '[./]*(api\/)?submit-key'/.test(file.text)).map((file) => file.name);
@@ -47,10 +47,12 @@ test('every create the contract keys is sent with an Idempotency-Key', () => {
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
   const pattern = (path: string) => new RegExp(`['\`]${path.split(/\{[^}]+\}/).map(escape).join('\\$\\{[^}]+\\}')}['\`?]`);
   for (const path of paths) {
+    // One pattern per path, tested on lines split once: the gate reads every file for every keyed path.
+    const called = pattern(path);
     const sent = files.flatMap((file) => {
-      const lines = file.text.split('\n');
+      const lines = file.lines;
       return lines.flatMap((line, index) => {
-        if (!pattern(path).test(line)) return [];
+        if (!called.test(line)) return [];
         const call = lines.slice(index, index + 3).join('\n');
         return /method: 'POST'/.test(call) ? [{ where: `${file.name}:${index + 1}`, keyed: /'Idempotency-Key'/.test(call) }] : [];
       });

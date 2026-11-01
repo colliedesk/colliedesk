@@ -33,12 +33,16 @@ func (e *NameTakenError) Error() string {
 
 // HeldError refuses to remove a channel that still holds messages that arrived while it was off:
 // removed, they would be out of reach in the app and still count toward storage.
-type HeldError struct{ Count int }
+// Queued of them belong to cards of the intake queue still to be decided, which are decided there.
+type HeldError struct{ Count, Queued int }
 
 func (e *HeldError) Error() string {
 	noun := "messages"
 	if e.Count == 1 {
 		noun = "message"
+	}
+	if e.Queued > 0 {
+		return fmt.Sprintf("the channel holds %d %s, %d of them in cards of the intake queue still to be decided", e.Count, noun, e.Queued)
 	}
 	return fmt.Sprintf("the channel holds %d %s that arrived while it was off", e.Count, noun)
 }

@@ -35,6 +35,8 @@ type IngestRequest struct {
 	DecidedBy string
 	// Flushing stores collected events as one message now (their Aggregate is not applied again).
 	Flushing bool
+	// Intake applies a decision of a gathering: EventIDs are all its held events, replayed as one.
+	Intake *IntakeApply
 }
 
 // IngestInbound is the one writer of conversations, contacts and messages from a channel: duplicate,
@@ -91,6 +93,12 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			in.Aggregate = &channels.Aggregate{Key: in.Thread.Keys[0], Quiet: quiet, Max: most}
 		}
 	}
+	// Where several customers write, each one's messages are collected apart: one customer's batch is
+	// never another's.
+	shared := slices.Contains(definition.SharedScopes, in.Scope)
+	if shared && in.Aggregate != nil {
+		in.Aggregate.Key = clip(in.Aggregate.Key+"|"+in.Sender.Identity.Key(), 500)
+	}
 	if len(request.EventIDs) > 0 {
 		// Another worker may hold these events; leave them to it.
 		allowed := []string{"received", "failed", "pending"}
@@ -105,6 +113,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if locked != len(request.EventIDs) {
 			result.Status = ResultSkipped
 			return result, nil
+		}
+	}
+	// A decision of a gathering applies only while it is undecided and holds exactly these events.
+	var pending pendingGathering
+	if request.Intake != nil {
+		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs); err != nil {
+			return result, err
 		}
 	}
 	journal := journalWriter{tx: tx, channel: channel, request: request, now: now}
@@ -304,7 +319,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// rules use them, so chatter the scope keeps without a conversation never creates a contact.
 	facts := rules.Facts{Commanded: commanded, CommandAction: command.Action, IntoConversation: request.IntoConversation, Replay: request.Replay,
 		CommandsOnly: scope.Mode == channels.ModeCommands, Flushing: request.Flushing, Review: channel.Settings.Review}
-	shared := slices.Contains(definition.SharedScopes, in.Scope)
+	// A batch of a chat's intake scope: AI may decide where the rules only have a default (auto).
+	level, err := intakeLevel(ctx, tx, channel, definition, in, request)
+	if err != nil {
+		return result, err
+	}
 	if facts.CommandsOnly && !commanded && !request.Replay && request.IntoConversation == "" {
 		if facts.Joins, err = s.joinsWithoutCommand(ctx, tx, channel, in, request, shared, senderKey, now); err != nil {
 			return result, err
@@ -313,6 +332,9 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// What the rules decide before the thread is read: only keeping it or holding it for a person.
 	switch decision := rules.Decide(facts); decision.Action {
 	case rules.Archive:
+		if level == intakeAuto {
+			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+		}
 		// Chatter of a scope that opens conversations only on a command is kept, not opened.
 		if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey, basis: decision.Basis, rule: decision.Rule}); err != nil {
 			return result, err
@@ -320,15 +342,42 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemArchived, reason: "chat"}); err != nil {
 			return result, err
 		}
+		if level == intakeSuggest {
+			if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringApplied, decision: decision, decidedByRules: true}); err != nil {
+				return result, err
+			}
+		}
 		result.Status = channels.ResultArchived
 		return finish(result)
 	case rules.Review:
+		if level == intakeAuto {
+			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+		}
 		// Collected messages that named no command wait for a person to decide what they are.
-		return s.holdInbound(ctx, tx, &journal, in, channels.HoldReview, decision, finish)
+		if level == "" {
+			return s.holdInbound(ctx, tx, &journal, in, channels.HoldReview, decision, finish)
+		}
+		var held channels.IngestResult
+		if _, err := s.holdInbound(ctx, tx, &journal, in, channels.HoldReview, decision, func(r channels.IngestResult) (channels.IngestResult, error) {
+			held = r
+			return r, nil
+		}); err != nil {
+			return held, err
+		}
+		if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision}); err != nil {
+			return held, err
+		}
+		return finish(held)
 	}
-	contactID, err := s.contactForIdentity(ctx, tx, channel, in.Sender)
-	if err != nil {
-		return result, err
+	// At auto, what the rules decide only by default waits for intake, and nothing is created for it
+	// yet: the contact is found once the message is stored. A reopen command names the sender's own
+	// conversation, which needs the contact first; it is a match, never held.
+	reopening := request.IntoConversation == "" && commanded && command.Action == channels.ActionReopen && in.Intent.Ref != ""
+	var contactID string
+	if level != intakeAuto || reopening {
+		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
+			return result, err
+		}
 	}
 	if request.IntoConversation != "" {
 		var exists bool
@@ -338,6 +387,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if !exists {
 			return result, pgx.ErrNoRows
 		}
+		// A card joins only a conversation it offers, so its reply never goes to someone else.
+		if request.Intake != nil && request.Intake.GatheringID != "" {
+			may, err := gatheringMayJoin(ctx, tx, workspaceID, request.Intake.GatheringID, request.IntoConversation)
+			if err != nil {
+				return result, err
+			}
+			if !may {
+				return result, ErrNotACandidate
+			}
+		}
 	} else {
 		if commanded && command.Action == channels.ActionReopen && in.Intent.Ref != "" {
 			err := tx.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND id::text=$2 AND contact_id=$3`,
@@ -346,13 +405,25 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
 			}
 		}
-		if facts.RefConversation == "" {
+		// A gathering decided to be a new request opens one, whatever conversation its thread found since.
+		if facts.RefConversation == "" && (request.Intake == nil || !request.Intake.ForceNew) {
 			if facts.Thread, err = findChannelThread(ctx, tx, channel, in.Thread, shared, senderKey, now); err != nil {
 				return result, err
 			}
 		}
 	}
 	decision := rules.Decide(facts)
+	if request.Intake != nil {
+		decision = request.Intake.basisOf(decision)
+	}
+	if level == intakeAuto && decision.Basis == rules.Default {
+		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+	}
+	if contactID == "" {
+		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
+			return result, err
+		}
+	}
 	conversationID := decision.ConversationID
 	var files []EmailFile
 	if files, err = s.putInboundFiles(ctx, workspaceID, in.Files); err != nil {
@@ -419,9 +490,35 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		objectKey: original, basis: decision.Basis, rule: decision.Rule}); err != nil {
 		return result, err
 	}
+	link := linkReasonOf(decision)
+	if request.Intake != nil && request.Intake.Decider != DecidedByRules {
+		link = request.Intake.Decider
+	}
 	if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemConversation, contactID: contactID, conversationID: conversationID,
-		messageID: messageID, linkReason: linkReasonOf(decision)}); err != nil {
+		messageID: messageID, linkReason: link}); err != nil {
 		return result, err
+	}
+	if request.Intake != nil {
+		state := GatheringAttached
+		if result.Status == channels.ResultCreated {
+			state = GatheringCreated
+		}
+		if err := concludeGathering(ctx, tx, workspaceID, *request.Intake, pending, state, conversationID, contactID, now); err != nil {
+			return result, err
+		}
+	}
+	if level != "" {
+		decided := gathering{state: GatheringAttached, decision: decision, conversationID: conversationID, contactID: contactID, decidedByRules: true}
+		switch {
+		case level == intakeSuggest && decision.Basis == rules.Default:
+			// The rules applied; AI only suggests what it would have done.
+			decided.state = GatheringApplied
+		case result.Status == channels.ResultCreated:
+			decided.state = GatheringCreated
+		}
+		if _, err := recordGathering(ctx, tx, &journal, in, decided); err != nil {
+			return result, err
+		}
 	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
 		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
@@ -461,8 +558,11 @@ func (s *Store) holdInbound(ctx context.Context, tx pgx.Tx, journal *journalWrit
 	}
 	// What waits for a person: a review of what was collected, or a channel that is off.
 	waiting := itemOutcome{disposition: ItemPendingReview, reason: "no_command"}
-	if reason == channels.HoldChannelOff {
+	switch reason {
+	case channels.HoldChannelOff:
 		waiting = itemOutcome{disposition: ItemUnresolved, reason: reason}
+	case channels.HoldIntake:
+		waiting = itemOutcome{disposition: ItemGathering, reason: "deciding"}
 	}
 	if err := recordThreadItems(ctx, tx, journal, in, waiting); err != nil {
 		return result, err
@@ -618,10 +718,15 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 	for _, key := range thread.Keys {
 		var conversationID, status string
 		var updatedAt time.Time
+		// Where several customers write, the place's key is everyone's: it continues only a
+		// conversation this sender wrote in.
 		err := tx.QueryRow(ctx, `SELECT c.id::text,c.status,c.updated_at FROM conversation_thread_keys k
 			JOIN conversations c ON c.workspace_id=k.workspace_id AND c.id=k.conversation_id
-			WHERE k.workspace_id=$1 AND k.channel_type=$2 AND k.key=$3 ORDER BY k.created_at DESC LIMIT 1`,
-			channel.WorkspaceID, string(channel.Type), key).Scan(&conversationID, &status, &updatedAt)
+			WHERE k.workspace_id=$1 AND k.channel_type=$2 AND k.key=$3 AND (NOT $4 OR EXISTS(SELECT 1 FROM messages m
+				JOIN channel_inbound_events e ON e.workspace_id=m.workspace_id AND e.message_id=m.id
+				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND e.sender_key=$5))
+			ORDER BY k.created_at DESC LIMIT 1`,
+			channel.WorkspaceID, string(channel.Type), key, shared, senderKey).Scan(&conversationID, &status, &updatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}

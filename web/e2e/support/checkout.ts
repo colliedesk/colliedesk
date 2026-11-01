@@ -11,7 +11,7 @@ export const checkoutID = createHash('sha256').update(repoRoot).digest('hex').sl
 const id = checkoutID;
 
 export const portBase = Number(process.env.COLLIEDESK_E2E_PORT_BASE ?? 20_000 + (parseInt(id, 16) % 400) * 20);
-export const ports = { main: portBase, mail: portBase + 2, fresh: portBase + 3, cloud: portBase + 4, jwks: portBase + 5, freshdeskAPI: portBase + 6, freshdeskFiles: portBase + 7,
+export const ports = { main: portBase, chat: portBase + 1, mail: portBase + 2, fresh: portBase + 3, cloud: portBase + 4, jwks: portBase + 5, freshdeskAPI: portBase + 6, freshdeskFiles: portBase + 7,
   microsoft: portBase + 8, microsoftStandIn: portBase + 9, autofix: portBase + 10, githubStandIn: portBase + 11, cursorStandIn: portBase + 12,
   operator: portBase + 13, operatorHost: portBase + 14, operatorTrial: portBase + 15, features: portBase + 16 };
 export const scratchDir = join(tmpdir(), `colliedesk-e2e-${id}`);
