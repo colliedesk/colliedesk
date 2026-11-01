@@ -10,6 +10,7 @@ page per type under it:
   [Email in Settings](email-channel.md#email-in-settings).
 - **Web form** (`/settings/channels/type/web_form`): your web form, or the form to add one.
 - **Help chat** (`/settings/channels/type/help_chat`): your [help chat](help-chat.md), or the form to add one.
+- **Zalo OA** (`/settings/channels/type/zalo`): your [Zalo OAs](zalo.md), or the form to connect one.
 - **Channels** itself (`/settings/channels`) lists every channel with what each is doing, and lets an
   admin add one, turn it off and on, or remove it, and its **History** tab lists what changed.
 
@@ -41,10 +42,11 @@ and its state:
 ## Add a channel
 
 Select **Add channel** and pick a type (with no channel yet, the page lists the types at once:
-**Connect your support email**, **Add a web form**). Live chat is listed as not available yet. The
-channel exists once you save its first settings: for email, a name and the support address (step 1 of
-the [email setup](email-channel.md#connect-your-support-email), which then goes on with forwarding);
-for the web form, its allowed origins.
+**Connect your support email**, **Add a web form**, **Add help chat**, **Connect Zalo OA**). Live chat is
+listed as not available yet. The channel exists once you save its first settings: for email, a name and
+the support address (step 1 of the [email setup](email-channel.md#connect-your-support-email), which then
+goes on with forwarding); for the web form, its allowed origins; for a Zalo OA, its OA and app ids
+([Connect an OA](zalo.md#connect-an-oa)).
 
 A workspace can have several channels of a type: a mailbox for support and one for billing, a form
 on your shop and one on your careers page. Pick the type again to add another.
@@ -63,7 +65,8 @@ on your shop and one on your careers page. Pick the type again to add another.
   a Gmail account sends for one email channel only. Two web forms may list the same website.
 
 Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
-**Replies**, how replies leave; web form: **Embed**), **AI** and **History**; on **Settings → Email** it is
+**Replies**, how replies leave; web form: **Embed**; help chat: **Setup** and **Your site**; Zalo OA:
+**Connection**, **Groups**, **Staff** and **Messages**), **AI** and **History**; on **Settings → Email** it is
 **Manage**. An email address still waiting for its first email also has its setup,
 `/settings/channels/<id>/setup` (**Continue setup**). Old links to the email and web form sections of
 Settings open the type's page; a bookmark to `/settings/channels/<id>` opens the same channel.
@@ -77,8 +80,10 @@ Turning a channel off keeps its settings and its conversations. While it is off:
   been had the channel been on) or discards them (**Discard N messages…**). Through the API they can
   also be added to an existing conversation. Discarding cannot be undone; the history
   keeps how many. Kept messages count toward your storage until they are opened or discarded.
+- **Zalo OA**: what arrives is kept the same way, shown as **N messages arrived while off**, for an
+  admin to open or discard.
 - **Web form**: submissions are refused exactly as if the form did not exist, so the address of your
-  form cannot be probed.
+  form cannot be probed. A **help chat** refuses what arrives the same way.
 - **Replies**: a reply written while its channel is off is saved, and its delivery shows the channel
   was off. After you turn the channel on, select **Retry** on the reply; nothing is sent again by
   itself. The channel shows how many replies wait.
@@ -109,7 +114,7 @@ says so ("Billing was removed; replies send from Support").
 - **Replies** leave from the mailbox the conversation came through. A conversation that came through
   a web form, or was started by the team, keeps the mailbox of its first reply. With two mailboxes the
   composer says which one ("Replies send from Billing").
-- **Filter → Email channels** (shown when a type has two channels) lists the conversations of one
+- **Filter → Email channels** (shown for any type with two channels or more: Web form channels, Zalo OA channels) lists the conversations of one
   channel: those that came through it and those whose replies leave from it. A removed channel still
   filters ("Careers (removed)"), and a saved view keeps the choice.
 

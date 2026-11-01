@@ -5,6 +5,31 @@ is a member of. Each message lands in your inbox as the [chat rules](channels.md
 channel decide, and your replies go back where the conversation was said: into its group, or to the
 customer alone, quoting the message they answer.
 
+## Set up a team from start to finish
+
+An admin, in this order:
+
+1. **A provider for AI**, unless the server's provider will do: **Settings → Built-in AI → Providers →
+   Add provider** ([Add your own provider](ai.md#add-your-own-provider)).
+2. **The OA**: [connect it](#connect-an-oa), paste the **Webhook URL** in the Zalo app, and set the OA
+   secret key before deliveries arrive; then add the tokens, so replies can be sent.
+3. **Chat intake**: its row in **Settings → Built-in AI → Features** shows once the workspace has a chat
+   channel such as the OA. Pick its provider and model and turn it on: that is your consent to send it the
+   chats. **Images customers sent** and **The customer's profile**, under it, are each a consent of their own
+   ([Every feature starts off](ai.md#every-feature-starts-off)).
+4. **AI on the OA's groups**: in the OA's **AI** tab, set **Intake** for **Groups** to Suggest and fill in its
+   **Intake settings**, among them the words that mark a secret in your customers' language ("mật khẩu",
+   "OTP") ([What AI does by itself, per channel](ai.md#what-ai-does-by-itself-per-channel)). Intake runs on
+   groups only: one-to-one messages follow the channel's rules.
+5. **Groups** and **Staff**: link each group to its customer's organization, and add your team's Zalo
+   accounts, so what they write in a group is never a request.
+6. **Messages**: the commands customers type, what the OA says, the words for each status and when a
+   resolved conversation closes ([The Messages tab](#the-messages-tab)).
+7. **Review**: decide the cards in [Review](review.md). A card decided as AI suggested, or otherwise, is
+   what tells whether AI is ready.
+8. **Auto**: raise Intake for Groups to Auto. The dialog says which actions are ready, and **Let it … alone
+   anyway** opens one before its labels do ([When AI acts on its own](ai.md#when-ai-acts-on-its-own)).
+
 ## Connect an OA
 
 An admin opens **Settings → Channels → Add channel → Connect Zalo OA** and fills in:
@@ -47,8 +72,8 @@ is then handled in order by the channel's rules. While paused the channel reads 
 here and in **Channels**, with since when and how many messages wait (counted again every 20 seconds
 while the page is open). Agents see the same and are told an admin resumes it.
 
-Pausing is not turning the channel off: a channel turned off keeps its messages under **Held** for
-someone to open or discard. A channel paused and off says to turn it on first, and stays paused when
+Pausing is not turning the channel off: a channel turned off keeps its messages for an admin to open
+or discard ([Turn a channel off](channels.md#turn-a-channel-off)). A channel paused and off says to turn it on first, and stays paused when
 you do.
 
 With the API instead:
@@ -80,7 +105,8 @@ What a customer can type to the OA, in a chat or a group: **Open a request**, **
 (followed by a conversation's code), **Confirm** (the answer to the question below) and **Help**. Each has
 its phrases and how they match: **Allow one typo** (one wrong letter in a phrase of five letters or more),
 **Whole words**, or **Exact** (the whole message, accents kept, in any case; best for short words such as
-"OK"). A command with no phrase is off.
+"OK"). A command with no phrase is off, and a new OA has none: write the phrases your customers will
+type (for example "tạo phiếu" for Open a request, "Chưa được" for Reopen, "OK" and "Hủy").
 
 **When a customer sends only the command** asks what the request is about when "Open a request" comes
 with nothing before it. A request still waiting for its description after **Forget a request still
@@ -127,7 +153,9 @@ without telling the customer, see [Telling the customer](inbox.md#telling-the-cu
 **Close resolved conversations after** a number of hours (empty or 0: never; at most 720, 30 days) closes
 a conversation that stayed resolved that long, counted in clock hours (not business hours) from the
 resolve or the customer's last message, whichever is later. It applies to conversations resolved from
-the time you turn it on: earlier ones never close by themselves. A new number while it is on also applies
+the time you turn it on: earlier ones never close by themselves, except an imported conversation that
+came in resolved and whose status nobody changed here since: it closes that long after its resolve in
+the system before, quietly (that system already told the customer). A new number while it is on also applies
 to those resolved since; a smaller one closes those already past it within minutes of saving. The
 sentence under the box says what it will do, and whether the customer is told (only when **When set to
 Closed** has words, and the conversation was not resolved quietly: one resolved without telling closes
