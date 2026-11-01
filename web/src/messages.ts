@@ -342,6 +342,9 @@ export const messages = {
   textStillHere: 'Your text is still here.',
   trialReplyRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
   trialReplyLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
+  // A help chat or web form visitor typed the address; the trial replies only to an address that wrote by email.
+  trialTypedAddress: 'During the trial, Colliedesk cannot email this customer: they typed their address and nothing proves it is theirs. You can still write private notes. To reply, verify your sending domain (the domain of your support address, such as example.com) or choose a plan:',
+  trialTypedAddressChannels: 'During the trial, replies to these conversations need a verified sending domain or a plan, because the customer types their address and nothing proves it is theirs:',
   retryNotSent: 'The delivery could not be retried. Try again.',
   trialCcRestricted: (addresses: string[]) => `During the trial, a reply can copy only people the customer wrote from or copied. Not allowed: ${addresses.join(', ')}. Remove them and send again, or verify your sending domain in Settings. Your text is still here.`,
   trialRetryRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan.',

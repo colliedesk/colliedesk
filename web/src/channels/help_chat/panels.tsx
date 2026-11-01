@@ -9,6 +9,7 @@ import { CopyButton } from '../../features/settings/copy-button';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
 import type { SaveState } from '../../features/settings/save-feedback';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
+import { TrialRepliesNotice } from '../trial-replies-notice';
 
 const limits = { greeting: 300, suggestions: 4, suggestion: 120, instructions: 2000 };
 
@@ -116,7 +117,10 @@ function useSave(channelID: string) {
 
 function Setup({ channel, canManage }: ChannelPanelProps) {
   const save = useSave(channel.id);
-  return <SurfaceForm config={channel.config as HelpChatConfig} canManage={canManage} save={saveState(save)} label={m.save} onSave={(value) => save.mutate(value)} />;
+  return <>
+    <TrialRepliesNotice />
+    <SurfaceForm config={channel.config as HelpChatConfig} canManage={canManage} save={saveState(save)} label={m.save} onSave={(value) => save.mutate(value)} />
+  </>;
 }
 
 // Embed is the sites that may frame the chat and the code that puts its button on them.
