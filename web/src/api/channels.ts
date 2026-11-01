@@ -28,6 +28,8 @@ export const helpChatConfigSchema = z.object({
 export type HelpChatConfig = z.infer<typeof helpChatConfigSchema>;
 export const zaloConfigSchema = z.object({
   oa_id: z.string(), app_id: z.string(), staff_user_ids: z.array(z.string()), groups: z.record(z.string(), z.string()), webhook_path: z.string(),
+  // Zalo's code for the HTML file method, and the URL prefix it verifies (it covers the webhook).
+  site_verification: z.string().nullable(), verification_prefix_path: z.string(),
   // The four secrets, in order: whether each is set, its last four characters, when it was last written.
   credentials: z.array(z.object({ name: z.enum(['app_secret', 'oa_secret_key', 'access_token', 'refresh_token']), hint: z.string().nullable(), set_at: nullableDate })),
 }) satisfies z.ZodType<Generated<'ZaloChannelConfig'>>;

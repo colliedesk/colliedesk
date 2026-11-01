@@ -852,7 +852,7 @@ test('a channel of a type the web app has no screens for still opens: its name a
 });
 
 const ZALO = '77777777-7777-4777-8777-777777777777';
-const zaloConfig = { oa_id: '4318002291772207', app_id: '1188200455', staff_user_ids: [], groups: {}, webhook_path: '/api/v1/channels/zalo/webhook',
+const zaloConfig = { oa_id: '4318002291772207', app_id: '1188200455', staff_user_ids: [], groups: {}, webhook_path: '/api/v1/channels/zalo/webhook', site_verification: null, verification_prefix_path: '/api/v1/channels/zalo/',
   credentials: ['app_secret', 'oa_secret_key', 'access_token', 'refresh_token'].map((name) => ({ name, hint: null, set_at: null })) };
 const zalo = (change: Record<string, unknown> = {}) => ({ ...channel('email', { id: ZALO, type: 'zalo', name: 'Hảo Đạt OA', summary: 'OA 4318…2207 · 0 groups linked', capabilities: ['threads'], is_default: true, processing_paused_at: null, ...change }),
   config: zaloConfig, settings: {}, effective_settings: {} });
