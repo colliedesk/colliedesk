@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -251,6 +252,10 @@ func TestExportNamesTheTokenThatMovedMessagesAndWroteANote(t *testing.T) {
 	first := inboundOK(t, api, secret, mail([]string{"From: kim@customer.example", "To: support@token-moves.example.com", "Subject: Printer", "Message-ID: <kim-1@customer.example>"}, "It jams"))
 	second := inboundOK(t, api, secret, mail([]string{"From: lee@customer.example", "To: support@token-moves.example.com", "Subject: Printer too", "Message-ID: <lee-1@customer.example>"}, "Mine too"))
 	printer, lee := *first.ConversationID, *second.ConversationID
+	// The printer conversation was resolved by a person, telling the customer.
+	if response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+printer, map[string]any{"status": "resolved"}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("resolve: %d %s", response.Code, response.Body.String())
+	}
 	response = request(t, api, http.MethodPost, "/api/v1/conversations/"+lee+"/messages/move",
 		map[string]any{"message_ids": []string{*second.MessageID}, "to": map[string]any{"conversation_id": printer}, "close_source": true}, created.Token, nil)
 	if response.Code != http.StatusOK {
@@ -273,13 +278,25 @@ func TestExportNamesTheTokenThatMovedMessagesAndWroteANote(t *testing.T) {
 			if len(changes) != 2 {
 				t.Fatalf("lee's status changes = %v, want closed by the move and opened by the undo", changes)
 			}
+			// A move tells the customer nothing: both changes are quiet.
 			for _, change := range changes {
-				if c := change.(map[string]any); c["cause"] != "token" || c["actor_token_id"] != tokenID {
-					t.Fatalf("lee's change = %v, want cause token, actor_token_id %s", c, tokenID)
+				if c := change.(map[string]any); c["cause"] != "token" || c["actor_token_id"] != tokenID || c["quiet"] != true {
+					t.Fatalf("lee's change = %v, want cause token, actor_token_id %s, quiet", c, tokenID)
 				}
 			}
 		}
 		if conversation["id"] == printer {
+			// Reopened by the move, quietly; the undo gives back the resolve as the person made it (told), so a
+			// close by itself later tells the customer as it would have.
+			changes, _ := conversation["status_changes"].([]any)
+			var got []string
+			for _, change := range changes {
+				c := change.(map[string]any)
+				got = append(got, fmt.Sprintf("%v:%v:%v", c["to_status"], c["cause"], c["quiet"]))
+			}
+			if strings.Join(got, ",") != "resolved:agent:false,open:token:true,resolved:token:false" {
+				t.Fatalf("printer's status changes = %v", got)
+			}
 			found := false
 			for _, message := range conversation["messages"].([]any) {
 				if m := message.(map[string]any); m["kind"] == "note" {

@@ -12,8 +12,24 @@ import (
 // when an AI agent's token makes it. An empty actor is no one: a customer reply that reopens. Set it
 // before every status write, so a change in the same transaction never carries the previous writer's
 // name or cause.
-func setStatusActor(ctx context.Context, tx pgx.Tx, actor Actor) error {
-	return setStatusCause(ctx, tx, statusChange{ActorID: actor.AgentID, TokenID: actor.TokenID, Cause: tokenCause(actor.TokenID)})
+func setStatusActor(ctx context.Context, tx pgx.Tx, actor Actor, quiet bool) error {
+	return setStatusCause(ctx, tx, statusChange{ActorID: actor.AgentID, TokenID: actor.TokenID, Cause: tokenCause(actor.TokenID), Quiet: quiet})
+}
+
+// movedStatusQuiet is how a status a move of messages sets is recorded. A move never tells the customer, so
+// it is quiet, except a resolved status it gives back: that keeps how the team resolved it (told or not),
+// which decides whether a close by itself tells the customer later.
+func movedStatusQuiet(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, status string) (bool, error) {
+	if status != "resolved" {
+		return true, nil
+	}
+	var quiet bool
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT quiet FROM conversation_status_changes WHERE workspace_id=$1 AND conversation_id=$2 AND to_status='resolved'
+		ORDER BY changed_at DESC,id DESC LIMIT 1),false)`, workspaceID, conversationID).Scan(&quiet)
+	if err != nil {
+		return false, fmt.Errorf("read how the conversation was resolved: %w", err)
+	}
+	return quiet, nil
 }
 
 // statusChange is who changes a conversation's status, and how: the person, the token when an AI agent's

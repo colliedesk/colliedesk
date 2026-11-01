@@ -117,7 +117,7 @@ support addresses it was sent to), `tag_ids`, `sla_applies` (the response target
 (its targets when they do, else `null`: `first_response` with `state`, `due_at`, `warn_at`, `met_at`; `resolution` with
 `state`, `due_at`, `warn_at`; `alert_since`; and `alerts`, each reminder or overdue email with `clock`, `threshold`, `due_at`,
 `recipient`, `status` and `at`),
-`created_at`, `updated_at`, `assigned_at` and `assigned_by_agent_id` (when and by whom it was last assigned, or `null`), `held_at` (when it was held over the Free plan's monthly quota, or `null`), `messages`, `time_entries` and `status_changes`.
+`created_at`, `updated_at`, `assigned_at` and `assigned_by_agent_id` (when and by whom it was last assigned, or `null`; for an assignment an API token made, the token's owner, or the person who approved its request), `held_at` (when it was held over the Free plan's monthly quota, or `null`), `messages`, `time_entries` and `status_changes`.
 
 Each message has `id`, `conversation_id`, `author_agent_id`, `author_name` (as stored: the author
 name of an imported message, `null` for a message written in Colliedesk, whose author is
@@ -148,11 +148,14 @@ Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`
 Each status change has `id`, `from_status`, `to_status`, `changed_at`, `actor_agent_id`, `source`
 (`colliedesk`, or `import` when an import set the status it read from the old helpdesk), `cause`,
 `actor_token_id` and `quiet`. `cause` says who changed it: `agent` (a person; `actor_agent_id` is that
-person), `token` (an API token or AI agent; `actor_token_id` is the token, and `actor_agent_id` its
-owner), `customer` (a customer reply reopened it), `command` (the customer's reopen command in a chat), `auto_close` (the
+person), `token` (an API token or AI agent; `actor_token_id` is always the token, and `actor_agent_id`
+the person who approved its [request](agent-requests.md), or its owner when it needed no approval), `customer` (a customer reply reopened it), `command` (the customer's reopen command in a chat), `auto_close` (the
 channel's [auto-close](channels.md)) or `import`. Tokens are not exported, so `actor_token_id` matches
 the `token_id` of `agent-requests.ndjson` and the `actor_token_id` of `ai-usage.ndjson`. `quiet` is
-`true` for a change made without telling the customer (`notify: false`). Changes recorded before
+`true` for a change that told the customer nothing on purpose: one made with `notify: false`; a close by
+itself after such a resolve, or of a conversation imported resolved (the old helpdesk had told them); and
+a change a [move of messages](inbox.md) made, which never tells the customer (a resolve the undo of a move
+gives back keeps the `quiet` of the resolve it restores). Changes recorded before
 `cause` existed have `import`, `agent` when they name a person, and `customer` otherwise. Changes are recorded from the
 upgrade that added them; a conversation created by an import has no change for its first status.
 

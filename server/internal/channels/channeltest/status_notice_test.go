@@ -201,6 +201,9 @@ func TestAResolvedConversationClosesAfter48Hours(t *testing.T) {
 	if item, err := d.store.GetConversation(ctx, d.workspaceID, id); err != nil || item.LastStatusChange == nil || item.LastStatusChange.By != "auto_close" {
 		t.Fatalf("closed by = %+v %v", item.LastStatusChange, err)
 	}
+	if got := d.one(t, `SELECT quiet::text FROM conversation_status_changes WHERE workspace_id=$1 AND conversation_id=$2 AND to_status='closed'`, id); got != "false" {
+		t.Fatalf("a close that told the customer is recorded quiet=%s", got)
+	}
 	// Imported resolved, after the channel began closing by itself, and untouched since: closed, quietly.
 	d.one(t, `UPDATE channels SET auto_close_since=$2 WHERE workspace_id=$1 AND id=$3 RETURNING 'ok'`, at.Add(-10*24*time.Hour), d.channel.ID)
 	importInto(t, d, bundle.Bundle{Format: bundle.Format, Source: "old", Contacts: []bundle.Contact{{ID: "x", Name: "Old"}},
@@ -344,6 +347,10 @@ func TestAQuietResolveClosesQuietlyAndAResolveAgainWaits(t *testing.T) {
 	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND notice_kind='status_closed'`); got != "0" {
 		t.Fatalf("a quiet resolve was told closed: %s", got)
 	}
+	// The history says the close told nobody, as the export reads it.
+	if got := d.one(t, `SELECT cause||':'||quiet::text FROM conversation_status_changes WHERE workspace_id=$1 AND conversation_id=$2 AND to_status='closed'`, quiet); got != "auto_close:true" {
+		t.Fatalf("the quiet close is recorded as %s", got)
+	}
 }
 
 // A bulk change marks what it will tell; any later change of the status takes the mark away, so the
@@ -442,6 +449,9 @@ func TestAnImportedResolvedConversationClosesAsItsDeskWould(t *testing.T) {
 	}
 	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND notice_kind IS NOT NULL`); got != "0" {
 		t.Fatalf("imported conversations told the customer: %s", got)
+	}
+	if got := d.one(t, `SELECT string_agg(quiet::text,',') FROM conversation_status_changes WHERE workspace_id=$1 AND cause='auto_close'`); got != "true,true" {
+		t.Fatalf("the quiet closes of imported conversations are recorded quiet=%s", got)
 	}
 }
 
