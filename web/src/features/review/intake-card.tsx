@@ -4,6 +4,7 @@ import type { ChatItem, IntakeDecideInput, IntakeGathering, IntakeGatheringDetai
 import { formatDate } from '../../lib/format-date';
 import { PlainTextBody } from '../inbox/plain-text-body';
 import { Choice } from '../../ui/choice';
+import { AIDecisionWhy } from './ai-decision-why';
 import { AISuggestion } from './ai-suggestion';
 import { CandidatePicker } from './candidate-picker';
 import { reviewMessages as m } from './review-messages';
@@ -100,6 +101,7 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
       {settled && <dl className="intake-decided">
         <dt>{m.decidedBy}</dt><dd><span>{whoDecided(item, agentName)}</span>{item.decided_at && <> · <time dateTime={item.decided_at}>{formatDate(item.decided_at, timezone)}</time></>}</dd>
         {item.fallback && <dd className="muted-copy">{m.fallback}</dd>}
+        {item.decided_by === 'ai' && item.ai_decision && <dd className="intake-decided-why"><AIDecisionWhy decision={item.ai_decision} timezone={timezone} label={m.whyAI} /></dd>}
       </dl>}
       {open && detailFailed && <p role="alert" className="error-copy">{m.detailFailed} <button type="button" className="link-action" onClick={onRetryDetail}>{m.tryAgain}</button></p>}
       {open && !detail && !detailFailed && <p role="status" className="muted-copy">{m.loading}</p>}

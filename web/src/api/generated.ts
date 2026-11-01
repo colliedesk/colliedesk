@@ -5135,6 +5135,30 @@ export interface components {
             preview: string;
             /** @description What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done. */
             suggestion: components["schemas"]["IntakeSuggestion"] | null;
+            /** @description The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided. */
+            ai_decision: components["schemas"]["IntakeAIDecision"] | null;
+        };
+        IntakeAIDecision: {
+            /** Format: uuid */
+            decision_id: string;
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore";
+            /**
+             * Format: uuid
+             * @description With attach.
+             */
+            target_conversation_id: string | null;
+            confidence: number | null;
+            /** @description With attach: how sure it was of the second most likely conversation. */
+            runner_up_confidence: number | null;
+            /** @description AI's reason, written from what the customer said; erased 90 days after. */
+            reason: string | null;
+            /** @description The model the channel's intake asked. */
+            model: string | null;
+            /** @description The model that answered, when the provider says: another one than model when the provider fell back (OpenRouter's fallback models). */
+            served_model: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         IntakeSuggestion: {
             /** Format: uuid */
@@ -5345,7 +5369,10 @@ export interface components {
             follows_decision_id: string | null;
             /** @description What failed when AI's answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject. */
             error_code: string | null;
+            /** @description With AI: the model the channel's intake asked. */
             model: string | null;
+            /** @description With AI: the model that answered, when the provider says: another one than model when the provider fell back (OpenRouter's fallback models). */
+            served_model: string | null;
             /** Format: uuid */
             agent_id: string | null;
             via_token: boolean;
@@ -7571,6 +7598,8 @@ export interface components {
             /** Format: uuid */
             contact_id: string;
             contact_name: string;
+            /** @description The organization of its customer (a Zalo group's organization, a Freshdesk company): the name ?organization= lists the conversations of. Null when the customer has none. */
+            contact_organization?: string | null;
             subject: string;
             status: components["schemas"]["ConversationStatus"];
             priority: components["schemas"]["Priority"];

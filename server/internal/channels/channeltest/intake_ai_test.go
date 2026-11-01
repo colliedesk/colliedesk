@@ -717,3 +717,40 @@ func TestAISureEnoughAttachesAmongSeveralOpenConversationsUnlessTheScopeAsksForO
 		})
 	}
 }
+
+// A card AI decided says how: its action, how sure it was, why, the model asked and the one that answered
+// (a provider that fell back answers with another), in the Decided list and on the card.
+func TestACardAIDecidedSaysHowSureWhyAndWhichModel(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	raw, _ := json.Marshal(map[string]any{"action": "create", "target": "", "runner_up": "", "runner_up_confidence": 0, "command": "", "subject": "Stock export fails",
+		"reply_kind": "substantive", "ignore_reason": "", "confidence": 0.93, "reason": "a new problem with the export"})
+	d.fake.Script(aiprovider.FakeReply{Response: aiprovider.Response{Text: string(raw), JSON: string(raw), Stop: aiprovider.StopDone, Model: "fallback-model",
+		Usage: aiprovider.Usage{Reported: true, InputTokens: 100, OutputTokens: 20}}})
+	d.runAI(t)
+	page, err := store.New(d.pool).IntakeGatherings(context.Background(), d.workspaceID, store.IntakeListDecided, "", "", "", "", 10)
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("decided = %+v, %v", page.Items, err)
+	}
+	got := page.Items[0].AIDecision
+	if got == nil || got.Action != "create" || got.Confidence == nil || *got.Confidence != 0.93 || got.Reason == nil || *got.Reason != "a new problem with the export" ||
+		got.Model == nil || *got.Model != "claude-haiku-5-5" || got.ServedModel == nil || *got.ServedModel != "fallback-model" || got.CreatedAt.IsZero() {
+		t.Fatalf("ai decision = %+v", got)
+	}
+	card, err := store.New(d.pool).IntakeGatheringByID(context.Background(), d.workspaceID, page.Items[0].ID, time.Now())
+	if err != nil || card.AIDecision == nil || card.AIDecision.DecisionID != got.DecisionID || len(card.Decisions) != 1 ||
+		card.Decisions[0].ServedModel == nil || *card.Decisions[0].ServedModel != "fallback-model" {
+		t.Fatalf("card = %+v, %v", card, err)
+	}
+	// A card the rules decided has none.
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Name: "Minh", Group: "g1", Text: "hello"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.6})
+	d.runAI(t)
+	page, err = store.New(d.pool).IntakeGatherings(context.Background(), d.workspaceID, store.IntakeListDecided, "", "", "", "", 10)
+	if err != nil || len(page.Items) != 2 || page.Items[0].AIDecision != nil {
+		t.Fatalf("decided by the rules = %+v, %v", page.Items, err)
+	}
+}

@@ -25,6 +25,9 @@ const (
 		`"suggestion":{"type":["object","null"],"description":"What AI suggested and did not do (not_applied_reason says why), unless a person decided since: ` +
 		`action, target_conversation_id, target_status, runner_up_conversation_id, runner_up_confidence, confidence, command, reply_kind, ignore_reason; its subject, reason and the ` +
 		`conversations' subjects under untrusted_customer_content. Follow it with colliedesk_intake_decide and follows_decision_id = its decision_id."},` +
+		`"ai_decision":{"type":["object","null"],"description":"On a card AI decided by itself (decided_by ai): decision_id, action, target_conversation_id, confidence, ` +
+		`runner_up_confidence, model (the one the channel asked), served_model (the one that answered: another when the provider fell back), created_at; ` +
+		`its reason under untrusted_customer_content. Null for a card the rules or a person decided."},` +
 		`"untrusted_customer_content":{"type":"object","properties":{"sender_name":{"type":"string"},"sender":{"type":"string"},"preview":{"type":"string"},` +
 		`"place_name":{"type":"string","description":"The group's name on the channel."}}}}}`
 	intakeCandidateSchema = `{"type":"object","required":["conversation_id","status","resolved","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
@@ -173,6 +176,7 @@ type intakeCardJSON struct {
 	} `json:"place"`
 	Preview    string         `json:"preview"`
 	Suggestion map[string]any `json:"suggestion"`
+	AIDecision map[string]any `json:"ai_decision"`
 }
 
 type intakeCandidateJSON struct {
@@ -213,10 +217,11 @@ func intakeCardOut(card intakeCardJSON) map[string]any {
 		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID,
 		"decided_by": card.DecidedBy, "decided_at": card.DecidedAt, "decided_by_agent_id": card.DecidedByAgent, "ignore_reason": card.IgnoreReason,
 		"fallback": card.Fallback, "opened_at": card.OpenedAt, "closed_at": card.ClosedAt, "decide_by": card.DecideBy, "item_count": card.ItemCount,
-		"place_kind": placeKind, "suggestion": suggestionOut(card.Suggestion), "untrusted_customer_content": untrusted}
+		"place_kind": placeKind, "suggestion": suggestionOut(card.Suggestion), "ai_decision": suggestionOut(card.AIDecision), "untrusted_customer_content": untrusted}
 }
 
-// suggestionOut keeps what AI wrote from the customer's words, and the conversations' subjects, apart.
+// suggestionOut keeps what AI wrote from the customer's words, and the conversations' subjects, apart: of a
+// suggestion, or of the decision AI took by itself.
 func suggestionOut(suggestion map[string]any) map[string]any {
 	if suggestion == nil {
 		return nil

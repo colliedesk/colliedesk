@@ -9,6 +9,7 @@ import { apiQuery } from '../../lib/inbox-query';
 import { Dialog, Field } from '../../ui/dialog';
 import { RotateCcwIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
+import { AIDecisionWhy } from '../review/ai-decision-why';
 import { ConversationPicker } from './conversation-picker';
 import { messageMovesApi } from './message-moves-api';
 import type { MessageMove, MessageMoveResult, MoveInput } from './message-moves-api';
@@ -56,10 +57,13 @@ interface ActionsProps {
 
 // MessageIntakeLabel says why a chat message is in this conversation: the channel's rules (and which one),
 // a person in Review, or AI. Email and web form messages say nothing: every one of them is the rules'. A
-// thank-you written after the conversation was resolved says it kept it resolved, with Reopen.
-export function MessageIntakeLabel({ conversation, message }: { conversation: Conversation; message: Message }) {
+// thank-you written after the conversation was resolved says it kept it resolved, with Reopen. A message AI
+// added says how sure it was, why, and which model answered.
+export function MessageIntakeLabel({ conversation, message, timezone = 'UTC' }: { conversation: Conversation; message: Message; timezone?: string }) {
   const client = useQueryClient();
-  const intake = useIntake(conversation.id).data?.messages.find((entry) => entry.message_id === message.id);
+  const answer = useIntake(conversation.id).data;
+  const intake = answer?.messages.find((entry) => entry.message_id === message.id);
+  const byAI = intake?.decision_basis === 'model' ? answer?.gatherings.find((card) => card.id === intake.gathering_id)?.ai_decision : undefined;
   const [reopening, setReopening] = useState(false);
   const [failed, setFailed] = useState(false);
   const reopen = async () => {
@@ -76,6 +80,7 @@ export function MessageIntakeLabel({ conversation, message }: { conversation: Co
   };
   return <>
     {intake?.gathering_id && <span className="message-kind message-intake">{addedLabel(intake.decision_basis, intake.decision_rule)}</span>}
+    {byAI && <AIDecisionWhy decision={byAI} timezone={timezone} label={m.whyAI} />}
     {message.intake_reply_kind === 'acknowledgement' && <span className="message-kind message-kept">{m.keptResolved}
       {conversation.status === 'resolved' && <> · <button type="button" className="link-action" disabled={reopening} onClick={() => void reopen()}>{m.reopen}</button></>}
       {failed && <span role="alert" className="error-copy"> {m.reopenFailed}</span>}</span>}

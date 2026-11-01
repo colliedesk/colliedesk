@@ -60,6 +60,7 @@ export const moveMessages = {
   } as Record<string, string>,
   addedByPerson: 'Added by a person in Review',
   addedByAI: 'Added by AI',
+  whyAI: 'Why AI added it',
   addedByRules: 'Added by the channel’s rules',
   notANewRequest: 'Not a new request? Move it…',
   // A thank-you AI or a person kept out of reopening the conversation.
