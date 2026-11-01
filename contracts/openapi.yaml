@@ -411,7 +411,8 @@ paths:
         At most 3 sign-ups per client address in a rolling 24 hours. The web form also asks what the
         team wants first (`goal`), the person's `role` and where they heard of Colliedesk (`source`);
         each is optional, is stored with the workspace and is counted with the trial. A value outside
-        its list answers 400 `invalid_request` and creates nothing.
+        its list answers 400 `invalid_request` and creates nothing. `attribution` carries the post or ad
+        the sign-in link came from; values the server does not accept are dropped instead.
       security:
         - bearerAuth: []
       x-permission: public
@@ -430,6 +431,7 @@ paths:
                 source: {$ref: '#/components/schemas/OnboardingSource'}
                 timezone: {$ref: '#/components/schemas/SignInTimezone'}
                 next: {$ref: '#/components/schemas/SignInNext'}
+                attribution: {$ref: '#/components/schemas/SignupAttribution'}
       responses:
         '201': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -9913,6 +9915,26 @@ components:
       type: string
       enum: [x, email, search, ai_chatgpt, ai_claude, ai_gemini, ai_perplexity, ai_other, tiktok, youtube, reddit, github, referral, other]
       description: Where the person heard of Colliedesk.
+    SignupAttribution:
+      type: object
+      description: >
+        The post or ad a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys and
+        the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links. A value is kept only when it matches
+        `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. Stored with the onboarding
+        answers and counted with the trial and the first payment.
+      additionalProperties: {type: string}
+      properties:
+        utm_source: {type: string, maxLength: 300}
+        utm_medium: {type: string, maxLength: 300}
+        utm_campaign: {type: string, maxLength: 300}
+        utm_content: {type: string, maxLength: 300}
+        utm_term: {type: string, maxLength: 300}
+        ttclid: {type: string, maxLength: 300}
+        fbclid: {type: string, maxLength: 300}
+        click_id_seen_at:
+          type: string
+          format: date-time
+          description: When the browser first saw `ttclid` or `fbclid`. Missing, in the future or older than 7 days, the sign-up time stands in.
     Me:
       type: object
       required: [agent, workspace, timezone, scope, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden]

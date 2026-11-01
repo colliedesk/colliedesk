@@ -54,6 +54,8 @@ type SignUp struct {
 	HostedMailDomain string
 	// Onboarding is what the person said about their team; it is stored with the workspace.
 	Onboarding domain.Onboarding
+	// Attribution is the post or ad the sign-up came from (domain.ParseAttribution); stored with the answers.
+	Attribution domain.Attribution
 }
 
 // SignUpCloud creates a trial workspace with Email as its admin. In one privileged transaction it
@@ -107,8 +109,12 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 			emailHash, workspace.ID, ipHash, now); err != nil {
 			return fmt.Errorf("record sign-up: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO workspace_onboarding(workspace_id,goal,role,source,created_at) VALUES($1,$2,$3,$4,$5)`,
-			workspace.ID, in.Onboarding.Goal, in.Onboarding.Role, in.Onboarding.Source, now); err != nil {
+		a := in.Attribution
+		if _, err := tx.Exec(ctx, `INSERT INTO workspace_onboarding(workspace_id,goal,role,source,created_at,
+			utm_source,utm_medium,utm_campaign,utm_content,utm_term,ttclid,fbclid,click_id_seen_at)
+			VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),NULLIF($11,''),NULLIF($12,''),$13)`,
+			workspace.ID, in.Onboarding.Goal, in.Onboarding.Role, in.Onboarding.Source, now,
+			a.UTMSource, a.UTMMedium, a.UTMCampaign, a.UTMContent, a.UTMTerm, a.TTCLID, a.FBCLID, nullTime(a.ClickIDSeenAt)); err != nil {
 			return fmt.Errorf("record onboarding answers: %w", err)
 		}
 		return nil
@@ -117,6 +123,14 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 		return domain.Workspace{}, err
 	}
 	return workspace, nil
+}
+
+// nullTime stores the zero time as NULL.
+func nullTime(at time.Time) *time.Time {
+	if at.IsZero() {
+		return nil
+	}
+	return &at
 }
 
 // connectHostedEmailTx gives a new workspace its email channel at the hosted address; nothing when the

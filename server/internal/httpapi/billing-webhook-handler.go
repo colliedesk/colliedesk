@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"context"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"regexp"
 	"time"
@@ -83,7 +85,7 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	}
 	// A redelivery is a duplicate and a stale event changes nothing; neither is counted.
 	if result == store.SubscriptionApplied && firstActivation {
-		a.recordFunnel("subscription_activated", workspaceID, map[string]any{"plan": incoming.Plan})
+		a.recordFunnel("subscription_activated", workspaceID, a.activationProperties(request.Context(), workspaceID, incoming.Plan))
 	}
 	status := string(result)
 	if result == store.SubscriptionUnknownWorkspace {
@@ -122,6 +124,19 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 // planOfProduct is the plan a Polar product buys, or "" when the product is not sold here.
 func (a *API) planOfProduct(productID string) string {
 	return a.config.Billing.Products.PlanOf(productID)
+}
+
+// activationProperties are the plan and the post or ad the workspace's sign-up came from. Attribution that
+// cannot be read is left out and logged: the payment is applied and counted either way.
+func (a *API) activationProperties(ctx context.Context, workspaceID, plan string) map[string]any {
+	properties := map[string]any{"plan": plan}
+	attribution, err := a.store.SignupAttribution(ctx, workspaceID)
+	if err != nil {
+		slog.Warn("subscription_activated without sign-up attribution", "workspace", workspaceID, "error", err)
+		return properties
+	}
+	maps.Copy(properties, attribution.Properties())
+	return properties
 }
 
 // recordReply counts a reply sent to a customer, by a person or an AI agent's token; a note is not a reply.
