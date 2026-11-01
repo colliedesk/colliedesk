@@ -17,6 +17,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -66,6 +67,9 @@ type Config struct {
 	// Background runs what follows a delivery after it was answered (reading its sender's name); a test
 	// runs it at once.
 	Background func(func())
+	// Origin (APP_ORIGIN) and HostDomain (HELP_CENTER_DOMAIN) make the workspace's public address, so the
+	// configuration gives absolute URLs an agent can hand a person; empty leaves them null.
+	Origin, HostDomain string
 }
 
 // Adapter is the Zalo channel type.
@@ -114,7 +118,7 @@ func (a *Adapter) Definition() channels.Definition {
 		Files:  []channels.File{{Dir: VerificationDir, Name: siteFile, Serve: a.verificationFile}}}
 }
 
-func (a *Adapter) Config() channels.ConfigPart     { return config{} }
+func (a *Adapter) Config() channels.ConfigPart     { return config{a.config} }
 func (a *Adapter) Inbound() channels.InboundPart   { return inbound{} }
 func (a *Adapter) Outbound() channels.OutboundPart { return outbound{a} }
 
@@ -140,6 +144,10 @@ type Public struct {
 	SiteVerification *string `json:"site_verification"`
 	// VerificationPrefixPath is the URL prefix to verify in the Zalo app, below the server's address.
 	VerificationPrefixPath string `json:"verification_prefix_path"`
+	// VerificationPrefixURL and WebhookURL are the two on the workspace's public address; nil when the
+	// server knows none.
+	VerificationPrefixURL *string `json:"verification_prefix_url"`
+	WebhookURL            *string `json:"webhook_url"`
 	// Credentials say which secrets are set: each of the four, its last four characters and when it was
 	// last written (a refresh too); never its value.
 	Credentials []CredentialState `json:"credentials"`
@@ -158,7 +166,7 @@ func fieldError(field, message string) error {
 	return &channels.FieldError{Fields: map[string]string{field: message}, Message: "Check the Zalo channel."}
 }
 
-type config struct{}
+type config struct{ server Config }
 
 func (config) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.Channel, patch json.RawMessage) (channels.ConfigChange, error) {
 	var value ConfigValue
@@ -297,7 +305,19 @@ func readSettings(ctx context.Context, tx pgx.Tx, workspaceID, channelID string)
 	return s, nil
 }
 
-func (config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
+// origin is the workspace's public address (workspacehost.Origin), "" when the server knows none.
+func (c config) origin(ctx context.Context, tx pgx.Tx, workspaceID string) (string, error) {
+	if c.server.Origin == "" {
+		return "", nil
+	}
+	var slug string
+	if err := tx.QueryRow(ctx, `SELECT slug FROM workspaces WHERE id=$1`, workspaceID).Scan(&slug); err != nil {
+		return "", fmt.Errorf("read workspace slug: %w", err)
+	}
+	return workspacehost.Origin(c.server.Origin, c.server.HostDomain, slug), nil
+}
+
+func (c config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
 	s, err := readSettings(ctx, tx, channel.WorkspaceID, channel.ID)
 	if err != nil {
 		return nil, err
@@ -323,7 +343,13 @@ func (config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for _, spec := range (config{}).Credentials() {
+	if base, err := c.origin(ctx, tx, channel.WorkspaceID); err != nil {
+		return nil, err
+	} else if base != "" {
+		prefix, webhook := base+public.VerificationPrefixPath, base+public.WebhookPath
+		public.VerificationPrefixURL, public.WebhookURL = &prefix, &webhook
+	}
+	for _, spec := range c.Credentials() {
 		state, ok := stored[spec.Name]
 		if !ok {
 			state = CredentialState{Name: spec.Name}
@@ -387,6 +413,18 @@ func (config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (
 		return channels.Status{State: channels.StateNeedsAttention, ReasonCode: ReasonSignatureFailed}, nil
 	case !names[CredentialAccessToken] || !names[CredentialRefreshToken] || !names[CredentialAppSecret]:
 		return channels.Status{State: channels.StateNeedsAttention, ReasonCode: ReasonTokenMissing}, nil
+	}
+	// Nothing arrived yet and no code: Zalo may be refusing the webhook URL on an address it has not
+	// verified. Not a fault (a team may have verified its domain with DNS), so it is a hint, not attention.
+	if s.SiteCode == nil {
+		var arrived bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2)`,
+			channel.WorkspaceID, channel.ID).Scan(&arrived); err != nil {
+			return channels.Status{}, err
+		}
+		if !arrived {
+			return channels.Status{State: channels.StateWorking, Message: NoCodeHint}, nil
+		}
 	}
 	return channels.Status{State: channels.StateWorking}, nil
 }

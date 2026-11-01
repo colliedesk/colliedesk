@@ -19,6 +19,10 @@ const VerificationDir = "/channels/zalo"
 const SiteVerificationRule = "No code found: Zalo's code is 8 to 100 letters, digits, _ or -; paste it, the TXT line " +
 	"(zalo-platform-site-verification=<code>), the meta tag or the file's name (zalo_verifier<code>.html), or leave it empty to clear it."
 
+// NoCodeHint is the status message of a Zalo channel with no code that has received nothing yet.
+const NoCodeHint = "Nothing has arrived yet. If Zalo refuses the webhook URL because its address is not verified, " +
+	"verify the URL prefix (verification_prefix_url) in the Zalo app with the HTML file method and set the code Zalo gives as site_verification."
+
 // MaxSiteVerificationPaste bounds what may be pasted for a code (the whole file fits).
 const MaxSiteVerificationPaste = 2000
 

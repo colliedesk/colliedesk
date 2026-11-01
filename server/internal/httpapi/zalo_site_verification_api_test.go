@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 const (
@@ -25,6 +26,8 @@ type zaloVerificationView struct {
 	Config struct {
 		SiteVerification       *string `json:"site_verification"`
 		VerificationPrefixPath string  `json:"verification_prefix_path"`
+		VerificationPrefixURL  *string `json:"verification_prefix_url"`
+		WebhookURL             *string `json:"webhook_url"`
 	} `json:"config"`
 }
 
@@ -36,7 +39,9 @@ func TestAZaloChannelServesZalosSiteVerificationFileForItsCode(t *testing.T) {
 	// The prefix to verify is shown before any code is pasted.
 	var before zaloVerificationView
 	decode(t, request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.channelA, nil, d.adminA, nil), &before)
-	if before.Config.SiteVerification != nil || before.Config.VerificationPrefixPath != "/api/v1/channels/zalo/" {
+	if before.Config.SiteVerification != nil || before.Config.VerificationPrefixPath != "/api/v1/channels/zalo/" ||
+		before.Config.VerificationPrefixURL == nil || *before.Config.VerificationPrefixURL != testOrigin+"/api/v1/channels/zalo/" ||
+		before.Config.WebhookURL == nil || *before.Config.WebhookURL != testOrigin+"/api/v1/channels/zalo/webhook" {
 		t.Fatalf("before a code = %+v", before.Config)
 	}
 	never := zaloFile(d, http.MethodGet, "zalo_verifier"+zaloCodeA+".html")
@@ -172,5 +177,20 @@ func TestZaloVerificationFileLookupsAreChargedToTheClientAddress(t *testing.T) {
 	}
 	if code := ask("zalo_verifier" + zaloCodeA + ".html"); code != http.StatusTooManyRequests {
 		t.Fatalf("lookup 31 = %d", code)
+	}
+}
+
+// On a server that gives each workspace its own host, the addresses are on that host, as its people use it.
+func TestTheZaloAddressesAreOnTheWorkspacesOwnHost(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.HelpCenterDomain = "colliedesk.example"
+	})
+	admin := createSession(t, api, service, "Zalo Host", "admin@zalo-host.example.com")
+	id := create(t, api, admin, "/api/v1/channels", map[string]any{"type": "zalo", "config": map[string]any{"oa_id": "4440003", "app_id": "700005"}})
+	var view zaloVerificationView
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels/"+id, nil, admin, nil), &view)
+	if view.Config.VerificationPrefixURL == nil || !strings.HasSuffix(*view.Config.VerificationPrefixURL, ".colliedesk.example/api/v1/channels/zalo/") ||
+		!strings.HasPrefix(*view.Config.VerificationPrefixURL, "https://") {
+		t.Fatalf("on a workspace host = %+v", view.Config)
 	}
 }

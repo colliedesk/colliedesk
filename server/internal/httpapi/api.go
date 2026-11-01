@@ -330,7 +330,9 @@ func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Co
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: config.Zalo})
+	zaloConfig := config.Zalo
+	zaloConfig.Origin, zaloConfig.HostDomain = config.Origin, config.HelpCenterDomain
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: zaloConfig})
 	if len(config.ExtraChannelTypes) == 0 {
 		return registered
 	}

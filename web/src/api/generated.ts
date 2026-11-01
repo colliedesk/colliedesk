@@ -8183,6 +8183,10 @@ export interface components {
             site_verification: string | null;
             /** @description The URL prefix to verify in the Zalo app (Domain verification › URL prefix), below the server's address (/api/v1/channels/zalo/); it covers the webhook. */
             verification_prefix_path: string;
+            /** @description verification_prefix_path on the workspace's public address (its own host, else APP_ORIGIN), as the person pastes it in the Zalo app (URL prefix, HTML file method). null when the server knows no address. */
+            verification_prefix_url: string | null;
+            /** @description webhook_path on the same address, for the Zalo app's webhook settings once the prefix is verified. null when the server knows no address. */
+            webhook_url: string | null;
             /** @description The four secrets in order (app_secret, oa_secret_key, access_token, refresh_token): whether each is set, its last four characters and when it was last written (a token refresh too). Never a value. */
             credentials: {
                 /** @enum {string} */

@@ -29,7 +29,7 @@ const channel = (config: Record<string, unknown> = {}, change: Partial<ChannelDe
   id: ID, type: 'zalo', name: 'Hảo Đạt OA', enabled: true, status: { state: 'working', reason_code: null, message: null }, summary: 'OA 4318…2207 · 1 group linked',
   capabilities: ['threads'], held_count: 0, unsent_count: 0, last_inbound_at: null, created_at: '2026-10-30T00:00:00Z', updated_at: '2026-10-30T00:00:00Z',
   config: { oa_id: '4318002291772207', app_id: '1188200455', staff_user_ids: [], groups: {}, webhook_path: '/api/v1/channels/zalo/webhook',
-    site_verification: null, verification_prefix_path: '/api/v1/channels/zalo/',
+    site_verification: null, verification_prefix_path: '/api/v1/channels/zalo/', verification_prefix_url: null, webhook_url: null,
     credentials: credentials({ app_secret: 'a1f9', oa_secret_key: '7c20' }), ...config },
   settings: {}, effective_settings: {}, ...change,
 } as ChannelDetail);

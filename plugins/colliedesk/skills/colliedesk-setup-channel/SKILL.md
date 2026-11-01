@@ -23,9 +23,12 @@ the person with the channel working or a short list of what only they can do.
    it there.
 2. Say plainly which steps happen outside Colliedesk (a DNS record, a webhook address in another
    service) and wait for the person to confirm them.
-3. When your token may not change channels, give the person the steps from the channel's page
+3. When another service (such as Zalo) will take a webhook only on an address it has verified, give the
+   person the exact address to verify that Colliedesk shows for the channel, and set on the channel the
+   code that service gives them, so they need no DNS change; then give them the webhook address.
+4. When your token may not change channels, give the person the steps from the channel's page
    instead of a dead end.
-4. Check the channel's state at the end and report it as Colliedesk gives it.
+5. Check the channel's state at the end and report it as Colliedesk gives it.
 
 ## Before you start
 

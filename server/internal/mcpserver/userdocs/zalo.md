@@ -116,6 +116,13 @@ for you, also on Colliedesk Cloud's address. An admin, in this order:
 4. Back in Zalo, press **Verify** (Xác thực). Zalo fetches the file at the URL prefix and the address is
    verified; then paste the **Webhook URL** in the app's webhook settings.
 
+An AI agent with an admin token does the same through MCP: the channel's configuration
+(`colliedesk_channels_get`, or the answer of `colliedesk_channels_create` and `colliedesk_channels_update`)
+has `verification_prefix_url`, the URL prefix to give the person for Zalo, and `webhook_url`, the
+Webhook URL for after. The agent sets the code the person reads in Zalo with `colliedesk_channels_update`
+(`config.site_verification`). Until anything arrives on a channel with no code, its state (`colliedesk_channels_check`)
+says so.
+
 The file is served while the channel holds the code: **Remove code** stops it, and so does removing the
 channel. Keep it after Zalo verified the prefix, as Zalo may check the file again: turning the channel off
 keeps serving it, and so does another channel that holds the same code. Several Zalo apps can each verify the same address with their own code, one per channel. Any
