@@ -66,6 +66,16 @@ export const aiSettingsSchema = z.object({
   auto_draft_estimate: z.object({ customer_messages: z.number().int(), draft_cost_micro_usd: z.number().int().nullable() }),
   channels: z.array(aiChannelLevelSchema), source_consents: z.array(aiSourceConsentSchema),
 }) satisfies z.ZodType<JsonResponse<'getAISettings', 200>>;
+const channelAISchema = z.object({
+  channel_id: z.string().uuid(),
+  scopes: z.array(z.object({
+    scope: z.string(),
+    slots: z.array(z.object({
+      slot: aiSlotNameSchema, level: aiLevelSchema.nullable(), effective_level: aiLevelSchema, source: z.enum(['scope', 'channel', 'workspace']),
+      off_reason: z.enum(['workspace_off']).nullable(), options: intakeOptionsSchema.nullable(),
+    })),
+  })),
+}) satisfies z.ZodType<JsonResponse<'getChannelAI', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 const aiModelListSchema = z.object({ models: z.array(z.string()) }) satisfies z.ZodType<JsonResponse<'listAIModels', 200>>;
 
@@ -112,13 +122,17 @@ export type AIProvider = z.infer<typeof aiProviderSchema>;
 export type AISlot = z.infer<typeof aiSlotSchema>;
 export type AIEvent = z.infer<typeof aiEventSchema>;
 export type AISlotName = z.infer<typeof aiSlotNameSchema>;
+export type AILevel = z.infer<typeof aiLevelSchema>;
+export type AIChannelLevel = z.infer<typeof aiChannelLevelSchema>;
+export type ChannelAI = z.infer<typeof channelAISchema>;
+export type ChannelAIInput = RequestBody<'setChannelAI'>;
 export type AIUsage = z.infer<typeof aiUsageSchema>;
 export type AIAutomatic = z.infer<typeof aiAutomaticSchema>;
 export type AIProviderInput = RequestBody<'addAIProvider'>;
 export type AISlotInput = RequestBody<'setAISlot'>;
 export type AIModelsInput = RequestBody<'listAIModels'>;
 
-const json = <Operation extends 'addAIProvider' | 'listAIModels' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits'>(value: RequestBody<Operation>): string => JSON.stringify(value);
+const json = <Operation extends 'addAIProvider' | 'listAIModels' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits' | 'setChannelAI'>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 export const aiApi = {
   settings: () => request('/api/v1/ai', aiSettingsSchema),
@@ -131,6 +145,10 @@ export const aiApi = {
   check: (id: string) => request(`/api/v1/ai/providers/${id}/check`, aiProviderSchema, { method: 'POST' }),
   remove: (id: string) => request(`/api/v1/ai/providers/${id}`, removedSchema, { method: 'DELETE' }),
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
+  // A channel's levels on each of its scopes; setting one answers the levels after the change.
+  channel: (id: string) => request(`/api/v1/channels/${id}/ai`, channelAISchema),
+  setChannel: (id: string, slot: AISlotName, input: ChannelAIInput) =>
+    request(`/api/v1/channels/${id}/ai/${slot}`, channelAISchema, { method: 'PUT', body: json<'setChannelAI'>(input) }),
   usage: (month: string) => request(`/api/v1/ai/usage?month=${encodeURIComponent(month)}`, aiUsageSchema),
   chatUsage: () => request('/api/v1/ai/chat/usage', aiChatUsageSchema),
   chatSessions: (filter: AIChatFilter) => {

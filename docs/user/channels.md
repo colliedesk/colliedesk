@@ -60,7 +60,7 @@ on your shop and one on your careers page. Pick the type again to add another.
   a Gmail account sends for one email channel only. Two web forms may list the same website.
 
 Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
-**Replies**, how replies leave; web form: **Embed**) and **History**; on **Settings → Email** it is
+**Replies**, how replies leave; web form: **Embed**), **AI** and **History**; on **Settings → Email** it is
 **Manage**. An email address still waiting for its first email also has its setup,
 `/settings/channels/<id>/setup` (**Continue setup**). Old links to the email and web form sections of
 Settings open the type's page; a bookmark to `/settings/channels/<id>` opens the same channel.
@@ -119,8 +119,9 @@ opened or discarded.
 
 ## AI on a channel
 
-A channel can set what each AI feature does by itself on it (triage, drafts, and on chat channels
-intake), apart from the workspace's default; see [AI per channel](ai.md#what-ai-does-by-itself-per-channel).
+Each channel's **AI** tab sets what each AI feature does by itself on it (triage and drafts; intake
+comes on chat channels), apart from the workspace's default; see [AI per channel](ai.md#what-ai-does-by-itself-per-channel).
+Agents see the tab; only admins change it.
 A change shows in the channel's history as "changed what AI triage does by itself".
 
 ## For AI agents and the API

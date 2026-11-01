@@ -123,11 +123,12 @@ minute are asked for in a workspace.
 
 ### Write a draft when a customer writes
 
-Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, turn on **Write a
-draft when a customer writes**. A dialog says first what it would have meant in the last 30 days (how
-many customer messages, about what a draft costs, and how much of the included AI it may use, or that
-your own key is billed). It is off until an admin turns it on, and it turns off when drafts turn off
-or move to another provider; it stays off until an admin turns it on again.
+Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, set **Default
+for channels** to **Suggest** (or do it on one channel, in its **AI** tab). A dialog says first what it
+would have meant in the last 30 days (how many customer messages, about what a draft costs, and how
+much of the included AI it may use, or that your own key is billed). It is **Off** until an admin
+picks Suggest, and goes back to Off when drafts turn off or move to another provider; it stays Off until
+an admin picks Suggest again.
 
 Each new customer message (by email, the web form or a problem report) then gets a draft. It waits a
 minute for more messages from the customer, so several in a row get one draft, which answers them
@@ -177,10 +178,10 @@ Imported tickets get no suggestion. A suggestion nobody used for 7 days expires;
 
 ### Apply suggestions automatically
 
-Admins can let suggestions apply by themselves: **Settings → Built-in AI**, under **Triage suggestions**, turn on
-**Apply suggestions automatically** (a dialog says what it does first). It is off until an admin turns
-it on, and it turns off when triage turns off or moves to another provider; it stays off until an admin
-turns it on again. Pick what applies by itself: **Tags** and **Priority** (the default) and
+Admins can let suggestions apply by themselves: **Settings → Built-in AI**, under **Triage suggestions**, set
+**Default for channels** to **Auto** (or do it on one channel, in its **AI** tab; a dialog says what it does
+first). Turning triage on starts at **Suggest**; moving it to another provider goes back to Suggest, and
+it stays there until an admin picks Auto again. **Off** makes suggestions only when someone asks. Pick what applies by itself: **Tags** and **Priority** (the default) and
 **Assignee**. A part not picked waits for someone to accept it, as above.
 
 It only fills what nobody set: tags are added, never removed; the priority is set only while it is
@@ -206,8 +207,7 @@ Each feature has a level: what it does without anyone asking.
 | Reply drafts | Only **Draft with AI** | Writes a draft when a customer writes | Never: AI never sends |
 | Intake (chat channels only) | The channel's rules decide | The rules decide; AI leaves a suggestion for review | AI decides what is clear enough; otherwise the rules decide |
 
-The workspace's level is the default: **Apply suggestions automatically** is triage's Auto, **Write a
-draft when a customer writes** is drafts' Suggest, and triage turned on without it is Suggest. A
+The workspace's level is **Default for channels** under each feature in **Settings → Built-in AI**. A
 channel can set its own level for a feature, and a chat channel for each of its scopes (one-to-one
 messages, groups), for example triage Auto on the support mailbox and Off on the sales one. A scope
 without its own level follows the channel, and the channel follows the workspace. A level never goes
@@ -225,10 +225,14 @@ for), and the history says why. Intake also goes back to Suggest on a channel wh
 another model, since what it was checked on was the old model's decisions. Restoring a workspace from
 a backup does the same.
 
-Admins set a channel's levels with `PUT /api/v1/channels/{id}/ai/{slot}` or the MCP tool
-`colliedesk_channel_ai_set`, and read them with `colliedesk_channel_ai_get`; **Settings → Built-in
-AI** lists the channels that set a level of their own. Every change is in the AI history and in the
-channel's history. An AI agent lowers a level with an admin token; raising one (or loosening intake's
+Admins set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
+column per scope, each set to the default it follows or to Off, Suggest or Auto; under it, what the level
+does, or "Off: Triage is off for the workspace" with **Turn on**. Raising triage to Auto or drafts to
+Suggest asks with the same dialog as Built-in AI. Under each feature, **Built-in AI** lists the
+channels that differ ("Support · Auto"), each a link to its AI tab, or says that every channel follows
+the default. The same is `PUT /api/v1/channels/{id}/ai/{slot}` and the MCP tools
+`colliedesk_channel_ai_set` and `colliedesk_channel_ai_get`. Every change is in the AI history and in
+the channel's history. An AI agent lowers a level with an admin token; raising one (or loosening intake's
 settings) always becomes a [request a person approves](agent-requests.md).
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only

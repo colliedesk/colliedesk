@@ -1,0 +1,20 @@
+/* Choice: a radio group on the tabs' segmented track; the picked option raised on it. It wraps on a
+   narrow screen instead of scrolling, so every option stays in view. */
+.seg-choice { min-width: 0; margin: 0; border: 0; padding: 0; }
+.seg-choice-legend { margin-bottom: var(--space-1); padding: 0; color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
+.seg-choice-track { display: inline-flex; flex-wrap: wrap; gap: 2px; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-0); padding: 3px; }
+.seg-choice-option { position: relative; display: inline-flex; align-items: center; min-height: 30px; border-radius: var(--radius-sm); padding: 0 var(--space-3);
+  color: var(--text-2); font-size: var(--fs-small); font-weight: 500; cursor: pointer; transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
+.seg-choice-option input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.seg-choice-option:hover { background: color-mix(in srgb, var(--text-1) 5%, transparent); color: var(--text-1); }
+.seg-choice-option:has(input:checked), .seg-choice-option:has(input:checked):hover { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
+.seg-choice-option:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+.seg-choice:disabled .seg-choice-option { cursor: default; opacity: 0.6; }
+.seg-choice:disabled .seg-choice-option:hover { background: transparent; color: var(--text-2); }
+.seg-choice:disabled .seg-choice-option:has(input:checked) { color: var(--text-1); }
+.seg-choice:disabled .seg-choice-option input { cursor: default; }
+@media (pointer: coarse) { .seg-choice-option { min-height: var(--touch); } }
+@media (prefers-reduced-motion: reduce) { .seg-choice-option { transition: none; } }
+@media (forced-colors: active) { .seg-choice-option:has(input:checked) { outline: 2px solid Highlight; } }
+@media (max-width: 30rem) { .seg-choice-option { padding: 0 var(--space-2); } }

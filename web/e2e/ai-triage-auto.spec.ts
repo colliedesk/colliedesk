@@ -38,13 +38,14 @@ test('an admin lets triage apply by itself; a new ticket gets its tag and priori
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/triage`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
 
-    // Settings → Built-in AI: the switch asks first, and says what AI will do.
+    // Settings → Built-in AI: raising triage's default for channels to Auto asks first, and says what AI will do.
     await page.goto(`${baseURL}/settings/ai`);
-    await page.getByRole('switch', { name: 'Apply suggestions automatically' }).click();
+    const triage = page.getByRole('group', { name: 'Triage: default for channels' });
+    await triage.getByRole('radio', { name: 'Auto' }).click();
     const dialog = page.getByRole('dialog', { name: 'Apply triage suggestions automatically?' });
     await expect(dialog.getByText(/Only fills what nobody set/)).toBeVisible();
     await dialog.getByRole('button', { name: 'Turn on' }).click();
-    await expect(page.getByRole('switch', { name: 'Apply suggestions automatically' })).toBeChecked();
+    await expect(triage.getByRole('radio', { name: 'Auto' })).toBeChecked();
 
     const inbound = await page.request.post(`${baseURL}/api/v1/channels/email/inbound`, {
       headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret },

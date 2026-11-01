@@ -255,3 +255,16 @@
 .aic-try { display: grid; gap: var(--space-2); padding: var(--space-4); min-width: 0; }
 .aic-try p { margin: 0; }
 .aic-try-form { display: grid; gap: var(--space-2); }
+
+/* What a feature does by itself where no channel says otherwise, and the channels that say otherwise. */
+.ai-auto-note { grid-area: parts; margin: var(--space-1) 0 0; font-size: var(--fs-small); }
+.ai-differ { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: 0; padding: 0 var(--space-3);
+  font-size: var(--fs-small); }
+.ai-differ-label { color: var(--text-2); }
+.ai-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.ai-chip { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; border-radius: 999px; background: var(--surface-0);
+  box-shadow: 0 0 0 1px var(--line); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); text-decoration: none; overflow-wrap: anywhere; }
+.ai-chip:hover { background: color-mix(in srgb, var(--text-1) 5%, var(--surface-0)); }
+.ai-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+@media (pointer: coarse) { .ai-chip { min-height: var(--touch); } }
+@media (max-width: 44rem) { .ai-differ { padding: 0 var(--space-2); } }
