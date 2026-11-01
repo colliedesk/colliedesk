@@ -59,8 +59,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_presence` | Shows the team that the agent is working on a conversation (as "your name via the token label", for 2 minutes), lists who else has it open and warns when someone has a reply not sent yet; `leave` takes it off the list | `read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `read` |
 | `colliedesk_attachment_get` | Reads an attachment: name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `read` |
-| `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created. A status its chat channel has words for [tells the customer](inbox.md#telling-the-customer): below the send tier that waits for a person; `notify: false` sets it quietly | `draft` |
-| `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing; tells customers as `colliedesk_conversation_update` does, and `notify: false` sets the statuses quietly | `draft` |
+| `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
+| `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `draft` |
 | `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call) | `draft` |
 | `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from. Cannot be undone | `send` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
@@ -386,3 +386,7 @@ approves it in the console with their authenticator code.
 - `colliedesk_conversations_bulk_update` is all or nothing: if one id is not a conversation of the
   workspace, nothing changes. It takes only existing tag names and cannot set priority; use
   `colliedesk_conversation_update` for those.
+- A status set with `colliedesk_conversation_update` or `colliedesk_conversations_bulk_update` on a
+  conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); with
+  a token below the send tier that change waits for a person. `notify: false` sets the status quietly,
+  without asking.
