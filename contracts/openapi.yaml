@@ -4894,7 +4894,7 @@ paths:
   /api/v1/workspace/setup/move:
     put:
       operationId: setSetupMoveStep
-      x-permission: workspace:update
+      x-permission: access:write
       description: >-
         Confirm a help center preview or Search Console verification and sitemap submission.
         The server requires a public article and an enabled help center for preview, and a
