@@ -63,7 +63,11 @@ type Slot struct {
 	Model      *string `json:"model"`
 	Effort     string  `json:"effort"`
 	Enabled    bool    `json:"enabled"`
-	// Automatic: triage suggestions apply by themselves (the AutoParts of them) as they come.
+	// DefaultLevel is what the feature does by itself where no channel sets a level, and on
+	// conversations of no channel: off, suggest or auto (triage only).
+	DefaultLevel string `json:"default_level"`
+	// Automatic is the older switch, read from DefaultLevel for clients that still read it: triage
+	// applying by itself (auto), drafts written when a customer writes (suggest).
 	Automatic bool     `json:"automatic"`
 	AutoParts []string `json:"auto_parts"`
 	// MonthlyCap is the chat slot's own monthly limit in micro-dollars; nil is none.
@@ -111,6 +115,10 @@ type Settings struct {
 	// AutoDraftEstimate is what writing a draft for every customer message would have meant in the last
 	// 30 days, shown before an admin turns it on.
 	AutoDraftEstimate AutoDraftEstimate `json:"auto_draft_estimate"`
+	// Channels are the levels channels set apart from the default, with what each means now.
+	Channels []ChannelLevel `json:"channels"`
+	// SourceConsents are the kinds of context an admin agreed intake may send besides the conversation.
+	SourceConsents []SourceConsent `json:"source_consents"`
 }
 
 // AutoDraftEstimate: CustomerMessages came in the last 30 days (imports left out); DraftCostMicroUSD

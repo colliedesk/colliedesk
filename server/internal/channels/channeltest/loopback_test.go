@@ -367,3 +367,15 @@ func TestScopesGiveGroupsTheirOwnRules(t *testing.T) {
 		t.Fatalf("undeclared scope: %v, want a field error", err)
 	}
 }
+
+// A conversation keeps the scope its first message came in, which the channel's AI levels are read
+// by; a type without scopes leaves it empty.
+func TestAConversationKeepsTheScopeItStartedIn(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	d.send(t, channeltest.LoopbackEvent{ID: "s1", From: "u1", Text: "one to one"},
+		channeltest.LoopbackEvent{ID: "s2", From: "u2", Group: "g1", Text: "in the group"})
+	if got := d.one(t, `SELECT string_agg(m.body||'='||COALESCE(c.channel_scope,'-'),',' ORDER BY m.body) FROM conversations c
+		JOIN messages m ON m.workspace_id=c.workspace_id AND m.conversation_id=c.id WHERE c.workspace_id=$1 AND m.kind='incoming'`); got != "in the group=group,one to one=user" {
+		t.Fatalf("scopes = %q", got)
+	}
+}

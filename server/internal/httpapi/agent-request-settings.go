@@ -34,6 +34,8 @@ var settingsFields = map[string][]string{
 	"PUT /api/v1/help-center/domain":                  {"hostname"},
 	"DELETE /api/v1/help-center/domain":               {},
 	"POST /api/v1/help-center/domain/check":           {},
+	"PUT " + channelAIRoute:                           {"scope", "level", "options"},
+	"PUT /api/v1/ai/source-consents/{class}":          {},
 }
 
 // summarizeSettingsRequest is what a person reads before approving a settings change: what changes,
@@ -59,6 +61,10 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		return action + " " + a.channelLabel(ctx, who.Workspace.ID, id)
 	}
 	switch route.Method + " " + route.Pattern {
+	case "PUT " + channelAIRoute:
+		return a.summarizeChannelAIRequest(ctx, request, who, body)
+	case "PUT /api/v1/ai/source-consents/{class}":
+		return "Let AI intake send " + request.PathValue("class") + " to the intake feature's provider"
 	case "PATCH /api/v1/workspace/timezone":
 		return fmt.Sprintf("Change the workspace timezone: %s → %s", who.Workspace.Timezone, orNone(call.Timezone, "(none)"))
 	case "PATCH /api/v1/workspace/name":

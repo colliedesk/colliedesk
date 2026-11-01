@@ -199,6 +199,10 @@ type Definition struct {
 	FileLimits FileLimits
 	// Scopes are the keys of Settings.Scopes the type gives its messages (Inbound.Scope).
 	Scopes []string
+	// IntakeScopes are the scopes where AI may decide what a message is (open a conversation, join
+	// one, or not a request): a chat's, where messages are collected first (each has a Gather in
+	// Defaults). A type without them (email, a web form) keeps its rules and has no intake.
+	IntakeScopes []string
 	// RepliesVia names the type that carries this type's replies when it sends none itself.
 	RepliesVia Type
 	// CarriesOtherReplies makes the type carry the replies of conversations that came through no

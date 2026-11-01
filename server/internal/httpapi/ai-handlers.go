@@ -160,17 +160,18 @@ func (a *API) setAISlot(response http.ResponseWriter, request *http.Request) {
 		Model      string `json:"model"`
 		Effort     string `json:"effort"`
 		Enabled    *bool  `json:"enabled"`
-		// Absent: kept as they are.
-		Automatic  *bool           `json:"automatic"`
-		AutoParts  *[]string       `json:"auto_parts"`
-		MonthlyCap json.RawMessage `json:"monthly_cap_micro_usd"`
+		// Absent: kept as they are. automatic is the older switch, mapped onto default_level.
+		DefaultLevel *string         `json:"default_level"`
+		Automatic    *bool           `json:"automatic"`
+		AutoParts    *[]string       `json:"auto_parts"`
+		MonthlyCap   json.RawMessage `json:"monthly_cap_micro_usd"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send source (server, provider or none), enabled, and optional provider_id, model and effort.")
 		return
 	}
 	slotInput := ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled,
-		Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)}
+		DefaultLevel: input.DefaultLevel, Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)}
 	// Absent: kept; null: removed.
 	if len(input.MonthlyCap) > 0 {
 		slotInput.MonthlyCapSet = true
@@ -216,6 +217,9 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_model_in_use", inUse.Error()+".")
 	case errors.Is(err, ai.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI provider or feature with that name in this workspace.")
+	case errors.Is(err, ai.ErrLevelNotAllowed):
+		writeError(response, http.StatusUnprocessableEntity, "ai_level_not_allowed",
+			"Drafts are never sent by AI, so they go up to suggest; intake runs by itself only on a channel's scope, never as the workspace's default.")
 	case errors.Is(err, ai.ErrKeysMissing):
 		logMissingSettings("ai_provider_keys", "MAILBOX_TOKEN_KEYS")
 		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: its key that encrypts them is not set up, so ask whoever runs it. Nothing was saved.")

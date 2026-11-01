@@ -54,7 +54,7 @@ test('the setup guide asks for its data and its chunk together, and the email se
   const email = record(page);
   const clicked = Date.now();
   await guide.getByRole('link', { name: /Receive customer email/ }).click();
-  await expect(page.getByRole('heading', { name: 'Email' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
   const route = first(email, /channels-route-.*\.js$/);
   const channels = first(email, /\/api\/v1\/channels$/);
   const panels = first(email, /\/panels-.*\.js$/);

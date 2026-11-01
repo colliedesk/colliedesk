@@ -375,3 +375,46 @@ func aiChatPreview(c *call, arguments map[string]any) (any, error) {
 	}
 	return answer, nil
 }
+
+const channelNotFound = "No channel of this workspace has that id. List them with colliedesk_channels_list."
+
+func channelAIGet(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	c.notFound = channelNotFound
+	var levels json.RawMessage
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/ai", nil, &levels); err != nil {
+		return nil, err
+	}
+	return map[string]any{"channel_ai": levels}, nil
+}
+
+func channelAISet(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	slot, _ := arguments["slot"].(string)
+	body := map[string]any{}
+	for key, value := range arguments {
+		if key != "channel_id" && key != "slot" {
+			body[key] = value
+		}
+	}
+	c.notFound = channelNotFound
+	var levels json.RawMessage
+	if err := c.send(http.MethodPut, "/api/v1/channels/"+url.PathEscape(id)+"/ai/"+url.PathEscape(slot), body, &levels); err != nil {
+		return nil, err
+	}
+	return map[string]any{"channel_ai": levels}, nil
+}
+
+func aiSourceConsentRequest(c *call, arguments map[string]any) (any, error) {
+	class, _ := arguments["source_class"].(string)
+	return ask(c, http.MethodPut, "/api/v1/ai/source-consents/"+url.PathEscape(class), nil)
+}
+
+func aiSourceConsentRemove(c *call, arguments map[string]any) (any, error) {
+	class, _ := arguments["source_class"].(string)
+	var removed json.RawMessage
+	if err := c.send(http.MethodDelete, "/api/v1/ai/source-consents/"+url.PathEscape(class), nil, &removed); err != nil {
+		return nil, err
+	}
+	return removed, nil
+}

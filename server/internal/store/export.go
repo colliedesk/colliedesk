@@ -395,7 +395,7 @@ type conversationPage struct {
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id)
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
 	if err != nil {
@@ -406,7 +406,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Channel, &head.ChannelID, &head.ReplyChannelID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
+			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
 		}
@@ -740,7 +740,8 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 			return err
 		}
 	}
-	rows, err = tx.Query(ctx, `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+	rows, err = tx.Query(ctx, `SELECT slot,uses_server,provider_id::text,model,effort,enabled,default_level,
+			(slot='triage' AND default_level='auto') OR (slot='draft' AND default_level='suggest'),auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 			monthly_cap_micro_usd
 		FROM ai_slots WHERE workspace_id=$1 ORDER BY slot`, workspaceID)
 	if err != nil {
@@ -748,7 +749,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	slots, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.AISlot, error) {
 		var r export.AISlot
-		err := row.Scan(&r.Slot, &r.UsesServer, &r.ProviderID, &r.Model, &r.Effort, &r.Enabled, &r.Automatic, &r.AutoParts, &r.ConsentedBy, &r.ConsentedAt, &r.UpdatedBy, &r.UpdatedAt,
+		err := row.Scan(&r.Slot, &r.UsesServer, &r.ProviderID, &r.Model, &r.Effort, &r.Enabled, &r.DefaultLevel, &r.Automatic, &r.AutoParts, &r.ConsentedBy, &r.ConsentedAt, &r.UpdatedBy, &r.UpdatedAt,
 			&r.MonthlyCapMicroUSD)
 		r.ConsentedAt, r.UpdatedAt = domain.UTCOptional(r.ConsentedAt), domain.UTC(r.UpdatedAt)
 		return r, err
@@ -777,6 +778,24 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	for _, record := range events {
 		if err := sink.AISettingsEvent(record); err != nil {
+			return err
+		}
+	}
+	rows, err = tx.Query(ctx, `SELECT source_class,consented_by::text,consented_at FROM ai_source_consents WHERE workspace_id=$1 ORDER BY source_class`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export AI source consents: %w", err)
+	}
+	consents, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.AISourceConsent, error) {
+		var r export.AISourceConsent
+		err := row.Scan(&r.SourceClass, &r.ConsentedBy, &r.ConsentedAt)
+		r.ConsentedAt = domain.UTC(r.ConsentedAt)
+		return r, err
+	})
+	if err != nil {
+		return fmt.Errorf("export AI source consents: %w", err)
+	}
+	for _, record := range consents {
+		if err := sink.AISourceConsent(record); err != nil {
 			return err
 		}
 	}
@@ -1059,6 +1078,25 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 	}
 	for _, record := range history {
 		if err := sink.ChannelEvent(record); err != nil {
+			return err
+		}
+	}
+	levels, err := tx.Query(ctx, `SELECT channel_id::text,scope,slot,level,options,updated_by::text,updated_at FROM channel_ai_levels
+		WHERE workspace_id=$1 ORDER BY channel_id,scope,slot`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export channel AI levels: %w", err)
+	}
+	levelRecords, err := pgx.CollectRows(levels, func(row pgx.CollectableRow) (export.ChannelAILevel, error) {
+		var r export.ChannelAILevel
+		err := row.Scan(&r.ChannelID, &r.Scope, &r.Slot, &r.Level, &r.Options, &r.UpdatedBy, &r.UpdatedAt)
+		r.UpdatedAt = domain.UTC(r.UpdatedAt)
+		return r, err
+	})
+	if err != nil {
+		return fmt.Errorf("export channel AI levels: %w", err)
+	}
+	for _, record := range levelRecords {
+		if err := sink.ChannelAILevel(record); err != nil {
 			return err
 		}
 	}

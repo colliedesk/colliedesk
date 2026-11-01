@@ -32,17 +32,17 @@ const (
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson",
-	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson",
+	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-source-consents.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson",
 	"autofix-installations.ndjson", "autofix-repos.ndjson", "autofix-connectors.ndjson", "fixes.ndjson", "fix-events.ndjson",
-	"channels.ndjson", "channel-events.ndjson", "channel-inbound-events.ndjson", "conversations.ndjson"}
+	"channels.ndjson", "channel-events.ndjson", "channel-ai-levels.ndjson", "channel-inbound-events.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
 	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people",
-	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines",
+	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-source-consents.ndjson": "ai_source_consents", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines",
 	"autofix-installations.ndjson": "autofix_installations", "autofix-repos.ndjson": "autofix_repos", "autofix-connectors.ndjson": "autofix_connectors", "fixes.ndjson": "fixes", "fix-events.ndjson": "fix_events",
-	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-inbound-events.ndjson": "channel_inbound_events",
+	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-ai-levels.ndjson": "channel_ai_levels", "channel-inbound-events.ndjson": "channel_inbound_events",
 	"conversations.ndjson": "conversations",
 }
 
@@ -197,6 +197,14 @@ func (w *Writer) AISlot(record AISlot) error {
 
 func (w *Writer) AISettingsEvent(record AISettingsEvent) error {
 	return w.record("ai-settings-events.ndjson", record)
+}
+
+func (w *Writer) AISourceConsent(record AISourceConsent) error {
+	return w.record("ai-source-consents.ndjson", record)
+}
+
+func (w *Writer) ChannelAILevel(record ChannelAILevel) error {
+	return w.record("channel-ai-levels.ndjson", record)
 }
 
 func (w *Writer) AIUsage(record AIUsage) error {

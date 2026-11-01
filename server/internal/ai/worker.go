@@ -421,7 +421,7 @@ func (s *Service) automaticDraftWanted(ctx context.Context, tx pgx.Tx, workspace
 	var on bool
 	var status string
 	var answered bool
-	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled AND automatic FROM ai_slots WHERE workspace_id=$1 AND slot='draft'),false),
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT ai_level($1,c.channel_id,c.channel_scope,'draft')='suggest' FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2),false),
 			(SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2),
 			COALESCE((SELECT kind<>'incoming' FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind IN ('incoming','outgoing')
 				ORDER BY created_at DESC,id DESC LIMIT 1),false)`, workspaceID, task.ConversationID).Scan(&on, &status, &answered)

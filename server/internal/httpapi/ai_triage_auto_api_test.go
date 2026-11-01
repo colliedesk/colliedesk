@@ -113,7 +113,7 @@ func TestAutomaticTriageIsOffUntilAnAdminTurnsItOnAndGoesOffWithTheFeature(t *te
 		t.Fatalf("history does not say automatic apply was turned on and off: %+v", settings.Events)
 	}
 	// The other workspace never was.
-	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_slots WHERE workspace_id=$1 AND automatic`, d.workspaceB); got != "0" {
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_slots WHERE workspace_id=$1 AND default_level='auto'`, d.workspaceB); got != "0" {
 		t.Fatalf("workspace B automatic slots = %s", got)
 	}
 }

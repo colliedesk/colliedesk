@@ -104,6 +104,7 @@ const reasons: Record<string, string> = {
   ai_chat_off: 'Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.',
 };
 
+const aiFeature: Record<string, string> = { triage: 'triage', draft: 'drafting', intake: 'intake' };
 const messagesOf = (count: number | undefined) => (count === undefined ? 'messages' : `${count} ${count === 1 ? 'message' : 'messages'}`);
 const eventWords: Record<ChannelEvent['kind'], (name: string, what?: string, count?: number) => string> = {
   added: (name) => `added ${name}`,
@@ -116,4 +117,5 @@ const eventWords: Record<ChannelEvent['kind'], (name: string, what?: string, cou
   default_changed: (name) => `made ${name} the default`,
   held_replayed: (name, _what, count) => `opened ${messagesOf(count)} that arrived while ${name} was off`,
   held_discarded: (name, _what, count) => `discarded ${messagesOf(count)} that arrived while ${name} was off`,
+  ai_changed: (name, what) => (what ? `changed what AI ${aiFeature[what] ?? what} does by itself on ${name}` : `changed the AI levels of ${name}`),
 };

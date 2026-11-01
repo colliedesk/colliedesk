@@ -31,7 +31,7 @@ const channelTypeInfoSchema = z.object({
 export const channelListSchema = z.object({ items: z.array(channelSchema), types: z.array(channelTypeInfoSchema) }) satisfies z.ZodType<Generated<'ChannelList'>>;
 export const channelEventSchema = z.object({
   id: z.string().uuid(), at: z.string().datetime(),
-  kind: z.enum(['added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed', 'removed', 'held_replayed', 'held_discarded', 'default_changed']),
+  kind: z.enum(['added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed', 'removed', 'held_replayed', 'held_discarded', 'default_changed', 'ai_changed']),
   channel_id: z.string().uuid(), channel_name: z.string(), channel_type: z.string(),
   actor: z.object({ agent_id: z.string().uuid().nullable(), name: z.string().nullable(), token_label: z.string().nullable() }),
   fields: z.array(z.string()).optional(), count: z.number().int().nullable().optional(),

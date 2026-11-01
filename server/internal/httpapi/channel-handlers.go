@@ -480,6 +480,11 @@ func eventFacts(event store.ChannelEvent) ([]string, *int) {
 		if name, ok := detail["name"].(string); ok {
 			fields = append(fields, name)
 		}
+	case "ai_changed":
+		// The AI feature whose level changed; the levels themselves are in the AI history.
+		if slot, ok := detail["slot"].(string); ok {
+			fields = append(fields, slot)
+		}
 	case "held_replayed", "held_discarded":
 		if n, ok := detail["count"].(float64); ok {
 			value := int(n)

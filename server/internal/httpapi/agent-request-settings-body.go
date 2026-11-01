@@ -6,6 +6,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/ai"
 )
 
 // settingsObjectFields lists, for a settings route, each field that takes a JSON object and the keys
@@ -13,6 +15,12 @@ import (
 // can carry a key past the check.
 var settingsObjectFields = map[string]map[string][]string{
 	"PUT /api/v1/help-center/theme": {"colors": themeColorFields},
+}
+
+// settingsCheckedFields lists, for a settings route, each field whose object its own parser checks (any key
+// it does not know is refused), as the call does when it runs: such a field holds lists and objects of its own.
+var settingsCheckedFields = map[string]map[string]func(json.RawMessage) error{
+	"PUT " + channelAIRoute: {"options": ai.CheckIntakeOptions},
 }
 
 // settingsRequiredFields lists, for a settings route, the fields its call refuses to run without; a
@@ -37,6 +45,12 @@ func settingsBodyProblem(route Route, body json.RawMessage) string {
 	for _, name := range slices.Sorted(maps.Keys(fields)) {
 		if !slices.Contains(allowed, name) {
 			return unexpectedSettingsField(name)
+		}
+		if check, checked := settingsCheckedFields[key][name]; checked {
+			if err := check(fields[name]); err != nil {
+				return strings.TrimSuffix(err.Error(), ".") + ". Nothing was filed."
+			}
+			continue
 		}
 		keys, takesObject := settingsObjectFields[key][name]
 		if !takesObject {
