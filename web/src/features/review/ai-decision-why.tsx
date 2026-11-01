@@ -17,8 +17,9 @@ export function AIDecisionWhy({ decision, timezone, label }: { decision: Decisio
   const model = text.model(decision.model, decision.fallback_model);
   return <span className="ai-decision-why" role="note" aria-label={label}>
     <span className="ai-decision-how">
-      {[decision.confidence !== null && text.sure(decision.confidence), model].filter(Boolean).join(' · ')}
-      {' · '}<time dateTime={decision.created_at}>{formatDate(decision.created_at, timezone)}</time>
+      {decision.confidence !== null && <>{text.sure(decision.confidence)} · </>}
+      {model && <><span className="ai-decision-model">{model}</span> · </>}
+      <time dateTime={decision.created_at}>{formatDate(decision.created_at, timezone)}</time>
     </span>
     {decision.reason && <span className="ai-decision-reason">{decision.reason}</span>}
   </span>;

@@ -1006,6 +1006,11 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Standalone tool links in the details pane (not inside a sentence) are quiet until hovered. */
 .details-panel .link-button { color: var(--text-2); font-weight: 500; text-decoration: none; }
 .details-panel .link-button:hover:not(:disabled) { color: var(--text-1); text-decoration: underline; }
+/* The customer's organization is a value that is also a link (its conversations): it reads as a link, apart
+   from the quiet "All conversations of" tool below it. */
+.details-panel .conversation-organization { margin-bottom: var(--space-2); }
+.details-panel .conversation-organization .link-button { justify-self: start; color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; text-align: left; }
+.details-panel .conversation-organization .link-button:hover:not(:disabled) { color: var(--accent-hover); }
 /* AI consent card: its strong edge came from the panel border; it is now a ring. */
 .panel.ai-consent { box-shadow: 0 0 0 1px var(--line-strong); }
 /* Forced colours: the menu rows show their native checkbox again, and selects use the native picker and arrow. */

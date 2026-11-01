@@ -8563,7 +8563,7 @@ components:
     IntakeGathering:
       type: object
       required: [id, channel_id, scope, thread_id, lane_key, contact_id, state, review_reason, rules, conversation_id, decided_by, decided_at, decided_by_agent_id,
-        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion, ai_decision]
+        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion, ai_decision, conversation_ref]
       properties:
         id: {type: string, format: uuid}
         channel_id: {type: string, format: uuid}
@@ -8606,6 +8606,7 @@ components:
         suggestion:
           anyOf: [{$ref: '#/components/schemas/IntakeSuggestion'}, {type: 'null'}]
           description: 'What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done.'
+        conversation_ref: {type: [string, 'null'], description: 'The code people know conversation_id by ("CHD-2026-0008", "#12"); null without a conversation.'}
         ai_decision:
           anyOf: [{$ref: '#/components/schemas/IntakeAIDecision'}, {type: 'null'}]
           description: 'The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided.'

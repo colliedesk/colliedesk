@@ -709,10 +709,18 @@ func TestAISureEnoughAttachesAmongSeveralOpenConversationsUnlessTheScopeAsksForO
 			if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1 AND status='open'`); got != "2" {
 				t.Fatalf("open conversations = %s", got)
 			}
-			d.answers(map[string]any{"action": "attach", "target": "C1", "runner_up": "C2", "runner_up_confidence": 0.02, "confidence": 0.97})
+			d.answers(map[string]any{"action": "attach", "target": "C1", "runner_up": "C2", "runner_up_confidence": 0.02, "confidence": 0.97,
+				"reason": "more on the printer of C1, not C2"})
 			d.runAI(t)
 			if got := d.decisions(t); got != c.want {
 				t.Fatalf("decisions = %s", got)
+			}
+			// The reason names the conversations by the code people know, never by the prompt's labels.
+			want := d.one(t, `SELECT 'more on the printer of '||t.display_ref||', not '||r.display_ref FROM intake_decisions d
+				JOIN conversations t ON t.id=d.target_conversation_id JOIN conversations r ON r.id=d.runner_up_conversation_id
+				WHERE d.workspace_id=$1 AND d.action='attach'`)
+			if got := d.one(t, `SELECT reason FROM intake_decisions WHERE workspace_id=$1 AND action='attach'`); got != want || strings.Contains(got, "C1") {
+				t.Fatalf("reason = %q, want %q", got, want)
 			}
 		})
 	}
@@ -744,7 +752,11 @@ func TestACardAIDecidedSaysHowSureWhyAndWhichModel(t *testing.T) {
 	d.flush(t)
 	d.fake.Script(answer("claude-haiku-5-5-20261001", "Stock export fails"))
 	d.runAI(t)
-	got := decided().AIDecision
+	first := decided()
+	if ref := d.one(t, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, *first.ConversationID); first.ConversationRef == nil || *first.ConversationRef != ref || ref == "" {
+		t.Fatalf("conversation ref = %v, want %q", first.ConversationRef, ref)
+	}
+	got := first.AIDecision
 	if got == nil || got.Action != "create" || got.Confidence == nil || *got.Confidence != 0.93 || got.Reason == nil || *got.Reason != "a new problem with the export" ||
 		got.Model == nil || *got.Model != "claude-haiku-5-5" || got.FallbackModel != nil || got.CreatedAt.IsZero() {
 		t.Fatalf("ai decision = %+v", got)

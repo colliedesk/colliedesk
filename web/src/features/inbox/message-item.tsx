@@ -19,6 +19,8 @@ interface MessageItemProps {
   // label says more about where the message came from (why a chat message is here); menu acts on it.
   label?: ReactNode;
   menu?: ReactNode;
+  // note is a line about the message under its header, the width of the message (why AI added it).
+  note?: ReactNode;
   // channelName is the conversation's channel, the author of a notice it sent by itself (named even once removed).
   channelName?: string;
 }
@@ -46,7 +48,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, channelName }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -82,6 +84,7 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
         <time dateTime={item.created_at} title={stampTitle(item.created_at, timezone)}>{formatDate(item.created_at, timezone)}{zoneSuffix(item.created_at, timezone)}</time>
         {menu}
       </header>
+      {note}
       {item.email && <EmailEnvelope email={item.email} storedFiles={stored.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
       {showHTML && item.body_html

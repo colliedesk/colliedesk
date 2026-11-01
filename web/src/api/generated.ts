@@ -5135,6 +5135,8 @@ export interface components {
             preview: string;
             /** @description What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done. */
             suggestion: components["schemas"]["IntakeSuggestion"] | null;
+            /** @description The code people know conversation_id by ("CHD-2026-0008", "#12"); null without a conversation. */
+            conversation_ref: string | null;
             /** @description The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided. */
             ai_decision: components["schemas"]["IntakeAIDecision"] | null;
         };

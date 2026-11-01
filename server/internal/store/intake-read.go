@@ -45,6 +45,8 @@ type IntakeGathering struct {
 	Suggestion *IntakeSuggestion `json:"suggestion"`
 	// AIDecision is the decision AI took by itself on a card it decided.
 	AIDecision *IntakeAIDecision `json:"ai_decision"`
+	// ConversationRef is the code people know ConversationID by.
+	ConversationRef *string `json:"conversation_ref"`
 }
 
 // IntakeAIDecision is what AI decided by itself of a card: how sure it was, why, the model the channel asked
@@ -194,6 +196,7 @@ const gatheringColumns = `g.id::text,g.channel_id::text,g.scope,g.thread_id::tex
 	f.sender_kind,f.sender_value,f.sender_name,t.kind,t.name,COALESCE(left(f.body,280),''),
 	s.id::text,s.action,s.target_conversation_id::text,s.target_subject,s.target_status,s.runner_up_conversation_id::text,s.runner_up_subject,
 	s.runner_up_confidence::float8,s.confidence::float8,s.command,s.subject,s.reply_kind,s.ignore_reason,s.reason,s.not_applied_reason,s.created_at,
+	(SELECT NULLIF(c.display_ref,'') FROM conversations c WHERE c.workspace_id=g.workspace_id AND c.id=g.conversation_id),
 	a.id::text,a.action,a.target_conversation_id::text,a.confidence::float8,a.runner_up_confidence::float8,a.reason,a.model,a.fallback_model,a.created_at`
 
 const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM ` + gatheringItemRows + `
@@ -226,7 +229,7 @@ func scanGathering(row pgx.Row) (IntakeGathering, error) {
 		&placeKind, &placeName, &g.Preview,
 		&suggestionID, &suggestionAction, &suggestion.TargetConversationID, &suggestion.TargetSubject, &suggestion.TargetStatus, &suggestion.RunnerUpConversationID,
 		&suggestion.RunnerUpSubject, &suggestion.RunnerUpConfidence, &suggestion.Confidence, &suggestion.Command, &suggestion.Subject, &suggestion.ReplyKind,
-		&suggestion.IgnoreReason, &suggestion.Reason, &notApplied, &suggestedAt,
+		&suggestion.IgnoreReason, &suggestion.Reason, &notApplied, &suggestedAt, &g.ConversationRef,
 		&decisionID, &decisionAction, &decision.TargetConversationID, &decision.Confidence, &decision.RunnerUpConfidence, &decision.Reason, &decision.Model,
 		&decision.FallbackModel, &decidedAt)
 	if placeKind != nil {

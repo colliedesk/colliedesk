@@ -110,11 +110,12 @@ test('a card AI set aside can be put back', async () => {
 });
 
 test('a decided card says what happened, who decided and links its conversation', () => {
-  const { rerender } = render(<IntakeCard {...props({ item: gathering({ state: 'attached', review_reason: null, decided_by: 'rules', conversation_id: CONVERSATION,
+  const { rerender } = render(<IntakeCard {...props({ item: gathering({ state: 'attached', review_reason: null, decided_by: 'rules', conversation_id: CONVERSATION, conversation_ref: 'CHD-2026-0004',
     rules: { action: 'attach', rule: 'quote', basis: 'match', target_conversation_id: CONVERSATION }, decided_at: '2026-10-26T02:03:00Z' }) })} />);
   expect(screen.getByText('Added to a conversation')).toBeInTheDocument();
   expect(screen.getByText('Rules · match')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open the conversation' })).toHaveAttribute('href', `/conversations/${CONVERSATION}`);
+  expect(screen.getByText('CHD-2026-0004')).toBeInTheDocument();
   rerender(<IntakeCard {...props({ item: gathering({ state: 'created', review_reason: null, decided_by: 'rules', fallback: true, conversation_id: CONVERSATION, decided_at: '2026-10-26T02:03:00Z' }) })} />);
   expect(screen.getByText('Rules · default')).toBeInTheDocument();
   expect(screen.getByText('Fallback: AI did not decide in time')).toBeInTheDocument();

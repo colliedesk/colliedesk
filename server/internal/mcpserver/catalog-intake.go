@@ -18,7 +18,7 @@ const (
 		`"contact_id":{"type":["string","null"]},"state":{"type":"string","enum":["deciding","review","created","attached","ignored","applied","cancelled"]},` +
 		`"review_reason":{"type":["string","null"],"description":"Why it waits for a person: no_command, ai_unavailable, lane_blocked (behind an earlier card of the same sender), requeued…"},` +
 		`"rules":{"type":"object","description":"What the channel's rules decided: what applies when AI does not decide in time."},` +
-		`"conversation_id":{"type":["string","null"]},"decided_by":{"type":["string","null"],"enum":["rules","ai","agent",null]},"decided_at":{"type":["string","null"]},` +
+		`"conversation_id":{"type":["string","null"]},"conversation_ref":{"type":["string","null"],"description":"The code people know the conversation by (CHD-2026-0008, #12)."},"decided_by":{"type":["string","null"],"enum":["rules","ai","agent",null]},"decided_at":{"type":["string","null"]},` +
 		`"decided_by_agent_id":{"type":["string","null"]},"ignore_reason":{"type":["string","null"],"enum":["chat","handled_in_chat","duplicate","other",null]},` +
 		`"fallback":{"type":"boolean"},"opened_at":{"type":"string"},"closed_at":{"type":"string"},"decide_by":{"type":["string","null"]},"item_count":{"type":"integer"},` +
 		`"place_kind":{"type":["string","null"],"enum":["direct","group",null],"description":"A one-to-one chat or a group."},` +
@@ -148,25 +148,26 @@ func conversationIntakeGetSpec() Spec {
 }
 
 type intakeCardJSON struct {
-	ID             string          `json:"id"`
-	ChannelID      string          `json:"channel_id"`
-	Scope          string          `json:"scope"`
-	ThreadID       *string         `json:"thread_id"`
-	ContactID      *string         `json:"contact_id"`
-	State          string          `json:"state"`
-	ReviewReason   *string         `json:"review_reason"`
-	Rules          json.RawMessage `json:"rules"`
-	ConversationID *string         `json:"conversation_id"`
-	DecidedBy      *string         `json:"decided_by"`
-	DecidedAt      *string         `json:"decided_at"`
-	DecidedByAgent *string         `json:"decided_by_agent_id"`
-	IgnoreReason   *string         `json:"ignore_reason"`
-	Fallback       bool            `json:"fallback"`
-	OpenedAt       string          `json:"opened_at"`
-	ClosedAt       string          `json:"closed_at"`
-	DecideBy       *string         `json:"decide_by"`
-	ItemCount      int             `json:"item_count"`
-	Sender         struct {
+	ID              string          `json:"id"`
+	ChannelID       string          `json:"channel_id"`
+	Scope           string          `json:"scope"`
+	ThreadID        *string         `json:"thread_id"`
+	ContactID       *string         `json:"contact_id"`
+	State           string          `json:"state"`
+	ReviewReason    *string         `json:"review_reason"`
+	Rules           json.RawMessage `json:"rules"`
+	ConversationID  *string         `json:"conversation_id"`
+	ConversationRef *string         `json:"conversation_ref"`
+	DecidedBy       *string         `json:"decided_by"`
+	DecidedAt       *string         `json:"decided_at"`
+	DecidedByAgent  *string         `json:"decided_by_agent_id"`
+	IgnoreReason    *string         `json:"ignore_reason"`
+	Fallback        bool            `json:"fallback"`
+	OpenedAt        string          `json:"opened_at"`
+	ClosedAt        string          `json:"closed_at"`
+	DecideBy        *string         `json:"decide_by"`
+	ItemCount       int             `json:"item_count"`
+	Sender          struct {
 		Value *string `json:"value"`
 		Name  *string `json:"name"`
 	} `json:"sender"`
@@ -214,7 +215,7 @@ func intakeCardOut(card intakeCardJSON) map[string]any {
 		}
 	}
 	return map[string]any{"id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID,
-		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID,
+		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID, "conversation_ref": card.ConversationRef,
 		"decided_by": card.DecidedBy, "decided_at": card.DecidedAt, "decided_by_agent_id": card.DecidedByAgent, "ignore_reason": card.IgnoreReason,
 		"fallback": card.Fallback, "opened_at": card.OpenedAt, "closed_at": card.ClosedAt, "decide_by": card.DecideBy, "item_count": card.ItemCount,
 		"place_kind": placeKind, "suggestion": suggestionOut(card.Suggestion), "ai_decision": suggestionOut(card.AIDecision), "untrusted_customer_content": untrusted}

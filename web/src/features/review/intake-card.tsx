@@ -113,7 +113,8 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
         </li>)}
       </ol>}
       {open && detail && waiting && <DecideForm key={detail.id} item={item} detail={detail} timezone={timezone} busy={busy} onDecide={(input) => void run(() => onDecide(input))} />}
-      {settled && item.conversation_id && <a href={`/conversations/${item.conversation_id}`}>{m.openConversation}</a>}
+      {settled && item.conversation_id && <p className="intake-conversation"><a href={`/conversations/${item.conversation_id}`}>{m.openConversation}</a>
+        {item.conversation_ref && <span className="intake-conversation-ref">{item.conversation_ref}</span>}</p>}
       {item.state === 'ignored' && <div className="request-actions"><button type="button" disabled={busy} onClick={() => void run(onRequeue)}>{m.putBack}</button></div>}
       {problem && <p role="alert" className="error-copy">{problem}</p>}
     </article>

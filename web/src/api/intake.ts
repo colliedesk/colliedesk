@@ -54,7 +54,7 @@ export const intakeGatheringSchema = z.object({
   ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), opened_at: date, closed_at: date, decide_by: date.nullable(),
   requeued_at: date.nullable(), requeued_by_agent_id: uuid.nullable(), item_count: z.number().int(), sender: chatSenderSchema,
   place: z.object({ kind: z.enum(['direct', 'group']), name: z.string().nullable() }).nullable(), preview: z.string(),
-  suggestion: intakeSuggestionSchema.nullable(), ai_decision: intakeAIDecisionSchema.nullable(),
+  suggestion: intakeSuggestionSchema.nullable(), ai_decision: intakeAIDecisionSchema.nullable(), conversation_ref: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'IntakeGathering'>>;
 
 export const intakeDecisionSchema = z.object({
