@@ -82,3 +82,13 @@ test('the picker recipe is written once for every select, never per component', 
   expect(components.match(/::picker\(select\)/g)).toHaveLength(1);
   expect(components).not.toMatch(/\.[\w-]+(\s+select)?::picker\(select\)/);
 });
+
+test('Normal priority keeps a quiet mark, so the mark column has no gap in the menu or on the closed field', () => {
+  const visibleMark = /content:\s*"[^"\s]+"/;
+  const menuRow = rule(components, '.property-row option[value="normal"]::before');
+  expect(menuRow).toMatch(visibleMark);
+  expect(menuRow).toMatch(/color:\s*var\(--text-3\)/);
+  const closed = rule(components, '.property-row:has(option[value="normal"]:checked)::after');
+  expect(closed).toMatch(visibleMark);
+  expect(closed).toMatch(/color:\s*var\(--text-3\)/);
+});

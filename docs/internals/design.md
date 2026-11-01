@@ -99,6 +99,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 - Details · Status is an `ActionMenu` on every conversation, never a select: arrow keys on a closed select
   fire `change` per step in some browsers, each a change of the conversation (and on a chat a message to
   the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
+  Every Priority value has a mark before its word, on the field and in its menu: red ↑ Urgent, grey ↑ High,
+  a quiet dash for Normal, ↓ Low. The mark column has no gap (Linear marks every priority); list rows still hide Normal.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
   is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.

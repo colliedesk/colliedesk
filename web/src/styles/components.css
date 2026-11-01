@@ -88,7 +88,7 @@
   .property-row option[value="resolved"] { --dot: var(--ok); } .property-row option[value="closed"] { --dot: var(--text-3); }
   .property-row option[value="urgent"]::before { content: "↑" / ""; width: 8px; color: var(--danger); font-weight: 600; }
   .property-row option[value="high"]::before { content: "↑" / ""; width: 8px; color: var(--text-2); font-weight: 600; }
-  .property-row option[value="normal"]::before { content: "" / ""; width: 8px; }
+  .property-row option[value="normal"]::before { content: "–" / ""; width: 8px; color: var(--text-3); }
   .property-row option[value="low"]::before { content: "↓" / ""; width: 8px; color: var(--text-3); }
 }
 .filter-match { margin-top: var(--space-1); color: var(--text-2); }
@@ -459,6 +459,8 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .property-row:has(option[value="urgent"]:checked) select { color: var(--danger); }
 .property-row:has(option[value="high"]:checked)::after { content: "↑" / ""; color: var(--text-2); }
 .property-row:has(option[value="low"]:checked)::after { content: "↓" / ""; color: var(--text-3); }
+/* Normal is a quiet dash, as Linear marks every priority: the mark column never has a gap. Rows in the list still hide it. */
+.property-row:has(option[value="normal"]:checked)::after { content: "–" / ""; color: var(--text-3); font-weight: 400; }
 .tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .tag-check { position: relative; display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
 .tag-check input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
