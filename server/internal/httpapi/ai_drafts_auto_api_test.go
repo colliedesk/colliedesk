@@ -129,7 +129,7 @@ func TestAutomaticDraftsStopAtTheirLimitsAndLeaveTriageAndPeople(t *testing.T) {
 	d.triageOn(t)
 	d.autoDraftsOn(t)
 	draftsPerDay := 0
-	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay); err != nil {
+	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay, nil); err != nil {
 		t.Fatal(err)
 	}
 	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
@@ -151,7 +151,7 @@ func TestAutomaticDraftsStopAtTheirLimitsAndLeaveTriageAndPeople(t *testing.T) {
 	}
 	// Five automatic drafts on one conversation in a day: the sixth is not written.
 	draftsPerDay = 100
-	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay); err != nil {
+	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_tasks(workspace_id,kind,conversation_id,automatic,state,started_at,finished_at)

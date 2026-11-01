@@ -771,11 +771,11 @@ test('the Connection tab opens the conversation its test message started, as the
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversations/66666666-6666-4666-8666-666666666666'));
 });
 
-const aiSlot = (slot: 'triage' | 'draft' | 'intake', change: Record<string, unknown> = {}) => ({ slot, source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low',
+const aiSlot = (slot: 'triage' | 'draft' | 'intake', change: Record<string, unknown> = {}) => ({ slot, source: 'server', provider_id: null, model: 'claude-haiku-5-5', fallback_model: null, effort: 'low',
   enabled: true, default_level: slot === 'triage' ? 'suggest' : 'off', automatic: false, auto_parts: [], active: true, off_reason: null, consented_by: null,
   consented_at: null, updated_by: null, updated_at: null, ...change });
 const aiSettings = (slots = [aiSlot('triage'), aiSlot('draft')]) => ({ server: null, providers: [], slots, events: [], provider_limit: 5, can_store_keys: true,
-  allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },
+  allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null },
   allowance: null, auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 12, draft_cost_micro_usd: null }, channels: [], source_consents: [] });
 const levelItem = (slot: 'triage' | 'draft', change: Record<string, unknown> = {}) => ({ slot, level: null, effective_level: slot === 'triage' ? 'suggest' : 'off',
   source: 'workspace', off_reason: null, options: null, ...change });

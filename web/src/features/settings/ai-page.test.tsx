@@ -9,19 +9,19 @@ import { refusal } from './ai-route';
 const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
-  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, default_level: 'off', automatic: false, auto_parts: [], active: false, off_reason: null,
+  return { slot: 'triage', source: 'none', provider_id: null, model: null, fallback_model: null, effort: 'low', enabled: false, default_level: 'off', automatic: false, auto_parts: [], active: false, off_reason: null,
     consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null, ...change };
 }
 
 function provider(change: Partial<AIProvider> = {}): AIProvider {
   return { id: providerID, kind: 'anthropic', label: 'Team key', base_url: null, auth_kind: 'api_key', key_hint: '7Qx2',
     models: ['claude-sonnet-5-5', 'claude-haiku-5-5'], check_status: 'ok', check_error_code: null, checked_at: '2026-10-22T08:00:00Z',
-    created_by: null, created_at: '2026-10-22T08:00:00Z', updated_at: '2026-10-22T08:00:00Z', used_by: [], ...change };
+    created_by: null, created_at: '2026-10-22T08:00:00Z', updated_at: '2026-10-22T08:00:00Z', used_by: [], routing: null, ...change };
 }
 
 function settings(change: Partial<AISettings> = {}): AISettings {
   return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
-    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null }, allowance: null,
+    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null }, allowance: null,
     auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, channels: [], source_consents: [], ...change };
 }
 
@@ -304,7 +304,7 @@ test('a number out of range marks its own field', async () => {
 
 test('a paused day and a used-up allowance each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
-    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },
+    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null },
     allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
   expect(screen.queryByText(/drafts left/)).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
@@ -317,8 +317,8 @@ test('a paused day and a used-up allowance each say what happens and what to do'
 
 test('the usage tab is asked for when it opens and sums each feature', () => {
   const { onUsageMonth } = page({ usage: { month: '2026-10', allowance: null, rows: [
-    { feature: 'draft', billed_to: 'server', provider_label: 'Colliedesk AI', calls: 87, failed: 1, automatic: 0, input_tokens: 740_000, output_tokens: 98_000, cost_micro_usd: 2_150_000 },
-    { feature: 'check', billed_to: 'workspace_key', provider_label: 'Team key', calls: 6, failed: 2, automatic: 0, input_tokens: 400, output_tokens: 100, cost_micro_usd: null },
+    { feature: 'draft', billed_to: 'server', provider_label: 'Colliedesk AI', calls: 87, failed: 1, automatic: 0, input_tokens: 740_000, output_tokens: 98_000, cost_micro_usd: 2_150_000, provider_cost: null },
+    { feature: 'check', billed_to: 'workspace_key', provider_label: 'Team key', calls: 6, failed: 2, automatic: 0, input_tokens: 400, output_tokens: 100, cost_micro_usd: null, provider_cost: null },
   ] } });
   fireEvent.click(screen.getByRole('tab', { name: 'Usage' }));
   expect(onUsageMonth).toHaveBeenCalled();
@@ -337,7 +337,7 @@ test('agents do not see the usage tab', () => {
 
 test('a paused feature says so on its row', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })],
-    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null } }) });
+    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null } }) });
   expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
 });
 
@@ -431,7 +431,7 @@ test('automatic drafts paused for the day say so and offer to raise the limit', 
   const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true, default_level: 'suggest', automatic: true });
   const onSetAutomatic = vi.fn().mockResolvedValue(undefined);
   page({ settings: settings({ server, slots: [slot(), drafts],
-    automatic: { per_day: 300, per_minute: 30, used_today: 100, paused_until: null, draft_per_day: 100, drafts_today: 100, drafts_paused_until: '2026-10-24T00:00:00Z', drafts_reserved_until: null } }),
+    automatic: { per_day: 300, per_minute: 30, used_today: 100, paused_until: null, draft_per_day: 100, drafts_today: 100, drafts_paused_until: '2026-10-24T00:00:00Z', drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null } }),
   onSetAutomatic });
   expect(screen.getByText('100 of 100 automatic drafts today.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Raise the limit' }));

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // AI settings (docs/user/ai.md). The handlers read and change the workspace's providers and features;
@@ -42,16 +44,23 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 		BaseURL string   `json:"base_url"`
 		APIKey  string   `json:"api_key"`
 		Models  []string `json:"models"`
+		// Routing is OpenRouter's routing by data policy.
+		Routing *ai.ProviderRouting `json:"routing"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url and, on OpenRouter, routing.")
 		return
 	}
 	// The provider's key never enters the fingerprint (it is a secret, and a fingerprint is a plain hash): a
-	// label is unique in the workspace, so the label, kind, address and models already name one provider.
-	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...), func(ctx context.Context) (any, error) {
+	// label is unique in the workspace, so the label, kind, address, models and routing already name one provider.
+	fingerprint := append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...)
+	if input.Routing != nil {
+		routing, _ := json.Marshal(input.Routing)
+		fingerprint = append(fingerprint, "routing:"+string(routing))
+	}
+	a.createOnce(response, request, addAIProviderOperation, fingerprint, func(ctx context.Context) (any, error) {
 		provider, err := a.ai.AddProvider(ctx, principal(request).Workspace.ID, aiActor(request),
-			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
+			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models, Routing: input.Routing})
 		if err != nil {
 			writeAIError(response, err)
 			return nil, errAnswered
@@ -102,16 +111,26 @@ func aiModelsMessage(check *ai.CheckError) string {
 }
 
 func (a *API) updateAIProvider(response http.ResponseWriter, request *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(request.Body, domain.MaxAgentRequestBody+1))
 	var input struct {
-		Label  *string   `json:"label"`
-		Models *[]string `json:"models"`
+		Label   *string             `json:"label"`
+		Models  *[]string           `json:"models"`
+		Routing *ai.ProviderRouting `json:"routing"`
 	}
-	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send label or models. A provider's base URL never changes: add the new address as another provider, with its key.")
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err != nil || len(body) > domain.MaxAgentRequestBody || decoder.Decode(&input) != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send label, models or, on OpenRouter, routing. A provider's base URL never changes: add the new address as another provider, with its key.")
 		return
 	}
-	provider, err := a.ai.UpdateProvider(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"),
-		ai.ProviderChange{Label: input.Label, Models: input.Models})
+	who := principal(request)
+	provider, err := a.ai.UpdateProvider(request.Context(), who.Workspace.ID, aiActor(request), request.PathValue("id"),
+		ai.ProviderChange{Label: input.Label, Models: input.Models, Routing: input.Routing, MayLoosen: !who.IsToken()})
+	if errors.Is(err, ai.ErrLoosenNeedsApproval) {
+		// Letting customers' data reach providers that store or train on it is a person's call.
+		a.fileAgentRequest(response, request, Route{Method: http.MethodPatch, Pattern: "/api/v1/ai/providers/{id}"}, who, domain.AgentRequestAction, body, "")
+		return
+	}
 	if err != nil {
 		writeAIError(response, err)
 		return
@@ -158,8 +177,10 @@ func (a *API) setAISlot(response http.ResponseWriter, request *http.Request) {
 		Source     string `json:"source"`
 		ProviderID string `json:"provider_id"`
 		Model      string `json:"model"`
-		Effort     string `json:"effort"`
-		Enabled    *bool  `json:"enabled"`
+		// FallbackModel is intake's; "" removes it, absent keeps it.
+		FallbackModel *string `json:"fallback_model"`
+		Effort        string  `json:"effort"`
+		Enabled       *bool   `json:"enabled"`
 		// Absent: kept as they are. automatic is the older switch, mapped onto default_level.
 		DefaultLevel *string         `json:"default_level"`
 		Automatic    *bool           `json:"automatic"`
@@ -170,7 +191,7 @@ func (a *API) setAISlot(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send source (server, provider or none), enabled, and optional provider_id, model and effort.")
 		return
 	}
-	slotInput := ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled,
+	slotInput := ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, FallbackModel: input.FallbackModel, Effort: input.Effort, Enabled: *input.Enabled,
 		DefaultLevel: input.DefaultLevel, Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)}
 	// Absent: kept; null: removed.
 	if len(input.MonthlyCap) > 0 {
@@ -299,15 +320,16 @@ func (a *API) getAIUsage(response http.ResponseWriter, request *http.Request) {
 
 func (a *API) setAIAutomaticLimits(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		PerDay      *int `json:"per_day"`
-		PerMinute   *int `json:"per_minute"`
-		DraftPerDay *int `json:"draft_per_day"`
+		PerDay       *int `json:"per_day"`
+		PerMinute    *int `json:"per_minute"`
+		DraftPerDay  *int `json:"draft_per_day"`
+		IntakePerDay *int `json:"intake_per_day"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.PerDay == nil || input.PerMinute == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000), and draft_per_day (0 to 10000) to change it.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000), and draft_per_day or intake_per_day (0 to 10000) to change them.")
 		return
 	}
-	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute, input.DraftPerDay)
+	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute, input.DraftPerDay, input.IntakePerDay)
 	if err != nil {
 		writeAIError(response, err)
 		return

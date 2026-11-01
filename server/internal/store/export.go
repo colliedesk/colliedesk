@@ -723,14 +723,14 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 
 // exportAI writes the AI providers (never a sealed key), feature settings, their history and usage.
 func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,kind,label,base_url,auth_kind,key_hint,models,check_status,check_error_code,checked_at,created_by::text,created_at,updated_at
+	rows, err := tx.Query(ctx, `SELECT id::text,kind,label,base_url,auth_kind,key_hint,models,check_status,check_error_code,checked_at,created_by::text,created_at,updated_at,routing
 		FROM ai_providers WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI providers: %w", err)
 	}
 	providers, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.AIProvider, error) {
 		var r export.AIProvider
-		err := row.Scan(&r.ID, &r.Kind, &r.Label, &r.BaseURL, &r.AuthKind, &r.KeyHint, &r.Models, &r.CheckStatus, &r.CheckErrorCode, &r.CheckedAt, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
+		err := row.Scan(&r.ID, &r.Kind, &r.Label, &r.BaseURL, &r.AuthKind, &r.KeyHint, &r.Models, &r.CheckStatus, &r.CheckErrorCode, &r.CheckedAt, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt, &r.Routing)
 		r.CheckedAt, r.CreatedAt, r.UpdatedAt = domain.UTC(r.CheckedAt), domain.UTC(r.CreatedAt), domain.UTC(r.UpdatedAt)
 		return r, err
 	})
@@ -742,7 +742,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 			return err
 		}
 	}
-	rows, err = tx.Query(ctx, `SELECT slot,uses_server,provider_id::text,model,effort,enabled,default_level,
+	rows, err = tx.Query(ctx, `SELECT slot,uses_server,provider_id::text,model,fallback_model,effort,enabled,default_level,
 			(slot='triage' AND default_level='auto') OR (slot='draft' AND default_level='suggest'),auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 			monthly_cap_micro_usd
 		FROM ai_slots WHERE workspace_id=$1 ORDER BY slot`, workspaceID)
@@ -751,7 +751,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	slots, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.AISlot, error) {
 		var r export.AISlot
-		err := row.Scan(&r.Slot, &r.UsesServer, &r.ProviderID, &r.Model, &r.Effort, &r.Enabled, &r.DefaultLevel, &r.Automatic, &r.AutoParts, &r.ConsentedBy, &r.ConsentedAt, &r.UpdatedBy, &r.UpdatedAt,
+		err := row.Scan(&r.Slot, &r.UsesServer, &r.ProviderID, &r.Model, &r.FallbackModel, &r.Effort, &r.Enabled, &r.DefaultLevel, &r.Automatic, &r.AutoParts, &r.ConsentedBy, &r.ConsentedAt, &r.UpdatedBy, &r.UpdatedAt,
 			&r.MonthlyCapMicroUSD)
 		r.ConsentedAt, r.UpdatedAt = domain.UTCOptional(r.ConsentedAt), domain.UTC(r.UpdatedAt)
 		return r, err
@@ -804,7 +804,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	// Usage can be long: stream it.
 	usage, err := tx.Query(ctx, `SELECT id::text,feature,billed_to,provider_id::text,provider_kind,provider_label,model,status,error_code,stop_reason,served_model,
 			input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,hops,provider_request_id,actor_agent_id::text,actor_token_id::text,started_at,finished_at,latency_ms,
-			task_id::text,automatic,cost_micro_usd,reserved_micro_usd
+			task_id::text,automatic,cost_micro_usd,reserved_micro_usd,provider_cost::float8
 		FROM ai_usage WHERE workspace_id=$1 ORDER BY started_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI usage: %w", err)
@@ -815,7 +815,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var hops []byte
 		if err := usage.Scan(&r.ID, &r.Feature, &r.BilledTo, &r.ProviderID, &r.ProviderKind, &r.ProviderLabel, &r.Model, &r.Status, &r.ErrorCode, &r.StopReason, &r.ServedModel,
 			&r.InputTokens, &r.OutputTokens, &r.CacheReadTokens, &r.CacheWriteTokens, &hops, &r.ProviderRequestID, &r.ActorAgentID, &r.ActorTokenID, &r.StartedAt, &r.FinishedAt, &r.LatencyMS,
-			&r.TaskID, &r.Automatic, &r.CostMicroUSD, &r.ReservedMicroUSD); err != nil {
+			&r.TaskID, &r.Automatic, &r.CostMicroUSD, &r.ReservedMicroUSD, &r.ProviderCost); err != nil {
 			return fmt.Errorf("export AI usage: %w", err)
 		}
 		r.Hops = hops

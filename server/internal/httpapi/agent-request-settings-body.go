@@ -14,7 +14,8 @@ import (
 // that object may hold. Any other field takes a plain value or a list of plain values, so no object
 // can carry a key past the check.
 var settingsObjectFields = map[string]map[string][]string{
-	"PUT /api/v1/help-center/theme": {"colors": themeColorFields},
+	"PUT /api/v1/help-center/theme":   {"colors": themeColorFields},
+	"PATCH /api/v1/ai/providers/{id}": {"routing": {"data_collection", "zdr"}},
 }
 
 // settingsCheckedFields lists, for a settings route, each field whose object its own parser checks (any key

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
@@ -36,6 +37,7 @@ var settingsFields = map[string][]string{
 	"POST /api/v1/help-center/domain/check":           {},
 	"PUT " + channelAIRoute:                           {"scope", "level", "options"},
 	"PUT /api/v1/ai/source-consents/{class}":          {},
+	"PATCH /api/v1/ai/providers/{id}":                 {"label", "models", "routing"},
 }
 
 // summarizeSettingsRequest is what a person reads before approving a settings change: what changes,
@@ -65,6 +67,8 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		return a.summarizeChannelAIRequest(ctx, request, who, body)
 	case "PUT /api/v1/ai/source-consents/{class}":
 		return "Let AI intake send " + request.PathValue("class") + " to the intake feature's provider"
+	case "PATCH /api/v1/ai/providers/{id}":
+		return a.summarizeRoutingRequest(ctx, who, id, body)
 	case "PATCH /api/v1/workspace/timezone":
 		return fmt.Sprintf("Change the workspace timezone: %s → %s", who.Workspace.Timezone, orNone(call.Timezone, "(none)"))
 	case "PATCH /api/v1/workspace/name":
@@ -131,6 +135,30 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		return "Read the plan and billing status"
 	}
 	return ""
+}
+
+// summarizeRoutingRequest says which providers an OpenRouter provider's requests could reach after the
+// change: the only change of a provider a token files is one that loosens its routing.
+func (a *API) summarizeRoutingRequest(ctx context.Context, who auth.Principal, id string, body json.RawMessage) string {
+	var call struct {
+		Routing *ai.ProviderRouting `json:"routing"`
+	}
+	_ = json.Unmarshal(body, &call)
+	provider, err := a.ai.Provider(ctx, who.Workspace.ID, id)
+	if err != nil || provider.Routing == nil || call.Routing == nil {
+		return "Change the AI provider " + id
+	}
+	var changes []string
+	if provider.Routing.DataCollection == "deny" && call.Routing.DataCollection != "deny" {
+		changes = append(changes, "providers that may store or train on what they are sent")
+	}
+	if provider.Routing.ZDR && !call.Routing.ZDR {
+		changes = append(changes, "providers that keep what they are sent")
+	}
+	if len(changes) == 0 {
+		return "Change the routing of the AI provider " + provider.Label
+	}
+	return "Let the AI provider " + provider.Label + " send customers' data to " + strings.Join(changes, " and ")
 }
 
 func (a *API) summarizeTeamChange(ctx context.Context, workspaceID, id string, displayName, role *string, active *bool, reassignTo *string) string {

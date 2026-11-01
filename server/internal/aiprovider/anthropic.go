@@ -2,6 +2,7 @@ package aiprovider
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strings"
@@ -115,12 +116,16 @@ func (p *anthropicProvider) params(request Request, fallbacks bool) anthropic.Be
 		params.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
 	}
 	for _, message := range request.Messages {
-		block := anthropic.NewBetaTextBlock(message.Text)
+		blocks := []anthropic.BetaContentBlockParamUnion{anthropic.NewBetaTextBlock(message.Text)}
+		for _, image := range message.Images {
+			blocks = append(blocks, anthropic.NewBetaImageBlock(anthropic.BetaBase64ImageSourceParam{
+				Data: base64.StdEncoding.EncodeToString(image.Data), MediaType: anthropic.BetaBase64ImageSourceMediaType(image.MediaType)}))
+		}
 		role := anthropic.BetaMessageParamRoleUser
 		if message.Role == RoleAssistant {
 			role = anthropic.BetaMessageParamRoleAssistant
 		}
-		params.Messages = append(params.Messages, anthropic.BetaMessageParam{Role: role, Content: []anthropic.BetaContentBlockParamUnion{block}})
+		params.Messages = append(params.Messages, anthropic.BetaMessageParam{Role: role, Content: blocks})
 	}
 	if fallbacks && p.fallbacks && fallbackModels[request.Model] {
 		params.Betas = []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01}

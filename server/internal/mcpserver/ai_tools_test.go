@@ -102,3 +102,28 @@ func TestAnAgentSetsAChannelsAILevelsThroughTheTools(t *testing.T) {
 		t.Fatalf("removed = %v", removed)
 	}
 }
+
+// An agent keeps an OpenRouter provider on providers that do not store data, and tightens it at once;
+// loosening it, which lets customers' data reach providers that store or train on it, waits for a
+// person.
+func TestAnAgentSetsOpenRouterRoutingThroughTheTools(t *testing.T) {
+	fake := &aiprovider.Fake{}
+	e := newEnvWith(t, func(config *httpapi.Config) {
+		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+		config.Google = google.Config{Keys: keys}
+		config.AI = ai.Config{Build: func(ai.Spec) (aiprovider.Provider, error) { return fake, nil }}
+	})
+	w := e.newWorkspace("AI Routing Desk", "admin@ai-routing.example.com")
+	admin := e.connect(w.adminTier, "")
+	added := e.ok(admin, "colliedesk_ai_provider_add", map[string]any{"kind": "openai_compatible", "label": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
+		"api_key": aiToolKey, "models": []string{"openai/gpt-5"}, "routing": map[string]any{"data_collection": "allow", "zdr": false}})
+	id := at(t, added, "provider", "id").(string)
+	tight := e.ok(admin, "colliedesk_ai_provider_update", map[string]any{"provider_id": id, "routing": map[string]any{"data_collection": "deny", "zdr": true}})
+	if at(t, tight, "provider", "routing", "data_collection") != "deny" {
+		t.Fatalf("tighten = %v", tight)
+	}
+	loose := e.ok(admin, "colliedesk_ai_provider_update", map[string]any{"provider_id": id, "routing": map[string]any{"data_collection": "allow", "zdr": true}})
+	if at(t, loose, "agent_request", "status") != "pending" {
+		t.Fatalf("loosen = %v", loose)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -65,45 +66,14 @@ func claudeAnswersColliedesk(model anthropic.ModelInfo) bool {
 // on a server that lists each model's parameters (OpenRouter), one that takes a JSON schema. A model
 // past its shutdown or expiration date, or served only in batches, is left out.
 func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(p.endpoint, "/chat/completions")+"/models", nil)
+	listed, err := p.listModels(ctx)
 	if err != nil {
-		return nil, &Error{Code: ErrorBadRequest}
+		return nil, err
 	}
-	httpRequest.Header.Set("Accept", "application/json")
-	if p.apiKey != "" {
-		httpRequest.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
-	reply, err := p.http.Do(httpRequest)
-	if err != nil {
-		return nil, transportError(ctx, err)
-	}
-	defer reply.Body.Close()
-	requestID := reply.Header.Get("X-Request-Id")
-	if reply.StatusCode < 200 || reply.StatusCode > 299 {
-		return nil, statusError(reply.StatusCode, reply.Header, requestID)
-	}
-	data, err := io.ReadAll(io.LimitReader(reply.Body, maxResponseBytes+1))
-	if err != nil {
-		return nil, transportError(ctx, err)
-	}
-	var parsed struct {
-		Data []struct {
-			ID                  string    `json:"id"`
-			SupportedParameters *[]string `json:"supported_parameters"`
-			// ShutdownDate is the day OpenAI turns a model off (YYYY-MM-DD), or null; GET /models
-			// keeps listing a model after it, and every request to it then fails with model_not_found.
-			ShutdownDate *string `json:"shutdown_date"`
-			// ExpirationDate is OpenRouter's: the day after which it may remove the model.
-			ExpirationDate *string `json:"expiration_date"`
-		} `json:"data"`
-	}
-	if len(data) > maxResponseBytes || json.Unmarshal(data, &parsed) != nil {
-		return nil, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
-	}
-	ids := make([]string, 0, len(parsed.Data))
+	ids := make([]string, 0, len(listed))
 	seen := map[string]bool{}
 	today := time.Now().UTC().Format(time.DateOnly)
-	for _, model := range parsed.Data {
+	for _, model := range listed {
 		id := strings.TrimSpace(model.ID)
 		if p.openAIHost && !openAIAnswersColliedesk(id) {
 			continue
@@ -130,6 +100,114 @@ func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
 		ids = ids[:MaxListedModels]
 	}
 	return ids, nil
+}
+
+// listedModel is one model of GET {BaseURL}/models.
+type listedModel struct {
+	ID                  string    `json:"id"`
+	SupportedParameters *[]string `json:"supported_parameters"`
+	// ShutdownDate is the day OpenAI turns a model off (YYYY-MM-DD), or null; GET /models
+	// keeps listing a model after it, and every request to it then fails with model_not_found.
+	ShutdownDate *string `json:"shutdown_date"`
+	// ExpirationDate is OpenRouter's: the day after which it may remove the model.
+	ExpirationDate *string `json:"expiration_date"`
+	// Reasoning is OpenRouter's, on a model that reasons: the efforts it takes, null for every one.
+	Reasoning *struct {
+		SupportedEfforts []string `json:"supported_efforts"`
+	} `json:"reasoning"`
+}
+
+func (p *openAIProvider) listModels(ctx context.Context) ([]listedModel, error) {
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(p.endpoint, "/chat/completions")+"/models", nil)
+	if err != nil {
+		return nil, &Error{Code: ErrorBadRequest}
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	if p.apiKey != "" {
+		httpRequest.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	reply, err := p.http.Do(httpRequest)
+	if err != nil {
+		return nil, transportError(ctx, err)
+	}
+	defer reply.Body.Close()
+	requestID := reply.Header.Get("X-Request-Id")
+	if reply.StatusCode < 200 || reply.StatusCode > 299 {
+		return nil, statusError(reply.StatusCode, reply.Header, requestID)
+	}
+	data, err := io.ReadAll(io.LimitReader(reply.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, transportError(ctx, err)
+	}
+	var parsed struct {
+		Data []listedModel `json:"data"`
+	}
+	if len(data) > maxResponseBytes || json.Unmarshal(data, &parsed) != nil {
+		return nil, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
+	}
+	return parsed.Data, nil
+}
+
+// How long what OpenRouter says of its models' reasoning is kept, and how long a failed ask is.
+const (
+	reasoningListFor     = time.Hour
+	reasoningListRetryIn = 5 * time.Minute
+	reasoningListTimeout = 5 * time.Second
+)
+
+// reasoningLists keeps, per OpenRouter endpoint, which models reason and at which efforts, so a
+// request asks GET /models at most once an hour (it is public and free).
+var reasoningLists = struct {
+	sync.Mutex
+	byEndpoint map[string]*reasoningList
+}{byEndpoint: map[string]*reasoningList{}}
+
+type reasoningList struct {
+	sync.Mutex
+	until time.Time
+	// efforts maps a model that reasons to the efforts it takes; nil takes every one.
+	efforts map[string][]string
+}
+
+// reasonsAt reports whether OpenRouter lists the model as one that reasons at the effort. When the
+// list cannot be read it says no: the request then goes without an effort, as it did before.
+func (p *openAIProvider) reasonsAt(ctx context.Context, model string, effort Effort) bool {
+	reasoningLists.Lock()
+	list := reasoningLists.byEndpoint[p.endpoint]
+	if list == nil {
+		list = &reasoningList{}
+		reasoningLists.byEndpoint[p.endpoint] = list
+	}
+	reasoningLists.Unlock()
+	list.Lock()
+	defer list.Unlock()
+	if now := time.Now(); now.After(list.until) {
+		lookup, cancel := context.WithTimeout(ctx, reasoningListTimeout)
+		listed, err := p.listModels(lookup)
+		cancel()
+		if err != nil {
+			list.efforts, list.until = nil, now.Add(reasoningListRetryIn)
+		} else {
+			list.efforts, list.until = map[string][]string{}, now.Add(reasoningListFor)
+			for _, listed := range listed {
+				if listed.SupportedParameters != nil && slices.Contains(*listed.SupportedParameters, "reasoning") {
+					var efforts []string
+					if listed.Reasoning != nil {
+						efforts = listed.Reasoning.SupportedEfforts
+					}
+					list.efforts[listed.ID] = efforts
+				}
+			}
+		}
+	}
+	efforts, ok := list.efforts[model]
+	if !ok {
+		// A variant (model:nitro, model:floor) reasons as its model does.
+		if base, _, cut := strings.Cut(model, ":"); cut {
+			efforts, ok = list.efforts[base]
+		}
+	}
+	return ok && (efforts == nil || slices.Contains(efforts, string(effort)))
 }
 
 // Models lists FakeModels; the fake has no network to ask.

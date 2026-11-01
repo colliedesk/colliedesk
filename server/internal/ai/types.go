@@ -40,11 +40,34 @@ type Provider struct {
 	CheckStatus    string    `json:"check_status"`
 	CheckErrorCode *string   `json:"check_error_code"`
 	CheckedAt      time.Time `json:"checked_at"`
-	CreatedBy      *string   `json:"created_by"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// Routing is how OpenRouter picks who serves the provider's requests; nil on another server.
+	Routing   *ProviderRouting `json:"routing"`
+	CreatedBy *string          `json:"created_by"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 	// UsedBy lists the slots set to this provider, on or off.
 	UsedBy []string `json:"used_by"`
+}
+
+// ProviderRouting is OpenRouter's provider routing by data policy: DataCollection "deny" keeps the
+// requests off the providers that store or train on what they are sent, ZDR on those that keep
+// nothing (zero data retention).
+type ProviderRouting struct {
+	DataCollection string `json:"data_collection"`
+	ZDR            bool   `json:"zdr"`
+}
+
+// loosens says whether a change of routing lets requests reach providers they could not reach.
+func (r ProviderRouting) loosens(to ProviderRouting) bool {
+	return r.DataCollection == "deny" && to.DataCollection != "deny" || r.ZDR && !to.ZDR
+}
+
+func (r ProviderRouting) adapter() aiprovider.Routing {
+	routing := aiprovider.Routing{ZDR: r.ZDR}
+	if r.DataCollection == "deny" {
+		routing.DataCollection = "deny"
+	}
+	return routing
 }
 
 // Server describes the server's provider without its key.
@@ -61,8 +84,11 @@ type Slot struct {
 	Source     string  `json:"source"`
 	ProviderID *string `json:"provider_id"`
 	Model      *string `json:"model"`
-	Effort     string  `json:"effort"`
-	Enabled    bool    `json:"enabled"`
+	// FallbackModel is intake's: the provider's model it tries when Model fails or answers what
+	// cannot be read.
+	FallbackModel *string `json:"fallback_model"`
+	Effort        string  `json:"effort"`
+	Enabled       bool    `json:"enabled"`
 	// DefaultLevel is what the feature does by itself where no channel sets a level, and on
 	// conversations of no channel: off, suggest or auto (triage only).
 	DefaultLevel string `json:"default_level"`

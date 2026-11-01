@@ -26,7 +26,8 @@ type WorkerOptions struct {
 	PerWorkspace int
 	// MaxAttempts is how many times a task is tried before it fails (3).
 	MaxAttempts int
-	// Timeouts bound one attempt of each kind (triage 30 s, draft 90 s).
+	// Timeouts bound one attempt of each kind (triage 30 s, draft 90 s, intake 75 s: its model and,
+	// when that fails, its fallback model).
 	Timeouts map[string]time.Duration
 }
 
@@ -47,7 +48,7 @@ func (o WorkerOptions) withDefaults() WorkerOptions {
 		o.MaxAttempts = 3
 	}
 	if o.Timeouts == nil {
-		o.Timeouts = map[string]time.Duration{SlotTriage: 30 * time.Second, SlotDraft: 90 * time.Second}
+		o.Timeouts = map[string]time.Duration{SlotTriage: 30 * time.Second, SlotDraft: 90 * time.Second, SlotIntake: 75 * time.Second}
 	}
 	return o
 }
@@ -404,6 +405,10 @@ func (w *Worker) admit(ctx context.Context, item claimedTask, task Task) (string
 				if code, err = w.service.admitAutomaticDraft(ctx, tx, item.workspaceID, task, limits, now); err != nil || code != "" {
 					return err
 				}
+			}
+			if task.Kind == SlotIntake && limits.IntakeToday >= limits.IntakePerDay {
+				code = CodeIntakeLimit
+				return nil
 			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE ai_tasks SET started_at=$4 WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, now)
