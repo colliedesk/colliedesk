@@ -172,6 +172,13 @@ the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; foll
   AGENTS.md records what it made true: each guarantee becomes a rule naming its gate, and text it
   made stale is updated. `milestone-agents-md.yml` opens that issue, assigned to whoever closed the
   milestone; the PR that updates AGENTS.md closes it.
+- **Read the whole issue before code.** Run `gh issue view N --comments`: the plan and the
+  design spec often arrive as comments after the issue was opened, and they are part of the task.
+  A comment that starts with "Design spec" is the design to build. A PR that says `Closes #N`,
+  `Part of #N` or `Refs #N` for such an issue carries a `## Design spec` section with one item per
+  mechanism: `- done: …`, `- changed: … because …` or `- not in this PR: … (#issue)`. The `roadmap`
+  job fails without it (`.github/scripts/design-spec-check.py`); after editing the description,
+  re-run that job.
 - **New ideas from users** belong in Discussions → Ideas, not Issues. When a maintainer accepts
   one, open an issue that links the discussion.
 - Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
