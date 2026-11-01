@@ -23,6 +23,8 @@ interface DetailsPanelProps {
   onClose?: () => void;
   // Narrows the list to this customer's conversations.
   onShowContactConversations?: (contactId: string) => void;
+  // Narrows the list to the conversations of the customer's organization (the organization filter).
+  onShowOrganizationConversations?: (organization: string) => void;
   // Triage suggestions are on in the workspace; onTriageApplied reads the conversation again after a part is applied.
   aiTriage?: boolean;
   onTriageApplied?: () => void;
@@ -68,7 +70,7 @@ function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; o
     </ActionMenu></div>;
 }
 
-export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting, autofix = false }: DetailsPanelProps) {
+export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, onShowOrganizationConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting, autofix = false }: DetailsPanelProps) {
   const [tagName, setTagName] = useState('');
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
@@ -115,6 +117,11 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
       </fieldset>
       {conversation && (
         <section className="details-section conversation-source">
+          {conversation.contact_organization && <div className="property-row conversation-organization"><span>{messages.organization}</span>
+            {onShowOrganizationConversations
+              ? <button type="button" className="link-button" title={messages.showOrganizationConversations(conversation.contact_organization)}
+                onClick={() => onShowOrganizationConversations(conversation.contact_organization ?? '')}>{conversation.contact_organization}</button>
+              : <span>{conversation.contact_organization}</span>}</div>}
           {onShowContactConversations && <button type="button" className="link-button" onClick={() => onShowContactConversations(conversation.contact_id)}>
             {messages.showContactConversations(conversation.contact_name)}</button>}
         </section>

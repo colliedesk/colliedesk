@@ -228,3 +228,13 @@ test('a notice the channel sent by itself says so and is not shown as a reply of
   expect(screen.queryByText('Someone')).toBeNull();
   expect(screen.getByText('Đã nhận yêu cầu của anh/chị.')).toBeInTheDocument();
 });
+
+test('a chat message keeps every line break the customer typed, however long the line; mail still joins its client\'s wraps', () => {
+  const lines = ['Chào shop, app bên mình từ sáng không in được hoá đơn, bấm in thì báo lỗi kết nối máy in',
+    'Máy in vẫn bật đèn xanh bình thường, mình đã tắt mở lại máy in và cả máy tính rồi mà vẫn bị',
+    'Khách đang đợi lấy hoá đơn nên shop xem giúp mình sớm với nhé'];
+  const { container, rerender } = render(<MessageItem item={{ ...base, email: null, body: lines.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(lines.join('\n'));
+  rerender(<MessageItem item={{ ...base, body: lines.join('\n') }} timezone="UTC" />);
+  expect(container.querySelector('.plain-text-body')?.textContent).toBe(lines.join(' '));
+});

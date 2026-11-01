@@ -250,10 +250,10 @@ const conversationChatChannel = `(SELECT i.channel_id::text FROM conversation_th
 
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),
+	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),
 		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
 		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber,
+		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber,
 			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
@@ -507,7 +507,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	}
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,
 		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb),
 		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
@@ -527,7 +527,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	for rows.Next() {
 		var item domain.Conversation
 		var tagsJSON []byte
-		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority,
+		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority,
 			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON,
 			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)

@@ -134,12 +134,14 @@ type Conversation struct {
 	ID        string `json:"id"`
 	ContactID string `json:"contact_id"`
 	// ContactName saves the reply box a second request for the customer's name.
-	ContactName string  `json:"contact_name"`
-	Subject     string  `json:"subject"`
-	Status      string  `json:"status"`
-	Priority    string  `json:"priority"`
-	AssigneeID  *string `json:"assignee_id"`
-	Tags        []Tag   `json:"tags"`
+	ContactName string `json:"contact_name"`
+	// ContactOrganization is its customer's organization, the name the organization filter matches.
+	ContactOrganization *string `json:"contact_organization"`
+	Subject             string  `json:"subject"`
+	Status              string  `json:"status"`
+	Priority            string  `json:"priority"`
+	AssigneeID          *string `json:"assignee_id"`
+	Tags                []Tag   `json:"tags"`
 	// Channel is how the conversation started: one of the Channel* values.
 	Channel string `json:"channel"`
 	// ChannelID is the channel it came through; nil for one that came through none.
