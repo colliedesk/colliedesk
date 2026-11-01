@@ -78,6 +78,8 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
     <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment && domain.next_step?.key !== 'import' && domain.next_step?.key !== 'enable' ? 'true' : 'false'}>
       {check.isSuccess && domain.status === 'active' && domain.awaiting_payment && !domain.check_error
         ? <>{domainMessages.checkedTrial(domain.hostname)} <a href="/settings/billing">{domainMessages.choosePlan}</a></>
+        : domain.status === 'active' && domain.hostname && domain.awaiting_payment && !domain.next_step
+        ? <>{domainMessages.readyForPlan(domain.hostname)} <a href="/settings/billing">{domainMessages.choosePlan}</a></>
         : domain.status === 'active' && domain.hostname && (domain.awaiting_payment || domain.next_step?.key === 'import' || domain.next_step?.key === 'enable')
         ? domainMessages.verifiedState(domain.hostname, domain.awaiting_payment) : domainMessages.state(domain.status, domain.hostname)}</p>
     {domain.status === 'active' && domain.address_checked_at && domain.address_url && (domain.address_error

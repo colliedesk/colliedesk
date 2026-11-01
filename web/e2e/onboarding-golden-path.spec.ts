@@ -71,7 +71,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await expect(guide.getByRole('button', { name: 'I checked the preview' })).toHaveCount(0);
     await expect(guide.locator('[data-step="import"]')).toHaveAttribute('data-state', 'done');
     const me = await (await page.request.get(`${baseURL}/api/v1/auth/me`)).json() as { workspace: { slug: string } };
-    await expect(guide.getByRole('link', { name: 'Turn on the help center' })).toHaveAttribute('href', '/settings#help-center-heading');
+    await expect(guide.getByRole('link', { name: 'Turn on the help center', exact: true })).toHaveAttribute('href', '/settings#help-center-heading');
     const headers = { Origin: baseURL };
     expect((await page.request.put(`${baseURL}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Golden help', locale: 'en' } })).status()).toBe(200);
     await page.reload();
@@ -114,7 +114,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     const articles = await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: Array<{ id: string; updated_at: string }> };
     for (const article of articles.items) expect((await page.request.delete(`${baseURL}/api/v1/kb/articles/${article.id}?updated_at=${encodeURIComponent(article.updated_at)}`, { headers })).status()).toBe(204);
     await page.reload();
-    await expect(page.getByRole('link', { name: 'Turn on the help center' })).toHaveAttribute('href', '/settings#help-center-heading');
+    await expect(page.getByRole('link', { name: 'Turn on the help center', exact: true })).toHaveAttribute('href', '/settings#help-center-heading');
     await page.goto(baseURL);
     await openGuide();
     await expect(guide.locator('[data-step="custom_domain"]')).toHaveAttribute('data-state', 'done');

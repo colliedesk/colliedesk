@@ -187,7 +187,7 @@ test('under the status, one line says whether the address really opens with the 
   // Not opened (during the trial, or before a check proved DNS): no line, and no failure.
   state = { ...active, awaiting_payment: true };
   open(true);
-  await screen.findByText(/is verified\. After the help center is ready/);
+  await screen.findByText(/is verified\. Choose a plan, then change the CNAME/);
   expect(screen.queryByText(/opens this help center|certificate/)).not.toBeInTheDocument();
 });
 

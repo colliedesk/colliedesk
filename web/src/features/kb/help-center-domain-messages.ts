@@ -17,6 +17,7 @@ export const domainMessages = {
   nextStep: { import: 'Import your knowledge base with images; old article links keep working', enable: 'Turn on the help center' },
   checkedTrial: (hostname: string | null) => `DNS checked. ${hostname} is verified. The help center serves on this domain once you choose a plan.`,
   choosePlan: 'Choose a plan',
+  readyForPlan: (hostname: string) => `${hostname} is verified. Choose a plan, then change the CNAME and press Check now.`,
   verifiedState: (hostname: string, unpaid: boolean) => `${hostname} is verified. ${unpaid ? 'After the help center is ready, choose a plan; then change the CNAME and press Check now.' : 'Finish the help center step above before changing the CNAME.'}`,
 
   state: (status: Status, hostname: string | null) => status === 'active'
