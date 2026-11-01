@@ -39,3 +39,7 @@ export const PlusIcon = () => <Icon><path d="M12 5v14M5 12h14" /></Icon>;
 export const MailIcon = () => <Icon><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></Icon>;
 export const FormIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></Icon>;
 export const ChatIcon = () => <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Icon>;
+export const ExternalLinkIcon = () => <Icon><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></Icon>;
+// Alert marks: the colour (icon-warn, icon-danger) carries the level; the words beside them stay ink.
+export const TriangleAlertIcon = ({ tone = 'warn' }: { tone?: 'warn' | 'danger' }) => <Icon className={`icon icon-${tone}`}><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></Icon>;
+export const CircleAlertIcon = ({ tone = 'danger' }: { tone?: 'warn' | 'danger' }) => <Icon className={`icon icon-${tone}`}><circle cx="12" cy="12" r="9" /><path d="M12 8v4" /><path d="M12 16h.01" /></Icon>;

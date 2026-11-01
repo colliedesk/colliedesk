@@ -130,7 +130,7 @@ var toolDocs = map[string]string{
 	"colliedesk_request_cancel":                     "Withdraws a waiting request",
 	"colliedesk_token_create_request":               "Asks for a new agent token; the approver gets it, never the agent",
 	"colliedesk_workspace_export_request":           "Asks for a workspace export; the approver gets the download",
-	"colliedesk_billing_request":                    "Asks for a plan checkout or the billing portal",
+	"colliedesk_billing_request":                    "Asks for a plan checkout, the billing portal or a Freshdesk data migration",
 	"colliedesk_email_channel_disconnect_request":   "Asks to disconnect the email channel",
 	"colliedesk_email_secret_rotate_request":        "Asks for a new inbound email secret; the approver sees it",
 	"colliedesk_gmail_connect_request":              "Asks an admin to connect Gmail for sending replies; the approver gets Google's consent page",
