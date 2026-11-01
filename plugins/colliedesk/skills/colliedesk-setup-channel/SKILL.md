@@ -18,16 +18,19 @@ the person with the channel working or a short list of what only they can do.
 
 ## Boundaries
 
-1. Never ask the person to paste a secret (a password, key or token) into the chat: send them to the
-   channel's page in Colliedesk to enter it there.
+1. Never ask the person to paste a secret (a password, key or token) into the chat, and never pass a
+   secret someone typed in the chat to a tool: send them to the channel's page in Colliedesk to enter
+   it there.
 2. Say plainly which steps happen outside Colliedesk (a DNS record, a webhook address in another
    service) and wait for the person to confirm them.
-3. Check the channel's state at the end and report it as Colliedesk gives it.
+3. When your token may not change channels, give the person the steps from the channel's page
+   instead of a dead end.
+4. Check the channel's state at the end and report it as Colliedesk gives it.
 
 ## Before you start
 
-1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`. A tool's
-   description says how to call it.
+1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`; stop and tell
+   the person when it says the workspace is locked. A tool's description says how to call it.
 2. Read the pages under Reference: they say how the feature works today.
 3. When a page describes something your tools do not offer, the person's server is older than the
    page: trust `tools_you_can_use` and tell the person what their server does not have yet.

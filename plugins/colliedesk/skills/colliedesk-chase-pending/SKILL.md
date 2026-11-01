@@ -1,6 +1,6 @@
 ---
 name: colliedesk-chase-pending
-description: Chase stalled Colliedesk conversations. Use when asked to follow up on customers who have not answered for some days, or to find conversations where the team has kept a customer waiting. Never closes or sends without the person's yes. Needs the Colliedesk MCP server.
+description: Chase stalled Colliedesk conversations. Use when asked to follow up on customers who have not answered for some days, or to find conversations where the team has kept a customer waiting. To answer one conversation, use colliedesk-draft-reply; to sort new ones, colliedesk-triage. Never closes or sends without the person's yes. Needs the Colliedesk MCP server.
 license: AGPL-3.0-only
 ---
 
@@ -29,8 +29,8 @@ waiting.
 
 ## Before you start
 
-1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`. A tool's
-   description says how to call it.
+1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`; stop and tell
+   the person when it says the workspace is locked. A tool's description says how to call it.
 2. Read the pages under Reference: they say how the feature works today.
 3. When a page describes something your tools do not offer, the person's server is older than the
    page: trust `tools_you_can_use` and tell the person what their server does not have yet.

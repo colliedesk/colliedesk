@@ -28,8 +28,12 @@ func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
 	name := regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 	tool := regexp.MustCompile(`colliedesk_[a-z_]*[a-z]`)
 	heading := regexp.MustCompile(`(?m)^#{1,6} .*$`)
-	link := regexp.MustCompile(`\]\((https?://[^)\s]+)\)`)
-	guide := regexp.MustCompile(`^https://colliedesk\.com/docs/((?:self-host/)?[a-z0-9-]+)\.md$`)
+	link := regexp.MustCompile(`https?://[^)\s>]+`)
+	guide := regexp.MustCompile(`^https://colliedesk\.com/docs/([a-z0-9-]+)\.md$`)
+	index, err := os.ReadFile("../../../docs/user/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sections := []string{"## What it is for", "## When to use", "## Boundaries", "## Before you start", "## Reference"}
 	mayName := []string{"colliedesk_whoami", "colliedesk_docs_search"}
 	for _, spec := range mcpserver.Catalog() {
@@ -85,26 +89,29 @@ func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
 				t.Errorf("%s names %s: a skill names no tool but %v; tools, arguments and tiers come from colliedesk_whoami and the tool descriptions, so a change in Colliedesk never leaves a skill wrong", skill, used, mayName)
 			}
 		}
-		if !strings.Contains(body, "colliedesk_whoami") || !strings.Contains(body, "tools_you_can_use") {
+		_, boundaries, _ := strings.Cut(body, "## Boundaries")
+		boundaries, _, _ = strings.Cut(boundaries, "## Before you start")
+		if !regexp.MustCompile(`(?m)^1\. \S`).MatchString(boundaries) {
+			t.Errorf("%s: its Boundaries section lists nothing; it says what the skill must never do", skill)
+		}
+		if !strings.Contains(body, "colliedesk_whoami") || !strings.Contains(body, "tools_you_can_use") || !strings.Contains(body, "workspace is locked") {
 			t.Errorf("%s must start from colliedesk_whoami and its tools_you_can_use: a person's server may be older than the skill", skill)
 		}
 		_, reference, _ := strings.Cut(body, "## Reference")
-		links := link.FindAllStringSubmatch(body, -1)
+		links := link.FindAllString(body, -1)
 		if !link.MatchString(reference) {
 			t.Errorf("%s: its Reference section links no guide", skill)
 		}
-		for _, match := range links {
-			page := guide.FindStringSubmatch(match[1])
+		for _, url := range links {
+			page := guide.FindStringSubmatch(url)
 			if page == nil {
-				t.Errorf("%s links %s; link only the Markdown twin of a colliedesk.com guide, https://colliedesk.com/docs/<page>.md, without an anchor", skill, match[1])
+				t.Errorf("%s links %s; link only the Markdown twin of a user guide, https://colliedesk.com/docs/<page>.md, without an anchor (colliedesk_docs_search serves those guides too)", skill, url)
 				continue
 			}
-			source := filepath.Join("../../../docs/user", page[1]+".md")
-			if strings.HasPrefix(page[1], "self-host/") {
-				source = filepath.Join("../../../docs", page[1]+".md")
-			}
-			if _, err := os.Stat(source); err != nil {
-				t.Errorf("%s links %s, but %s does not exist: the page was renamed or removed", skill, match[1], source)
+			if _, err := os.Stat(filepath.Join("../../../docs/user", page[1]+".md")); err != nil {
+				t.Errorf("%s links %s, but docs/user/%s.md does not exist: the page was renamed or removed", skill, url, page[1])
+			} else if !strings.Contains(string(index), "]("+page[1]+".md)") {
+				t.Errorf("%s links %s, but docs/user/README.md does not list it, so colliedesk.com does not publish it", skill, url)
 			}
 		}
 	}

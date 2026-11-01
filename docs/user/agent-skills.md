@@ -1,8 +1,8 @@
 # Agent skills
 
 Agent skills tell an AI agent when to take on a Colliedesk routine, what it is for and what it must
-never do, and link the pages of these docs that explain the feature. Colliedesk ships four, in the
-open [Agent Skills](https://agentskills.io) format, so Claude Code, Codex, Cursor, VS Code and Claude
+never do, and link the pages of these docs that explain the feature. Colliedesk ships the skills below, in
+the open [Agent Skills](https://agentskills.io) format, so Claude Code, Codex, Cursor, VS Code and Claude
 load the same files. They work through the Colliedesk MCP server: connect your host first
 ([Claude Code](connect-claude-code.md), [Codex](connect-codex.md), [Cursor](connect-cursor.md),
 [VS Code](connect-vscode.md), [Claude Desktop](connect-claude-desktop.md)).
@@ -14,7 +14,8 @@ load the same files. They work through the Colliedesk MCP server: connect your h
 | `colliedesk-chase-pending` | Drafts a reminder for customers who have not answered for some days, and notes the conversations your team keeps waiting for their owner. Never closes a conversation on its own. |
 | `colliedesk-setup-channel` | Adds or fixes a channel (support email, web form, help chat, Zalo OA) and says which steps only you can do. Never asks for a secret in the chat. |
 
-A skill holds no tool names, steps or token tiers, so a change in Colliedesk never leaves it wrong.
+A skill names no tool beyond `colliedesk_whoami` and `colliedesk_docs_search`, and holds no steps
+or token tiers, so a change in Colliedesk never leaves it wrong.
 The agent learns them when it runs: it asks Colliedesk which tools your token may use
 (`colliedesk_whoami`), reads each tool's description, and reads the linked pages on colliedesk.com.
 An agent without web access gets the same pages from your server with `colliedesk_docs_search`. When
@@ -33,7 +34,7 @@ The skills are in the Colliedesk repository, in
 - **Claude Code:** the Colliedesk plugin installs them with the MCP server; see
   [Connect Claude Code](connect-claude-code.md). Ask for them by name, for example "use
   colliedesk-triage on the queue", or let Claude pick one.
-- **Codex, Cursor and VS Code:** copy the four folders into `~/.agents/skills/` (every project) or
+- **Codex, Cursor and VS Code:** copy the skill folders into `~/.agents/skills/` (every project) or
   `.agents/skills/` in a project. On macOS or Linux:
 
   ```sh

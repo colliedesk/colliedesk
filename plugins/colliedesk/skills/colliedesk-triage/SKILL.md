@@ -1,6 +1,6 @@
 ---
 name: colliedesk-triage
-description: Triage the Colliedesk support inbox. Use when asked to sort, tag, prioritize or assign open conversations that nobody owns, or to "triage the queue". Never writes to a customer. Needs the Colliedesk MCP server.
+description: Triage the Colliedesk support inbox. Use when asked to sort, tag, prioritize or assign open conversations that nobody owns, or to "triage the queue". Not for chasing stalled conversations (colliedesk-chase-pending). Never writes to a customer. Needs the Colliedesk MCP server.
 license: AGPL-3.0-only
 ---
 
@@ -26,8 +26,8 @@ that way.
 
 ## Before you start
 
-1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`. A tool's
-   description says how to call it.
+1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`; stop and tell
+   the person when it says the workspace is locked. A tool's description says how to call it.
 2. Read the pages under Reference: they say how the feature works today.
 3. When a page describes something your tools do not offer, the person's server is older than the
    page: trust `tools_you_can_use` and tell the person what their server does not have yet.

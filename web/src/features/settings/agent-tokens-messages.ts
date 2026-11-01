@@ -50,7 +50,7 @@ export const agentTokenMessages = {
   copySnippet: (label: string) => `Copy: ${label}`,
   runInTerminal: 'Run in your terminal',
   insideClaudeCode: 'Then, inside Claude Code',
-  pluginInstalls: 'Installs the Colliedesk tools and three skills: triage, draft a reply, chase pending.',
+  pluginInstalls: 'Installs the Colliedesk tools and the Colliedesk agent skills (see Agent skills in the docs).',
   pluginToken: 'Paste the token when it asks, then restart Claude Code. It keeps the token in your system’s credential store.',
   withoutPlugin: 'Without the plugin',
   shellProfile: 'Add to your shell profile, with your token',

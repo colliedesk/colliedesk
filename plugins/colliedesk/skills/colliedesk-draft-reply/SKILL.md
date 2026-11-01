@@ -1,6 +1,6 @@
 ---
 name: colliedesk-draft-reply
-description: Draft a reply to a Colliedesk conversation for a person to check and send. Use when asked to answer, reply to or draft a response for a customer ticket. Sends only when the person approves the exact text. Needs the Colliedesk MCP server.
+description: Draft a reply to a Colliedesk conversation for a person to check and send. Use when asked to answer, reply to or draft a response for a customer ticket. For reminders to customers who stopped answering, use colliedesk-chase-pending instead. Sends only when the person approves the exact text. Needs the Colliedesk MCP server.
 license: AGPL-3.0-only
 ---
 
@@ -29,8 +29,8 @@ Colliedesk.
 
 ## Before you start
 
-1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`. A tool's
-   description says how to call it.
+1. Call `colliedesk_whoami` and work only with the tools in its `tools_you_can_use`; stop and tell
+   the person when it says the workspace is locked. A tool's description says how to call it.
 2. Read the pages under Reference: they say how the feature works today.
 3. When a page describes something your tools do not offer, the person's server is older than the
    page: trust `tools_you_can_use` and tell the person what their server does not have yet.
