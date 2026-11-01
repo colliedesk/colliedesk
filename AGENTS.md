@@ -62,6 +62,12 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - **Contracts:** anything crossing the wire is typed in `contracts/openapi.yaml`.
 - **Docs:** a user-visible change updates its page in `docs/user/` (server operation: `docs/self-host/`). Internal docs record decisions
   and traps only (`docs/internals/`).
+- **Website:** before you push, check that what colliedesk.com tells people still matches the code:
+  the `docs/user/` pages it publishes and its own text, commands and claims in
+  [colliedesk/colliedesk.com](https://github.com/colliedesk/colliedesk.com) (`src/data/pages/`,
+  `src/components/`). Fix what is wrong and add what is missing, in this PR for `docs/user/` and in
+  a colliedesk.com PR for the rest. After the merge, check the live page (the site rebuilds every
+  15 minutes, or run its `Site` workflow).
 
 ## Verifying
 
