@@ -721,6 +721,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/results/shared", auth.PermissionPublic},
 		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/workspace/setup", auth.PermissionAuthenticated},
+		{http.MethodPut, "/api/v1/workspace/setup/move", auth.PermWorkspaceUpdate},
 		{http.MethodPut, "/api/v1/agents/me/setup-guide", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/channels", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/channels", auth.PermissionAccessWrite},

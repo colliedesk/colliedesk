@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { OnboardingGoal } from '../../api/schemas';
 import type { SetupProgress, SetupStepKey } from '../../api/schemas';
 import { preloadChannelsPage } from '../settings/channels/channels-preload';
 import { track } from '../../lib/product-analytics';
+import { request } from '../../api/client';
+import { setupProgressSchema } from '../../api/schemas';
 import { messages } from '../../messages';
 import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { setupMessages } from './setup-messages';
@@ -12,7 +14,7 @@ import { stepIsDone, visibleSteps } from './setup-steps';
 import './setup-checklist.css';
 
 // Where each step is finished.
-const targets: Record<SetupStepKey, string> = { email: '/settings/channels/type/email', import: '/settings/import-freshdesk', invite: '/settings', first_reply: '/' };
+const targets: Record<SetupStepKey, string> = { email: '/settings/channels/type/email', import: '/settings/import-freshdesk', invite: '/settings', first_reply: '/', preview: '/settings#help-center-heading', custom_domain: '/settings#help-center-domain-heading', plan: '/settings/billing', cname: '/settings#help-center-domain-heading', search_console: '/settings#help-center-search-console-heading' };
 
 // Whether the agent left the guide open or folded, kept by this browser; without a stored choice, none.
 const storageKey = 'colliedesk-setup-dock-v1';
@@ -41,8 +43,14 @@ interface SetupChecklistProps {
 // conversation the agent did not ask it to.
 export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onHide }: SetupChecklistProps) {
   const client = useQueryClient();
+  const update = useMutation({
+    mutationFn: (body: { step: 'preview' | 'custom_domain' | 'search_console'; state: 'done' | 'skipped' | 'none' }) =>
+      request('/api/v1/workspace/setup/move', setupProgressSchema, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: (saved) => client.setQueryData(['setup'], saved),
+  });
   const steps = visibleSteps(progress, admin);
   const done = steps.filter(stepIsDone).length;
+  const domainSkipped = steps.some((step) => step.state === 'skipped');
   const firstTodo = steps.find((step) => !stepIsDone(step))?.key;
   const [choice, setChoice] = useState(storedChoice);
   const open = choice ?? defaultOpen;
@@ -66,7 +74,7 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
   // A step that turns done while this is on screen is reported once; what was done on arrival is not.
   const seenDone = useRef<Set<SetupStepKey>>(undefined);
   useEffect(() => {
-    const now = new Set(steps.filter(stepIsDone).map((step) => step.key));
+    const now = new Set(steps.filter((step) => step.state !== 'skipped' && stepIsDone(step)).map((step) => step.key));
     if (seenDone.current) {
       for (const key of now) if (!seenDone.current.has(key)) track('onboarding_step_completed', { step: key });
     }
@@ -87,7 +95,7 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
   }
   return (
     <div className="setup-dock">
-      <section className="setup-guide" aria-label={setupMessages.heading} onKeyDown={fold}>
+      <section className="setup-guide" aria-label={setupMessages.heading} data-move={goal === 'leave_helpdesk' || undefined} onKeyDown={fold}>
         <header>
           <h2>{setupMessages.heading}</h2>
           <span className="setup-count">{setupMessages.progress(done, steps.length)}</span>
@@ -110,22 +118,32 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
           {steps.map((step) => {
             const finished = stepIsDone(step);
             const primary = step.key === firstTodo;
+            const target = step.url || targets[step.key];
             return (
               <li key={step.key} className="setup-step" data-state={finished ? 'done' : 'todo'} data-step={step.key}>
                 <span className="setup-mark" aria-hidden="true">{finished && <CheckIcon />}</span>
-                <a href={targets[step.key]} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
-                  onPointerEnter={() => preloadChannelsPage(client, targets[step.key])} onFocus={() => preloadChannelsPage(client, targets[step.key])}>
+                <a href={target} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
+                  onPointerEnter={() => preloadChannelsPage(client, target)} onFocus={() => preloadChannelsPage(client, target)}>
                   <span className="setup-title">{setupMessages.title[step.key]}</span>
                   <span className="setup-state" data-attention={step.state === 'needs_attention' || undefined}>
                     {progress.recommended === step.key && !finished && <><b>{setupMessages.recommended}</b>{' · '}</>}
-                    {(setupMessages.state[step.key] as Record<string, string>)[step.state] ?? ''}
+                    {step.detail ? setupMessages.prerequisites[step.detail] ?? (setupMessages.state[step.key] as Record<string, string>)[step.state] : (setupMessages.state[step.key] as Record<string, string>)[step.state] ?? ''}
                   </span>
                 </a>
                 {!finished && <span className="setup-time">{setupMessages.time[step.key]}</span>}
+                {!finished && ((step.key === 'preview' && !step.detail) || (step.key === 'search_console' && primary)) &&
+                  <button type="button" className="link-action" disabled={update.isPending} onClick={() => update.mutate({ step: step.key as 'preview' | 'search_console', state: 'done' })}>
+                    {step.key === 'preview' ? setupMessages.previewChecked : setupMessages.searchSubmitted}
+                  </button>}
+                {step.key === 'custom_domain' && <button type="button" className="link-action" disabled={update.isPending}
+                  onClick={() => update.mutate({ step: 'custom_domain', state: domainSkipped ? 'none' : 'skipped' })}>
+                  {domainSkipped ? setupMessages.restoreDomain : setupMessages.skipDomain}
+                </button>}
               </li>
             );
           })}
         </ol>
+        {update.isError && <p role="alert">{setupMessages.updateFailed}</p>}
       </section>
     </div>
   );

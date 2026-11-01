@@ -139,7 +139,7 @@ test('on the trial an admin verifies a domain, and the card says it serves there
   fireEvent.click(screen.getByRole('button', { name: 'Set domain' }));
   expect(await screen.findByText(/help.acme.example is waiting for its DNS records/)).toHaveAttribute('role', 'status');
   fireEvent.click(screen.getByRole('button', { name: 'Check now' }));
-  expect(await screen.findByText('help.acme.example is verified. The help center serves there once you pay for a plan; until then it stays on its own address.'))
+  expect(await screen.findByText('help.acme.example is verified. After the help center is ready, choose a plan; then change the CNAME and press Check now.'))
     .toHaveAttribute('role', 'status');
   expect(screen.queryByText('The help center is served on help.acme.example.')).not.toBeInTheDocument();
 });
@@ -187,6 +187,23 @@ test('under the status, one line says whether the address really opens with the 
   // Not opened (during the trial, or before a check proved DNS): no line, and no failure.
   state = { ...active, awaiting_payment: true };
   open(true);
-  await screen.findByText(/is verified\. The help center serves there once you pay/);
+  await screen.findByText(/is verified\. After the help center is ready/);
   expect(screen.queryByText(/opens this help center|certificate/)).not.toBeInTheDocument();
+});
+
+test('a verified domain with an empty help center names import before the plan', async () => {
+  serve({
+    'GET /api/v1/help-center/domain': () => json(200, { ...active, awaiting_payment: true,
+      next_step: { key: 'import', url: '/settings/import-freshdesk' } }),
+  });
+  open(true);
+  const link = await screen.findByRole('link', { name: /Import.*knowledge base/ });
+  expect(link).toHaveAttribute('href', '/settings/import-freshdesk');
+  const card = screen.getByRole('heading', { name: 'Custom domain' }).parentElement!;
+  expect(card.textContent!.indexOf('Import')).toBeLessThan(card.textContent!.indexOf('pay for a plan'));
+  cleanup();
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, { ...active, next_step: { key: 'enable', url: '/settings#help-center-heading' } }) });
+  open(true);
+  expect(await screen.findByRole('link', { name: 'Turn on the help center' })).toHaveAttribute('href', '/settings#help-center-heading');
+  expect(screen.getByRole('status')).toHaveAttribute('data-on', 'false');
 });

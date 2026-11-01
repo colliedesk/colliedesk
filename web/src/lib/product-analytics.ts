@@ -111,9 +111,9 @@ export interface EventProperties {
   settings_section_opened: { section: SettingsSection };
   workspace_export_requested: undefined;
   problem_reported: undefined;
-  // step is the setup guide row only: email, import, invite or first_reply.
-  onboarding_step_started: { step: 'email' | 'import' | 'invite' | 'first_reply' };
-  onboarding_step_completed: { step: 'email' | 'import' | 'invite' | 'first_reply' };
+  // Only the setup guide row is sent, never a domain name or verification token.
+  onboarding_step_started: { step: 'email' | 'import' | 'invite' | 'first_reply' | 'preview' | 'custom_domain' | 'plan' | 'cname' | 'search_console' };
+  onboarding_step_completed: { step: 'email' | 'import' | 'invite' | 'first_reply' | 'preview' | 'custom_domain' | 'plan' | 'cname' | 'search_console' };
   survey_answered: { survey: SurveyId; answer: string };
   survey_dismissed: { survey: SurveyId };
 }

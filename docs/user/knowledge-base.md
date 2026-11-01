@@ -435,6 +435,21 @@ of address names, `/c/billing/cards`; changing one is not redirected. Addresses 
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Email) changes every help center address, and old links stop working.
 
+### Moving the help center from Freshdesk
+
+Follow the [move guide](import-freshdesk.md#finish-the-move): **import** tickets, contacts and the
+knowledge base with images (old article links keep working), **preview** the help center at its own
+address, **verify the domain by TXT**, **choose a plan**, **change the CNAME**, then **keep Search
+Console verification and submit the sitemap**. Your own Cloud preview is `<slug>.colliedesk.com/help`.
+
+The inbox's setup guide shows the real state and the next link. It asks you to confirm checking the
+preview and, after cutover works, finishing Search Console and sitemap submission. These confirmations
+stay done. Choose **No custom domain needed** to skip the four optional domain steps.
+
+A verified domain alone does not mean the help center is ready. If it is empty, the domain card
+links to importing the knowledge base; if it is off, it links to turning it on. Otherwise it links
+to the preview. This guidance comes before the plan advice, so you can check the content first.
+
 ### Custom domain
 
 The help center can answer on an address of your own domain, such as `help.example.com`. Open
@@ -485,8 +500,9 @@ The daily check opens the address too and updates the line. A server without TLS
 help center does not serve there yet.
 
 **Moving from Freshdesk: verify by TXT first, then change the CNAME.** Add only the `TXT` record and
-press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Change the
-`CNAME` afterwards, to the target the card shows. The domain is already verified, so the first visit
+press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Preview
+your articles, turn on the help center, and choose a plan on Cloud. Then change the `CNAME` to the
+target the card shows. The domain is already verified, so the first visit
 after the switch gets its certificate at once and does not wait for a DNS check. If you change the
 `CNAME` first, the first visitor makes the server check DNS and ask for the certificate, which takes
 longer. The old `*.freshdesk.com` addresses are covered in
@@ -496,8 +512,9 @@ longer. The old `*.freshdesk.com` addresses are covered in
 you can set and verify it, to prepare the move, but the help center serves on it only once the
 workspace is paid: trial pages are hidden from search engines, and serving them on your domain would
 cost it its place in search results. Until then the card says *verified*, the help center stays on
-its own address, and no certificate is issued for the domain. Within a minute of paying, the domain
-serves the help center and the other addresses move there. A workspace whose trial ended unpaid
+its own address, and no certificate is issued for the domain. Once the help center is on with
+published articles and DNS sends visitors here, the domain serves it and the other addresses move
+there. Press **Check now** to verify that its address opens. A workspace whose trial ended unpaid
 serves on no address. A server you run yourself has no plans: every workspace serves on its domain.
 
 While the domain is active, the help center answers only help center pages on it: the app, the API
@@ -603,7 +620,8 @@ Both tools offer a verification by HTML tag. Copy only the `content` value of th
 Open **Settings → Help center → Search Console**, paste each value into its field and press **Save**.
 The help center then puts the tag in the head of every page of this workspace, on its own address
 (its host or its custom domain). The app and every other workspace's help center never carry it.
-Then press **Verify** in Search Console or Bing.
+Then press **Verify** in Search Console or Bing. The card also shows the exact sitemap address to
+submit after switching your domain. Saving tokens here does not submit the sitemap.
 
 - Paste the value, not the whole tag. A value that is not 16 to 100 letters, digits, `-` or `_`
   is refused and nothing is saved.

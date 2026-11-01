@@ -47,6 +47,17 @@ test('help center custom domain: an admin sets it in Settings, the DNS check mak
   await expect(page.getByText(/Last check: The TXT record _help-center-verify\./)).toBeVisible();
   setDNS({ txt: { [`_help-center-verify.${host}`]: [token] } });
   await page.getByRole('button', { name: 'Check now' }).click();
+  // TXT proof cannot make an empty help center ready. Name the missing import before cutover.
+  await expect(page.getByRole('link', { name: 'Import your knowledge base with images; old article links keep working' }))
+    .toHaveAttribute('href', '/settings/import-freshdesk');
+  await expect(page.getByRole('status').filter({ hasText: `${host} is verified.` })).toBeVisible();
+  const created = await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Guides' } });
+  expect(created.status()).toBe(201);
+  const { id: collection } = await created.json() as { id: string };
+  expect((await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers, data: {
+    collection_id: collection, title: 'Getting started', body_md: 'Welcome to the help center.', status: 'published',
+  } })).status()).toBe(201);
+  await page.getByRole('button', { name: 'Check now' }).click();
   await expect(page.getByRole('status').filter({ hasText: `The help center is served on ${host}.` })).toBeVisible();
   // The check also opened the address and the help center answered there. This server has no TLS, so the
   // address is http and the line claims no HTTPS (and shows no false failure).

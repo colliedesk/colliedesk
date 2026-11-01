@@ -55,3 +55,29 @@ test('Settings opened at #help-center-heading (the reply box links there) scroll
     delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   }
 });
+
+test('turning on a verified help center advances the domain card to preview without a reload', async () => {
+  let enabled = false;
+  serve({
+    'GET /api/v1/help-center': () => json(200, { ...off, enabled }),
+    'PUT /api/v1/help-center': (call) => {
+      enabled = (call.body as { enabled: boolean }).enabled;
+      return json(200, { ...off, enabled, content_version: 4 });
+    },
+    'GET /api/v1/help-center/domain': () => json(200, {
+      hostname: 'help.acme.example', status: 'active', records: [], awaiting_payment: true,
+      created_at: '2026-11-01T09:00:00Z', verified_at: '2026-11-01T09:01:00Z', checked_at: null,
+      check_error: null, certificate_requested_at: null, failing_since: null, pending_reason: null,
+      address_url: 'https://help.acme.example', address_checked_at: null, address_error: null,
+      next_step: enabled ? { key: 'preview', url: 'https://desk.example.com/help/acme' }
+        : { key: 'enable', url: '/settings#help-center-heading' },
+    }),
+  });
+  open(true);
+  await screen.findByRole('link', { name: 'Turn on the help center' });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Publish the help center' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save help center' }));
+  expect(await screen.findByRole('link', { name: 'Preview the help center before switching your domain' }))
+    .toHaveAttribute('href', 'https://desk.example.com/help/acme');
+  expect(screen.queryByRole('link', { name: 'Turn on the help center' })).not.toBeInTheDocument();
+});

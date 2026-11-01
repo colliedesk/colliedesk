@@ -22,6 +22,7 @@ type SetupStep struct {
 	Key    string  `json:"key"`
 	State  string  `json:"state"`
 	Detail *string `json:"detail"`
+	URL    string  `json:"url"`
 }
 
 // SetupProgress is where a workspace stands on getting started, the goal's step first.
@@ -29,6 +30,7 @@ type SetupProgress struct {
 	Steps       []SetupStep `json:"steps"`
 	Complete    bool        `json:"complete"`
 	Recommended *string     `json:"recommended"`
+	NextURL     *string     `json:"next_url"`
 }
 
 // setupFirstStep is the step each sign-up goal starts with; any other goal keeps the usual order.
@@ -40,6 +42,9 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	goal, err := s.OnboardingGoal(ctx, workspaceID)
 	if err != nil {
 		return SetupProgress{}, err
+	}
+	if goal != nil && *goal == "leave_helpdesk" {
+		return s.setupMove(ctx, workspaceID, now)
 	}
 	emailState, emailDetail, err := s.setupEmail(ctx, workspaceID)
 	if err != nil {

@@ -250,7 +250,7 @@ test('help center branding: from Settings to a branded public page takes at most
   await person.click(brand.getByRole('button', { name: 'Save brand' }));
   await expect(brand.getByText('Saved. Live on the next page load.')).toBeVisible();
   const opened = context.waitForEvent('page');
-  await person.click(page.getByRole('link', { name: `${servers.main}/help/${slug}` }));
+  await person.click(page.getByRole('link', { name: `${servers.main}/help/${slug}`, exact: true }));
   const site = await opened;
   const masthead = site.getByRole('banner');
   await expect(masthead.getByRole('img', { name: 'Acme help' })).toHaveJSProperty('naturalWidth', 4);

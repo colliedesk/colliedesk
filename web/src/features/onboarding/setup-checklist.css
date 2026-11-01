@@ -50,3 +50,7 @@
   .setup-dock { left: var(--space-3); bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); max-width: calc(100vw - 2 * var(--space-3)); }
   .inbox-shell[data-view="thread"] > .setup-dock { display: none; }
 }
+
+/* The move's prerequisite and link promise must be readable at phone widths. */
+.setup-guide[data-move] .setup-title, .setup-guide[data-move] .setup-state { white-space: normal; overflow: visible; }
+.setup-step > button { grid-column: 2 / -1; justify-self: start; margin-bottom: var(--space-2); text-align: left; }

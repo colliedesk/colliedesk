@@ -7,6 +7,33 @@ what Colliedesk now holds. If anything is missing, the report says **FAILED** an
 ids. If the totals could not be confirmed, it says **UNVERIFIED**. Run the import again to retry:
 finished items are never copied twice. Your Freshdesk account is not changed.
 
+## Finish the move
+
+If you chose **Move off Freshdesk** when signing up, the inbox's [setup guide](setup-guide.md)
+shows six steps in order. The next unfinished step is the main action:
+
+1. **Import from Freshdesk.** Tickets, contacts and the knowledge base with images come together.
+   [Old article links keep working](#old-help-center-links) on Colliedesk's help center addresses.
+   Only an import whose reconcile report is **OK** completes this step.
+2. **Preview the help center.** Turn it on in Settings and open its own address,
+   `<slug>.colliedesk.com/help` on Cloud. Check the articles and images, then press
+   **I checked the preview** in the guide. With no published article, the guide links to import first.
+3. **Verify your domain by TXT.** Set the domain in **Settings → Help center**. Add only the TXT
+   record and press **Check now**. Your visitors still reach Freshdesk.
+4. **Choose a plan.** Cloud serves the help center on your custom domain only on a paid plan.
+5. **Change the CNAME.** Use the target in the domain card, then press **Check now**. This step
+   completes only when the server opens the address and finds this workspace's help center.
+6. **Keep Search Console verification and submit the sitemap.** The import carries supported
+   verification tags; keep existing DNS verification records too. Check verification on the same
+   domain in Search Console, then submit its `sitemap.xml`. In the guide, press
+   **Verification kept and sitemap submitted** after doing both. This confirms your work;
+   Colliedesk does not submit to Google for you.
+
+If you do not want a custom domain, press **No custom domain needed** to skip the four domain
+steps. Completed steps stay done across visits and later domain changes. On a server you run
+yourself, the plan step is already done. See [Custom domain](knowledge-base.md#custom-domain)
+for the DNS records and [Search Console](knowledge-base.md#search-console-and-bing-webmaster-tools).
+
 ## What is imported
 
 | Freshdesk | Colliedesk |

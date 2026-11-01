@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { InvalidRequestError, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated } from '../../api/schemas';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { domainMessages } from './help-center-domain-messages';
@@ -18,6 +19,7 @@ const domainSchema = z.object({
   created_at: date, verified_at: date, checked_at: date, check_error: z.string().nullable(), certificate_requested_at: date,
   failing_since: date, pending_reason: z.enum(['proof_lost', 'taken_over']).nullable(), awaiting_payment: z.boolean(),
   address_url: z.string().nullable(), address_checked_at: date, address_error: z.string().nullable(),
+  next_step: z.object({ key: z.enum(['import', 'enable', 'preview']), url: z.string() }).nullable().optional(),
 }) satisfies z.ZodType<Generated<'HelpCenterDomain'>>;
 
 export type HelpCenterDomain = z.infer<typeof domainSchema>;
@@ -40,10 +42,12 @@ const releaseAfterMs = 7 * 24 * 60 * 60 * 1000;
 export function HelpCenterDomainSection({ canManage, timezone }: { canManage: boolean; timezone: string }) {
   const client = useQueryClient();
   const current = useQuery({ queryKey: ['help-center-domain'], queryFn: domainApi.get });
+  useScrollToHashWhenReady(current.isSuccess, 'help-center-domain-heading');
   // The help center's address follows the domain, so its card reads it again after every change.
   const applied = (saved: HelpCenterDomain) => {
     client.setQueryData(['help-center-domain'], saved);
     void client.invalidateQueries({ queryKey: ['help-center'], exact: true });
+    void client.invalidateQueries({ queryKey: ['setup'] });
   };
   const set = useMutation({ mutationFn: domainApi.set, onSuccess: applied });
   const check = useMutation({ mutationFn: domainApi.check, onSuccess: applied, onError: () => void current.refetch() });
@@ -68,10 +72,12 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
   return <section className="stacked-form" aria-labelledby="help-center-domain-heading">
     <h3 id="help-center-domain-heading">{domainMessages.heading}</h3>
     <p className="muted-copy">{domainMessages.description}</p>
+    {domain.status === 'active' && domain.next_step && <p className="muted-copy"><a href={domain.next_step.url}>{domainMessages.nextStep[domain.next_step.key]}</a></p>}
     {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}
     {domain.status !== 'active' && <p className="muted-copy"><strong>{domainMessages.cutoverHeading}</strong> {domainMessages.cutover}</p>}
-    <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment ? 'true' : 'false'}>
-      {domain.status === 'active' && domain.awaiting_payment && domain.hostname ? domainMessages.verifiedUnpaid(domain.hostname) : domainMessages.state(domain.status, domain.hostname)}</p>
+    <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment && domain.next_step?.key !== 'import' && domain.next_step?.key !== 'enable' ? 'true' : 'false'}>
+      {domain.status === 'active' && domain.hostname && (domain.awaiting_payment || domain.next_step?.key === 'import' || domain.next_step?.key === 'enable')
+        ? domainMessages.verifiedState(domain.hostname, domain.awaiting_payment) : domainMessages.state(domain.status, domain.hostname)}</p>
     {domain.status === 'active' && domain.address_checked_at && domain.address_url && (domain.address_error
       ? <p className="warning-note">{domain.address_error}</p>
       : <p className="muted-copy">{domain.address_url.startsWith('https://') && <>{domainMessages.httpsWorks} </>}

@@ -43,7 +43,11 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
   const save = useMutation({
     // The language is not edited here yet, so the one stored is sent back as it is.
     mutationFn: ({ enabled, title }: { enabled: boolean; title: string }) => kbApi.saveHelpCenter({ enabled, title, locale: settings.data?.locale || 'en' }),
-    onSuccess: (saved) => client.setQueryData(['help-center'], saved),
+    onSuccess: (saved) => {
+      client.setQueryData(['help-center'], saved);
+      void client.invalidateQueries({ queryKey: ['help-center-domain'] });
+      void client.invalidateQueries({ queryKey: ['setup'] });
+    },
   });
   const [enabled, setEnabled] = useState(false);
   const [title, setTitle] = useState('');
@@ -71,7 +75,7 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
         </form>
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
     <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
-    <HelpCenterSearchConsoleSection canManage={canManage} />
+    <HelpCenterSearchConsoleSection canManage={canManage} helpCenterURL={settings.data.url} />
     <HelpCenterFreshdeskRedirectSection />
     <Brand canManage={canManage} />
   </>;

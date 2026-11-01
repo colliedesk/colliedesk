@@ -55,6 +55,7 @@ export default defineConfig({
     // The cloud server also imports in the app and sends replies by SMTP, through its own outbox worker,
     // for the golden path. It sends with the mail server's From policy, so a reply leaves both the same way.
     server(servers.cloud, {
+      COLLIEDESK_E2E_DNS_FILE: dnsFile,
       ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'c1:ZTJlLWNsb3VkLWltcG9ydC1rZXktMzItYnl0ZXMhISE=',
       SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any',
       CLOUD_AUTH_ISSUER: identity.issuer, CLOUD_AUTH_JWKS_URL: jwksURL,

@@ -64,3 +64,13 @@ test('an agent without admin rights reads the tokens but cannot change them', as
   expect(screen.queryByRole('button', { name: 'Save tokens' })).not.toBeInTheDocument();
   expect(screen.getByText(/Only an admin can change/)).toBeInTheDocument();
 });
+
+test('the move names verification carried by the import and the exact sitemap to submit', async () => {
+  serve({ 'GET /api/v1/help-center/search-console': () => json(200, { ...none, google_site_verification: google }) });
+  render(<QueryClientProvider client={new QueryClient()}>
+    <HelpCenterSearchConsoleSection canManage helpCenterURL="https://help.acme.example" />
+  </QueryClientProvider>);
+  const sitemap = await screen.findByRole('link', { name: 'https://help.acme.example/sitemap.xml' });
+  expect(sitemap).toHaveAttribute('href', 'https://help.acme.example/sitemap.xml');
+  expect(screen.getByText(/import carries verification tags/)).toBeInTheDocument();
+});

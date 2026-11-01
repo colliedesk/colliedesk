@@ -2928,9 +2928,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. States only, computed on every call. */
+        /** @description Where the workspace stands on getting started. For leave_helpdesk the six move steps are import, preview, custom_domain, plan, cname and search_console. Other goals keep the email, import, invite and first_reply guide. Each step includes its next action URL; next_url is the first unfinished step's URL. Reads existing import, billing and help center state without making external calls. Confirmed milestones stay done; optional domain steps may be skipped. */
         get: operations["getSetupProgress"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspace/setup/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Confirm a help center preview or Search Console verification and sitemap submission. The server requires a public article and an enabled help center for preview, and a successful custom-domain address check for Search Console. Use custom_domain skipped to skip the four optional domain steps, or none to restore skipped steps. Completed steps never regress. Safe to repeat; lower-tier tokens file an approval request. */
+        put: operations["setSetupMoveStep"];
         post?: never;
         delete?: never;
         options?: never;
@@ -6458,26 +6475,36 @@ export interface components {
             /** @default UTC */
             timezone: string;
         };
+        SetupMoveStepInput: {
+            /** @enum {string} */
+            step: "preview" | "custom_domain" | "search_console";
+            /** @enum {string} */
+            state: "done" | "skipped" | "none";
+        };
         SetupProgress: {
             steps: components["schemas"]["SetupStep"][];
-            /** @description True when every step is done. */
+            /** @description True when every step is done or skipped. */
             complete: boolean;
             /**
-             * @description The step the sign-up goal puts first while it is not done; null for a goal without one.
+             * @description The next move step, or the first step suggested by another sign-up goal; null when none.
              * @enum {string|null}
              */
-            recommended: "email" | "import" | "invite" | null;
+            recommended: "email" | "import" | "invite" | "preview" | "custom_domain" | "plan" | "cname" | "search_console" | null;
+            /** @description Action URL for the first unfinished step; null when complete. */
+            next_url: string | null;
         };
         SetupStep: {
             /** @enum {string} */
-            key: "email" | "import" | "invite" | "first_reply";
+            key: "email" | "import" | "invite" | "first_reply" | "preview" | "custom_domain" | "plan" | "cname" | "search_console";
             /**
-             * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent.
+             * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent. Move steps use none, done or skipped.
              * @enum {string}
              */
-            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "alone" | "invited" | "joined" | "sent";
-            /** @description A reason code for needs_attention; null otherwise. */
+            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "alone" | "invited" | "joined" | "sent" | "skipped";
+            /** @description Reason code for a missing prerequisite or a step needing attention; null otherwise. */
             detail: string | null;
+            /** @description Link to the action or the missing prerequisite. */
+            url: string;
         };
         Agent: {
             /** Format: uuid */
@@ -7202,6 +7229,12 @@ export interface components {
             url: string;
         };
         HelpCenterDomain: {
+            /** @description Missing help center prerequisite, shown before plan advice on a verified domain. */
+            next_step?: {
+                /** @enum {string} */
+                key: "import" | "enable" | "preview";
+                url: string;
+            } | null;
             /** @description The custom host name in ASCII (punycode) form; null when none is set. */
             hostname: string | null;
             /**
@@ -15694,6 +15727,43 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    setSetupMoveStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupMoveStepInput"];
+            };
+        };
+        responses: {
+            /** @description The updated setup progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupProgress"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Invalid step or missing prerequisite; nothing changed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     setSetupGuideHidden: {
