@@ -86,8 +86,10 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   **Ctrl/Cmd + Enter** to send. A reply also offers **Send and resolve** (secondary button beside the
   primary **Send reply**; **Ctrl/Cmd + Shift + Enter**), as Freshdesk's "Send and set as" and Help Scout's
   status-on-send do: the status changes only after the reply was accepted. A note has none. The keycap hint sits
-  in the composer head, so the button row stays one line on desktop; below 75 rem the hint hides and the
-  row wraps instead of clipping.
+  in the composer head, so the button row stays one line on desktop; below 75 rem the hint hides. Below 45rem of
+  reply box the tools show icons only (name in the tooltip; Draft with AI keeps its words, its Off state from
+  36rem), so Send and resolve and Send reply never split across lines, as in Plain, Intercom and Front
+  (`web/e2e/reply-toolbar.spec.ts`).
 - Knowledge base pages show their title (IBM Plex Serif, like the inbox title) at the start of the
   Articles | Media row.
 - Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
