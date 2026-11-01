@@ -23,7 +23,10 @@ const MaxWebhookBody = 1 << 20
 // OA secret key), the timestamp read from the body.
 const SignatureHeader = "X-ZEvent-Signature"
 
-// Sign is a delivery's signature as Zalo computes it.
+// Sign is a delivery's signature as Zalo computes it. This is Zalo's required scheme, not password
+// storage: the OA secret key is never stored as this hash, and the webhook compares the result with
+// subtle.ConstantTimeCompare. A slow hash or an HMAC would not match the signature Zalo sends, so the
+// code-scanning alert "weak hashing of sensitive data" here (#130) was dismissed as a false positive.
 func Sign(appID string, body []byte, timestamp, oaSecretKey string) string {
 	digest := sha256.New()
 	digest.Write([]byte(appID))
