@@ -42,7 +42,7 @@ const intakeSuggestionSchema = z.object({
 // What AI decided by itself of a card: how sure, why, the model asked and the one that answered.
 export const intakeAIDecisionSchema = z.object({
   decision_id: uuid, action: z.enum(['create', 'attach', 'ignore']), target_conversation_id: uuid.nullable(), confidence: z.number().nullable(),
-  runner_up_confidence: z.number().nullable(), reason: z.string().nullable(), model: z.string().nullable(), served_model: z.string().nullable(), created_at: date,
+  runner_up_confidence: z.number().nullable(), reason: z.string().nullable(), model: z.string().nullable(), fallback_model: z.string().nullable(), created_at: date,
 }) satisfies z.ZodType<Generated<'IntakeAIDecision'>>;
 
 export const intakeGatheringSchema = z.object({
@@ -63,7 +63,7 @@ export const intakeDecisionSchema = z.object({
   command: z.string().nullable(), subject: z.string().nullable(), reply_kind: replyKindSchema.nullable(),
   confidence: z.number().nullable(), reason: z.string().nullable(), applied: z.boolean(), not_applied_reason: z.string().nullable(),
   ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), corrects_decision_id: uuid.nullable(),
-  follows_decision_id: uuid.nullable(), error_code: z.string().nullable(), model: z.string().nullable(), served_model: z.string().nullable(), agent_id: uuid.nullable(), via_token: z.boolean(), created_at: date,
+  follows_decision_id: uuid.nullable(), error_code: z.string().nullable(), model: z.string().nullable(), fallback_model: z.string().nullable(), agent_id: uuid.nullable(), via_token: z.boolean(), created_at: date,
 }) satisfies z.ZodType<Generated<'IntakeDecision'>>;
 
 export const intakeCandidateSchema = z.object({

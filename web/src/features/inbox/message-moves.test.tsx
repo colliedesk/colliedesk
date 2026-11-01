@@ -201,7 +201,7 @@ test('a message AI added says how sure it was, why, which model answered and whe
   const card = '88888888-8888-4888-8888-888888888888';
   moves.intake.mockResolvedValue(intake(card, 'intake_attach', 'model', [{ id: card, ai_decision: {
     decision_id: '99999999-0000-4000-8000-000000000001', action: 'attach', target_conversation_id: HERE, confidence: 0.97, runner_up_confidence: 0.02,
-    reason: 'Same printer problem, more detail', model: 'z-ai/glm-5.3-flash', served_model: 'google/gemini-3.8-flash', created_at: '2026-10-25T08:01:00Z' } }]));
+    reason: 'Same printer problem, more detail', model: 'z-ai/glm-5.3-flash', fallback_model: 'google/gemini-3.8-flash', created_at: '2026-10-25T08:01:00Z' } }]));
   view(<MessageIntakeLabel conversation={conversation({ channel: 'loopback' })} message={timeline[0]} timezone="Asia/Ho_Chi_Minh" />);
   expect(await screen.findByText('Added by AI')).toBeInTheDocument();
   const why = screen.getByRole('note', { name: 'Why AI added it' });

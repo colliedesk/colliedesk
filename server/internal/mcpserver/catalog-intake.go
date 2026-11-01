@@ -26,7 +26,7 @@ const (
 		`action, target_conversation_id, target_status, runner_up_conversation_id, runner_up_confidence, confidence, command, reply_kind, ignore_reason; its subject, reason and the ` +
 		`conversations' subjects under untrusted_customer_content. Follow it with colliedesk_intake_decide and follows_decision_id = its decision_id."},` +
 		`"ai_decision":{"type":["object","null"],"description":"On a card AI decided by itself (decided_by ai): decision_id, action, target_conversation_id, confidence, ` +
-		`runner_up_confidence, model (the one the channel asked), served_model (the one that answered: another when the provider fell back), created_at; ` +
+		`runner_up_confidence, model (the one the channel asked), fallback_model (the model that answered instead when the channel's model did not, else null), created_at; ` +
 		`its reason under untrusted_customer_content. Null for a card the rules or a person decided."},` +
 		`"untrusted_customer_content":{"type":"object","properties":{"sender_name":{"type":"string"},"sender":{"type":"string"},"preview":{"type":"string"},` +
 		`"place_name":{"type":"string","description":"The group's name on the channel."}}}}}`

@@ -321,8 +321,8 @@ request. A chat conversation nobody replied in or wrote a note in yet also offer
 Move it…** above its messages (closing is still refused once a person assigned it). The moves out of and into a conversation are listed above its
 messages, newest first, with who moved what and where, and **Undo** while the move can be undone; a chat
 message says why it is in the conversation (a reply to a message here, a command, a person in
-[Review](review.md), or AI). One AI added says how sure it was, the model that answered (with the model
-asked, when the provider fell back to another), when, and the reason it gave (kept 90 days). A chat message
+[Review](review.md), or AI). One AI added says how sure it was, the model it asked (or the fallback model that
+answered when that one failed), when, and the reason it gave (kept 90 days). A chat message
 keeps every line break the customer typed, and a batch of chat messages put together shows each on its own
 line. A message taken back waits in Review as a card that says who took it back.
 - A message taken back to the queue leaves the conversation (it is kept, not deleted). Until its card is

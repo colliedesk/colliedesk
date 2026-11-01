@@ -5155,8 +5155,8 @@ export interface components {
             reason: string | null;
             /** @description The model the channel's intake asked. */
             model: string | null;
-            /** @description The model that answered, when the provider says: another one than model when the provider fell back (OpenRouter's fallback models). */
-            served_model: string | null;
+            /** @description The model that answered instead of model, when the channel's model failed or its answer could not be read (the channel's fallback model) or the provider re-ran the request on another; null when model answered. */
+            fallback_model: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -5371,8 +5371,8 @@ export interface components {
             error_code: string | null;
             /** @description With AI: the model the channel's intake asked. */
             model: string | null;
-            /** @description With AI: the model that answered, when the provider says: another one than model when the provider fell back (OpenRouter's fallback models). */
-            served_model: string | null;
+            /** @description With AI: the model that answered instead of model (the channel's fallback model, or another the provider re-ran the request on); null when model answered. */
+            fallback_model: string | null;
             /** Format: uuid */
             agent_id: string | null;
             via_token: boolean;

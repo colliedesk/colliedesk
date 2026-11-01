@@ -127,7 +127,7 @@ test('a decided card says what happened, who decided and links its conversation'
 test('a card AI decided by itself says how sure it was, why, which model answered and when', () => {
   render(<IntakeCard {...props({ item: gathering({ state: 'created', review_reason: null, decided_by: 'ai', conversation_id: CONVERSATION, decided_at: '2026-10-26T02:03:00Z',
     ai_decision: { decision_id: DECISION, action: 'create', target_conversation_id: null, confidence: 0.85, runner_up_confidence: null,
-      reason: 'A new printing problem, not the open scale one', model: 'z-ai/glm-5.3-flash', served_model: 'z-ai/glm-5.3-flash', created_at: '2026-10-26T02:02:58Z' } }) })} />);
+      reason: 'A new printing problem, not the open scale one', model: 'z-ai/glm-5.3-flash', fallback_model: null, created_at: '2026-10-26T02:02:58Z' } }) })} />);
   expect(screen.getByText('AI')).toBeInTheDocument();
   const why = screen.getByRole('note', { name: 'Why AI decided it' });
   expect(why).toHaveTextContent('85% sure · z-ai/glm-5.3-flash');

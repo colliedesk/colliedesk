@@ -8611,7 +8611,7 @@ components:
           description: 'The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided.'
     IntakeAIDecision:
       type: object
-      required: [decision_id, action, target_conversation_id, confidence, runner_up_confidence, reason, model, served_model, created_at]
+      required: [decision_id, action, target_conversation_id, confidence, runner_up_confidence, reason, model, fallback_model, created_at]
       properties:
         decision_id: {type: string, format: uuid}
         action: {type: string, enum: [create, attach, ignore]}
@@ -8620,7 +8620,7 @@ components:
         runner_up_confidence: {type: [number, 'null'], description: 'With attach: how sure it was of the second most likely conversation.'}
         reason: {type: [string, 'null'], description: "AI's reason, written from what the customer said; erased 90 days after."}
         model: {type: [string, 'null'], description: The model the channel's intake asked.}
-        served_model: {type: [string, 'null'], description: 'The model that answered, when the provider says: another one than model when the provider fell back (OpenRouter''s fallback models).'}
+        fallback_model: {type: [string, 'null'], description: 'The model that answered instead of model, when the channel''s model failed or its answer could not be read (the channel''s fallback model) or the provider re-ran the request on another; null when model answered.'}
         created_at: {type: string, format: date-time}
     IntakeSuggestion:
       type: object
@@ -8785,7 +8785,7 @@ components:
     IntakeDecision:
       type: object
       required: [id, decider, basis, action, target_conversation_id, runner_up_conversation_id, runner_up_confidence, command, subject, reply_kind, confidence, reason,
-        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, error_code, model, served_model, agent_id, via_token, created_at]
+        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, error_code, model, fallback_model, agent_id, via_token, created_at]
       properties:
         id: {type: string, format: uuid}
         decider: {type: string, enum: [ai, agent]}
@@ -8807,7 +8807,7 @@ components:
         follows_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI suggestion a person decided as.'}
         error_code: {type: [string, 'null'], description: 'What failed when AI''s answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject.'}
         model: {type: [string, 'null'], description: 'With AI: the model the channel''s intake asked.'}
-        served_model: {type: [string, 'null'], description: 'With AI: the model that answered, when the provider says: another one than model when the provider fell back (OpenRouter''s fallback models).'}
+        fallback_model: {type: [string, 'null'], description: 'With AI: the model that answered instead of model (the channel''s fallback model, or another the provider re-ran the request on); null when model answered.'}
         agent_id: {type: [string, 'null'], format: uuid}
         via_token: {type: boolean}
         created_at: {type: string, format: date-time}
