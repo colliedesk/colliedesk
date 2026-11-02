@@ -64,7 +64,7 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
               <span className="team-person"><strong title={member.email}>{name}{member.id === currentAgentId && <small> ({settingsMessages.teamYou})</small>}</strong>
                 {member.display_name && <small>{member.email}</small>}</span>
               <span className="team-role role-chips" aria-label={settingsMessages.teamRoleOf(name)}>
-                {member.roles.map((role) => <span key={role.id} className="role-chip">{role.name}</span>)}
+                {member.roles.map((role) => <span key={role.id} className="role-chip" title={role.name}>{role.name}</span>)}
                 {manage && !deactivated && changing !== member.id && <button type="button" aria-expanded={false} aria-controls={`roles-of-${member.id}`}
                   ref={(node) => { if (node) roleButtons.current.set(member.id, node); else roleButtons.current.delete(member.id); }}
                   aria-label={`${roleMessages.changeRoles}: ${name}`} onClick={() => { setStatus(undefined); setChanging(member.id); }}>{roleMessages.changeRoles}</button>}

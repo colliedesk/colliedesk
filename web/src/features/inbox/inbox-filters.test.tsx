@@ -111,7 +111,7 @@ test('Source, Organization, who replies next and the date ranges are not in the 
   for (const name of ['Who replies next', 'Source', 'Created', 'Last activity']) expect(within(menu).queryByRole('group', { name })).not.toBeInTheDocument();
   expect(within(menu).queryByRole('textbox')).not.toBeInTheDocument();
   expect(within(menu).queryByRole('radio')).not.toBeInTheDocument();
-  for (const name of ['Assigned to anyone', 'Reply draft waiting for approval']) expect(within(menu).queryByRole('checkbox', { name })).not.toBeInTheDocument();
+  for (const name of ['Assigned to anyone', 'Reply draft waiting to be sent']) expect(within(menu).queryByRole('checkbox', { name })).not.toBeInTheDocument();
   expect(screen.getByLabelText('3 filters active')).toBeInTheDocument();
   const chips = screen.getByRole('list', { name: 'Active filters' });
   // Ho Chi Minh City is UTC+7: the range starts at 17:00 UTC on September 30 and ends where October 8 starts.
@@ -126,7 +126,7 @@ test('every active filter shows as a chip that removes it, and Clear all goes ba
   const chips = await screen.findByRole('list', { name: 'Active filters' });
   expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
     // In the order of the Filter menu; a value the menu no longer offers keeps its chip.
-    'Priority: High', 'Priority: Urgent', 'Assignee: Me', 'Assignee: Assigned to anyone', 'Tags: Billing', 'Waiting on the customer', 'Reply draft waiting for approval', 'Organization: Acme',
+    'Priority: High', 'Priority: Urgent', 'Assignee: Me', 'Assignee: Assigned to anyone', 'Tags: Billing', 'Waiting on the customer', 'Reply draft waiting to be sent', 'Organization: Acme',
   ]);
   fireEvent.click(within(chips).getByRole('button', { name: 'Remove filter Priority: High' }));
   expect(onChange).toHaveBeenLastCalledWith({ status: 'pending', priority: 'urgent', assignee: 'me,anyone', tag: billing.id, awaiting: 'customer', has_pending_draft: true, organization: 'Acme', search: 'refund' });

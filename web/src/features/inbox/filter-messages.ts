@@ -22,7 +22,7 @@ export const filterMessages = {
   source: 'Source',
   sources: { imported: 'Imported', native: 'Created in Colliedesk' },
   attention: 'Needs attention',
-  hasPendingDraft: 'Reply draft waiting for approval',
+  hasPendingDraft: 'Reply draft waiting to be sent',
   noPendingDraft: 'No reply draft waiting',
   deliveryFailed: 'Reply delivery failed',
   noDeliveryFailed: 'No failed delivery',

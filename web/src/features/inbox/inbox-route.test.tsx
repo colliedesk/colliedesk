@@ -673,7 +673,7 @@ test('the filters in the address are the list, and changing one keeps the open c
   api.timeEntries.mockResolvedValue({ items: [] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
-  expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting for approval');
+  expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting to be sent');
   fireEvent.click(screen.getByRole('button', { name: 'Remove filter Priority: High' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
     search: { priority: 'urgent', has_pending_draft: true, sort: 'waiting_longest' }, replace: false });

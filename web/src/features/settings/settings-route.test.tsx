@@ -1,5 +1,5 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { agentRoleRef, builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 import { SettingsRoute } from './settings-route';
@@ -304,4 +304,22 @@ test('a burst of Create invite presses sends one invite under one key, and the b
   await waitFor(() => expect(create).toBeDisabled());
   answer({ invite: { id: 'i1', email: 'new@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2026-11-04T07:00:00Z', used_at: null, revoked_at: null }, url: 'https://desk.example.com/invite#t' });
   await waitFor(() => expect(create).toBeEnabled());
+});
+
+// A person whose roles hold none of the read permissions of a section is not shown it, and the page asks
+// the server for none of it: no refused call.
+test('a narrow role sees only what it may read, and Settings asks for nothing else', async () => {
+  show('agent');
+  cleanup();
+  api.me.mockResolvedValue({ ...me('agent'), permissions: ['conversations:read', 'messages:read', 'profile:update'] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  for (const call of Object.values(api)) call.mockClear();
+  render(<QueryClientProvider client={client}><SettingsRoute /></QueryClientProvider>);
+  await screen.findByRole('heading', { name: 'Sessions' });
+  await new Promise((resolve) => { setTimeout(resolve, 50); });
+  for (const name of ['agents', 'invites', 'savedReplies', 'roles'] as const) expect(api[name], name).not.toHaveBeenCalled();
+  for (const name of ['Team', 'Invites', 'Saved replies', 'Help center']) expect(screen.queryByRole('heading', { name, level: 2 }), name).not.toBeInTheDocument();
+  const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+  for (const name of ['Team', 'Invites', 'Saved replies', 'Help center', 'Channels', 'Built-in AI', 'Roles']) expect(within(nav).queryByRole('link', { name }), name).not.toBeInTheDocument();
+  expect(within(nav).getByRole('link', { name: 'Conversation numbers' })).toBeInTheDocument();
 });

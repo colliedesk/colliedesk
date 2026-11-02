@@ -420,3 +420,35 @@ func TestLockedWorkspaceAdminCanStillExport(t *testing.T) {
 		t.Fatalf("counts = %v, want the one received conversation with its message", manifest.Counts)
 	}
 }
+
+// A reply draft a token wrote keeps, in the export, that it was written and not generated, and whom it
+// copies: nothing of a draft is lost.
+func TestExportKeepsWhetherADraftWasWrittenAndItsCopies(t *testing.T) {
+	f := newExportFixture(t)
+	ctx := context.Background()
+	var conversationID string
+	if err := f.pool.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 ORDER BY created_at LIMIT 1`, f.workspaceID).Scan(&conversationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,status,source,text,cc,ready_at) VALUES($1,$2,'ready','written','Written by a token',ARRAY['copy@example.com'],now())`,
+		f.workspaceID, conversationID); err != nil {
+		t.Fatal(err)
+	}
+	response := request(t, f.api, http.MethodGet, "/api/v1/export", nil, f.adminToken, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var found bool
+	for _, line := range ndjsonLines(t, unzip(t, response.Body.Bytes())["ai-drafts.ndjson"]) {
+		if line["text"] != "Written by a token" {
+			continue
+		}
+		found = true
+		if line["source"] != "written" || fmt.Sprint(line["cc"]) != "[copy@example.com]" {
+			t.Fatalf("exported draft = %v, want source written and cc [copy@example.com]", line)
+		}
+	}
+	if !found {
+		t.Fatal("the written draft is not in ai-drafts.ndjson")
+	}
+}

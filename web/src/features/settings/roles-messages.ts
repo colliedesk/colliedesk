@@ -93,7 +93,9 @@ export const roleMessages = {
   removeAndStop: (count: number) => `Remove and stop ${plural(count, 'token')}`,
   cantGive: "you can't give it",
   cantGiveLong: 'This role holds permissions you do not hold, so you cannot give it or take it away.',
-  tokensStop: (person: string, list: readonly string[]) => `${plural(list.length, `of ${person}'s agent tokens`, `of ${person}'s agent tokens`)} ${list.length === 1 ? 'follows' : 'follow'} this role and stop working at once: ${list.join(', ')}. Giving the role back starts them again.`,
+  tokensStop: (person: string, list: readonly string[]) => (list.length === 1
+    ? `${person}'s agent token ${list[0]} follows this role and stops working at once. Giving the role back starts it again.`
+    : `${list.length} of ${person}'s agent tokens follow this role and stop working at once: ${list.join(', ')}. Giving the role back starts them again.`),
   loseManageTeam: 'You will no longer be able to change roles.',
   atLeastOne: 'Everyone needs at least one role.',
   nowHas: (name: string, roles: readonly string[]) => `${name} now has ${roles.join(', ')}.`,

@@ -37,10 +37,12 @@ export function SettingsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
-  const invites = useQuery({ queryKey: ['invites'], queryFn: api.invites });
-  const team = useQuery({ queryKey: ['agents'], queryFn: api.agents });
+  // A section the person's roles may not read is neither asked for nor shown.
+  const readsTeam = can(me.data, 'team:read');
+  const invites = useQuery({ queryKey: ['invites'], queryFn: api.invites, enabled: readsTeam });
+  const team = useQuery({ queryKey: ['agents'], queryFn: api.agents, enabled: readsTeam });
   const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
-  const roles = useQuery({ queryKey: ['roles'], queryFn: () => api.roles(), enabled: can(me.data, 'team:read') });
+  const roles = useQuery({ queryKey: ['roles'], queryFn: () => api.roles(), enabled: readsTeam });
   const createInvite = useCreateMutation({ create: ({ email, roleIds }: { email: string; roleIds: string[] }, key: string) => api.createInvite(email, roleIds, key), onSuccess: () => refresh('invites') });
   // A team change also moves seats, sessions and assignments, so every view that shows them reloads.
   const afterTeamChange = () => { for (const key of ['agents', 'sessions', 'invites', 'billing', 'conversations', 'me', 'roles']) void refresh(key); };
@@ -76,7 +78,8 @@ export function SettingsRoute() {
   const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: () => { void refresh('me'); void refresh('setup'); } });
   // The help center card is its own chunk (the knowledge base's); it loads alongside the settings requests.
   useEffect(helpCenterPart.preload, []);
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const readsSavedReplies = can(me.data, 'saved_replies:read');
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies, enabled: readsSavedReplies });
   const refreshSavedReplies = () => refresh('saved-replies');
   // A saved reply added again after a failed request goes under the same key, so it is stored once.
   const createSavedReply = useCreateMutation({ create: ({ title, body }: { title: string; body: string }, key: string) => api.createSavedReply(title, body, key),
@@ -86,7 +89,7 @@ export function SettingsRoute() {
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
   // Plan and billing exists only on the hosted cloud and only admins manage it.
   const showBilling = billingShown;
-  const loading = me.isPending || sessions.isPending || invites.isPending;
+  const loading = me.isPending || sessions.isPending || (readsTeam && invites.isPending);
   // A link to a section (the nav from another settings page, a pasted address) arrives before the sections do.
   useScrollToHashWhenReady(!loading);
   return <SettingsPage loading={loading} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
@@ -109,7 +112,8 @@ export function SettingsRoute() {
       onRename={(id, name) => updateAgent.mutate({ id, display_name: name })}
       onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
       onReactivate={(id) => updateAgent.mutate({ id, active: true })} /> : undefined}
-    savedRepliesSection={<SavedRepliesSection replies={savedReplies.data?.items ?? []}
+    showInvites={readsTeam}
+    savedRepliesSection={readsSavedReplies && <SavedRepliesSection replies={savedReplies.data?.items ?? []}
       onCreate={(title, body) => createSavedReply.mutateAsync({ title, body })}
       onUpdate={(id, change) => updateSavedReply.mutateAsync({ id, ...change })}
       onDelete={(id, updatedAt) => deleteSavedReply.mutateAsync({ id, updatedAt })} onReload={() => void refreshSavedReplies()} timezone={me.data?.timezone ?? 'UTC'}
@@ -117,7 +121,7 @@ export function SettingsRoute() {
       onRestoreVersion={async (id, version, updatedAt) => { await api.restoreSavedReplyVersion(id, version, updatedAt); await refreshSavedReplies(); }}
       loadTrash={(cursor) => api.trashedSavedReplies(cursor)}
       onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
-    helpCenterSection={<section className="settings-card" aria-labelledby="help-center-heading">
+    helpCenterSection={can(me.data, 'help_center:read') && <section className="settings-card" aria-labelledby="help-center-heading">
       <div className="section-heading"><h2 id="help-center-heading">{messages.helpCenter}</h2><p>{settingsMessages.helpCenterDescription}</p></div>
       <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
         render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={can(me.data, 'help_center:update')} workspaceName={me.data?.workspace.name} timezone={me.data?.timezone ?? 'UTC'} />} /></div>

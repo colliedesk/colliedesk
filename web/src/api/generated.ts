@@ -4397,7 +4397,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. An approved request records the consent in the approver's name: the approver agrees to the text the request names. */
+        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. The consent is recorded in the caller's name: a person, or the person whose agent token made the call. */
         put: operations["enableFixConnector"];
         post?: never;
         /** @description Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes already sent go on. The consent on record and Cursor's key stay until removed. */

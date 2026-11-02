@@ -35,14 +35,16 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean; autofix?: boolean; roles?: boolean }
+export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean; autofix?: boolean; roles?: boolean; invites?: boolean; conversations?: boolean }
 
 // byPermission shows the workspace pages the session may use, whatever a page passed: a person sees a
 // page when their roles hold what it needs.
 export function byPermission(shown: Shown, me: Permissions): Shown {
   if (!me) return shown;
-  return { ...shown, general: can(me, 'workspace:update'), team: can(me, 'team:read'), roles: can(me, 'team:read'),
-    exportData: can(me, 'workspace:export'), importData: can(me, 'imports:run'), agents: shown.agents !== false && can(me, 'team:create_tokens') };
+  return { ...shown, general: can(me, 'workspace:update'), team: can(me, 'team:read'), roles: can(me, 'team:read'), invites: can(me, 'team:read'),
+    exportData: can(me, 'workspace:export'), importData: can(me, 'imports:run'), agents: shown.agents !== false && can(me, 'team:create_tokens'),
+    channels: shown.channels && can(me, 'channels:read'), conversations: can(me, 'conversations:read'), ai: shown.ai !== false && can(me, 'ai_settings:read'),
+    savedReplies: shown.savedReplies && can(me, 'saved_replies:read'), helpCenter: shown.helpCenter !== false && can(me, 'help_center:read') };
 }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
@@ -54,9 +56,10 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.general, 'general-heading', shown.general),
       ...section(messages.team, 'team-heading', shown.team),
       ...(shown.roles ? [{ label: messages.roles, to: '/settings/roles' as const, current: page === '/settings/roles' }] : []),
-      ...section(messages.invites, 'invites-heading'),
+      ...section(messages.invites, 'invites-heading', shown.invites !== false),
       ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
-      ...(shown.channels ? [{ label: messages.responseTargets, to: '/settings/targets' as const, current: page === '/settings/targets' }] : []),
+      // Response targets and conversation numbers read conversations, not channels.
+      ...(shown.conversations ?? shown.channels ? [{ label: messages.responseTargets, to: '/settings/targets' as const, current: page === '/settings/targets' }] : []),
       // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
       // While in preview it shows only in a browser that turned it on (autofix-preview.ts).
       ...(shown.autofix !== false && autofixPreviewOn() ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
@@ -68,7 +71,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
         { label: messages.helpChatNav, to: '/settings/channels/type/help_chat' as const, current: page === '/settings/channels/type/help_chat' },
         { label: messages.zaloNav, to: '/settings/channels/type/zalo' as const, current: page === '/settings/channels/type/zalo' },
       ] }] : []),
-      ...(shown.channels ? [{ label: messages.conversationNumbers, to: '/settings/numbers' as const, current: page === '/settings/numbers' }] : []),
+      ...(shown.conversations ?? shown.channels ? [{ label: messages.conversationNumbers, to: '/settings/numbers' as const, current: page === '/settings/numbers' }] : []),
       ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
       ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
       ...section(messages.exportHeading, 'export-heading', shown.exportData),
