@@ -137,7 +137,7 @@ A call without the permission it needs is refused with HTTP 403 and the code
 
 ```json
 {"error": {"code": "permission_missing",
-  "message": "This agent token cannot send replies to customers (messages:send). Long Bui holds it: create a token that includes it in Settings → External AI agents, then use that token.",
+  "message": "This agent token was not given messages:send. Long Bui holds it: create a token that includes it in Settings → External AI agents, then use that token.",
   "missing_permissions": ["messages:send"], "missing_from": "token"}}
 ```
 

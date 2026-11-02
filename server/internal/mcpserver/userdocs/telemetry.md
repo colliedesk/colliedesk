@@ -117,7 +117,8 @@ alike, and the same switch as the usage report turns it off: set `DISABLE_TELEME
 never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
 
 - On Colliedesk Cloud the agent is named by their agent id, email address and display name, with
-  their role (`admin` or `agent`), and every event carries the workspace id, name, slug and plan, so
+  their role (`admin` when they hold the Admin role, `agent` when they hold the Agent role, `other`
+  when they hold only roles the workspace made), and every event carries the workspace id, name, slug and plan, so
   the team knows which customer it is helping. A self-hosted install sends only the random agent id,
   role, workspace id and plan: its agents are not our customers.
 - Every element's text and attributes are masked, so no conversation, message, contact or form
@@ -137,7 +138,7 @@ Each is sent only after the action succeeded.
 | `conversation_status_changed` | `to`: the new status |
 | `conversation_assigned` | `to_self` |
 | `bulk_action_applied` | `action`: `status`, `assign`, `add_tag` or `remove_tag`; `count` |
-| `agent_request_decided` | `decision`: `approved` or `rejected` |
+| `reply_draft_decided` | `decision`: `sent` or `discarded`; sent when someone sends or discards a reply draft an AI made or an AI agent left |
 | `settings_section_opened` | `section`: the settings section |
 | `workspace_export_requested` | none |
 | `onboarding_step_started` | `step`: `email`, `import`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |

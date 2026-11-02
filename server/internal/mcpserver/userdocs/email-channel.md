@@ -191,8 +191,8 @@ The next reply uses the new name, on every way a reply leaves: your own domain, 
 Line breaks and other control characters are refused. On Colliedesk Cloud a name with a well-known
 brand in it (for example "PayPal Support") is refused, as at sign-up. If it is your own brand, contact
 us: the operator sets the name for you with `collie email sender-name`
-([self-hosting guide](../self-host/email.md#set-a-sender-name-with-a-brand-in-it)). Only admins can
-change it; other teammates see it.
+([self-hosting guide](../self-host/email.md#set-a-sender-name-with-a-brand-in-it)). Changing it needs
+`channels:update` (the admins); other teammates see it.
 
 Saving the sender name changes only the name. The support address, its domain verification and the
 sending domain stay as they are.
@@ -246,10 +246,10 @@ they did before Gmail was connected (the server's SMTP relay). A reply that was 
 fails with a note and can be retried. **Use another Gmail account** replaces the connected account.
 Disconnecting the whole email channel also disconnects Gmail.
 
-Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect` and
-`colliedesk_gmail_disconnect` file a request, and the admin who approves it gets Google's
-page. On Colliedesk Cloud the request card shows the same note on Google data first. See
-[Agent requests](agent-requests.md).
+An AI agent whose token holds `channels:manage_credentials` disconnects Gmail at once
+(`colliedesk_gmail_disconnect`). Connecting needs Google's consent, so `colliedesk_gmail_connect`
+answers Google's address: only the person the token acts as can finish it, by opening it within 10
+minutes in a browser signed in to Colliedesk and agreeing on Google's page.
 
 ### Self-hosted
 
@@ -312,9 +312,9 @@ retried.
 larger than 3 MB and it goes through Microsoft 365, the reply box warns you. If Microsoft refuses the
 reply, it is marked **Delivery failed** with the reason and keeps its files: remove a file and retry.
 
-Agents (AI) cannot connect or disconnect Microsoft 365 themselves: `colliedesk_microsoft_connect`
-and `colliedesk_microsoft_disconnect` file a request, and the admin who approves it gets
-Microsoft's sign-in page. See [Agent requests](agent-requests.md).
+An AI agent whose token holds `channels:manage_credentials` disconnects Microsoft 365 at once
+(`colliedesk_microsoft_disconnect`). `colliedesk_microsoft_connect` answers Microsoft's sign-in
+address: only the person the token acts as can finish it, signed in to Colliedesk.
 
 On a server you run, Microsoft 365 sending needs your own app registration in Microsoft Entra. See
 [send replies through Microsoft 365](../self-host/email.md#send-replies-through-microsoft-365).

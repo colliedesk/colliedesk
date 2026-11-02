@@ -123,7 +123,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_part` | Sends the next part of an upload (up to 5 MiB, base64) | `kb_media:create` |
 | `colliedesk_kb_video_upload_status` | Says where an upload stands, to go on after an interruption | `kb_media:read` |
 | `colliedesk_kb_video_upload_list` | Lists the workspace's uploads in progress, who started each and when it expires | `kb_media:read` |
-| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; an admin's token, any) | `kb_media:create` |
+| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; with kb_media:purge, any) | `kb_media:create` |
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `kb_media:create` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `kb_media:update` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `help_center:read` |
@@ -184,7 +184,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `billing:read` |
 | `colliedesk_imports_list` | Lists imports | `imports:read` |
 | `colliedesk_import_get` | Shows one import with its progress and why it failed or waits | `imports:read` |
-| `colliedesk_import_preview` | Reads a Freshdesk account before importing it, without writing anything. Takes a Freshdesk admin's API key, which passes through the conversation: refused below `admin` so it never waits in a request | `imports:manage_credentials` |
+| `colliedesk_import_preview` | Reads a Freshdesk account before importing it, without writing anything. Takes a Freshdesk admin's API key, which passes through the conversation | `imports:manage_credentials` |
 | `colliedesk_import_start` | Starts a previewed import: recent tickets first, then the whole account | `imports:run` |
 | `colliedesk_import_cancel` | Stops an import or discards a preview; what was imported stays | `imports:run` |
 | `colliedesk_import_key_set` | Gives an import waiting for its Freshdesk key the key again | `imports:manage_credentials` |
@@ -194,10 +194,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_import_person_link` | Links a Freshdesk agent to a Colliedesk agent; their imported replies and tickets follow | `imports:run` |
 | `colliedesk_import_person_unlink` | Takes back the link between a Freshdesk agent and a Colliedesk agent | `imports:run` |
 | `colliedesk_ai_settings_get` | Shows the [AI settings](ai.md): providers (never a key), each feature's provider and model, and the change history | `ai_settings:read` |
-| `colliedesk_ai_models_list` | Lists the models a key may use, before adding the provider; saves and bills nothing. Refused below `admin` so the key never waits in a request | `ai_settings:manage_credentials` |
-| `colliedesk_ai_provider_add` | Adds an AI provider after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `ai_settings:manage_credentials` |
-| `colliedesk_ai_provider_update` | Renames an AI provider, changes its models, or an OpenRouter provider's routing (loosening it waits for a person) | `ai_settings:update` |
-| `colliedesk_ai_provider_key_set` | Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `ai_settings:manage_credentials` |
+| `colliedesk_ai_models_list` | Lists the models a key may use, before adding the provider; saves and bills nothing | `ai_settings:manage_credentials` |
+| `colliedesk_ai_provider_add` | Adds an AI provider after a billed check of the first model. The key passes through the conversation | `ai_settings:manage_credentials` |
+| `colliedesk_ai_provider_update` | Renames an AI provider, changes its models, or an OpenRouter provider's routing | `ai_settings:update` |
+| `colliedesk_ai_provider_key_set` | Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation | `ai_settings:manage_credentials` |
 | `colliedesk_ai_provider_check` | Runs a check of an AI provider | `ai_settings:update` |
 | `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `ai_settings:update` |
 | `colliedesk_ai_slot_set` | Sets an AI feature: its provider and model, on or off, and what it does by itself by default | `ai_settings:update` |
@@ -209,9 +209,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_chat_session_delete` | Deletes an AI chat's transcript. Cannot be undone | `ai_settings:update` |
 | `colliedesk_ai_chat_preview` | Asks the help center's AI chat a question as a customer would | `ai_assist:create` |
 | `colliedesk_channel_ai_get` | Shows what each AI feature does by itself on a channel and its scopes | `channels:read` |
-| `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope; a raise waits for a person (admin token) | `ai_settings:update` |
+| `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope | `ai_settings:update` |
 | `colliedesk_ai_source_consent_set` | Lets AI intake send images, a contact's profile or an integration's data | `ai_settings:update` |
-| `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data (admin token) | `ai_settings:update` |
+| `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data | `ai_settings:update` |
 | `colliedesk_channel_ai_intake_readiness_get` | Shows, per action, whether intake's AI may act on its own on a chat scope, and what keeps it a suggestion | `channels:read` |
 | `colliedesk_channel_ai_intake_evaluations_list` | Lists the offline evaluations recorded for a chat channel's intake | `channels:read` |
 | `colliedesk_channel_ai_intake_evaluation_record` | Records an offline evaluation of a chat scope's intake, which can open a gate | `ai_settings:update` |
@@ -249,11 +249,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `channels:read` |
 | `colliedesk_channels_get` | Shows one channel and its configuration | `channels:read` |
 | `colliedesk_channels_events` | Shows the history of the channels | `channels:read` |
-| `colliedesk_channels_create` | Adds a channel (admin token) | `channels:update` |
-| `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules (admin token) | `channels:update` |
-| `colliedesk_channels_check` | Reads a channel's state again (admin token) | `channels:update` |
-| `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off (admin token) | `channels:update` |
-| `colliedesk_channels_credentials_set` | Stores a channel's secret (admin token only) | `channels:manage_credentials` |
+| `colliedesk_channels_create` | Adds a channel | `channels:update` |
+| `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules | `channels:update` |
+| `colliedesk_channels_check` | Reads a channel's state again | `channels:update` |
+| `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off | `channels:update` |
+| `colliedesk_channels_credentials_set` | Stores a channel's secret | `channels:manage_credentials` |
 | `colliedesk_channels_delete` | Removes a channel; its conversations stay. Cannot be undone | `channels:manage_credentials` |
 | `colliedesk_channels_held_discard` | Discards the messages a channel held while it was off. Cannot be undone | `channels:update` |
 | `colliedesk_autofix_status` | Shows whether Autofix is set up and how many fixes wait for a person or are running | `autofix:read` |
@@ -264,11 +264,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_github_repositories_list` | Lists the repositories a GitHub installation reaches, read from GitHub now, and which are connected | `autofix_settings:read` |
 | `colliedesk_github_connect` | Starts installing the Colliedesk GitHub App; the person behind the token installs it on GitHub | `autofix_settings:update` |
 | `colliedesk_github_disconnect` | Uninstalls the GitHub App from an account; its repositories stay, paused. Cannot be undone | `autofix_settings:update` |
-| `colliedesk_autofix_repo_connect` | Connects a private repository for fixes (admin token) | `autofix_settings:update` |
-| `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests (admin token) | `autofix_settings:update` |
-| `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled (admin token). Cannot be undone | `autofix_settings:update` |
+| `colliedesk_autofix_repo_connect` | Connects a private repository for fixes | `autofix_settings:update` |
+| `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests | `autofix_settings:update` |
+| `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled. Cannot be undone | `autofix_settings:update` |
 | `colliedesk_autofix_repo_notes_include_set` | Lets fixes on a repository carry internal notes | `autofix_settings:update` |
-| `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository (admin token) | `autofix_settings:update` |
+| `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository | `autofix_settings:update` |
 | `colliedesk_fix_preview` | Builds what sending a conversation to a coding agent would send, masked, without sending | `autofix:read` |
 | `colliedesk_fix_send` | Sends a conversation to a coding agent; for an issue the person behind the token confirms on GitHub | `autofix:send` |
 | `colliedesk_fix_retry` | Sends a failed or cancelled fix again | `autofix:send` |
@@ -280,7 +280,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_coding_agent_enable` | Turns on a coding agent for Autofix, with consent to the data it receives | `autofix_settings:update` |
 | `colliedesk_coding_agent_disable` | Turns off a coding agent for Autofix; fixes not sent yet are cancelled, fixes already sent go on | `autofix_settings:update` |
 | `colliedesk_coding_agent_check` | Checks a coding agent: the GitHub App and private repositories, or Cursor's key and its repositories | `autofix_settings:read` |
-| `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation: refused below `admin` so it never waits in a request | `autofix_settings:manage_credentials` |
+| `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation | `autofix_settings:manage_credentials` |
 | `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `autofix_settings:manage_credentials` |
 <!-- /generated -->
 

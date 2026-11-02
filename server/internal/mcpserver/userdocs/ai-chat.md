@@ -57,7 +57,7 @@ without an AI provider of its own has no prices at all: on your own key, your pr
 (the chat page, an article, your site), its state (open, handed off, ended) and whether an answer was
 rated not helpful. Open one to read it with the articles each answer cited. Every member of the team
 reads them there (the tab shows only the chats to someone who is not an admin), and from a conversation
-a hand-off opened (**Open chat transcript**); only an admin deletes one, for good (the conversation
+a hand-off opened (**Open chat transcript**); only someone with `ai_settings:update` (an admin) deletes one, for good (the conversation
 keeps its own copy).
 
 A chat's texts are kept 90 days after its last question, then erased; its numbers stay a year. They

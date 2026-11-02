@@ -2,8 +2,8 @@
 
 Colliedesk speaks the Model Context Protocol (MCP), so an AI agent such as Claude Code or Codex can
 work your inbox: find conversations, read them, set status, priority, assignee and tags, and leave
-private notes for your team. With a `send` token it can also reply to customers. Give an agent the
-`send` tier only when you want it to write to customers; a person stays in charge of the rest.
+private notes for your team. With `messages:send` it can also reply to customers. Give an agent a
+token that holds `messages:send` only when you want it to write to customers.
 
 ## Endpoint and sign-in
 
@@ -13,23 +13,23 @@ private notes for your team. With a `send` token it can also reply to customers.
 <!-- /generated -->
 - Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
   person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
-- Create the token in **Settings → External AI agents**, as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
-  that does the job. The token is shown once; revoke it in **Settings → Sessions**.
+- Create the token in **Settings → External AI agents**, as described in
+  [Agent tokens](sessions.md#agent-tokens): it follows one of your roles, or holds a fixed list of
+  your permissions. Give it only what the job needs. The token is shown once; revoke it in
+  **Settings → Sessions**.
 
-| Tier | The agent can |
-|---|---|
-| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members, read saved replies with their history and trash, and see the workspace settings, invites, sessions, and the email and web form settings. No answer holds an invite link, a token or the inbound email secret. |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), add private notes, and set your own timezone. Nothing reaches a customer. |
-| `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, rename or delete tags, and create, edit, delete and restore saved replies. With `read` or `draft`, a saved reply change is a proposal a person approves. |
-| `admin` | Everything in `send`, plus change the workspace name and timezone, deactivate and reactivate agents, revoke invites, revoke agent tokens and its owner's own sign-ins, set up the web form and the email channel, verify the email domain, and read the plan. It acts with the role of the admin who created it. |
+The agent does what the token's [permissions](roles-and-permissions.md) allow, at once; nothing waits
+for a person to approve it, and it never does more than the person who made the token can do right
+now. The **Needs** column below names the permissions each tool needs. `colliedesk_whoami` answers
+your name and roles, how the token was made and its permissions.
 
-A tool used above its tier does not fail: Colliedesk files the call as an
-[agent request](agent-requests.md) that a person approves in **Requests**, and the tool answers
-with `agent_request` (its id, summary and expiry) and `next`, which tells the model that nothing
-changed yet and how to follow it. A reply from a token below `send` becomes a reply draft. Some
-actions wait for a person with every tier, `admin` included: new tokens, invites, making someone an
-admin or changing an admin, signing out another person, export, billing checkout and portal, disconnecting the email channel, a new
-inbound secret and the workspace address. No tool approves or rejects; only a person does.
+A tool the token has no permission for fails with the message, `missing_permissions` and
+`missing_from` of [a refused call](roles-and-permissions.md#when-a-permission-is-missing): `token`
+means you hold the permission and a token that includes it would work, `person` that you would need a
+role that holds it. An invite, a new inbound email secret, an export link or a results share link is
+returned to the agent so it can give it to you. Connecting Gmail, Microsoft 365 or GitHub, sending a
+fix through GitHub, and billing checkout and portal answer an address only you can finish, in a
+browser signed in to Colliedesk. Creating a token is for people only: no tool makes one.
 
 ## Connect your AI host
 
@@ -123,7 +123,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_part` | Sends the next part of an upload (up to 5 MiB, base64) | `kb_media:create` |
 | `colliedesk_kb_video_upload_status` | Says where an upload stands, to go on after an interruption | `kb_media:read` |
 | `colliedesk_kb_video_upload_list` | Lists the workspace's uploads in progress, who started each and when it expires | `kb_media:read` |
-| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; an admin's token, any) | `kb_media:create` |
+| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; with kb_media:purge, any) | `kb_media:create` |
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `kb_media:create` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `kb_media:update` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `help_center:read` |
@@ -184,7 +184,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `billing:read` |
 | `colliedesk_imports_list` | Lists imports | `imports:read` |
 | `colliedesk_import_get` | Shows one import with its progress and why it failed or waits | `imports:read` |
-| `colliedesk_import_preview` | Reads a Freshdesk account before importing it, without writing anything. Takes a Freshdesk admin's API key, which passes through the conversation: refused below `admin` so it never waits in a request | `imports:manage_credentials` |
+| `colliedesk_import_preview` | Reads a Freshdesk account before importing it, without writing anything. Takes a Freshdesk admin's API key, which passes through the conversation | `imports:manage_credentials` |
 | `colliedesk_import_start` | Starts a previewed import: recent tickets first, then the whole account | `imports:run` |
 | `colliedesk_import_cancel` | Stops an import or discards a preview; what was imported stays | `imports:run` |
 | `colliedesk_import_key_set` | Gives an import waiting for its Freshdesk key the key again | `imports:manage_credentials` |
@@ -194,10 +194,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_import_person_link` | Links a Freshdesk agent to a Colliedesk agent; their imported replies and tickets follow | `imports:run` |
 | `colliedesk_import_person_unlink` | Takes back the link between a Freshdesk agent and a Colliedesk agent | `imports:run` |
 | `colliedesk_ai_settings_get` | Shows the [AI settings](ai.md): providers (never a key), each feature's provider and model, and the change history | `ai_settings:read` |
-| `colliedesk_ai_models_list` | Lists the models a key may use, before adding the provider; saves and bills nothing. Refused below `admin` so the key never waits in a request | `ai_settings:manage_credentials` |
-| `colliedesk_ai_provider_add` | Adds an AI provider after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `ai_settings:manage_credentials` |
-| `colliedesk_ai_provider_update` | Renames an AI provider, changes its models, or an OpenRouter provider's routing (loosening it waits for a person) | `ai_settings:update` |
-| `colliedesk_ai_provider_key_set` | Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `ai_settings:manage_credentials` |
+| `colliedesk_ai_models_list` | Lists the models a key may use, before adding the provider; saves and bills nothing | `ai_settings:manage_credentials` |
+| `colliedesk_ai_provider_add` | Adds an AI provider after a billed check of the first model. The key passes through the conversation | `ai_settings:manage_credentials` |
+| `colliedesk_ai_provider_update` | Renames an AI provider, changes its models, or an OpenRouter provider's routing | `ai_settings:update` |
+| `colliedesk_ai_provider_key_set` | Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation | `ai_settings:manage_credentials` |
 | `colliedesk_ai_provider_check` | Runs a check of an AI provider | `ai_settings:update` |
 | `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `ai_settings:update` |
 | `colliedesk_ai_slot_set` | Sets an AI feature: its provider and model, on or off, and what it does by itself by default | `ai_settings:update` |
@@ -209,9 +209,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_chat_session_delete` | Deletes an AI chat's transcript. Cannot be undone | `ai_settings:update` |
 | `colliedesk_ai_chat_preview` | Asks the help center's AI chat a question as a customer would | `ai_assist:create` |
 | `colliedesk_channel_ai_get` | Shows what each AI feature does by itself on a channel and its scopes | `channels:read` |
-| `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope; a raise waits for a person (admin token) | `ai_settings:update` |
+| `colliedesk_channel_ai_set` | Sets what an AI feature does by itself on a channel or a scope | `ai_settings:update` |
 | `colliedesk_ai_source_consent_set` | Lets AI intake send images, a contact's profile or an integration's data | `ai_settings:update` |
-| `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data (admin token) | `ai_settings:update` |
+| `colliedesk_ai_source_consent_remove` | Stops AI intake sending a kind of extra data | `ai_settings:update` |
 | `colliedesk_channel_ai_intake_readiness_get` | Shows, per action, whether intake's AI may act on its own on a chat scope, and what keeps it a suggestion | `channels:read` |
 | `colliedesk_channel_ai_intake_evaluations_list` | Lists the offline evaluations recorded for a chat channel's intake | `channels:read` |
 | `colliedesk_channel_ai_intake_evaluation_record` | Records an offline evaluation of a chat scope's intake, which can open a gate | `ai_settings:update` |
@@ -249,11 +249,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `channels:read` |
 | `colliedesk_channels_get` | Shows one channel and its configuration | `channels:read` |
 | `colliedesk_channels_events` | Shows the history of the channels | `channels:read` |
-| `colliedesk_channels_create` | Adds a channel (admin token) | `channels:update` |
-| `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules (admin token) | `channels:update` |
-| `colliedesk_channels_check` | Reads a channel's state again (admin token) | `channels:update` |
-| `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off (admin token) | `channels:update` |
-| `colliedesk_channels_credentials_set` | Stores a channel's secret (admin token only) | `channels:manage_credentials` |
+| `colliedesk_channels_create` | Adds a channel | `channels:update` |
+| `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules | `channels:update` |
+| `colliedesk_channels_check` | Reads a channel's state again | `channels:update` |
+| `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off | `channels:update` |
+| `colliedesk_channels_credentials_set` | Stores a channel's secret | `channels:manage_credentials` |
 | `colliedesk_channels_delete` | Removes a channel; its conversations stay. Cannot be undone | `channels:manage_credentials` |
 | `colliedesk_channels_held_discard` | Discards the messages a channel held while it was off. Cannot be undone | `channels:update` |
 | `colliedesk_autofix_status` | Shows whether Autofix is set up and how many fixes wait for a person or are running | `autofix:read` |
@@ -264,11 +264,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_github_repositories_list` | Lists the repositories a GitHub installation reaches, read from GitHub now, and which are connected | `autofix_settings:read` |
 | `colliedesk_github_connect` | Starts installing the Colliedesk GitHub App; the person behind the token installs it on GitHub | `autofix_settings:update` |
 | `colliedesk_github_disconnect` | Uninstalls the GitHub App from an account; its repositories stay, paused. Cannot be undone | `autofix_settings:update` |
-| `colliedesk_autofix_repo_connect` | Connects a private repository for fixes (admin token) | `autofix_settings:update` |
-| `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests (admin token) | `autofix_settings:update` |
-| `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled (admin token). Cannot be undone | `autofix_settings:update` |
+| `colliedesk_autofix_repo_connect` | Connects a private repository for fixes | `autofix_settings:update` |
+| `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests | `autofix_settings:update` |
+| `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled. Cannot be undone | `autofix_settings:update` |
 | `colliedesk_autofix_repo_notes_include_set` | Lets fixes on a repository carry internal notes | `autofix_settings:update` |
-| `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository (admin token) | `autofix_settings:update` |
+| `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository | `autofix_settings:update` |
 | `colliedesk_fix_preview` | Builds what sending a conversation to a coding agent would send, masked, without sending | `autofix:read` |
 | `colliedesk_fix_send` | Sends a conversation to a coding agent; for an issue the person behind the token confirms on GitHub | `autofix:send` |
 | `colliedesk_fix_retry` | Sends a failed or cancelled fix again | `autofix:send` |
@@ -280,7 +280,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_coding_agent_enable` | Turns on a coding agent for Autofix, with consent to the data it receives | `autofix_settings:update` |
 | `colliedesk_coding_agent_disable` | Turns off a coding agent for Autofix; fixes not sent yet are cancelled, fixes already sent go on | `autofix_settings:update` |
 | `colliedesk_coding_agent_check` | Checks a coding agent: the GitHub App and private repositories, or Cursor's key and its repositories | `autofix_settings:read` |
-| `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation: refused below `admin` so it never waits in a request | `autofix_settings:manage_credentials` |
+| `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation | `autofix_settings:manage_credentials` |
 | `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `autofix_settings:manage_credentials` |
 <!-- /generated -->
 
@@ -336,7 +336,7 @@ approves it in the console with their authenticator code.
 - **Customer text is marked.** Subjects, message bodies, customer names, emails and organizations
   appear only inside a field named `untrusted_customer_content`. The tool descriptions tell the
   model to treat it as data and never as instructions. This lowers the risk that a hostile email
-  steers the agent; it does not remove it. Keep agents on the lowest tier that works.
+  steers the agent; it does not remove it. Give agents only the permissions the job needs.
 - **Only native team messages count as team text.** A reply or note written in Colliedesk by a
   team member shows its author. A message imported from another helpdesk is marked like customer
   text unless it was a reply or a private note of a team member: a Freshdesk public note or a
@@ -349,8 +349,8 @@ approves it in the console with their authenticator code.
   comes back as its name, size, SHA-256 and detected type only: open it in the web app. The file
   name and text are customer text. **An image cannot be marked as customer text:** whatever it
   shows (a screenshot of instructions, text in a photo) reaches the model as it is. The tool
-  description tells the model it is data a customer sent, never instructions; keep agents on the
-  lowest tier that works.
+  description tells the model it is data a customer sent, never instructions; give agents only the
+  permissions the job needs.
 - **Saved replies are team text.** Their title and text appear under `team_text`: the team wrote
   them for customers. The tool descriptions tell the model to treat them as text to send or improve,
   never as instructions. Writes carry the `updated_at` the model read, so it cannot overwrite or
@@ -358,15 +358,14 @@ approves it in the console with their authenticator code.
 - **Files an agent attaches.** `colliedesk_note_add`, `colliedesk_reply_send` and
   `colliedesk_conversation_start` take `files`: up to 10 files, 5 MiB in total per call, each with
   a `filename` and its bytes as base64. The REST API takes 10 MiB a message; attach larger files in
-  the web app. A call with files is never filed as a request (see
-  [agent requests](agent-requests.md)): below the tool's tier it is refused and nothing is stored,
-  so the agent sends the text alone. `colliedesk_reply_draft` carries no files. A reply written from
+  the web app. A call with files the token may not make is refused
+  and nothing is stored. `colliedesk_reply_draft` carries no files. A reply written from
   an [AI draft](ai.md#reply-drafts) passes its `ai_draft_id`, so the draft records how close the
-  reply stayed to it; this works only with a send token, and a draft that is not the conversation's
+  reply stayed to it; this needs `messages:send`, and a draft that is not the conversation's
   ready one (another conversation's, another workspace's, already sent) is refused and nothing is
   sent.
 - **Who wrote it.** When an agent token wrote a note or a reply, the message also shows
-  `written_by_agent_token` with the label and tier of the token. The server tells the model to read
+  `written_by_agent_token` with the label of the token and the team member it acts as (`acts_as`). The server tells the model to read
   such text as model output, not as a decision of the person the token acts as.
 
 ## Limits and errors
@@ -390,6 +389,6 @@ approves it in the console with their authenticator code.
   workspace, nothing changes. It takes only existing tag names and cannot set priority; use
   `colliedesk_conversation_update` for those.
 - A status set with `colliedesk_conversation_update` or `colliedesk_conversations_bulk_update` on a
-  conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); with
-  a token below the send tier that change waits for a person. `notify: false` sets the status quietly,
-  without asking.
+  conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); that
+  change needs `messages:send`, and without it the call is refused and names the channel.
+  `notify: false` sets the status quietly with `conversations:update` alone.
