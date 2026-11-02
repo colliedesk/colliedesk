@@ -895,7 +895,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A token that may not write to customers (below the send tier) asks a person first (202) when the change would tell one, with a summary that quotes the notice; a quiet change does not ask. The conversation's `status_notices` says beforehand which statuses would tell. */
+        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A caller without `messages:send` is refused (403 `permission_missing`) when the change would tell a customer; `notify: false` changes it without telling them. The conversation's `status_notices` says beforehand which statuses would tell. */
         patch: operations["updateConversation"];
         trace?: never;
     };
@@ -937,7 +937,7 @@ export interface paths {
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
          *
-         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft or a call filed as an agent request (202) does not use it.
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. A reply draft (`POST /api/v1/conversations/{id}/reply-drafts`) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -973,7 +973,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Lists the workspace's channels, oldest first, with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it the workspace has and which is its default (`default_channel_id`). A workspace may have several channels of every type (two support mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a channel id act on, a conversation started without choosing a channel leaves from, and the next oldest becomes when it is removed. Removed channels are left out unless `include_removed=true` (they come last, with `deleted_at` and state `removed`, for naming the channel of older conversations). Every member of the team may read it; changing a channel needs an admin. */
+        /** @description Lists the workspace's channels, oldest first, with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it the workspace has and which is its default (`default_channel_id`). A workspace may have several channels of every type (two support mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a channel id act on, a conversation started without choosing a channel leaves from, and the next oldest becomes when it is removed. Removed channels are left out unless `include_removed=true` (they come last, with `deleted_at` and state `removed`, for naming the channel of older conversations). `channels:read` reads it; changing a channel needs `channels:update`. */
         get: operations["listChannels"];
         put?: never;
         /** @description Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput). The type validates it and the channel is stored only when it passes (400 with `fields`). A workspace may add several channels of a type; give each a `name` that tells them apart. An outside account another channel already is answers 409 `channel_account_taken`. A name another live channel of the type has (whatever its case) answers 409 `channel_name_taken`, a support address whose mailbox another email channel of the workspace has (support+vip@ is support@) 409 `support_address_taken`; both with `fields` and `conflict` naming that channel. Without a name the first channel of a type is called as its type, a later one by its address (email) or with a number. The first channel of a type is its default; `is_default: true` makes a later one the default. The first email channel is what `PUT /api/v1/channels/email` connects. */
@@ -1014,11 +1014,11 @@ export interface paths {
         get: operations["getChannel"];
         put?: never;
         post?: never;
-        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. An agent token's call is an agent request a person approves. */
+        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. */
         delete: operations["removeChannel"];
         options?: never;
         head?: never;
-        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
+        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for someone with `channels:update` to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
         patch: operations["updateChannel"];
         trace?: never;
     };
@@ -1032,7 +1032,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never waits in an agent request. */
+        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. It needs `channels:manage_credentials`. */
         put: operations["setChannelCredential"];
         post?: never;
         delete?: never;
@@ -1090,7 +1090,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. An agent token's call is an agent request a person approves. */
+        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. */
         post: operations["discardHeldChannelMessages"];
         delete?: never;
         options?: never;
@@ -1348,7 +1348,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Sets what one AI feature does by itself on a scope of the channel (`level`: off, suggest, auto, or null to follow the channel and the workspace). Drafts go up to suggest (AI never sends); intake exists only on a chat type's intake scopes (422 `intake_not_supported` with `available_slots` otherwise) and takes `options`. A level decides only the AI's own work; people can ask by hand while the workspace has the feature on. An agent token lowers a level with `ai_settings:update`; a change that lets AI do more by itself (a higher level of any scope it reaches, a lower threshold, a source turned on, other instructions) is an agent request a person approves, whatever the token holds. Only admins change a level (403 for another role). Every change is in the AI history and in the channel's. */
+        /** @description Sets what one AI feature does by itself on a scope of the channel (`level`: off, suggest, auto, or null to follow the channel and the workspace). Drafts go up to suggest (AI never sends); intake exists only on a chat type's intake scopes (422 `intake_not_supported` with `available_slots` otherwise) and takes `options`. A level decides only the AI's own work; people can ask by hand while the workspace has the feature on. Any change needs `ai_settings:update`, raising a level as well as lowering it. Every change is in the AI history and in the channel's. */
         put: operations["setChannelAI"];
         post?: never;
         delete?: never;
@@ -1366,7 +1366,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; an admin may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
+        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; someone with `ai_settings:update` may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
         get: operations["getIntakeReadiness"];
         put?: never;
         post?: never;
@@ -1388,7 +1388,7 @@ export interface paths {
         /** @description The offline evaluations recorded for a chat channel's intake, newest first (at most 100); scope narrows them. */
         get: operations["listIntakeEvaluations"];
         put?: never;
-        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. Only admins; an agent token's record is an agent request a person approves, since it can open a gate. */
+        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it can open a gate. */
         post: operations["recordIntakeEvaluation"];
         delete?: never;
         options?: never;
@@ -1668,7 +1668,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an agent request; the person who approves receives the consent address. */
+        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). The consent address goes to whoever calls, a person or an agent token with `channels:manage_credentials`. */
         post: operations["connectGmail"];
         /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
         delete: operations["disconnectGmail"];
@@ -1686,7 +1686,7 @@ export interface paths {
         };
         /**
          * Google's redirect after the consent screen
-         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `address_mismatch` (the account is not the channel's support address mailbox), `account_in_use` (another email channel of the workspace sends through it, named by `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked unless a channel holds the account. Google's own error text is never echoed.
+         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (without `channels:manage_credentials`, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `address_mismatch` (the account is not the channel's support address mailbox), `account_in_use` (another email channel of the workspace sends through it, named by `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked unless a channel holds the account. Google's own error text is never echoed.
          */
         get: operations["finishGmailConnect"];
         put?: never;
@@ -1706,7 +1706,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). An agent token gets an agent request; the person who approves receives the sign-in address. */
+        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). The sign-in address goes to whoever calls, a person or an agent token with `channels:manage_credentials`. */
         post: operations["connectMicrosoft"];
         /** @description Disconnect Microsoft 365: the grant is deleted here. Microsoft has no API that revokes one app's grant, so Colliedesk stays listed in the account's apps until the person removes it there (My Apps for a work or school account, account.live.com/consent/Manage for a personal one); the deleted token is useless without this server's client secret. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Microsoft 365 fails with the reason and can be retried. A locked workspace may disconnect. 404 when the channel has no Microsoft 365 connection. */
         delete: operations["disconnectMicrosoft"];
@@ -1724,7 +1724,7 @@ export interface paths {
         };
         /**
          * Microsoft's redirect after the sign-in and consent pages
-         * @description Opened by the browser Microsoft redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start, started for Microsoft 365; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&microsoft=connected`, or `?tab=replies&microsoft_error=<reason>` with `signed_out`, `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or provider, or older than 10 minutes), `wrong_person`, `denied` (cancelled at Microsoft, or the organization needs an admin's approval), `send_not_granted`, `no_refresh_token`, `mailbox_unavailable` (the account has no Exchange Online mailbox), `address_mismatch` (the mailbox is not the channel's support address; aliases and shared mailboxes are not supported yet), `account_in_use` (named by `&microsoft_channel=<id>`), `email_channel_missing`, `server_misconfigured` (Microsoft refused this server's client secret) and `microsoft_unavailable`. Microsoft's own error text is never echoed.
+         * @description Opened by the browser Microsoft redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start, started for Microsoft 365; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&microsoft=connected`, or `?tab=replies&microsoft_error=<reason>` with `signed_out`, `forbidden` (without `channels:manage_credentials`, or the workspace is locked), `expired` (state unknown, used, from another workspace or provider, or older than 10 minutes), `wrong_person`, `denied` (cancelled at Microsoft, or the organization needs an admin's approval), `send_not_granted`, `no_refresh_token`, `mailbox_unavailable` (the account has no Exchange Online mailbox), `address_mismatch` (the mailbox is not the channel's support address; aliases and shared mailboxes are not supported yet), `account_in_use` (named by `&microsoft_channel=<id>`), `email_channel_missing`, `server_misconfigured` (Microsoft refused this server's client secret) and `microsoft_unavailable`. Microsoft's own error text is never echoed.
          */
         get: operations["finishMicrosoftConnect"];
         put?: never;
@@ -1818,7 +1818,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. One tab announces one conversation at most every 2 seconds, and a call that starts or ends a reply (`writing` changes) at most every half second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes nothing. Changes nothing a customer or a teammate wrote, so the read tier is enough for an agent token. */
+        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. One tab announces one conversation at most every 2 seconds, and a call that starts or ends a reply (`writing` changes) at most every half second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes nothing. Changes nothing a customer or a teammate wrote. */
         put: operations["putConversationPresence"];
         post?: never;
         delete?: never;
@@ -2286,10 +2286,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. A reply in the trash is not listed here (see `GET /api/v1/saved-replies/trash`). `last_change` says who made the latest version, and through which agent token or approved agent request. */
+        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. A reply in the trash is not listed here (see `GET /api/v1/saved-replies/trash`). `last_change` says who made the latest version, and through which agent token. */
         get: operations["listSavedReplies"];
         put?: never;
-        /** @description Any agent may create one, and a `send` agent token. A lower tier files an agent request a person approves. The title is unique among the replies not in the trash, ignoring case (409 `duplicate_title`). A workspace holds at most 500, counting the ones in the trash (409 `saved_reply_limit`). The new reply has version 1 in its history. */
+        /** @description Needs `saved_replies:create`. The title is unique among the replies not in the trash, ignoring case (409 `duplicate_title`). A workspace holds at most 500, counting the ones in the trash (409 `saved_reply_limit`). The new reply has version 1 in its history. */
         post: operations["createSavedReply"];
         delete?: never;
         options?: never;
@@ -2326,11 +2326,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Move the reply to the trash. It disappears from the list and the reply box, and can be restored for 30 days with `POST /api/v1/saved-replies/{id}/restore`. Send the `updated_at` you read: when the reply was saved since, nothing is deleted and the answer is 409 `changed_elsewhere` (an agent request approved after someone edited the reply fails the same way). A `send` agent token may delete; a lower tier files an agent request. */
+        /** @description Move the reply to the trash. It disappears from the list and the reply box, and can be restored for 30 days with `POST /api/v1/saved-replies/{id}/restore`. Send the `updated_at` you read: when the reply was saved since, nothing is deleted and the answer is 409 `changed_elsewhere`. */
         delete: operations["deleteSavedReply"];
         options?: never;
         head?: never;
-        /** @description Change the title, the body or both. Any agent may edit a shared reply, and a `send` agent token; a lower tier files an agent request whose detail shows the reply before and after. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. Every edit adds a version to the history. A reply in the trash is 404. */
+        /** @description Change the title, the body or both. Needs `saved_replies:update`. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. Every edit adds a version to the history. A reply in the trash is 404. */
         patch: operations["updateSavedReply"];
         trace?: never;
     };
@@ -2345,7 +2345,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Take a reply out of the trash, as it was when deleted. Send the `updated_at` of the trashed reply as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in the trash. 409 `duplicate_title` when another reply took its title meanwhile (rename that one first). A `send` agent token may restore; a lower tier files an agent request. */
+        /** @description Take a reply out of the trash, as it was when deleted. Send the `updated_at` of the trashed reply as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in the trash. 409 `duplicate_title` when another reply took its title meanwhile (rename that one first). */
         post: operations["restoreSavedReply"];
         delete?: never;
         options?: never;
@@ -2362,7 +2362,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The versions of a saved reply, newest first, in pages: who made each, through which agent token or approved agent request, and the title and text it had. A reply in the trash keeps its history. Versions are never changed or removed while the reply exists; restoring one adds a new version. */
+        /** @description The versions of a saved reply, newest first, in pages: who made each, through which agent token, and the title and text it had. A reply in the trash keeps its history. Versions are never changed or removed while the reply exists; restoring one adds a new version. */
         get: operations["listSavedReplyVersions"];
         put?: never;
         post?: never;
@@ -2384,7 +2384,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Make an earlier version the current one. The title and text of that version become a new version; nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere` when the reply was saved since). 409 `duplicate_title` when another reply has that title now. A reply in the trash is 404: restore it from the trash first. A `send` agent token may restore; a lower tier files an agent request. */
+        /** @description Make an earlier version the current one. The title and text of that version become a new version; nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere` when the reply was saved since). 409 `duplicate_title` when another reply has that title now. A reply in the trash is 404: restore it from the trash first. */
         post: operations["restoreSavedReplyVersion"];
         delete?: never;
         options?: never;
@@ -2435,7 +2435,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. Only an admin may ask (an agent token's call waits for a person's approval). `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. 502 `mail_failed` when the mail relay refuses it; nothing is stored then either. A repeat with the same Idempotency-Key answers the first request's answer and sends nothing. */
+        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. It needs `billing:manage`. `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. 502 `mail_failed` when the mail relay refuses it; nothing is stored then either. A repeat with the same Idempotency-Key answers the first request's answer and sends nothing. */
         post: operations["createMigrationRequest"];
         delete?: never;
         options?: never;
@@ -2535,10 +2535,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's in-app imports and undos, newest first (at most 100). Admins only. A job never shows its Freshdesk API key; `has_key` says whether the server still holds it. */
+        /** @description The workspace's in-app imports and undos, newest first (at most 100). Needs `imports:read`. A job never shows its Freshdesk API key; `has_key` says whether the server still holds it. */
         get: operations["listImports"];
         put?: never;
-        /** @description Starts an import from Freshdesk by reading the account in the background, before anything is written (`state` previewing, then previewed with `preview`, or failed with `error_code`). Poll `GET /api/v1/imports/{id}`. The key must be a Freshdesk admin's; it is sealed on the server, never returned, and erased when the job ends or when the preview is not started within an hour. A new preview discards the workspace's earlier preview. An agent token below the admin tier is refused with 403 `credentials_need_admin_token` and nothing is stored: an agent request would keep the key. */
+        /** @description Starts an import from Freshdesk by reading the account in the background, before anything is written (`state` previewing, then previewed with `preview`, or failed with `error_code`). Poll `GET /api/v1/imports/{id}`. The key must be a Freshdesk admin's; it is sealed on the server, never returned, and erased when the job ends or when the preview is not started within an hour. A new preview discards the workspace's earlier preview. It needs `imports:manage_credentials`. */
         post: operations["previewImport"];
         delete?: never;
         options?: never;
@@ -2613,7 +2613,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Gives a job in `waiting_key` (the server restarted without a key ring, or its keys changed) the Freshdesk API key again; it goes on where it stopped. Refused to agent tokens below the admin tier like `POST /api/v1/imports`. */
+        /** @description Gives a job in `waiting_key` (the server restarted without a key ring, or its keys changed) the Freshdesk API key again; it goes on where it stopped. It needs `imports:manage_credentials`. */
         put: operations["setImportKey"];
         post?: never;
         delete?: never;
@@ -2654,7 +2654,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Queues an undo of an import that ended (finished, failed or cancelled): it removes what that Freshdesk account brought into the workspace, as `collie import undo` does, and keeps what the team changed since. Every agent token's call waits for a person's approval. */
+        /** @description Queues an undo of an import that ended (finished, failed or cancelled): it removes what that Freshdesk account brought into the workspace, as `collie import undo` does, and keeps what the team changed since. It needs `imports:undo`. */
         post: operations["undoImport"];
         delete?: never;
         options?: never;
@@ -2710,7 +2710,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's AI settings: the server's provider (set by the operator; null when the server has none), the providers the workspace added (never a key, only its last four characters), each feature ("slot": `triage`, `draft`, `intake`) with its provider, model, whether it is on and can run and what it does by itself by default (`default_level`), the levels channels set apart from it (`channels`), the kinds of extra context intake may send (`source_consents`), and the newest 50 changes. Every feature starts off; turning one on is an admin's consent to send that feature's ticket data to its provider. Agents can read this; only admins change it. */
+        /** @description The workspace's AI settings: the server's provider (set by the operator; null when the server has none), the providers the workspace added (never a key, only its last four characters), each feature ("slot": `triage`, `draft`, `intake`) with its provider, model, whether it is on and can run and what it does by itself by default (`default_level`), the levels channels set apart from it (`channels`), the kinds of extra context intake may send (`source_consents`), and the newest 50 changes. Every feature starts off; turning one on is the caller's consent to send that feature's ticket data to its provider. `ai_settings:read` reads this; `ai_settings:update` changes it. */
         get: operations["getAISettings"];
         put?: never;
         post?: never;
@@ -2729,7 +2729,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). It needs `ai_settings:manage_credentials`. */
         post: operations["addAIProvider"];
         delete?: never;
         options?: never;
@@ -2746,7 +2746,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Lists the models a provider's key may use, before the provider is added, so a person picks them instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission, model_not_found when the server keeps no list, blocked_address…); type the model names then. Same input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        /** @description Lists the models a provider's key may use, before the provider is added, so a person picks them instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission, model_not_found when the server keeps no list, blocked_address…); type the model names then. Same input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429 `ai_checks_rate_limited`). */
         post: operations["listAIModels"];
         delete?: never;
         options?: never;
@@ -2784,7 +2784,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Replaces a provider's key. The new key is checked first; when the check fails nothing changes and the old key keeps working (422 `ai_check_failed`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`. */
+        /** @description Replaces a provider's key. The new key is checked first; when the check fails nothing changes and the old key keeps working (422 `ai_check_failed`). It needs `ai_settings:manage_credentials`. */
         put: operations["setAIProviderKey"];
         post?: never;
         delete?: never;
@@ -2822,7 +2822,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model (the provider's first when left out), effort, on or off, and what it does by itself where no channel sets a level (`default_level`). Turning a feature on, or moving it to another provider while it is on, records the person's consent: that feature's ticket data goes to that provider from now on, and what channels let it do by itself goes down a level (auto to suggest; a draft written by itself to one asked for). Every agent token's call becomes an agent request a person approves. */
+        /** @description Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model (the provider's first when left out), effort, on or off, and what it does by itself where no channel sets a level (`default_level`). Turning a feature on, or moving it to another provider while it is on, records the person's consent: that feature's ticket data goes to that provider from now on, and what channels let it do by itself goes down a level (auto to suggest; a draft written by itself to one asked for). It needs `ai_settings:update`. */
         put: operations["setAISlot"];
         post?: never;
         delete?: never;
@@ -2841,7 +2841,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Records an admin's consent that AI intake may send this kind of context to its provider besides the conversation's text (which the feature's own consent covers): `images` customers sent, the `contact_profile`, or an integration's data (`external:<name>`). Giving it again changes nothing. Every agent token's call becomes an agent request a person approves. */
+        /** @description Records an admin's consent that AI intake may send this kind of context to its provider besides the conversation's text (which the feature's own consent covers): `images` customers sent, the `contact_profile`, or an integration's data (`external:<name>`). Giving it again changes nothing. It needs `ai_settings:update`. */
         put: operations["setAISourceConsent"];
         post?: never;
         /** @description Takes the consent back: intake leaves that kind of context out from its next decision. `removed` is false when there was none. */
@@ -2858,7 +2858,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). Every role reads it; the compute error is shown to admins only. */
+        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). `results:read` reads it; the compute error is shown only to callers with `results:share`. */
         get: operations["getResults"];
         put?: never;
         post?: never;
@@ -2875,12 +2875,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Admins only. */
+        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Needs `results:share`. */
         get: operations["getResultsShareLink"];
         put?: never;
-        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Admins only. */
+        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Needs `results:share`. */
         post: operations["createResultsShareLink"];
-        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only. */
+        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Needs `results:share`. */
         delete: operations["revokeResultsShareLink"];
         options?: never;
         head?: never;
@@ -2917,7 +2917,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
+        /** @description Turns the weekly results email on or off for the caller. It goes only to people with `results:share`, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
         patch: operations["setResultsEmail"];
         trace?: never;
     };
@@ -2962,7 +2962,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Admins only. */
+        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Needs `billing:read`. */
         get: operations["getAIUsage"];
         put?: never;
         post?: never;
@@ -2979,7 +2979,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month) against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any. Admins only. */
+        /** @description One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month) against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any. Needs `billing:read`. */
         get: operations["getAIChatUsage"];
         put?: never;
         post?: never;
@@ -3019,7 +3019,7 @@ export interface paths {
         get: operations["getAIChatSession"];
         put?: never;
         post?: never;
-        /** @description Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI settings records it, without its texts. Every agent token's call becomes an agent request a person approves. */
+        /** @description Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI settings records it, without its texts. */
         delete: operations["deleteAIChatSession"];
         options?: never;
         head?: never;
@@ -3207,7 +3207,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids, time entries and status changes), and the attachment files. Admins only. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
+        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids, time entries and status changes), and the attachment files. Needs `workspace:export`. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
         get: operations["exportWorkspace"];
         put?: never;
         post?: never;
@@ -3286,7 +3286,7 @@ export interface paths {
         put?: never;
         /**
          * Get a one-time download URL for the workspace export
-         * @description Admins only; works in every plan state, including a locked workspace. Runs the checks of `GET /api/v1/export` that can be answered before streaming (another export of this workspace is running: 409; the server is at its export limit: 429 with `Retry-After`) and returns a URL that starts the same ZIP download without a session or token. The URL works once, for the workspace that asked, and expires after `expires_in_seconds`; a new link replaces the previous one. A browser that navigates to it streams the file to disk, so a large archive is never held in memory. Links live in the memory of one server process: a restart invalidates them.
+         * @description Needs `workspace:export`; works in every plan state, including a locked workspace. Runs the checks of `GET /api/v1/export` that can be answered before streaming (another export of this workspace is running: 409; the server is at its export limit: 429 with `Retry-After`) and returns a URL that starts the same ZIP download without a session or token. The URL works once, for the workspace that asked, and expires after `expires_in_seconds`; a new link replaces the previous one. A browser that navigates to it streams the file to disk, so a large archive is never held in memory. Links live in the memory of one server process: a restart invalidates them.
          */
         post: operations["createExportLink"];
         delete?: never;
@@ -3328,7 +3328,7 @@ export interface paths {
         put?: never;
         /**
          * @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. `seen_reply_number` is the newest reply the approving person had on screen: when someone replied since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so it can be read again and approved with the new number.
-         *     With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call and never stored, and `confirm` carries the phrases a configuration change asks to type (400 `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An agent request's id answers 404 there, and an operator request's id answers 404 without the header.
+         *     With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call and never stored, and `confirm` carries the phrases a configuration change asks to type (400 `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An operator request's id answers 404 without the header; a workspace call answers 410 `agent_requests_removed`.
          */
         post: operations["approveAgentRequest"];
         delete?: never;
@@ -3482,7 +3482,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Send a problem report ("Report a problem" in the web app) to the support desk of this server. Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a conversation in that workspace, tagged `problem-report`, from the reporter's verified email, with the description, the diagnostics, facts the server knows (agent, role, workspace, plan, version, realm, the request id of this call) and the screenshots as attachments. No text from the reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the web app offers a GitHub issue instead. Any agent token tier may report. One agent may send 5 reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total). */
+        /** @description Send a problem report ("Report a problem" in the web app) to the support desk of this server. Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a conversation in that workspace, tagged `problem-report`, from the reporter's verified email, with the description, the diagnostics, facts the server knows (agent, role, workspace, plan, version, realm, the request id of this call) and the screenshots as attachments. No text from the reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the web app offers a GitHub issue instead. Any agent token may report. One agent may send 5 reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total). */
         post: operations["createProblemReport"];
         delete?: never;
         options?: never;
@@ -3500,7 +3500,7 @@ export interface paths {
         /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
         get: operations["listKBCollections"];
         put?: never;
-        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
+        /** @description Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
         post: operations["createKBCollection"];
         delete?: never;
         options?: never;
@@ -3572,7 +3572,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change, and an order that moves nothing leaves `content_version` as it is. After an order by hand, a new, moved, imported or restored item goes last. Any agent may set it, and a `send` agent token; a lower tier files an agent request. */
+        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change, and an order that moves nothing leaves `content_version` as it is. After an order by hand, a new, moved, imported or restored item goes last. Needs `kb_articles:update`. */
         put: operations["setKBOrder"];
         post?: never;
         delete?: never;
@@ -3591,7 +3591,7 @@ export interface paths {
         /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
-        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. At most 64 KiB of JSON. */
         post: operations["createKBArticle"];
         delete?: never;
         options?: never;
@@ -3629,11 +3629,11 @@ export interface paths {
         get: operations["getKBArticle"];
         put?: never;
         post?: never;
-        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days. Send the `updated_at` you read (409 `changed_elsewhere`). A `send` agent token may delete; a lower tier files an agent request. */
+        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days. Send the `updated_at` you read (409 `changed_elsewhere`). */
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -3685,7 +3685,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The versions of an article, newest first, in pages: who made each, through which agent token or approved agent request, and the title, slug, text, collection and status it had. An article in the trash keeps its history. Versions are never changed or removed while the article exists. */
+        /** @description The versions of an article, newest first, in pages: who made each, through which agent token, and the title, slug, text, collection and status it had. An article in the trash keeps its history. Versions are never changed or removed while the article exists. */
         get: operations["listKBArticleVersions"];
         put?: never;
         post?: never;
@@ -3724,7 +3724,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Store an image in the knowledge base's media library. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type, at most 8,192 pixels on a side and 40 megapixels (400 otherwise). Location, camera data, XMP and comments are removed without touching the pixels (a JPEG keeps its orientation), and the server makes a thumbnail. The same bytes uploaded twice give the same item (and take an item in the library's trash out of it). Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. An image no article ever saved is deleted 30 days after its last upload unless it is kept: `keep=true` is for an upload made in the library. A workspace holds at most 10,000 items, its trash included (409 `kb_limit`). A `send` agent token may upload; a lower tier gets 403 `files_need_approval`. */
+        /** @description Store an image in the knowledge base's media library. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type, at most 8,192 pixels on a side and 40 megapixels (400 otherwise). Location, camera data, XMP and comments are removed without touching the pixels (a JPEG keeps its orientation), and the server makes a thumbnail. The same bytes uploaded twice give the same item (and take an item in the library's trash out of it). Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. An image no article ever saved is deleted 30 days after its last upload unless it is kept: `keep=true` is for an upload made in the library. A workspace holds at most 10,000 items, its trash included (409 `kb_limit`). */
         post: operations["uploadKBImage"];
         delete?: never;
         options?: never;
@@ -3795,7 +3795,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Move to the trash up to 500 items no live article uses, added before `before` (when the person opened the page, so nothing uploaded since is swept along), leaving kept items unless `include_kept`. Call again with the answer's `batch_id` while `more` is true; one Undo (`POST /api/v1/kb/media/restore` with that `batch_id`) restores everything moved. A token below `send` gets an agent request naming the ids (at most 100 a request), so a person approves exactly what will move. */
+        /** @description Move to the trash up to 500 items no live article uses, added before `before` (when the person opened the page, so nothing uploaded since is swept along), leaving kept items unless `include_kept`. Call again with the answer's `batch_id` while `more` is true; one Undo (`POST /api/v1/kb/media/restore` with that `batch_id`) restores everything moved. */
         post: operations["trashUnusedKBMedia"];
         delete?: never;
         options?: never;
@@ -3829,7 +3829,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`. */
         post: operations["purgeKBMedia"];
         delete?: never;
         options?: never;
@@ -3922,10 +3922,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's video uploads in progress, the oldest first: who started each, the bytes received and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth); the person who started one, or an admin, cancels it to make room. */
+        /** @description The workspace's video uploads in progress, the oldest first: who started each, the bytes received and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth); the person who started one, or someone with `kb_media:purge`, cancels it to make room. */
         get: operations["listKBMediaUploads"];
         put?: never;
-        /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. A token below `send` gets 403 `files_need_approval`. */
+        /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. */
         post: operations["createKBMediaUpload"];
         delete?: never;
         options?: never;
@@ -3947,7 +3947,7 @@ export interface paths {
         /** @description Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`. A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`, the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at a time; a part must arrive within 120 seconds. */
         put: operations["putKBMediaUploadPart"];
         post?: never;
-        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). Only the person who started it, or an admin, can (403 `not_your_upload`). A token below `send` gets 403 `files_need_approval`. */
+        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). Only the person who started it, or someone with `kb_media:purge`, can (403 `not_your_upload`). */
         delete: operations["cancelKBMediaUpload"];
         options?: never;
         head?: never;
@@ -4059,7 +4059,7 @@ export interface paths {
         };
         /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Admins only, and an `admin` agent token. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -4132,7 +4132,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in progress. Every agent token's call becomes an agent request; the person who approves it sends. */
+        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in progress. */
         post: operations["retryFix"];
         delete?: never;
         options?: never;
@@ -4211,7 +4211,7 @@ export interface paths {
         /** @description Every fix of the conversation, the latest attempt first. */
         get: operations["listConversationFixes"];
         put?: never;
-        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
+        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). */
         post: operations["sendFix"];
         delete?: never;
         options?: never;
@@ -4264,7 +4264,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Starts installing the Colliedesk GitHub App: answers the address the admin's browser opens (choose "Only select repositories"). GitHub sends the browser back to `/api/v1/autofix/github/callback`, which checks with the admin's own authorization that the installation is theirs before it joins the workspace. An installation that reaches every repository is stored but blocked until narrowed. 503 `autofix_unavailable` while the server's GitHub App is not set up. Every agent token's call becomes an agent request; the person who approves it gets the address. */
+        /** @description Starts installing the Colliedesk GitHub App: answers the address the admin's browser opens (choose "Only select repositories"). GitHub sends the browser back to `/api/v1/autofix/github/callback`, which checks with the admin's own authorization that the installation is theirs before it joins the workspace. An installation that reaches every repository is stored but blocked until narrowed. 503 `autofix_unavailable` while the server's GitHub App is not set up. */
         post: operations["connectGitHub"];
         delete?: never;
         options?: never;
@@ -4284,7 +4284,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub, so every agent token's call becomes an agent request. */
+        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub. */
         delete: operations["disconnectGitHub"];
         options?: never;
         head?: never;
@@ -4319,7 +4319,7 @@ export interface paths {
         };
         /**
          * GitHub's redirect after installing the App or authorizing a fix
-         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization, and they must administer every repository the installation reaches (an organization owner does; a member does not), else `installation_not_yours`. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: only an admin connects GitHub), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub). The reasons: `signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is never echoed.
+         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization, and they must administer every repository the installation reaches (an organization owner does; a member does not), else `installation_not_yours`. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: connecting GitHub needs `autofix_settings:update`), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub). The reasons: `signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is never echoed.
          */
         get: operations["finishGitHubAuthorization"];
         put?: never;
@@ -4377,7 +4377,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Lets a fix on this repository carry internal notes the sender picks (never one an agent token wrote). Notes then leave the workspace for the coding agent, so every agent token's call becomes an agent request. */
+        /** @description Lets a fix on this repository carry internal notes the sender picks (never one an agent token wrote). Notes then leave the workspace for the coding agent. */
         put: operations["includeNotesInFixes"];
         post?: never;
         /** @description Stops internal notes from going with fixes on this repository (the default). */
@@ -4397,7 +4397,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. An approved request records the consent in the approver's name: the approver agrees to the text the request names. */
+        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. An approved request records the consent in the approver's name: the approver agrees to the text the request names. */
         put: operations["enableFixConnector"];
         post?: never;
         /** @description Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes already sent go on. The consent on record and Cursor's key stay until removed. */
@@ -4434,7 +4434,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). A token without `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed as an agent request, because a request keeps its body. Cursor tries the key first (`GET /v1/me`): 400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer, with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS. */
+        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). It needs `autofix_settings:manage_credentials`. Cursor tries the key first (`GET /v1/me`): 400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer, with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS. */
         put: operations["setCursorKey"];
         post?: never;
         /** @description Removes the Cursor key; Cursor cannot take new fixes until a key is set again. */
@@ -4470,7 +4470,7 @@ export interface paths {
         };
         /** @description The brand of the public help center: logo, favicon, website and contact links, colors and fonts, with the contrast `checks` of the colors it shows. A null color or font is the default. */
         get: operations["getHelpCenterTheme"];
-        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
+        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. It needs `help_center:update` and `kb_articles:publish`; without either nothing changes (403 `permission_missing`). Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
         put: operations["putHelpCenterTheme"];
         post?: never;
         delete?: never;
@@ -4488,7 +4488,7 @@ export interface paths {
         };
         /** @description The verification tokens of the help center: the content of the `google-site-verification` (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is null until set. Each is served as a `<meta>` tag in the head of every page of this workspace's help center, on its own host or custom domain, and never on the app or another workspace. */
         get: operations["getHelpCenterSearchConsole"];
-        /** @description Set or remove the verification tokens. A field left out stays as it is; null or an empty string removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to 100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422 `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so a save changes `content_version`. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. */
+        /** @description Set or remove the verification tokens. A field left out stays as it is; null or an empty string removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to 100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422 `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so a save changes `content_version`. It needs `help_center:update` and `kb_articles:publish`; without either nothing changes (403 `permission_missing`). */
         put: operations["putHelpCenterSearchConsole"];
         post?: never;
         delete?: never;
@@ -4555,12 +4555,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so every tier may read it, and it is never exported. On a server with billing, a workspace on its trial may set and verify a domain, but the help center serves on it only once the workspace is paid (`awaiting_payment`). */
+        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so `help_center:read` reads it, and it is never exported. On a server with billing, a workspace on its trial may set and verify a domain, but the help center serves on it only once the workspace is paid (`awaiting_payment`). */
         get: operations["getHelpCenterDomain"];
-        /** @description Set or replace the help center's custom domain. Admins only, and an `admin` agent token. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
+        /** @description Set or replace the help center's custom domain. Needs `help_center:update` and `kb_articles:publish`. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
         put: operations["putHelpCenterDomain"];
         post?: never;
-        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Admins only, and an `admin` agent token; removing when there is none changes nothing. */
+        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Needs `help_center:update` and `kb_articles:publish`; removing when there is none changes nothing. */
         delete: operations["deleteHelpCenterDomain"];
         options?: never;
         head?: never;
@@ -4576,7 +4576,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent token. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Needs `help_center:update` and `kb_articles:publish`. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
         post: operations["checkHelpCenterDomain"];
         delete?: never;
         options?: never;
@@ -4854,7 +4854,7 @@ export interface components {
                 /** @enum {string} */
                 mask: "phone" | "id_number" | "account_number" | "hidden";
             }[];
-            /** @description Actions AI may take on its own before readiness shows it is ready (an admin's call); needs gate_override_reason. Adding one needs the approval raising AI needs. */
+            /** @description Actions AI may take on its own before readiness shows it is ready needs gate_override_reason. Adding one needs ai_settings:update, like raising a level. */
             gate_override?: ("create" | "attach" | "ignore")[];
             /** @description Why the gates in gate_override were opened by hand. */
             gate_override_reason?: string;
@@ -5792,7 +5792,7 @@ export interface components {
             resets_at: string;
         };
         Results: {
-            /** @description The caller's weekly email (admins only; null for agents). */
+            /** @description The caller's weekly email (people with results:share; null for others). */
             weekly_email: null | {
                 subscribed: boolean;
                 /** @description False when the server has no outgoing mail settings. */
@@ -5819,7 +5819,7 @@ export interface components {
                 "30d"?: components["schemas"]["ResultsHoursSaved"];
                 "7d"?: components["schemas"]["ResultsHoursSaved"];
             };
-            /** @description Why the last compute failed (admins only; null for agents and when it worked). */
+            /** @description Why the last compute failed (callers with results:share; null for others and when it worked). */
             error: null | {
                 message: string;
                 /** Format: date-time */
@@ -6851,7 +6851,7 @@ export interface components {
             kind: "baseline" | "create" | "edit" | "delete" | "restore" | "undelete";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
-            /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
+            /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             /** @description The agent token that made or asked for the change; null when a person made it in the web app. */
             token: null | {
@@ -6861,7 +6861,7 @@ export interface components {
             };
             /**
              * Format: uuid
-             * @description The approved agent request that made the change.
+             * @description The approved agent request that made the change, before agent requests were removed; null for every new change.
              */
             agent_request_id: string | null;
             /** Format: date-time */
@@ -6968,7 +6968,7 @@ export interface components {
             kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
-            /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
+            /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             /** @description The agent token that made or asked for the change; null when a person made it in the web app. */
             token: null | {
@@ -6978,7 +6978,7 @@ export interface components {
             };
             /**
              * Format: uuid
-             * @description The approved agent request that made the change.
+             * @description The approved agent request that made the change, before agent requests were removed; null for every new change.
              */
             agent_request_id: string | null;
             /** Format: date-time */
@@ -7745,7 +7745,7 @@ export interface components {
                 assignee_id?: string | null;
                 add_tag_ids?: string[];
                 remove_tag_ids?: string[];
-                /** @description false sets the status without telling the customers (the channels' status notices); a token below the send tier asks a person first when one would be told. true by default. */
+                /** @description false sets the status without telling the customers (the channels' status notices); a caller without messages:send is refused when one would be told. true by default. */
                 notify?: boolean;
             };
         };
@@ -7905,7 +7905,7 @@ export interface components {
             agent_token: null | components["schemas"]["MessageAgentToken"];
             /**
              * Format: uuid
-             * @description The agent request whose approval sent this message (a reply draft): `agent_token` drafted it, `author_agent_id` approved and sent it. Null otherwise.
+             * @description The agent request whose approval sent this message, before agent requests were removed: `agent_token` drafted it, `author_agent_id` approved and sent it. Null otherwise and for every new message.
              */
             agent_request_id: string | null;
             /** @enum {string} */
@@ -9603,7 +9603,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
+        /** @description Permission or CSRF check failed. A caller without the operation's permission gets error code `permission_missing` with `missing_permissions`, `missing_from` (`token` or `person`) and `ask` (who in the workspace holds them); an agent token on an action only a person makes gets `person_only` with `where`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -9630,7 +9630,7 @@ export interface components {
         WebFormPressKey: string;
         /** @description `operator`: the request is an operator request, decided with an operator's session (the operator console sends it). */
         OperatorRealm: "operator";
-        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
         CreateIdempotencyKey: string;
     };
     requestBodies: never;
@@ -10447,7 +10447,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10524,7 +10524,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10608,7 +10608,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10644,7 +10644,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10681,7 +10681,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10732,7 +10732,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10755,7 +10755,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10870,7 +10870,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10936,7 +10936,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -10990,7 +10990,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11035,7 +11035,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11104,7 +11104,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11270,7 +11270,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -11323,7 +11323,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11510,7 +11510,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11745,7 +11745,7 @@ export interface operations {
                      * @description The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation's ready, undecided draft.
                      */
                     ai_draft_id?: string;
-                    /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
+                    /** @description Removed: answers 400. To leave a reply for a person to edit, send or discard, post it to `POST /api/v1/conversations/{id}/reply-drafts`. */
                     draft?: boolean;
                 };
                 "multipart/form-data": {
@@ -11871,7 +11871,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -12189,7 +12189,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12224,7 +12224,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12327,7 +12327,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12395,7 +12395,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12597,7 +12597,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12816,7 +12816,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -13063,7 +13063,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -13581,7 +13581,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -13810,7 +13810,7 @@ export interface operations {
             402: components["responses"]["PlanLimitReached"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The change would leave the workspace without an active admin (error code `last_admin`). Make another agent an admin first. */
+            /** @description The change would leave the workspace without an active member holding the Admin role (error code `last_admin`). Give the Admin role to another member first. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14152,7 +14152,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14275,7 +14275,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14444,7 +14444,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14738,7 +14738,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14956,7 +14956,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -15277,7 +15277,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -15890,7 +15890,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -16772,7 +16772,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -16896,7 +16896,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -16927,7 +16927,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -16958,7 +16958,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -17006,7 +17006,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -17110,7 +17110,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -17340,7 +17340,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -19225,7 +19225,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
-            /** @description Error code `consent_required`. consent_version is missing or empty, also in an approved agent request; nothing changed. */
+            /** @description Error code `consent_required`. consent_version is missing or empty; nothing changed. */
             422: {
                 headers: {
                     [name: string]: unknown;

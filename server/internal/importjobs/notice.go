@@ -1,10 +1,10 @@
 package importjobs
 
 import (
-	"github.com/colliedesk/colliedesk/server/internal/store"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"strings"
 	"time"
 

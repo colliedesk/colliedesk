@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-
 // CreateMigrationRequest records that an admin asked Colliedesk to move the workspace's Freshdesk data.
 func (s *Store) CreateMigrationRequest(ctx context.Context, workspaceID, agentID, freshdeskAddress, times string, requestedAt time.Time) error {
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
@@ -21,4 +20,3 @@ func (s *Store) CreateMigrationRequest(ctx context.Context, workspaceID, agentID
 	}
 	return nil
 }
-

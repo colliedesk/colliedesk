@@ -63,25 +63,25 @@ type DraftWarning struct {
 
 // Draft is one AI reply draft.
 type Draft struct {
-	ID                 string         `json:"id"`
-	ConversationID     string         `json:"conversation_id"`
-	Status             string         `json:"status"`
+	ID             string `json:"id"`
+	ConversationID string `json:"conversation_id"`
+	Status         string `json:"status"`
 	// Source is ai for a draft the provider wrote, written for words someone (usually an agent token)
 	// left for a person to send; CC and WrittenBy only on a written one.
-	Source    string          `json:"source"`
-	CC        []string        `json:"cc"`
-	WrittenBy *DraftWrittenBy `json:"written_by"`
-	ErrorCode          *string        `json:"error_code"`
-	Prompt             string         `json:"prompt"`
-	Text               *string        `json:"text"`
-	MissingInfo        *string        `json:"missing_info"`
-	Sources            []DraftSource  `json:"sources"`
-	Warnings           []DraftWarning `json:"warnings"`
-	Model              *string        `json:"model"`
-	Outcome            *string        `json:"outcome"`
-	Similarity         *float64       `json:"similarity"`
-	SentMessageID      *string        `json:"sent_message_id"`
-	RequestedByAgentID *string        `json:"requested_by_agent_id"`
+	Source             string          `json:"source"`
+	CC                 []string        `json:"cc"`
+	WrittenBy          *DraftWrittenBy `json:"written_by"`
+	ErrorCode          *string         `json:"error_code"`
+	Prompt             string          `json:"prompt"`
+	Text               *string         `json:"text"`
+	MissingInfo        *string         `json:"missing_info"`
+	Sources            []DraftSource   `json:"sources"`
+	Warnings           []DraftWarning  `json:"warnings"`
+	Model              *string         `json:"model"`
+	Outcome            *string         `json:"outcome"`
+	Similarity         *float64        `json:"similarity"`
+	SentMessageID      *string         `json:"sent_message_id"`
+	RequestedByAgentID *string         `json:"requested_by_agent_id"`
 	// Automatic: written by itself for a customer's message (AnswersMessageID), for the whole team.
 	// ReplyNeeded is the model's view that the message wants a reply; null for a person's draft.
 	Automatic        bool       `json:"automatic"`

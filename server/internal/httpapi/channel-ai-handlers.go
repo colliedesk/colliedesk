@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -123,48 +122,6 @@ func writeChannelAIError(response http.ResponseWriter, err error) {
 	default:
 		writeAIError(response, err)
 	}
-}
-
-// summarizeChannelAIRequest is what a person reads before approving a channel's AI level: the
-// channel, the feature, the scope, from what to what, and whether intake's options change.
-func (a *API) summarizeChannelAIRequest(ctx context.Context, request *http.Request, who auth.Principal, body json.RawMessage) string {
-	var call struct {
-		Scope   string          `json:"scope"`
-		Level   *string         `json:"level"`
-		Options json.RawMessage `json:"options"`
-	}
-	_ = json.Unmarshal(body, &call)
-	slot := request.PathValue("slot")
-	ref, _, err := a.channelRef(ctx, who.Workspace.ID, request.PathValue("id"))
-	if err != nil {
-		return ""
-	}
-	before := "(unknown)"
-	if levels, err := a.ai.ChannelAI(ctx, who.Workspace.ID, ref); err == nil {
-		for _, scope := range levels.Scopes {
-			for _, item := range scope.Slots {
-				if scope.Scope == call.Scope && item.Slot == slot {
-					before = item.EffectiveLevel
-					if item.Level == nil {
-						before += " (following " + item.Source + ")"
-					}
-				}
-			}
-		}
-	}
-	after := "follow the channel and the workspace"
-	if call.Level != nil {
-		after = *call.Level
-	}
-	where := ref.Name
-	if call.Scope != "" {
-		where += " · " + call.Scope
-	}
-	summary := "Set AI " + slot + " on " + where + ": " + before + " → " + after
-	if trimmed := strings.TrimSpace(string(call.Options)); trimmed != "" && trimmed != "null" {
-		summary += "; intake options " + trimmed
-	}
-	return summary
 }
 
 func (a *API) setAISourceConsent(response http.ResponseWriter, request *http.Request) {

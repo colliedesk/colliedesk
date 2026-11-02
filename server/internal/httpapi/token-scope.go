@@ -51,7 +51,7 @@ func personOnlyNeeding(permission, why string) TokenAccess {
 }
 
 // Operator console rows: an operator token holds the permission, or every token's call is an operator
-// request a person approves (alwaysAsk).
+// request an operator approves (alwaysAsk).
 func grant(permission string) TokenAccess {
 	return TokenAccess{Tier: auth.ScopeOperator, Permission: permission}
 }
@@ -169,7 +169,7 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/tags":                                           need(auth.PermTagsRead),
 	"GET /api/v1/results":                                        need(auth.PermResultsRead),
 	"GET /api/v1/results/share-link":                             need(auth.PermResultsShare),
-	// A share link puts the numbers outside sign-in: data leaving, so a person approves every token's call.
+	// A share link puts the numbers outside sign-in: data leaving, so it is a permission of its own.
 	"POST /api/v1/results/share-link":            need(auth.PermResultsShare),
 	"DELETE /api/v1/results/share-link":          need(auth.PermResultsShare),
 	"POST /api/v1/results/shared":                notForPeople,
@@ -231,13 +231,12 @@ var routeAccess = map[string]TokenAccess{
 	"PATCH /api/v1/channels/{id}":            need(auth.PermChannelsUpdate),
 	"POST /api/v1/channels/{id}/check":       need(auth.PermChannelsUpdate),
 	"POST /api/v1/channels/{id}/held/replay": need(auth.PermChannelsUpdate),
-	// A channel's secret is a credential route (credentialRoutes): an admin token stores it, a lower one
-	// is refused, so it never waits in a request. Removing a channel is what DELETE /channels/email
-	// already is: a person approves every token's call. Discarding held messages cannot be undone.
+	// A channel's secret needs manage_credentials, a permission apart from changing the channel.
+	// Discarding held messages cannot be undone.
 	"PUT /api/v1/channels/{id}/credentials":   need(auth.PermChannelsManageCredentials),
 	"DELETE /api/v1/channels/{id}":            need(auth.PermChannelsManageCredentials),
 	"POST /api/v1/channels/{id}/held/discard": need(auth.PermChannelsUpdate),
-	// One email channel of several: the same tiers as the routes of the default one.
+	// One email channel of several: the same permissions as the routes of the default one.
 	"GET /api/v1/channels/{id}/email": need(auth.PermChannelsRead),
 	// The code and link Gmail sent to the channel: read like the channel's settings; the email itself is
 	// already a conversation every reader of the inbox sees.
@@ -284,17 +283,16 @@ var routeAccess = map[string]TokenAccess{
 	"PUT /api/v1/conversation-number-series/{series}": need(auth.PermWorkspaceUpdate),
 	"GET /api/v1/response-targets":                    need(auth.PermConversationsRead),
 	"PUT /api/v1/response-targets":                    need(auth.PermWorkspaceUpdate),
-	// Connecting Gmail grants Colliedesk a sending identity (and the consent address is for a person's
-	// browser); disconnecting changes the address customers get replies from.
+	// Connecting Gmail grants Colliedesk a sending identity; disconnecting changes the address customers
+	// get replies from. Both are credentials.
 	"POST " + gmailPath:   need(auth.PermChannelsManageCredentials),
 	"DELETE " + gmailPath: need(auth.PermChannelsManageCredentials),
 	// Microsoft 365 the same way: the sign-in address is for a person's browser.
 	"POST " + microsoftPath:   need(auth.PermChannelsManageCredentials),
 	"DELETE " + microsoftPath: need(auth.PermChannelsManageCredentials),
 
-	// Imports read and write the whole workspace: admin. An undo deletes what an import brought in, so
-	// every token asks a person. The two routes that take a Freshdesk key are refused below admin
-	// (credentialRoutes) rather than filed: an agent request keeps its body.
+	// Imports read and write the whole workspace. An undo deletes what an import brought in, so it is a
+	// permission of its own; the two routes that take a Freshdesk key need manage_credentials.
 	"GET /api/v1/imports":              need(auth.PermImportsRead),
 	"POST /api/v1/imports":             need(auth.PermImportsManageCredentials),
 	"GET /api/v1/imports/{id}":         need(auth.PermImportsRead),
@@ -308,9 +306,8 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/imports/{id}/people":                      need(auth.PermImportsRead),
 	"PUT /api/v1/imports/{id}/people/{externalId}/link":    need(auth.PermImportsRun),
 	"DELETE /api/v1/imports/{id}/people/{externalId}/link": need(auth.PermImportsRun),
-	// AI settings show no key, so reading them is read. Providers are admin; the three routes that carry
-	// a provider key (add, list its models, new key) are credential routes. Setting a feature decides whether ticket data leaves for a
-	// provider, so every token's call waits for a person.
+	// AI settings show no key, so reading them is read. The routes that carry a provider key need
+	// manage_credentials; setting a feature decides whether ticket data leaves for a provider.
 	"GET /api/v1/ai":                       need(auth.PermAISettingsRead),
 	"POST /api/v1/ai/providers":            need(auth.PermAISettingsManageCredentials),
 	"POST /api/v1/ai/models":               need(auth.PermAISettingsManageCredentials),
@@ -319,16 +316,15 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/ai/providers/{id}/check": need(auth.PermAISettingsUpdate),
 	"DELETE /api/v1/ai/providers/{id}":     need(auth.PermAISettingsUpdate),
 	"PUT /api/v1/ai/slots/{slot}":          need(auth.PermAISettingsUpdate),
-	// A channel's AI level: lowering it is ai_settings:update; raising it (or loosening intake's
-	// options) lets AI do more by itself, so the handler files it for a person whatever the token holds.
+	// A channel's AI level: raising it as well as lowering it needs ai_settings:update.
 	"GET /api/v1/channels/{id}/ai": need(auth.PermChannelsRead),
 	"PUT " + channelAIRoute:        byHandler(auth.PermAISettingsUpdate),
 	// Agreeing that intake may send another kind of data (images, a contact's profile) is data
 	// leaving, like turning a feature on; taking it back only lowers.
 	"PUT /api/v1/ai/source-consents/{class}":    need(auth.PermAISettingsUpdate),
 	"DELETE /api/v1/ai/source-consents/{class}": need(auth.PermAISettingsUpdate),
-	// Readiness says whether AI may act on its own; recording an evaluation can open a gate, so a token's
-	// record waits for a person like any raise.
+	// Readiness says whether AI may act on its own; recording an evaluation can open a gate, so it needs
+	// ai_settings:update like a raise.
 	"GET /api/v1/channels/{id}/ai/intake/readiness":    need(auth.PermChannelsRead),
 	"POST /api/v1/channels/{id}/ai/intake/evaluations": need(auth.PermAISettingsUpdate),
 	"GET /api/v1/channels/{id}/ai/intake/evaluations":  need(auth.PermChannelsRead),
@@ -351,8 +347,8 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/conversations/{id}/messages/move": need(auth.PermConversationsUpdate),
 	"GET /api/v1/conversations/{id}/message-moves":  need(auth.PermConversationsRead),
 	"POST /api/v1/message-moves/{id}/undo":          need(auth.PermConversationsUpdate),
-	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
-	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
+	// Usage shows what the workspace spent, like billing. The automatic limits only lower or raise how
+	// much automatic work runs; the monthly allowance still bounds the money.
 	"GET /api/v1/ai/usage":      need(auth.PermBillingRead),
 	"GET /api/v1/ai/chat/usage": need(auth.PermBillingRead),
 	// A chat's transcript is an end user's messages, read like a conversation's; deleting one is for good.
@@ -362,8 +358,7 @@ var routeAccess = map[string]TokenAccess{
 	// A trial answer costs money and reaches no customer, like a draft.
 	"POST /api/v1/ai/chat/preview":    need(auth.PermAIAssistCreate),
 	"PUT /api/v1/ai/automatic-limits": need(auth.PermAISettingsUpdate),
-	// An AI draft never reaches a customer: a person edits and sends it, like a note, so asking for one
-	// and discarding one are draft; reading them is read.
+	// An AI draft never reaches a customer: a person edits and sends it, like a note.
 	"POST /api/v1/conversations/{id}/ai-drafts":                   need(auth.PermAIAssistCreate),
 	"GET /api/v1/conversations/{id}/ai-drafts":                    need(auth.PermAIAssistRead),
 	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":          need(auth.PermAIAssistRead),
@@ -381,9 +376,9 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/autofix/fixes":            need(auth.PermAutofixRead),
 	"GET /api/v1/autofix/fixes/{id}":       need(auth.PermAutofixRead),
 	"GET /api/v1/conversations/{id}/fixes": need(auth.PermAutofixRead),
-	// Autofix settings: reading them shows no key. Changing them is admin; installing the App answers a
-	// one-time address, removing it uninstalls the App on the customer's GitHub, and letting notes go
-	// with fixes sends internal notes out, so a person approves those three.
+	// Autofix settings: reading them shows no key. Installing the App answers a one-time address,
+	// removing it uninstalls the App on the customer's GitHub, and letting notes go with fixes sends
+	// internal notes out.
 	"GET /api/v1/autofix/settings":                               need(auth.PermAutofixSettingsRead),
 	"GET /api/v1/autofix/github/installations/{id}/repositories": need(auth.PermAutofixSettingsRead),
 	"POST /api/v1/autofix/github/installations":                  need(auth.PermAutofixSettingsUpdate),
@@ -394,8 +389,7 @@ var routeAccess = map[string]TokenAccess{
 	"PUT /api/v1/autofix/repos/{id}/include-notes":               need(auth.PermAutofixSettingsUpdate),
 	"DELETE /api/v1/autofix/repos/{id}/include-notes":            need(auth.PermAutofixSettingsUpdate),
 	// Autofix fixes: a preview changes nothing. Sending (and retrying) takes ticket data out to a coding
-	// agent as the person who approves, after their GitHub confirmation, so every token's call waits for
-	// a person, who gets the confirmation address. A person's changes to a fix stay in Colliedesk, except
+	// agent after the caller's GitHub confirmation. A person's changes to a fix stay in Colliedesk, except
 	// that a cancel closes the fix's issue.
 	"POST /api/v1/conversations/{id}/fixes/preview":  need(auth.PermAutofixRead),
 	"POST /api/v1/conversations/{id}/fixes":          need(auth.PermAutofixSend),
@@ -405,9 +399,8 @@ var routeAccess = map[string]TokenAccess{
 	"DELETE /api/v1/autofix/fixes/{id}/deployed":     need(auth.PermAutofixUpdate),
 	"PUT /api/v1/autofix/fixes/{id}/pull-request":    need(auth.PermAutofixUpdate),
 	"DELETE /api/v1/autofix/fixes/{id}/pull-request": need(auth.PermAutofixUpdate),
-	// Turning a coding agent on decides that ticket data leaves for that vendor, with the admin's
-	// consent on record, so every token's call waits for a person (like PUT /api/v1/ai/slots/{slot}).
-	// Turning it off and removing Cursor's key only stop new fixes: admin. A check reads what the
+	// Turning a coding agent on decides that ticket data leaves for that vendor, with the caller's
+	// consent on record. Turning it off and removing Cursor's key only stop new fixes. A check reads what the
 	// settings show and tries the key, changing nothing but its result. Setting Cursor's key carries
 	// the key, a credential route.
 	"PUT /api/v1/autofix/connectors/{kind}":            need(auth.PermAutofixSettingsUpdate),

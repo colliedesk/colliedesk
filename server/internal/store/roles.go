@@ -98,7 +98,9 @@ type roleRecord struct {
 	UpdatedAt   time.Time
 }
 
-func (r roleRecord) ref() domain.RoleRef { return domain.RoleRef{ID: r.ID, Name: r.Name, System: r.System} }
+func (r roleRecord) ref() domain.RoleRef {
+	return domain.RoleRef{ID: r.ID, Name: r.Name, System: r.System}
+}
 
 func (r roleRecord) isAdmin() bool { return r.System != nil && *r.System == domain.SystemRoleAdmin }
 

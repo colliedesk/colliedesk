@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 const tokenUsage = "usage: collie token create --workspace <slug> --email <agent email> (--role <role name> | --permission <resource:action>...) --label <text>"
@@ -30,12 +31,26 @@ func tokenCommand(ctx context.Context, service *auth.Service, args []string, out
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || *workspace == "" || *email == "" {
 		return errors.New(tokenUsage)
 	}
-	if *scope != "" {
+	switch *scope {
+	case "":
+		if *role == "" && permissions == nil {
+			return errors.New("give the token a role it follows (--role <name>) or permissions (--permission <resource:action>, repeat for more)")
+		}
+	case "read", "draft", "send", "admin":
 		if _, err := fmt.Fprintln(stderr, "--scope is deprecated: tiers were replaced by roles. Use --role <name> or --permission <resource:action>."); err != nil {
 			return err
 		}
+	default:
+		return fmt.Errorf("--scope %s is not a tier; --scope is deprecated: use --role <name> or --permission <resource:action>", *scope)
 	}
 	created, err := service.IssueAgentToken(ctx, *workspace, *email, auth.TokenRequest{Label: *label, RoleName: *role, Permissions: permissions, LegacyScope: *scope})
+	if errors.Is(err, domain.ErrRoleNotYours) {
+		name := *role
+		if *scope == "admin" {
+			name = "Admin"
+		}
+		return fmt.Errorf("%s does not hold the role %q; a token follows only a role its person holds", *email, name)
+	}
 	if err != nil {
 		return err
 	}

@@ -119,7 +119,7 @@ func (s *Store) UpdateAgent(ctx context.Context, workspaceID string, caller Call
 		// Links go first, before this transaction holds any other lock. A redeem in flight holds its link
 		// and then waits for the seat lock or the agent row, so taking those first would deadlock with it.
 		if update.Active != nil && !*update.Active {
-			if err := s.revokeUnusedLinks(ctx, tx, workspaceID, agentID, email, ""); err != nil {
+			if err := s.revokeUnusedLinks(ctx, tx, workspaceID, agentID, email); err != nil {
 				return domain.TeamMember{}, err
 			}
 		}
@@ -208,11 +208,10 @@ func (s *Store) deactivateAgent(ctx context.Context, tx pgx.Tx, workspaceID, age
 }
 
 // revokeUnusedLinks revokes the unused links of one person: the pairing links of agentID (when given)
-// and the invites sent to email. A ceiling limits it to invites with that role ceiling.
-func (s *Store) revokeUnusedLinks(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email, ceiling string) error {
-	if _, err := tx.Exec(ctx, `UPDATE pairing_links SET revoked_at=$5 WHERE workspace_id=$1 AND used_at IS NULL AND revoked_at IS NULL
-		AND (($2<>'' AND agent_id::text=$2) OR (kind='invite' AND email=lower($3)))
-		AND ($4='' OR role_ceiling=$4)`, workspaceID, agentID, email, ceiling, s.now()); err != nil {
+// and the invites sent to email.
+func (s *Store) revokeUnusedLinks(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email string) error {
+	if _, err := tx.Exec(ctx, `UPDATE pairing_links SET revoked_at=$4 WHERE workspace_id=$1 AND used_at IS NULL AND revoked_at IS NULL
+		AND (($2<>'' AND agent_id::text=$2) OR (kind='invite' AND email=lower($3)))`, workspaceID, agentID, email, s.now()); err != nil {
 		return fmt.Errorf("revoke links: %w", err)
 	}
 	return nil

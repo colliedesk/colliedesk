@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -301,20 +300,3 @@ func (a *API) getConversationIntake(response http.ResponseWriter, request *http.
 
 // scopeShape is a scope's name as types declare them.
 var scopeShape = regexp.MustCompile(`^[a-z_]{1,40}$`)
-
-// intakeSummary is what a person reads before approving a decision of a card. It names the card, not
-// what the customer wrote: the agent that filed it reads the summary back, and a customer's words reach
-// an agent only as untrusted content.
-func intakeSummary(card store.IntakeGathering, input intakeDecisionInput) string {
-	messages := fmt.Sprintf("%d messages", card.ItemCount)
-	if card.ItemCount == 1 {
-		messages = "1 message"
-	}
-	switch input.Action {
-	case intake.Create:
-		return "Open a conversation from intake card " + card.ID + " (" + messages + " from a customer)"
-	case intake.Attach:
-		return "Add intake card " + card.ID + " (" + messages + " from a customer) to conversation " + input.ConversationID
-	}
-	return "Set aside intake card " + card.ID + " (" + messages + " from a customer)"
-}
