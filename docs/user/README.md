@@ -28,7 +28,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Timezones](timezones.md)
 - [Sessions and devices](sessions.md)
 - [Connect an AI agent (MCP)](mcp.md)
-- [Agent requests and reply drafts](agent-requests.md)
+- [Agent requests (removed)](agent-requests.md)
 - [AI providers and features](ai.md)
 - [AI chat on the help center](ai-chat.md)
 - [Autofix: send a conversation to a coding agent](autofix.md)

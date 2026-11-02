@@ -276,7 +276,7 @@ Taking a word or a pattern out masks less, so it needs the approval raising AI n
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
 once an admin agreed to each: in **Settings → Built-in AI** under Chat intake (**Images customers sent**,
 **The customer's profile**, each a switch that gives or takes back the consent), or with
-`colliedesk_ai_source_consent_request` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+`colliedesk_ai_source_consent_set` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
 on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
 on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at
@@ -307,7 +307,7 @@ An admin may open an action by hand before its labels do (`gate_override` with a
 which needs the approval raising AI needs). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
 (each action's gate, labels, what it misses, what AI did on its own and how much people corrected, and what
 a month costs) and the MCP tool `colliedesk_channel_ai_intake_readiness_get`; evaluations are
-`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record_request`,
+`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record`,
 which always waits for a person, and `colliedesk_channel_ai_intake_evaluations_list`).
 
 Raising intake to **Auto** on a scope opens a dialog first: each action with whether it is ready ("ready ·
@@ -326,7 +326,7 @@ again") with **Turn Auto back on**, which asks with the same dialog.
 Intake can have a **fallback model**: another of its provider's models, tried once when its model
 times out, is busy, refuses for its rate, is gone, or answers what Colliedesk cannot read. A refused key
 or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
-with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set_request` (an empty string
+with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set` (an empty string
 removes it); Settings does not show it yet. The provider cannot
 drop a model intake uses this way. A new fallback model takes intake back to Suggest on every channel,
 as another model does.

@@ -246,8 +246,8 @@ they did before Gmail was connected (the server's SMTP relay). A reply that was 
 fails with a note and can be retried. **Use another Gmail account** replaces the connected account.
 Disconnecting the whole email channel also disconnects Gmail.
 
-Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect_request` and
-`colliedesk_gmail_disconnect_request` file a request, and the admin who approves it gets Google's
+Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect` and
+`colliedesk_gmail_disconnect` file a request, and the admin who approves it gets Google's
 page. On Colliedesk Cloud the request card shows the same note on Google data first. See
 [Agent requests](agent-requests.md).
 
@@ -312,8 +312,8 @@ retried.
 larger than 3 MB and it goes through Microsoft 365, the reply box warns you. If Microsoft refuses the
 reply, it is marked **Delivery failed** with the reason and keeps its files: remove a file and retry.
 
-Agents (AI) cannot connect or disconnect Microsoft 365 themselves: `colliedesk_microsoft_connect_request`
-and `colliedesk_microsoft_disconnect_request` file a request, and the admin who approves it gets
+Agents (AI) cannot connect or disconnect Microsoft 365 themselves: `colliedesk_microsoft_connect`
+and `colliedesk_microsoft_disconnect` file a request, and the admin who approves it gets
 Microsoft's sign-in page. See [Agent requests](agent-requests.md).
 
 On a server you run, Microsoft 365 sending needs your own app registration in Microsoft Entra. See

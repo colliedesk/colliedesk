@@ -75,7 +75,7 @@ In the web app:
 
 `GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
 adds or changes one (admins; an agent token asks a person first). MCP: `colliedesk_number_series_list`,
-`colliedesk_number_series_set_request`.
+`colliedesk_number_series_set`.
 
 Find a conversation by its code with `?ref=` on `GET /api/v1/conversations` (MCP `ref` of
 `colliedesk_inbox_search`): another case, spaces around it or more or fewer leading zeros match, a code of
