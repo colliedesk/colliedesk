@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { KnowledgeRoute } from './knowledge-page';
+import { PermissionsContext } from '../../lib/permissions-context';
 import type { KnowledgeSearch } from './knowledge-page';
 import { collection, collections, ids, json, me, refusal, serve, summary } from './kb.test.fixture';
 
@@ -232,4 +233,17 @@ test('the Knowledge page shows its title, not only to screen readers', async () 
   const title = await screen.findByRole('heading', { level: 1, name: 'Knowledge base' });
   expect(title).not.toHaveClass('sr-only');
   expect(title).toHaveClass('kb-page-title');
+});
+
+// A role that may read articles and nothing else is offered no way to make one, no Media tab, and the page
+// does not ask about the help center it may not read.
+test('a role that only reads articles sees them, with nothing to create and no Media tab', async () => {
+  const calls = serve(base);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><PermissionsContext.Provider value={['kb_articles:read']}><KnowledgeRoute search={{}} /></PermissionsContext.Provider></QueryClientProvider>);
+  await screen.findByRole('navigation', { name: 'Collections' });
+  expect(screen.queryByRole('link', { name: /New article/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New collection' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Media' })).not.toBeInTheDocument();
+  expect(calls.map((call) => call.path)).not.toContain('/api/v1/help-center');
 });

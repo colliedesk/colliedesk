@@ -73,7 +73,8 @@ export function TargetsRoute() {
   const billingShown = useBillingShown(isAdmin);
   const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: billingShown, importData: isAdmin, ai: true };
   const doc = useQuery({ queryKey: ['response-targets'], queryFn: responseTargetsApi.get });
-  const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list });
+  // Targets per channel need the channel list, which only a role that reads channels may ask for.
+  const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
   return <main className="settings-page panel">

@@ -1,3 +1,4 @@
+import { routePermissions } from './route-permissions';
 import type { z } from 'zod';
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
@@ -173,11 +174,59 @@ function noteFailure(path: string, init: RequestInit | undefined, response: Resp
 }
 
 // request is exported for the API calls that live in a lazy part of the app (features/contacts/contact-api.ts, saved-views.ts).
+// The session's permissions, from GET /api/v1/auth/me: a read they do not allow is not sent, so the server
+// never answers it with a 403. undefined until the session is known; null when there is none to go by.
+let held: ReadonlySet<string> | null | undefined;
+let waiting: Array<() => void> = [];
+const routeMatchers = routePermissions.map(([route, permission]) => [new RegExp(`^${route.replace(/\{[^}]+\}/g, '[^/]+')}$`), permission] as const);
+
+// knowPermissions records the session's permissions; null means there is no session to go by.
+export function knowPermissions(list: readonly string[] | null) {
+  held = list ? new Set(list) : null;
+  for (const go of waiting.splice(0)) go();
+}
+
+// forgetPermissions drops what is known of the session, as when it signs out (and between tests).
+export function forgetPermissions() {
+  held = undefined;
+  for (const go of waiting.splice(0)) go();
+}
+
+// sessionPermissions waits, briefly, for the session to be known: a page asks for its data while the app
+// asks who is signed in.
+async function sessionPermissions(): Promise<ReadonlySet<string> | null> {
+  if (held === undefined) await new Promise<void>((go) => { waiting.push(go); setTimeout(go, 3000); });
+  return held ?? null;
+}
+
+function permissionOf(path: string): string | undefined {
+  const route = path.split('?', 1)[0];
+  return routeMatchers.find(([matcher]) => matcher.test(route))?.[1];
+}
+
+function refuseUnheld(mine: ReadonlySet<string> | null, permission: string) {
+  if (mine && !mine.has(permission)) {
+    throw new PermissionError(`Your roles do not include ${permission}.`, { code: 'permission_missing', missing_permissions: [permission], missing_from: 'person' });
+  }
+}
+
 export async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+  // Only a read is skipped: a change goes to the server, which decides it and says why. A known session is
+  // checked at once, so a read goes out in the same tick as before.
+  const permission = (init?.method ?? 'GET').toUpperCase() === 'GET' ? permissionOf(path) : undefined;
+  if (permission) refuseUnheld(held === undefined ? await sessionPermissions() : held, permission);
+  const parsed = await send(path, schema, init);
+  if (path === '/api/v1/auth/me') knowPermissions((parsed as { permissions?: string[] }).permissions ?? null);
+  return parsed;
+}
+
+async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
   if (!response.ok) noteFailure(path, init, response);
+  // Signed out: there is no session to go by, so nothing waits for one.
+  if (response.status === 401 && path === '/api/v1/auth/me') knowPermissions(null);
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
@@ -309,8 +358,8 @@ export const api = {
   createRole: (value: RequestBody<'createRole'>, key: string) => request('/api/v1/roles', roleSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createRole'>(value) }),
   updateRole: (id: string, value: RequestBody<'updateRole'>) => request(`/api/v1/roles/${encodeURIComponent(id)}`, roleSchema, { method: 'PATCH', body: json<'updateRole'>(value) }),
   deleteRole: (id: string) => requestNoContent(`/api/v1/roles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  resetRole: (id: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/reset`, roleSchema, { method: 'POST' }),
-  restoreRole: (id: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/restore`, roleSchema, { method: 'POST' }),
+  // A press of Restore or Undo is named by its key, so a repeat of it restores once.
+  restoreRole: (id: string, key: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/restore`, roleSchema, { method: 'POST', headers: { 'Idempotency-Key': key } }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
   // A token follows one of the person's roles (role_id) or holds a fixed list of permissions, never both.
   createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>, key: string) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createAgentToken'>({ label, ...choice }) }),

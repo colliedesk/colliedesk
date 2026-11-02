@@ -6,6 +6,10 @@ const listWords = (words: string[]) => (words.length < 2 ? words.join('') : `${w
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
+  contactArea: 'this contact',
+  closedScreen: (area: string) => `Your roles do not let you open ${area}.`,
+  closedScreenAsk: (permission: string) => `It needs the permission ${permission}. Ask someone who can change roles to give you a role that holds it.`,
+  closedScreenOpen: 'You can open:',
   // The count beside Inbox is of this page; with more pages it is the range shown, never a total.
   inboxShown: (first: number, last: number) => `Conversations ${first} to ${last} on this page`,
   // Contacts and starting a conversation: the strings the inbox shows; the rest is in contact-messages.ts.
@@ -105,6 +109,7 @@ export const messages = {
   setStatus: 'Set status',
   assignTo: 'Assign to',
   assignToMe: 'Me',
+  anotherTeammate: 'Another teammate',
   resolve: 'Resolve',
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',

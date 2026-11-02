@@ -9,6 +9,7 @@ import { IntakeCard } from './intake-card';
 import { ReviewPage } from './review-page';
 import type { ReviewTab } from './review-page';
 import { reviewMessages as m } from './review-messages';
+import { useHolds } from '../../lib/permissions-context';
 
 // The lists a tab reads: AI dismissed is what AI set aside; Decided is every card that was decided.
 const listOf: Record<ReviewTab, Pick<IntakeListQuery, 'state' | 'decided_by'>> = {
@@ -28,7 +29,8 @@ interface ReviewRouteProps {
 export function ReviewRoute({ tab, filter, onChange }: ReviewRouteProps) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const team = useQuery({ queryKey: ['agents'], queryFn: api.agents });
+  // Names of teammates come from the team list, which only a role that reads the team may ask for.
+  const team = useQuery({ queryKey: ['agents'], queryFn: api.agents, enabled: useHolds()('team:read') });
   const summary = useIntakeSummary();
   const [channelID, scopeOf] = filter ? filter.split(':') : [undefined, undefined];
   const scope = scopeOf || undefined;

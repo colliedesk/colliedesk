@@ -14,6 +14,7 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { trackFilterChanges } from './filter-analytics';
 import { channelLabel, filterMessages as text } from './filter-messages';
 import { slaOf } from '../../lib/sla';
+import { useHolds } from '../../lib/permissions-context';
 
 // The Filter menu, the Sort menu and the chips of the active filters. They load on their own chunk, right
 // after the first screen (inbox-filters.tsx).
@@ -53,8 +54,11 @@ const has = (query: InboxQuery, key: InboxQueryKey) => query[key] !== undefined 
 // useChannelList reads the workspace's channels, removed ones too, once it is wanted: to offer their types
 // and choose one channel in the menu, and to name the chip of one. Through the app's query cache (Settings reloads it);
 // a part rendered without one reads them itself.
-function useChannelList(wanted: boolean): ChannelList | undefined {
+function useChannelList(asked: boolean): ChannelList | undefined {
   const client = useContext(QueryClientContext);
+  // The list of channels is read only by a role that may read channels (channels:read).
+  const reads = useHolds()('channels:read');
+  const wanted = asked && reads;
   const [list, setList] = useState<ChannelList>();
   useEffect(() => {
     if (!wanted) return undefined;
@@ -133,6 +137,8 @@ function FilterPanel(props: FilterPartProps & { opened: boolean }) {
     set(key, values.join(','));
   };
   const chosenTags = listOf(query, 'tag');
+  // A role that may not read the tag list is offered no tag to filter by.
+  const readsTags = useHolds()('tags:read');
   // A channel type is offered once the workspace has (or had) a channel of it; a problem report reaches only
   // the operator's workspace. A value chosen before stays listed, so it can be unticked.
   const offeredChannels = channels.filter((value) => origins.includes(value) || listOf(query, 'channel').includes(value) || list?.items.some((item) => item.type === value));
@@ -147,11 +153,11 @@ function FilterPanel(props: FilterPartProps & { opened: boolean }) {
         {agents.filter((agent) => !agent.deactivated_at && agent.id !== currentAgentId).map((agent) => check('assignee', agent.id, agent.display_name || agent.email))}
         {check('assignee', 'unassigned', messages.unassigned)}
       </fieldset>
-      <fieldset><legend>{text.tags}</legend>
+      {readsTags && <fieldset><legend>{text.tags}</legend>
         {tags.length === 0 ? <p className="filter-hint">{text.noTags}</p> : tags.map((tag) => check('tag', tag.id, tag.name))}
         {(chosenTags.length > 1 || query.tag_match === 'all') && <label className="check-row filter-match"><input type="checkbox" checked={query.tag_match === 'all'}
           onChange={(event) => set('tag_match', event.currentTarget.checked ? 'all' : undefined)} /><span>{text.matchAllTags}</span></label>}
-      </fieldset>
+      </fieldset>}
       {/* Offered once a listed conversation has targets (they are on), or while the filter is set. */}
       {(listOf(query, 'sla').length > 0 || props.conversations?.some((item) => slaOf(item))) && <fieldset><legend>{text.targets}</legend>
         {check('sla', 'overdue', text.targetStates.overdue)}{check('sla', 'due_soon', text.targetStates.due_soon)}</fieldset>}

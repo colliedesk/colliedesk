@@ -8,6 +8,7 @@ import { json, serve, summary } from '../kb/kb.test.fixture';
 import { ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { ReplyComposer, replyPickersPart } from './reply-composer';
+import { PermissionsContext } from '../../lib/permissions-context';
 
 // The lists under the box come from their own chunk, which the composer loads when it mounts. These tests
 // start with it there, as a person finds it a moment after opening a conversation; the moment before is in
@@ -1114,4 +1115,18 @@ test('taking over another tab\'s draft keeps the key of the send it has in fligh
   act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: sending, storageArea: window.localStorage })); });
   expect(screen.getByLabelText('Message body')).toHaveValue('From tab A');
   expect(keptDraft('ws-1:agent-1:conv-22')).toMatchObject({ body: 'From tab A', sendKey: 'tab-a-key' });
+});
+
+// A role that may write notes but not to customers, and reads no saved replies or articles, is offered a
+// note and nothing it could not use.
+test('the box offers only what the role holds: a note without Reply, no saved replies, no articles', () => {
+  render(<PermissionsContext.Provider value={['conversations:read', 'messages:read', 'messages:note']}><ReplyComposer /></PermissionsContext.Provider>);
+  expect(screen.queryByRole('button', { name: /^Reply/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Saved replies|Insert saved reply/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Articles/ })).not.toBeInTheDocument();
+  fireEvent.keyDown(document.body, { key: 'r' });
+  expect(screen.getByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
+  fireEvent.keyDown(document.body, { key: '/' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

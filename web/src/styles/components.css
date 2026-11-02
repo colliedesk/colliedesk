@@ -1080,3 +1080,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .target-met { color: var(--ok); }
 .target-quiet { color: var(--text-3); }
 .targets-foot { margin: var(--space-2) 0 0; color: var(--text-3); font-size: var(--fs-label); }
+/* A page the session's roles may not open: why, and the areas it can open instead. */
+.closed-screen .button-row a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+@media (pointer: coarse), (max-width: 30rem) { .closed-screen .button-row a.button { min-height: var(--touch); } }

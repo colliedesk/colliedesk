@@ -22,6 +22,7 @@ import type { TreeNode } from './kb-tree';
 import { OrderAnnouncement, OrderButtons, allArticleIds, useOrderMoves } from './order-buttons';
 import type { Step } from './order-buttons';
 import { useCreateAction } from '../../api/use-create';
+import { useHolds } from '../../lib/permissions-context';
 
 export interface KnowledgeSearch {
   collection?: string;
@@ -153,7 +154,9 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const noCollections = collections.isSuccess && nodes.length === 0;
   const total = nodes.reduce((sum, node) => sum + node.collection.article_count, 0);
   // Published is not public while the help center is off: the page says so, and how to turn it on.
-  const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
+  const holds = useHolds();
+  const creates = holds('kb_articles:create');
+  const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter, enabled: holds('help_center:read') });
   const publicNow = center.data?.enabled;
   const newCollection = () => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); };
   const newArticle = `/knowledge/new${selected ? `?${new URLSearchParams({ collection: selected.collection.id })}` : ''}`;
@@ -162,25 +165,25 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
       <KBHead current="articles" heading={kbMessages.heading} articles={collections.isSuccess ? total : undefined} actions={<>
         <button type="button" aria-haspopup="dialog" aria-label={kbMessages.trash} onClick={() => setTrashOpen(true)}><Icon name="trash" /><span className="kb-label">{kbMessages.trash}</span></button>
         {/* A pointer or the focus on New article loads the editor's chunk ahead of the click (editor-part.ts). */}
-        {!noCollections && <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}><a className="button-link primary-action" href={newArticle}><Icon name="plus" />{kbMessages.newArticle}</a></span>}
+        {creates && !noCollections && <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}><a className="button-link primary-action" href={newArticle}><Icon name="plus" />{kbMessages.newArticle}</a></span>}
       </>} />
       {publicNow === false && <div className="kb-notice" role="status">
         <Icon name="globe" />
         <span><strong>{kbMessages.helpCenterIsOff}</strong> {kbMessages.helpCenterIsOffDetail}</span>
-        <a className="button-link" href="/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>
+        {holds('help_center:update') && <a className="button-link" href="/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>}
       </div>}
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
       <OrderAnnouncement message={moves.message} />
       <div className="kb-art-layout">
-        <nav className="kb-collections" aria-labelledby="kb-collections-heading" data-form={form === 'new' || noCollections ? 'true' : undefined}>
+        <nav className="kb-collections" aria-labelledby="kb-collections-heading" data-form={creates && (form === 'new' || noCollections) ? 'true' : undefined}>
           <div className="kb-collections-head">
             <h2 id="kb-collections-heading">{kbMessages.collections}</h2>
-            <button type="button" className="icon-button" aria-label={kbMessages.newCollection} data-tip={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>
+            {creates && <button type="button" className="icon-button" aria-label={kbMessages.newCollection} data-tip={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>}
           </div>
           {collections.isError && <p role="alert" className="error-copy">{kbMessages.collectionsFailed}{' '}
             <button type="button" className="link-action" onClick={() => void collections.refetch()}>{kbMessages.retry}</button></p>}
-          {(form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
-          {noCollections && <p className="muted-copy">{kbMessages.noCollections}</p>}
+          {creates && (form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
+          {noCollections && <p className="muted-copy">{creates ? kbMessages.noCollections : kbMessages.noCollectionsYet}</p>}
           {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={collectionHref} /></div>}
         </nav>
         <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined}>
@@ -196,7 +199,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
                 <option value="">{`${kbMessages.allArticles} (${total})`}</option>
                 {nodes.map((node) => <option key={node.collection.id} value={node.collection.id}>{`${indent(node)} (${node.collection.article_count})`}</option>)}
               </select>
-              <button type="button" className="icon-button" aria-label={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>
+              {creates && <button type="button" className="icon-button" aria-label={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>}
             </span>}
             <label className="search-field kb-search">
               <SearchIcon />

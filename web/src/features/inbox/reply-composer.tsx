@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
+import { useHolds } from '../../lib/permissions-context';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
@@ -93,9 +94,16 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
 export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent }: ReplyComposerProps) {
-  // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
+  // What the role holds: a reply needs messages:send, the lists under the box their own read.
+  const holds = useHolds();
+  const mayReply = holds('messages:send');
+  const maySavedReplies = holds('saved_replies:read');
+  const mayArticles = holds('kb_articles:read');
+  // With no channel to carry replies, or a role that may not write to customers, the box opens on a private
+  // note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
-  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
+  const [kind, setKindAsked] = useState<Kind>(noReplies || !mayReply ? 'note' : stored?.kind ?? 'outgoing');
+  const setKind = useCallback((next: Kind) => setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next), [mayReply]);
   const [body, setBody] = useState(stored?.body ?? '');
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
@@ -335,7 +343,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     if (disabled) return;
     const onKey = (event: KeyboardEvent) => {
       if (composing(event) || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
-      if (event.key === '/') { event.preventDefault(); setPicking('replies'); return; }
+      if (event.key === '/' && maySavedReplies) { event.preventDefault(); setPicking('replies'); return; }
       const next = shortcuts[event.key.toLowerCase()];
       if (!next) return;
       event.preventDefault();
@@ -344,11 +352,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [disabled]);
+  }, [disabled, setKind, maySavedReplies]);
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(event.nativeEvent)) return;
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(event.shiftKey); }
-    if (event.key === '/' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPicking('replies'); }
+    if (event.key === '/' && (event.metaKey || event.ctrlKey) && maySavedReplies) { event.preventDefault(); setPicking('replies'); }
   };
   return (
     <div className="composer">
@@ -358,8 +366,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       <div className="composer-card" data-kind={kind} ref={card}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>
-            <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
-              <ReplyIcon />{messages.replyMode}<kbd aria-hidden="true">R</kbd></button>
+            {mayReply && <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
+              <ReplyIcon />{messages.replyMode}<kbd aria-hidden="true">R</kbd></button>}
             <button type="button" aria-pressed={kind === 'note'} onClick={() => setKind('note')}>
               <LockIcon />{messages.noteMode}<kbd aria-hidden="true">N</kbd></button>
           </div>
@@ -398,12 +406,12 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           {/* Attach is the first tool; the chosen files and their notes take a line above the row (components.css). */}
           <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
+          {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
-            <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.articles}
+            <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>}
+          {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.articles}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
-            <BookIcon /><span className="tool-label">{messages.articles}</span></button>
+            <BookIcon /><span className="tool-label">{messages.articles}</span></button>}
           {aiDraftsFor && (
             <button type="button" className="saved-reply-button ai-tool" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
               onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>

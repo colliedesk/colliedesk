@@ -6,6 +6,9 @@ import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
+import { closedScreen, firstOpenArea, railAreas } from './lib/areas';
+import { PermissionsContext } from './lib/permissions-context';
+import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
@@ -72,14 +75,15 @@ function AppLayout() {
   // An admin's locked screen shows the plans: billing is asked for while its chunk loads, not after.
   useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: locked && !paused && can(me.data, 'billing:read') });
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
-  useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
+  const readsInbox = can(me.data, 'conversations:read');
+  useInboxActivity(!onSignIn && readsInbox && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
   // On a sign-in page the analytics library waits for the sign-in form, so a slow connection loads the form first.
   useProductAnalytics(config.data?.product_analytics, me.data, onSignIn ? signInFormReady : undefined);
   // Fixes is in the Autofix chunk, loaded only where the server runs Autofix and this browser turned its preview on.
   const fixes = autofixPreviewOn() && config.data?.autofix?.available === true && Boolean(me.data) && !signedOut && !locked;
   // Cards of chat channels waiting in Review; the link shows only where a chat channel collects messages.
-  const intake = useIntakeSummary(!onSignIn && Boolean(me.data) && !signedOut && !locked).data;
+  const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -100,6 +104,10 @@ function AppLayout() {
   const inKnowledge = path.startsWith('/knowledge');
   const inResults = path.startsWith('/results');
   const inFixes = path.startsWith('/fixes');
+  // A screen the session's roles may not read says so; the inbox address takes it to the first area it may open.
+  const closed = me.data ? closedScreen(path, me.data) : undefined;
+  if (closed && path === '/') return <Navigate to={firstOpenArea(me.data)} replace />;
+  const shows = (permission: TokenPermission) => !me.data || can(me.data, permission);
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
@@ -108,19 +116,20 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>}
       {fixes && <Part part={autofixPart} render={({ FixesRailLink }) => <FixesRailLink current={inFixes} />} />}
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
         {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
-      <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
-        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
-      <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
-        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>
+      {shows('kb_articles:read') && <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
+      {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
+        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
         onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
-    <Outlet />
+    {closed && me.data ? <ClosedScreen label={closed.label} permission={closed.permission} me={me.data} />
+      : <PermissionsContext.Provider value={me.data?.permissions}><Outlet /></PermissionsContext.Provider>}
   </AppShell></SettingsNavLinkContext.Provider>;
 }
 
@@ -402,4 +411,14 @@ export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
+}
+
+// ClosedScreen stands for a page the session's roles may not read: what it needs, who to ask, and where it can go.
+function ClosedScreen({ label, permission, me }: { label: string; permission: TokenPermission; me: NonNullable<Parameters<typeof can>[0]> }) {
+  const open = railAreas.filter((area) => !area.permission || can(me, area.permission));
+  return <main className="settings-page closed-screen">
+    <header><h1>{label}</h1><p role="status">{messages.closedScreen(label)} {messages.closedScreenAsk(permission)}</p></header>
+    <p className="muted-copy">{messages.closedScreenOpen}</p>
+    <span className="button-row">{open.map((area) => <Link key={area.to} to={area.to} className="button">{area.label}</Link>)}</span>
+  </main>;
 }

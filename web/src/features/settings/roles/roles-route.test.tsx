@@ -135,5 +135,5 @@ test('Undo after a delete brings the role back and says so, without offering Und
   fireEvent.click(within(status).getByRole('button', { name: 'Undo' }));
   await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Zero is back.'));
   expect(within(screen.getByRole('status')).queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
-  expect(mocks.api.restoreRole).toHaveBeenCalledWith(zero.id);
+  expect(mocks.api.restoreRole).toHaveBeenCalledWith(zero.id, expect.any(String));
 });

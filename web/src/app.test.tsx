@@ -3,6 +3,7 @@ import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/rea
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
+import { forgetPermissions } from './api/client';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { readPlanIntent, rememberPlanIntent } from './features/settings/plan-intent';
 import { createQueryClient } from './query-client';
@@ -589,4 +590,31 @@ test('Review opened with a channel and no scope lists that channel\'s cards only
   const list = fetchMock.mock.calls.map(([url]) => String(url)).find((url) => url.startsWith('/api/v1/intake/gatherings?'));
   expect(list).toContain(`channel_id=${channel}`);
   expect(list).not.toContain('scope=');
+});
+
+const openTrial = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
+const narrow = (permissions: string[]) => ({ ...meBody('agent', openTrial), permissions });
+
+// A role that reads only the knowledge base sees only what it opens: the rail offers Knowledge and Settings,
+// the inbox address opens Knowledge, and no page asks the server for what the role may not read.
+test('a role that reads only the knowledge base lands in Knowledge and is offered nothing else to read', async () => {
+  // As in the browser, no session is known until /auth/me answers.
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['kb_articles:read', 'kb_media:read', 'help_center:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/collections': () => json(200, { items: [] }),
+    '/api/v1/kb/articles': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/help-center': () => json(200, { enabled: false }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge'));
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
+  expect(within(rail).queryByRole('link', { name: 'Results' })).not.toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+  await act(async () => { await router.navigate({ to: '/results' }); });
+  expect(await screen.findByText(/Your roles do not let you open Results/)).toBeInTheDocument();
+  const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
+  for (const path of ['/api/v1/conversations', '/api/v1/inbox/activity', '/api/v1/intake/summary', '/api/v1/results', '/api/v1/tags', '/api/v1/agents']) expect(asked, path).not.toContain(path);
 });

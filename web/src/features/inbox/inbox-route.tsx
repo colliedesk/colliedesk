@@ -27,6 +27,8 @@ import { autofixPreviewOn } from '../autofix/autofix-preview';
 import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
 import { mayTell, noticesOf } from './status-tell';
+import { PermissionsContext } from '../../lib/permissions-context';
+import type { TokenPermission } from '../../api/schemas';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -176,7 +178,9 @@ export function InboxRoute() {
   const viewing = useInboxViewing();
   // Replies an AI agent left for a person to send (written drafts), shown above the composer of the open
   // conversation whether or not AI drafts are on. The inbox filter "has a draft waiting" finds the others.
-  const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) });
+  // What the session may read decides what the page asks for: a list it may not read is not asked for.
+  const reads = (permission: TokenPermission) => can(me.data, permission);
+  const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
   const selectedDrafts = waitingWritten(drafts.data?.items);
   const [draftNotice, setDraftNotice] = useState<string>();
   const afterDraft = (conversationId: string) => {
@@ -187,18 +191,18 @@ export function InboxRoute() {
   const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
   // The side lists come after everything the open ticket needs: a browser allows six HTTP/1.1 connections per
   // host, and a request that waits for one is a request the person waits for.
-  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
-  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents, enabled: reads('team:read') });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags, enabled: reads('tags:read') });
   // Fetched once and shared with Settings, so the picker opens from memory.
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies, enabled: reads('saved_replies:read') });
   // How replies leave is read for the mailbox the open conversation's replies leave from; the default
   // one for a conversation no channel carries yet. Replies that leave through another type (a chat
   // channel) have no mailbox to read.
   const repliesVia = selected?.channel_ref?.replies_via;
   const senderID = repliesVia?.id;
   const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
-    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()), enabled: !repliesVia || repliesVia.type === 'email' });
-  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types;
+    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()), enabled: reads('channels:read') && (!repliesVia || repliesVia.type === 'email') });
+  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
   // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
   // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
@@ -309,7 +313,7 @@ export function InboxRoute() {
     const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
-  return <><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
+  return <PermissionsContext.Provider value={me.data?.permissions}><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} guide={guide}
     onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
       void client.invalidateQueries({ queryKey: ['conversations'] });
@@ -327,7 +331,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
-    onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={me.data?.ai_features?.draft}
+    onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={reads('ai_assist:read') ? me.data?.ai_features?.draft : undefined}
     autofix={autofixPreviewOn() && config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
@@ -365,8 +369,8 @@ export function InboxRoute() {
     }}
     onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
-    onNewConversation={() => setStarting(true)} />
+    onNewConversation={me.data && !reads('messages:send') ? undefined : () => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
-  </>;
+  </PermissionsContext.Provider>;
 }
