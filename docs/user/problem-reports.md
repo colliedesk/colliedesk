@@ -17,7 +17,7 @@ Before you send, the dialog lists every field under **What will be sent**. A rep
 | Recent errors in the browser (up to 20) | message, source, time | The error the page raised. |
 | Recent failed requests (up to 20) | `GET /api/v1/conversations` 500, **request id** `9f3ac1d2b7e4`, time | The request id finds that exact request in the server log. |
 | Names of the last actions (up to 30) | `conversation_opened`, `inbox_searched` | What led to the problem. Names only. |
-| Who and where, added by the server | your agent id, email, display name and role; the workspace id, name, address and plan; the server version; the id of this report | So the team knows whose report it is. |
+| Who and where, added by the server | your agent id, email, display name and roles; the workspace id, name, address and plan; the server version; the id of this report | So the team knows whose report it is. |
 
 A report never contains the subject, text, contact, email address or attachments of any
 conversation, and the pages you visited are sent without their query strings. The browser keeps the
@@ -49,7 +49,7 @@ server keeps it. Otherwise the server makes a 12-character id.
 ## For AI agents
 
 The MCP tool `colliedesk_problem_report` and `POST /api/v1/support/problem-reports` send the same
-report. Any token tier may use them. An agent should pass the request ids of the failed calls in
+report. Any agent token may use them: they need no permission. An agent should pass the request ids of the failed calls in
 `diagnostics.failed_api_calls`. On a server that takes no reports the tool says so and points to
 GitHub issues.
 

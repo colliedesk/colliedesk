@@ -15,7 +15,7 @@ It works the same on self-hosted installs and on Colliedesk Cloud.
 ## Turn it on
 
 1. Open **Settings → Channels**, select **Add a web form** (or **Add channel → Add a web form**)
-   (admins only; agents see the state).
+   (needs `channels:update`, which admins hold; others see the state).
 2. Under **Allowed origins** list every site that hosts the form, one per line, for example
    `https://example.com`. An origin is scheme, host and optional port, exactly as the browser shows
    it. No path, no trailing slash, no wildcard. `https://example.com` and `https://www.example.com`

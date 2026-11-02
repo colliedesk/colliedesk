@@ -1,7 +1,7 @@
 # Response targets
 
-Response targets measure how fast conversations are answered and resolved, in business hours: an admin
-sets them under Settings → Response targets; every teammate sees them.
+Response targets measure how fast conversations are answered and resolved, in business hours: someone with
+`workspace:update` (an admin) sets them under Settings → Response targets; every teammate sees them.
 
 1. **Business hours**: a timezone (the workspace's unless you pick another), the hours each weekday is open
    (a day not open is closed; 00:00 to 24:00 is the whole day), and holidays. Time outside them does not
@@ -50,7 +50,7 @@ the last seconds may reach the filter a few seconds later; it always shows its o
 ## Reminder and overdue emails
 
 When a running clock is due soon, and again when it is overdue, Colliedesk emails the person the
-conversation is assigned to, or the admins while nobody is: each email once for each person, even with
+conversation is assigned to, or, while nobody is, everyone who can set response targets (`workspace:update`, the admins): each email once for each person, even with
 several servers and even after the conversation was Pending and opened again (which moves its due time).
 Turn yours off under Settings → Response targets (`PATCH /api/v1/agents/me/sla-alerts`, MCP
 `colliedesk_my_sla_alerts_set`); an admin turns them off for everyone (`alert_email`). A conversation shows

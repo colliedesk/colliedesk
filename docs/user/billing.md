@@ -3,9 +3,10 @@
 Billing exists only on the hosted Colliedesk Cloud. A self-hosted instance has no billing page, no
 trial, no plan and no limits; nothing here applies to it.
 
-Only workspace admins see **Settings → Plan and billing**. Agents see the day the trial ends in the banner at
-the top and nothing else about billing. If an agent on the trial opens the page, it names the admins who can
-choose a plan.
+Only people with `billing:read` see **Settings → Plan and billing**, and choosing or changing a plan
+needs `billing:manage`; the Admin role holds both. Everyone else sees the day the trial ends in the
+banner at the top and nothing else about billing. If they open the page on the trial, it names the
+admins who can choose a plan.
 
 If the server's operator turns billing off, nothing is charged or locked meanwhile and nothing can be bought.
 A workspace with a subscription still sees **Plan and billing** with a note saying so, and can change or
@@ -36,9 +37,9 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
   that tab), so **Buy Team 25** in the banner, **Plan and billing** and the locked page show the Team 25
   card first, marked **Your pick**. Any other `plan` value is ignored. The sign-up form asks for the
   workspace name only here too.
-- Admins get an email three days before the trial ends and another on the day it ends, in the workspace's
+- Everyone with `billing:manage` (the admins) gets an email three days before the trial ends and another on the day it ends, in the workspace's
   timezone (the day starts at its midnight). It gives the end date and time, says that the workspace locks,
-  that nothing is deleted and that export stays available, and links to **Plan and billing**. Each admin
+  that nothing is deleted and that export stays available, and links to **Plan and billing**. Each of them
   gets each email once. A workspace that has a plan, or whose trial is over, gets none. If the trial end
   moves (for example after a Freshdesk import extends it), the new end gets its own two emails.
 
@@ -212,7 +213,8 @@ that suit you for a call, with a time zone.
   reply by email within one working day.
 - **Plan and billing** shows when the request was sent in the **Freshdesk migration** row. You can send it again, for example to correct the
   address; a workspace can send 5 requests an hour.
-- Only an admin can ask. An AI agent can prepare the request, and an admin approves it.
+- Asking needs `billing:manage` (the Admin role has it). An AI agent whose token holds it can send the
+  request too (`colliedesk_billing_action`).
 - If this server cannot send email, nothing is sent and Colliedesk says so.
 
 ## What the page shows once you pay
@@ -251,7 +253,7 @@ opens the same portal and says until when you keep access. The button stays avai
 
 1. The workspace stays locked, with all its data, for at least 12 months while you decide. You can
    choose a plan at any time, and everything is there again.
-2. Before a locked workspace is deleted, every admin gets an email with the exact deletion date, at
+2. Before a locked workspace is deleted, everyone who can export it (`workspace:export`, the admins) gets an email with the exact deletion date, at
    least 30 days ahead. It is sent from Colliedesk, not from your workspace's address.
 3. When the workspace is deleted, it is deleted for good: conversations, contacts and attachments.
    Choosing a plan before that date cancels the deletion, and a later lock starts a new period.

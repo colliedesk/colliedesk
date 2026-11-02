@@ -9,9 +9,12 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
   a session that ran out shows **Expired**.
 - On **This device** the button reads **Sign out**: it signs this browser out at once.
 - To sign out of the browser you are using, you can also select your avatar at the foot of the left rail (top
-  right on a phone) and choose **Sign out**. The menu shows your name and role; the workspace and your address
+  right on a phone) and choose **Sign out**. The menu shows your name and roles; the workspace and your address
   are in the bar above every page.
-- Agents see their own sessions. Admins see and can revoke every session in the workspace.
+- You see your own sessions. Someone with `team:revoke` (the Admin role has it) sees every session in
+  the workspace and can revoke those of anyone who does not hold more than they do.
+- A session signed in through the API with `requested_role: agent` shows **Limited to Agent**: it
+  acts with the Agent role only, even if you hold more. Any other sign-in acts with all your roles.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
 shows **You are signed out** instead of the inbox. On instances with cloud sign-in it opens the
@@ -20,79 +23,61 @@ asks for a code again. To sign in again on a revoked device, ask an admin for a 
 
 ## Agent tokens
 
-An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you
-with a limit you choose. It is a session with a label and a **scope**. It appears in
-**Settings → Sessions** next to your browser sessions, with its scope as a badge and the date it
-stops working. **Revoke** ends it at once, as for any session. Admins see and revoke the tokens of
-every agent.
+An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
+with the permissions you choose. It is a session with a label. It appears in **Settings → Sessions**
+next to your browser sessions, with what it was given as a badge and the date it stops working.
+**Revoke** ends it at once, as for any session. Someone with `team:revoke` sees and revokes the
+tokens of every person they do not rank below.
 
-Create a token in **Settings → External AI agents**, which every agent sees: give it a name you will
-recognise in Sessions (1 to 80 characters, for example **Claude Code on my laptop**), pick its scope
-(**Read**, **Draft**, **Send** or **Admin**; **Draft** is selected) and choose **Create token**. Only an
-admin can pick **Admin**; for an agent it is shown but cannot be chosen. The token is shown once,
-with **Copy token**. Choose **I saved it, hide the token** when you have it; leaving the page hides it too,
-and Colliedesk cannot show it again. If you lose it, create a new token and revoke the old one. The new
-token appears in Sessions at once. Below it, **Connect your agent** has the steps for Claude Code,
-Codex, Cursor, VS Code and Claude Desktop with your address filled in, and the way to remove each
-one; while the token is shown, **Add to Cursor** puts it into Cursor in one click. To check that an
-agent is connected, ask it "Who am I in Colliedesk?".
+Create a token in **Settings → External AI agents** (it needs `team:create_tokens`, which the Agent
+and Admin roles hold). Give it a name you will recognise in Sessions (1 to 80 characters, for
+example **Claude Code on my laptop**), then under **Access** choose one of:
 
-To give a token exactly what it needs, choose **Show its permissions**: every part of Colliedesk is
-a row (conversations, messages, the knowledge base, the team…) with a chip for each action (view,
-create, edit, delete, and actions such as **Send to customers** or **Publish**). Choosing a tier ticks
-its permissions; ticking or unticking one makes the token **Custom**, with exactly what is ticked. An
-orange dot marks what reaches outside the workspace (customers, the public help center, another
-service); a ring marks what always waits for a person. Only an admin can give an admin-only
-permission. In Sessions a custom token shows how many permissions it holds; open it to see them.
+- **Follow my role**: pick one of the roles you hold. The token gets that role's permissions as they
+  are on each call: when someone changes the role, the token changes with it, and if the role is
+  taken from you, the token stops until you hold it again. A role that can export data, change roles
+  or reach outside the workspace says so; pick permissions to leave some out.
+- **Pick permissions (fixed)**: tick the permissions the token gets, out of the ones you hold. The
+  list is fixed when you create the token. An orange dot marks what reaches outside the workspace (a
+  customer, the public help center, another service).
 
-A program can create a token with `POST /api/v1/auth/tokens` and a body such as
-`{"label": "Claude Code", "scope": "draft"}`, or `{"label": "KB writer", "permissions":
-["kb_articles:read", "kb_articles:create", "kb_articles:update"]}` for a custom token. Each permission
-is `resource:action`; the table below lists them by the tier that holds them. On your own server you can also use the
-[command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line). The agent
-sends the token as `Authorization: Bearer <token>`.
+Either way, a token never does more than you can do right now: if you lose a permission, every
+token of yours loses it too, and if you are deactivated, your tokens stop working. See
+[Roles and permissions](roles-and-permissions.md) for the list of permissions.
 
-| Scope | The agent can |
-|---|---|
-| `read` | Read conversations, messages, contacts, tags, saved replies and the team list, and see the session and invite lists and the email channel and web form settings. No answer ever holds an invite link, a token or the inbound email secret. |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one conversation or several at once, create a tag, add private notes, and set your own timezone. Nothing reaches a customer. |
-| `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, rename and delete tags, create contacts and conversations, and create, edit, delete and restore [saved replies](saved-replies.md#ai-agents) |
-| `admin` | Everything in `send`, plus change the workspace name and timezone, deactivate and reactivate agents, revoke invites, set up the web form and the email channel, verify the email domain (10 times an hour), read the plan, revoke agent tokens, and sign out your own devices. Only an admin can create it. |
+Choose **Create token**. The token is shown once, with **Copy token**. Choose **I saved it, hide the
+token** when you have it; leaving the page hides it too, and Colliedesk cannot show it again. If you
+lose it, create a new token and revoke the old one. The new token appears in Sessions at once. Below
+it, **Connect your agent** has the steps for Claude Code, Codex, Cursor, VS Code and Claude Desktop
+with your address filled in, and the way to remove each one; while the token is shown, **Add to
+Cursor** puts it into Cursor in one click. To check that an agent is connected, ask it "Who am I in
+Colliedesk?": it answers with your name, your roles and what the token may do.
 
-Start with `read` or `draft`. Give `admin` only to an agent you trust to run the workspace.
+In Sessions a token shows one of:
 
-| Tier | Permissions it holds (and every lower tier's) |
-|---|---|
-| `read` | `conversations:read`, `messages:read`, `ai_assist:read`, `contacts:read`, `tags:read`, `saved_replies:read`, `saved_views:read`, `kb_articles:read`, `kb_media:read`, `help_center:read`, `results:read`, `agent_requests:read`, `agent_requests:cancel`, `team:read`, `channels:read`, `ai_settings:read`, `autofix:read`, `autofix_settings:read` |
-| `draft` | `conversations:update`, `messages:note`, `ai_assist:create`, `tags:create`, `saved_views:create`, `saved_views:update`, `saved_views:delete`, `profile:update` |
-| `send` | `messages:send`, `contacts:create`, `contacts:update`, `tags:update`, `tags:delete`, `saved_replies:create`, `saved_replies:update`, `saved_replies:delete`, `kb_articles:create`, `kb_articles:update`, `kb_articles:delete`, `kb_articles:publish`, `kb_media:create`, `kb_media:update`, `kb_media:delete` |
-| `admin` | `kb_media:purge`, `help_center:update`, `results:share`, `team:invite`, `team:revoke`, `team:manage_roles`, `team:create_tokens`, `channels:update`, `channels:manage_credentials`, `workspace:update`, `workspace:export`, `billing:read`, `billing:manage`, `imports:read`, `imports:run`, `imports:manage_credentials`, `imports:undo`, `ai_settings:update`, `ai_settings:manage_credentials`, `autofix_settings:update`, `autofix_settings:manage_credentials` |
+- **Follows role Agent** (or the role it follows); open it to see **What it may do**.
+- **Fixed · 5 permissions**: a token made with a list.
+- **Stopped: Long Bui no longer holds Support lead**: giving the role back starts it again.
+- **Created before roles · was Send**: a token made with the old tiers. It keeps the permissions it
+  had, except those that used to wait for a person's approval; create a new token for those
+  ([which ones](roles-and-permissions.md#tokens-created-before-roles)).
 
-A tier is worked out on every call, so it keeps what its table row says as Colliedesk grows. A custom
-token holds only its own list. `messages:note` writes private notes; `messages:send` reaches customers.
-`kb_articles:publish` is needed for anything that changes the public help center: creating or making
-an article published, editing, trashing or restoring a published one, replacing an image it shows, and
-renaming, moving or deleting a collection. Without it, those changes wait for a person. Accepting or
-undoing an AI triage suggestion also needs `conversations:update`. A token with an admin-only
-permission acts with your role, like an `admin` token.
+Creating a token is something only a person does: an AI agent's token cannot create another one
+(HTTP 403 `person_only`), because a token that made tokens would leave them behind after it was
+revoked. A program signed in as a person can create one with `POST /api/v1/auth/tokens` and a body
+such as `{"label": "Claude Code", "role_id": "<id of one of your roles>"}`, or `{"label": "KB writer",
+"permissions": ["kb_articles:read", "kb_articles:create", "kb_articles:update"]}` for a fixed list.
+Each permission is `resource:action`. The old `scope` field is refused. On your own server you can
+also use the [command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line).
+The agent sends the token as `Authorization: Bearer <token>`.
 
-An `admin` token acts with your role, checked on every call. If you are demoted to agent, the token
-keeps working with the agent role only; if you are deactivated, it stops working. A `read`,
-`draft` or `send` token always has the agent role, even when an admin creates it. An agent that
-asks for an `admin` token files a request; it is created only when an admin approves it.
-
-These actions are always requests, for every tier including `admin`: creating an invite (the
-person who approves sees its link once; no token ever does), making someone an admin, any change to
-an admin (demoting, deactivating, reactivating), and signing out another person's device. When an
-agent token revokes a session, the session list shows it as **Revoked** and the server log names
-the token that did it.
-
-A call the token holds no permission for is not refused: it becomes an [agent request](agent-requests.md) that a
-person approves or rejects, and nothing changes until then (HTTP 202). A reply from a token below
-`send` becomes a reply draft a person sends. Creating tokens, invites, any change to an admin or that makes
-one, signing out another person, export, billing checkout and portal, disconnecting the email channel, rotating its secret and
-changing the workspace address always wait for a person, whatever the scope, `admin` included.
-Approving or rejecting a request is for people only.
+An AI agent does what its token's permissions allow, at once; nothing waits for a person to approve
+it. A call without the permission it needs is refused with HTTP 403 `permission_missing`, naming the
+permission and whether the token or you lack it
+([details](roles-and-permissions.md#when-a-permission-is-missing)). A reply the token may not send
+can be left as a draft above the reply box (`ai_assist:create`) for a person to send. When an agent
+token revokes a session, the session list shows it as **Revoked** and the server log names the
+token that did it.
 
 A token starts with `cdk_agent_` so that secret scanners recognise it if it ends up in a file by
 mistake. It works only in the `Authorization` header. A browser cookie that holds a token is

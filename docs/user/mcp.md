@@ -2,8 +2,8 @@
 
 Colliedesk speaks the Model Context Protocol (MCP), so an AI agent such as Claude Code or Codex can
 work your inbox: find conversations, read them, set status, priority, assignee and tags, and leave
-private notes for your team. With a `send` token it can also reply to customers. Give an agent the
-`send` tier only when you want it to write to customers; a person stays in charge of the rest.
+private notes for your team. With `messages:send` it can also reply to customers. Give an agent a
+token that holds `messages:send` only when you want it to write to customers.
 
 ## Endpoint and sign-in
 
@@ -13,23 +13,23 @@ private notes for your team. With a `send` token it can also reply to customers.
 <!-- /generated -->
 - Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
   person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
-- Create the token in **Settings → External AI agents**, as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
-  that does the job. The token is shown once; revoke it in **Settings → Sessions**.
+- Create the token in **Settings → External AI agents**, as described in
+  [Agent tokens](sessions.md#agent-tokens): it follows one of your roles, or holds a fixed list of
+  your permissions. Give it only what the job needs. The token is shown once; revoke it in
+  **Settings → Sessions**.
 
-| Tier | The agent can |
-|---|---|
-| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members, read saved replies with their history and trash, and see the workspace settings, invites, sessions, and the email and web form settings. No answer holds an invite link, a token or the inbound email secret. |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), add private notes, and set your own timezone. Nothing reaches a customer. |
-| `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, rename or delete tags, and create, edit, delete and restore saved replies. With `read` or `draft`, a saved reply change is a proposal a person approves. |
-| `admin` | Everything in `send`, plus change the workspace name and timezone, deactivate and reactivate agents, revoke invites, revoke agent tokens and its owner's own sign-ins, set up the web form and the email channel, verify the email domain, and read the plan. It acts with the role of the admin who created it. |
+The agent does what the token's [permissions](roles-and-permissions.md) allow, at once; nothing waits
+for a person to approve it, and it never does more than the person who made the token can do right
+now. The **Needs** column below names the permissions each tool needs. `colliedesk_whoami` answers
+your name and roles, how the token was made and its permissions.
 
-A tool used above its tier does not fail: Colliedesk files the call as an
-[agent request](agent-requests.md) that a person approves in **Requests**, and the tool answers
-with `agent_request` (its id, summary and expiry) and `next`, which tells the model that nothing
-changed yet and how to follow it. A reply from a token below `send` becomes a reply draft. Some
-actions wait for a person with every tier, `admin` included: new tokens, invites, making someone an
-admin or changing an admin, signing out another person, export, billing checkout and portal, disconnecting the email channel, a new
-inbound secret and the workspace address. No tool approves or rejects; only a person does.
+A tool the token has no permission for fails with the message, `missing_permissions` and
+`missing_from` of [a refused call](roles-and-permissions.md#when-a-permission-is-missing): `token`
+means you hold the permission and a token that includes it would work, `person` that you would need a
+role that holds it. An invite, a new inbound email secret, an export link or a results share link is
+returned to the agent so it can give it to you. Connecting Gmail, Microsoft 365 or GitHub, sending a
+fix through GitHub, and billing checkout and portal answer an address only you can finish, in a
+browser signed in to Colliedesk. Creating a token is for people only: no tool makes one.
 
 ## Connect your AI host
 
@@ -336,7 +336,7 @@ approves it in the console with their authenticator code.
 - **Customer text is marked.** Subjects, message bodies, customer names, emails and organizations
   appear only inside a field named `untrusted_customer_content`. The tool descriptions tell the
   model to treat it as data and never as instructions. This lowers the risk that a hostile email
-  steers the agent; it does not remove it. Keep agents on the lowest tier that works.
+  steers the agent; it does not remove it. Give agents only the permissions the job needs.
 - **Only native team messages count as team text.** A reply or note written in Colliedesk by a
   team member shows its author. A message imported from another helpdesk is marked like customer
   text unless it was a reply or a private note of a team member: a Freshdesk public note or a
@@ -349,8 +349,8 @@ approves it in the console with their authenticator code.
   comes back as its name, size, SHA-256 and detected type only: open it in the web app. The file
   name and text are customer text. **An image cannot be marked as customer text:** whatever it
   shows (a screenshot of instructions, text in a photo) reaches the model as it is. The tool
-  description tells the model it is data a customer sent, never instructions; keep agents on the
-  lowest tier that works.
+  description tells the model it is data a customer sent, never instructions; give agents only the
+  permissions the job needs.
 - **Saved replies are team text.** Their title and text appear under `team_text`: the team wrote
   them for customers. The tool descriptions tell the model to treat them as text to send or improve,
   never as instructions. Writes carry the `updated_at` the model read, so it cannot overwrite or
@@ -358,15 +358,14 @@ approves it in the console with their authenticator code.
 - **Files an agent attaches.** `colliedesk_note_add`, `colliedesk_reply_send` and
   `colliedesk_conversation_start` take `files`: up to 10 files, 5 MiB in total per call, each with
   a `filename` and its bytes as base64. The REST API takes 10 MiB a message; attach larger files in
-  the web app. A call with files is never filed as a request (see
-  [agent requests](agent-requests.md)): below the tool's tier it is refused and nothing is stored,
-  so the agent sends the text alone. `colliedesk_reply_draft` carries no files. A reply written from
+  the web app. A call with files the token may not make is refused
+  and nothing is stored. `colliedesk_reply_draft` carries no files. A reply written from
   an [AI draft](ai.md#reply-drafts) passes its `ai_draft_id`, so the draft records how close the
-  reply stayed to it; this works only with a send token, and a draft that is not the conversation's
+  reply stayed to it; this needs `messages:send`, and a draft that is not the conversation's
   ready one (another conversation's, another workspace's, already sent) is refused and nothing is
   sent.
 - **Who wrote it.** When an agent token wrote a note or a reply, the message also shows
-  `written_by_agent_token` with the label and tier of the token. The server tells the model to read
+  `written_by_agent_token` with the label of the token and the team member it acts as (`acts_as`). The server tells the model to read
   such text as model output, not as a decision of the person the token acts as.
 
 ## Limits and errors
@@ -390,6 +389,6 @@ approves it in the console with their authenticator code.
   workspace, nothing changes. It takes only existing tag names and cannot set priority; use
   `colliedesk_conversation_update` for those.
 - A status set with `colliedesk_conversation_update` or `colliedesk_conversations_bulk_update` on a
-  conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); with
-  a token below the send tier that change waits for a person. `notify: false` sets the status quietly,
-  without asking.
+  conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); that
+  change needs `messages:send`, and without it the call is refused and names the channel.
+  `notify: false` sets the status quietly with `conversations:update` alone.
