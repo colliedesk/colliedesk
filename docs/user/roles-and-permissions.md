@@ -70,6 +70,15 @@ nothing changes until you choose **Save and apply**.
 gives it and no token follows it; otherwise the page names them. A deleted role is listed under
 **Deleted roles**, where **Restore** brings it back.
 
+## What a person with a narrow role sees
+
+The app shows only what your roles let you read. The left rail lists the areas you can open; a role
+without `conversations:read` opens on the knowledge base (or the first area it can open) instead of
+the inbox. Opening a screen your roles do not cover says so: "Your roles do not let you open …", names
+the permission it needs, and links the areas you can open. In a conversation, **Reply** and **New
+conversation** are shown only with `messages:send`, and saved replies, knowledge base articles, tags
+and the team list only with their `:read` permission. **Settings** shows only the sections you can read.
+
 ## Give people roles
 
 In **Settings → Team**, each person shows their roles. **Change roles** opens the list of roles:
