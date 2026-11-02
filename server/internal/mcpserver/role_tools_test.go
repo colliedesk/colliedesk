@@ -23,6 +23,19 @@ func TestRoleToolsAcceptNames(t *testing.T) {
 	if at(t, created, "role", "name") != "KB editor" || !slices.Equal(permissionsOf(t, created), []string{"kb_articles:read", "kb_articles:update"}) {
 		t.Fatalf("created = %v", created)
 	}
+	if empty := e.ok(admin, "colliedesk_role_create", map[string]any{"name": "Empty for now"}); len(permissionsOf(t, empty)) != 0 {
+		t.Fatalf("a role with a name only = %v, want no permissions", empty)
+	}
+	cleared := e.ok(admin, "colliedesk_role_update", map[string]any{"role": "Empty for now", "name": "Still empty", "permissions": []string{}})
+	if at(t, cleared, "role", "name") != "Still empty" || len(permissionsOf(t, cleared)) != 0 {
+		t.Fatalf("cleared = %v", cleared)
+	}
+	e.ok(admin, "colliedesk_role_update", map[string]any{"role": "Still empty", "permissions": []string{"conversations:read"}})
+	if emptied := e.ok(admin, "colliedesk_role_update", map[string]any{"role": "Still empty", "permissions": []string{}}); len(permissionsOf(t, emptied)) != 0 {
+		t.Fatalf("emptied = %v, want the permissions taken away", emptied)
+	}
+	e.ok(admin, "colliedesk_role_delete", map[string]any{"role": "Still empty"})
+
 	updated := e.ok(admin, "colliedesk_role_update", map[string]any{"role": "kb editor", "add_permissions": []string{"kb_articles:publish"}, "remove_permissions": []string{"kb_articles:update"}})
 	if !slices.Equal(permissionsOf(t, updated), []string{"kb_articles:publish", "kb_articles:read"}) {
 		t.Fatalf("updated = %v", updated)

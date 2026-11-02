@@ -101,7 +101,7 @@ func roleDeleteSpec() Spec {
 		Title: "Delete a role",
 		Description: `Delete a role nobody uses: no team member holds it, no pending invite gives it and no live agent token follows it (otherwise refused with what still uses it). ` +
 			`Admin and Agent cannot go. Bring it back with colliedesk_role_restore.`,
-		REST:   []string{"DELETE /api/v1/roles/{id}"},
+		REST:   []string{"DELETE /api/v1/roles/{id}", "GET /api/v1/roles/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["role"],"properties":{` + roleKeyProperty + `}}`,
 		Output: `{"type":"object","required":["deleted","next"],"properties":{"deleted":{"type":"string","description":"Name of the deleted role."},"next":{"type":"string"}}}`,
 		run:    roleDelete,

@@ -92,9 +92,10 @@ func rolesList(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"roles": roles}, nil
 }
 
-// union adds extra to base, keeping each permission once, sorted.
+// union adds extra to base, keeping each permission once, sorted. It is never nil: an empty list goes
+// out as [], which the server reads as "no permissions", where null would mean "not sent".
 func union(base, extra []string) []string {
-	out := slices.Clone(base)
+	out := append([]string{}, base...)
 	for _, item := range extra {
 		if !slices.Contains(out, item) {
 			out = append(out, item)
