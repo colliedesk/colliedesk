@@ -46,7 +46,6 @@ func (a *API) updateAgentTimezone(response http.ResponseWriter, request *http.Re
 		writeStoreError(response, err)
 		return
 	}
-	agent.Role = identity.Agent.Role
 	writeJSON(response, http.StatusOK, agent)
 }
 

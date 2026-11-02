@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -70,7 +69,7 @@ func (a *API) createConversation(response http.ResponseWriter, request *http.Req
 			}
 			return item, nil
 		}
-		actor, _ := messageActor(ctx, identity, "outgoing")
+		actor, _ := messageActor(identity, "outgoing")
 		cc, refusal := a.cleanCC(ctx, identity.Workspace.ID, "outgoing", input.CC)
 		if refusal != nil {
 			a.writeUploadError(response, refusal)
@@ -144,7 +143,7 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 		TagIDs     *[]string       `json:"tag_ids"`
 		Notify     *bool           `json:"notify"`
 	}
-	raw, err := readBody(request)
+	_, err := readBody(request)
 	if err != nil || decodeJSON(request, &input) != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Conversation changes are invalid.")
 		return
@@ -160,8 +159,7 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 	}
 	identity := principal(request)
 	quiet := input.Notify != nil && !*input.Notify
-	if a.statusNeedsApproval(response, request, Route{Method: http.MethodPatch, Pattern: "/api/v1/conversations/{id}"}, identity, raw,
-		[]string{request.PathValue("id")}, input.Status, quiet) {
+	if a.refuseStatusThatTells(response, request, identity, []string{request.PathValue("id")}, input.Status, quiet) {
 		return
 	}
 	item, err := a.store.UpdateConversation(request.Context(), identity.Workspace.ID, request.PathValue("id"), store.ConversationUpdate{
@@ -182,12 +180,11 @@ func positiveInt(value string, fallback int) int {
 	return parsed
 }
 
-// statusNeedsApproval files the call as an agent request when it is a token's that may not write to
-// customers and the status it sets would tell one (the channel's status notice): it answers 202 and says
-// so. A quiet change (notify false) never asks.
-func (a *API) statusNeedsApproval(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, raw json.RawMessage,
-	ids []string, status *string, quiet bool) bool {
-	if status == nil || quiet || !who.IsToken() || who.Allows(auth.PermMessagesSend) {
+// refuseStatusThatTells answers 403 permission_missing and reports true when the caller may not write
+// to customers (messages:send) and the status it sets would tell one (the channel's status notice). A
+// quiet change (notify false) tells nobody and needs no more than the route.
+func (a *API) refuseStatusThatTells(response http.ResponseWriter, request *http.Request, who auth.Principal, ids []string, status *string, quiet bool) bool {
+	if status == nil || quiet || who.Can(auth.PermMessagesSend) {
 		return false
 	}
 	notices, err := a.store.StatusNoticePreview(request.Context(), who.Workspace.ID, ids, *status)
@@ -198,36 +195,14 @@ func (a *API) statusNeedsApproval(response http.ResponseWriter, request *http.Re
 	if len(notices) == 0 {
 		return false
 	}
-	a.fileAgentRequestTelling(response, request, route, who, domain.AgentRequestAction, raw, statusRequestSummary(ids, *status, notices), notices)
+	a.writePermissionMissingHint(response, request, who,
+		"This status tells the customer ("+notices[0].ChannelName+"), which is writing to them; send notify: false to change it without telling them.",
+		auth.PermMessagesSend)
 	return true
 }
 
-// statusRequestSummary says what a status change that waits for a person does, as the approval card
-// reads it: "Set REF-1 to Resolved and tell the customer on Zalo: REF-1: fixed.", or for several
-// "Set 3 conversations to Resolved and tell their customers on Zalo, Web chat" ("tell 2 of their
-// customers" when one is not told).
-func statusRequestSummary(ids []string, status string, notices []domain.StatusNoticePreview) string {
-	label := strings.ToUpper(status[:1]) + status[1:]
-	if len(ids) == 1 {
-		return fmt.Sprintf("Set %s to %s and tell the customer on %s: %s", notices[0].ExampleRef, label, notices[0].ChannelName, notices[0].Text)
-	}
-	names, told := make([]string, len(notices)), 0
-	for index, notice := range notices {
-		names[index], told = notice.ChannelName, told+notice.Told
-	}
-	customers := "their customers"
-	if told < len(ids) {
-		customers = fmt.Sprintf("%d of their customers", told)
-	}
-	return fmt.Sprintf("Set %d conversations to %s and tell %s on %s", len(ids), label, customers, strings.Join(names, ", "))
-}
-
-// tokenOf is the id of the AI agent's token making a call, or "" for a person's own: a token's request a
-// person approved is still the token's, made with their approval.
+// tokenOf is the id of the AI agent's token making a call, or "" for a person's own.
 func tokenOf(request *http.Request) string {
-	if replay, ok := approvalOf(request.Context()); ok {
-		return replay.tokenID
-	}
 	if who := principal(request); who.IsToken() {
 		return who.SessionID
 	}

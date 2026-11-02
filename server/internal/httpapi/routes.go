@@ -37,7 +37,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.exportWorkspace,
 		a.getWebForm, a.putWebForm, a.submitWebForm,
 		a.createExportLink, a.downloadExport,
-		a.listAgentRequests, a.getAgentRequest, a.approveAgentRequest, a.rejectAgentRequest, a.cancelAgentRequest,
+		a.agentRequestsRemoved, a.agentRequestsRemoved,
 		a.createProblemReport,
 		a.listImports, a.getImport, a.setImportKey, a.cancelImport, a.startImport, a.previewImport, a.getImportReport, a.undoImport,
 		a.listImportPeople, a.linkImportPerson, a.unlinkImportPerson,
@@ -64,6 +64,8 @@ func (a *API) routeSpecs() []routeSpec {
 		a.enableFixConnector, a.disableFixConnector, a.checkFixConnector, a.setCursorKey, a.removeCursorKey,
 		a.sendTestMessage, a.sendTestMessage,
 		a.getForwardingConfirmation,
+		a.listRoles, a.createRole, a.getRole, a.updateRole, a.deleteRole, a.resetRole, a.restoreRole, a.setAgentRoles,
+		a.createReplyDraft,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

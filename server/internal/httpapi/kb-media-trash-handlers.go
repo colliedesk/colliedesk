@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -116,35 +115,12 @@ func (a *API) trashUnusedKBMedia(response http.ResponseWriter, request *http.Req
 		return
 	}
 	who := principal(request)
-	if !who.Allows(auth.PermKBMediaDelete) {
-		a.proposeTrashOfUnusedKBMedia(response, request, who, *input.Before, input.IncludeKept)
-		return
-	}
 	moved, more, batch, err := a.store.TrashUnusedKBMedia(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), input.IncludeKept, *input.Before, input.BatchID)
 	if err != nil {
 		writeKBMediaTrashError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"trashed": moved, "more": more, "batch_id": optionalString(batch)})
-}
-
-// proposeTrashOfUnusedKBMedia answers a token below send: a request a person approves always names
-// the items it moves, so it files the trash of up to 100 unused items by id, never "all unused".
-func (a *API) proposeTrashOfUnusedKBMedia(response http.ResponseWriter, request *http.Request, who auth.Principal, before time.Time, includeKept bool) {
-	ids, err := a.store.UnusedKBMediaIDs(request.Context(), who.Workspace.ID, includeKept, before, domain.MaxKBMediaBatch)
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	if len(ids) == 0 {
-		writeJSON(response, http.StatusOK, map[string]any{"trashed": 0, "more": false, "batch_id": nil})
-		return
-	}
-	body, _ := json.Marshal(map[string]any{"ids": ids})
-	route := Route{Method: http.MethodPost, Pattern: kbMediaTrashRoute}
-	proposal := request.Clone(request.Context())
-	proposal.Method, proposal.URL.Path, proposal.URL.RawPath, proposal.URL.RawQuery = http.MethodPost, kbMediaTrashRoute, "", ""
-	a.fileAgentRequest(response, proposal, route, who, domain.AgentRequestAction, body, "")
 }
 
 func (a *API) restoreKBMedia(response http.ResponseWriter, request *http.Request) {
@@ -215,7 +191,7 @@ func writeKBMediaReplaceError(response http.ResponseWriter, err error) {
 func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request) {
 	// A replacement writes a new version of every live article that shows the item.
 	who := principal(request)
-	if a.askUnlessHeld(response, request, kbMediaReplaceRoute, who, auth.PermKBArticlesPublish, nil, func() (bool, error) {
+	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
 		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
 	}) {
 		return
@@ -237,7 +213,7 @@ func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request
 
 func (a *API) undoKBMediaReplacement(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
-	if a.askUnlessHeld(response, request, kbMediaReplacementUndoRoute, who, auth.PermKBArticlesPublish, nil, func() (bool, error) {
+	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
 		return a.store.KBReplacementTouchesPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
 	}) {
 		return

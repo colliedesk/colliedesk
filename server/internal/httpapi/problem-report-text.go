@@ -23,13 +23,17 @@ func (a *API) reportBody(who auth.Principal, description string, diagnostics dia
 	}
 	signedIn := "person"
 	if who.IsToken() {
-		signedIn = "agent token (" + who.Scope + ")"
+		signedIn = "agent token (" + who.Token.Kind + ")"
 	}
 	plan := who.Access.Plan
 	if plan == "" {
 		plan = "none (no plan limits)"
 	}
-	fmt.Fprintf(&out, "Reporter: %s <%s>, %s, agent id %s, signed in as %s\n", oneLine(name, 200), who.Agent.Email, who.Agent.Role, who.Agent.ID, signedIn)
+	roles := make([]string, len(who.Agent.Roles))
+	for index, role := range who.Agent.Roles {
+		roles[index] = role.Name
+	}
+	fmt.Fprintf(&out, "Reporter: %s <%s>, roles %s, agent id %s, signed in as %s\n", oneLine(name, 200), who.Agent.Email, oneLine(strings.Join(roles, ", "), 200), who.Agent.ID, signedIn)
 	fmt.Fprintf(&out, "Workspace: %s (%s), id %s, plan %s\n", oneLine(who.Workspace.Name, 200), who.Workspace.Slug, who.Workspace.ID, plan)
 	fmt.Fprintf(&out, "Server: version %s, realm %s\n", a.version(), a.realm())
 	fmt.Fprintf(&out, "Report request id: %s\n", requestID)

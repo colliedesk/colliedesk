@@ -125,12 +125,8 @@ func (a *API) updateAIProvider(response http.ResponseWriter, request *http.Reque
 	}
 	who := principal(request)
 	provider, err := a.ai.UpdateProvider(request.Context(), who.Workspace.ID, aiActor(request), request.PathValue("id"),
-		ai.ProviderChange{Label: input.Label, Models: input.Models, Routing: input.Routing, MayLoosen: !who.IsToken()})
-	if errors.Is(err, ai.ErrLoosenNeedsApproval) {
-		// Letting customers' data reach providers that store or train on it is a person's call.
-		a.fileAgentRequest(response, request, Route{Method: http.MethodPatch, Pattern: "/api/v1/ai/providers/{id}"}, who, domain.AgentRequestAction, body, "")
-		return
-	}
+		// The route needs ai_settings:update, which is also what letting data reach looser providers takes.
+		ai.ProviderChange{Label: input.Label, Models: input.Models, Routing: input.Routing, MayLoosen: true})
 	if err != nil {
 		writeAIError(response, err)
 		return
@@ -414,13 +410,13 @@ func (a *API) createAITriage(response http.ResponseWriter, request *http.Request
 // Accepting or undoing a suggestion changes the conversation's tags, priority and assignee, as
 // PATCH /api/v1/conversations/{id} does: a token also needs conversations:update for it.
 var (
-	aiTriageAcceptRoute = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionConversationsWrite}
-	aiTriageUndoRoute   = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite}
+	aiTriageAcceptRoute = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionSession}
+	aiTriageUndoRoute   = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionSession}
 )
 
 func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
-	if a.askUnlessHeld(response, request, aiTriageAcceptRoute, identity, auth.PermConversationsUpdate, nil, nil) {
+	if a.refuseUnlessHeld(response, request, identity, auth.PermConversationsUpdate, nil) {
 		return
 	}
 	var want ai.TriageSet
@@ -443,7 +439,7 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 // undoAITriage takes back what AI applied of a suggestion by itself: the parts named (tags, priority,
 // assignee), or all of it without a body.
 func (a *API) undoAITriage(response http.ResponseWriter, request *http.Request) {
-	if a.askUnlessHeld(response, request, aiTriageUndoRoute, principal(request), auth.PermConversationsUpdate, nil, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermConversationsUpdate, nil) {
 		return
 	}
 	var input struct {

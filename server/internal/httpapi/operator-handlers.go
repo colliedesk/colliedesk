@@ -96,7 +96,7 @@ func (a *API) authorizeOperator(route Route, next http.HandlerFunc) http.Handler
 				return
 			}
 			if who.IsToken() {
-				access := tokenTiers[route.Method+" "+route.Pattern]
+				access := routeAccess[route.Method+" "+route.Pattern]
 				if access.Approval || (access.Permission != "" && !who.Allows(access.Permission)) {
 					a.fileOperatorRequest(response, request, route, who)
 					return

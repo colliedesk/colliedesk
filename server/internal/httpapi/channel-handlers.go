@@ -683,7 +683,7 @@ func (a *API) channelTypeRoutes() []routeSpec {
 	var specs []routeSpec
 	for _, definition := range a.store.Channels().Definitions() {
 		for _, route := range definition.Routes {
-			permission := auth.PermissionAccessWrite
+			permission := auth.PermissionSession
 			if route.Public {
 				permission = auth.PermissionPublic
 			}

@@ -11,7 +11,6 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -125,24 +124,18 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 		writeIntakeError(response, store.ErrGatheringNotFound)
 		return
 	}
-	body, input, ok := readIntakeDecision(response, request)
+	_, input, ok := readIntakeDecision(response, request)
 	if !ok {
 		return
 	}
 	who := principal(request)
-	// Opening a conversation may tell the customer it was received: a token needs messages:send for it.
+	// Opening a conversation may tell the customer it was received: that needs messages:send.
 	needs := auth.PermConversationsUpdate
 	if input.Action == intake.Create {
 		needs = auth.PermMessagesSend
 	}
-	if who.IsToken() && !who.Allows(needs) {
-		card, err := a.store.IntakeGatheringByID(request.Context(), who.Workspace.ID, id, a.now())
-		if err != nil {
-			writeIntakeError(response, err)
-			return
-		}
-		a.fileAgentRequest(response, request, Route{Method: http.MethodPost, Pattern: intakeDecideRoute}, who, domain.AgentRequestAction, body,
-			intakeSummary(card.IntakeGathering, input))
+	if !who.Can(needs) {
+		a.writePermissionMissing(response, request, who, needs)
 		return
 	}
 	actor := store.ChannelActor{AgentID: who.Agent.ID}
@@ -162,7 +155,7 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 // would refuse it; which of the two it gets is part of the input, so a repeat never shows more.
 func (a *API) decideOnce(response http.ResponseWriter, request *http.Request, operation string, input []string, decide func(context.Context) error) {
 	who := principal(request)
-	hidden := who.IsToken() && !who.Allows(auth.PermMessagesRead)
+	hidden := !who.Can(auth.PermMessagesRead)
 	a.runOnce(response, request, http.StatusOK, operation, append([]string{request.PathValue("id"), strconv.FormatBool(hidden)}, input...), func(ctx context.Context) (any, error) {
 		if err := decide(ctx); err != nil {
 			writeIntakeError(response, err)

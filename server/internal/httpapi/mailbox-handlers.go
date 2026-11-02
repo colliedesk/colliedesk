@@ -150,7 +150,7 @@ func (a *API) finishMailboxConsent(p mailboxProvider, request *http.Request, res
 	if err != nil || who.IsToken() {
 		return "signed_out"
 	}
-	if !auth.HasPermission(who.Agent.Role, auth.PermissionAccessWrite) || (a.limits && who.Access.Locked) {
+	if !who.Can(auth.PermChannelsManageCredentials) || (a.limits && who.Access.Locked) {
 		return "forbidden"
 	}
 	query := request.URL.Query()

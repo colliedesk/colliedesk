@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/results"
@@ -10,7 +11,7 @@ import (
 
 func (a *API) getResults(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
-	page, err := a.store.ReadResults(request.Context(), who.Workspace.ID, results.Viewer{AgentID: who.Agent.ID, Admin: who.Agent.Role == "admin",
+	page, err := a.store.ReadResults(request.Context(), who.Workspace.ID, results.Viewer{AgentID: who.Agent.ID, Admin: who.Can(auth.PermResultsShare),
 		CanSend: a.config.Email.SMTP.Configured() && a.config.Email.MailFromDomain != "", Now: a.now()})
 	if err != nil {
 		writeStoreError(response, err)

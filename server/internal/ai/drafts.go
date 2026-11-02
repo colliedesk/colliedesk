@@ -66,6 +66,11 @@ type Draft struct {
 	ID                 string         `json:"id"`
 	ConversationID     string         `json:"conversation_id"`
 	Status             string         `json:"status"`
+	// Source is ai for a draft the provider wrote, written for words someone (usually an agent token)
+	// left for a person to send; CC and WrittenBy only on a written one.
+	Source    string          `json:"source"`
+	CC        []string        `json:"cc"`
+	WrittenBy *DraftWrittenBy `json:"written_by"`
 	ErrorCode          *string        `json:"error_code"`
 	Prompt             string         `json:"prompt"`
 	Text               *string        `json:"text"`
@@ -87,6 +92,12 @@ type Draft struct {
 	DecidedAt        *time.Time `json:"decided_at"`
 }
 
+// DraftWrittenBy names who left a written draft: the agent token (nil when a person did) and the person.
+type DraftWrittenBy struct {
+	TokenLabel *string `json:"token_label"`
+	AgentName  string  `json:"agent_name"`
+}
+
 // draftColumns read a draft with the state its task gives it: a pending draft is queued, running,
 // failed or cancelled as its task is; one whose task is gone (a restored workspace) failed.
 const draftColumns = `d.id::text,d.conversation_id::text,
@@ -96,14 +107,18 @@ const draftColumns = `d.id::text,d.conversation_id::text,
 		WHEN d.status='pending' AND t.state='done' THEN 'internal'
 		WHEN d.status='pending' AND t.state IN ('failed','cancelled') THEN t.error_code END,
 	d.prompt,d.text,d.missing_info,d.sources,d.warnings,d.model,d.outcome,d.similarity::float8,d.sent_message_id::text,
-	d.requested_by_agent_id::text,d.automatic,d.answers_message_id::text,d.reply_needed,d.created_at,d.ready_at,d.decided_at
+	d.requested_by_agent_id::text,d.automatic,d.answers_message_id::text,d.reply_needed,d.created_at,d.ready_at,d.decided_at,
+	d.source,d.cc,(SELECT s.label FROM sessions s WHERE s.workspace_id=d.workspace_id AND s.id=d.requested_by_token_id),
+	(SELECT COALESCE(NULLIF(btrim(a.display_name),''),a.email) FROM agents a WHERE a.workspace_id=d.workspace_id AND a.id=d.requested_by_agent_id)
 	FROM ai_drafts d LEFT JOIN ai_tasks t ON t.workspace_id=d.workspace_id AND t.id=d.task_id`
 
 func scanDraft(row pgx.Row) (Draft, error) {
 	var d Draft
 	var sources, warnings []byte
+	var tokenLabel, agentName *string
 	err := row.Scan(&d.ID, &d.ConversationID, &d.Status, &d.ErrorCode, &d.Prompt, &d.Text, &d.MissingInfo, &sources, &warnings, &d.Model,
-		&d.Outcome, &d.Similarity, &d.SentMessageID, &d.RequestedByAgentID, &d.Automatic, &d.AnswersMessageID, &d.ReplyNeeded, &d.CreatedAt, &d.ReadyAt, &d.DecidedAt)
+		&d.Outcome, &d.Similarity, &d.SentMessageID, &d.RequestedByAgentID, &d.Automatic, &d.AnswersMessageID, &d.ReplyNeeded, &d.CreatedAt, &d.ReadyAt, &d.DecidedAt,
+		&d.Source, &d.CC, &tokenLabel, &agentName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Draft{}, ErrDraftNotFound
 	}
@@ -111,10 +126,62 @@ func scanDraft(row pgx.Row) (Draft, error) {
 		return Draft{}, err
 	}
 	d.Sources, d.Warnings = []DraftSource{}, []DraftWarning{}
+	if d.Source == DraftWritten {
+		d.WrittenBy = &DraftWrittenBy{TokenLabel: tokenLabel}
+		if agentName != nil {
+			d.WrittenBy.AgentName = *agentName
+		}
+	}
 	_ = json.Unmarshal(sources, &d.Sources)
 	_ = json.Unmarshal(warnings, &d.Warnings)
 	d.CreatedAt, d.ReadyAt, d.DecidedAt = d.CreatedAt.UTC(), utcPointer(d.ReadyAt), utcPointer(d.DecidedAt)
 	return d, nil
+}
+
+// DraftWritten marks a draft someone wrote for a person to send (ai_drafts.source).
+const DraftWritten = "written"
+
+// maxWrittenDraftRunes bounds a written draft, as a reply.
+const maxWrittenDraftRunes = 20000
+
+// CreateWrittenDraft leaves text (and copies) as a ready draft above the reply box, for a person to send,
+// edit or discard like an AI draft. It calls no provider and works while AI drafts are off. It replaces
+// the earlier draft of the same person and token, never anyone else's.
+func (s *Service) CreateWrittenDraft(ctx context.Context, workspaceID string, actor Actor, conversationID, text string, cc []string) (Draft, error) {
+	text = strings.TrimSpace(text)
+	if text == "" || utf8.RuneCountInString(text) > maxWrittenDraftRunes {
+		return Draft{}, invalid("A draft needs text of 1 to %d characters.", maxWrittenDraftRunes)
+	}
+	if !isUUID(conversationID) {
+		return Draft{}, ErrConversationNotFound
+	}
+	var copies []string
+	if len(cc) > 0 {
+		copies = cc
+	}
+	now := s.now().UTC()
+	var draft Draft
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		if err := conversationExists(ctx, tx, workspaceID, conversationID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='superseded',decided_at=$4,decided_by_agent_id=$3
+			WHERE workspace_id=$1 AND conversation_id=$2 AND requested_by_agent_id=$3 AND requested_by_token_id IS NOT DISTINCT FROM $5::uuid
+			AND source='written' AND status='ready' AND outcome IS NULL`,
+			workspaceID, conversationID, actor.AgentID, now, nullable(actor.TokenID)); err != nil {
+			return err
+		}
+		var id string
+		if err := tx.QueryRow(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,requested_by_agent_id,requested_by_token_id,status,source,text,cc,ready_at,created_at)
+			VALUES($1,$2,$3,$4,'ready','written',$5,$6,$7,$7) RETURNING id::text`, workspaceID, conversationID, nullable(actor.AgentID), nullable(actor.TokenID),
+			text, copies, now).Scan(&id); err != nil {
+			return err
+		}
+		var err error
+		draft, err = scanDraft(tx.QueryRow(ctx, `SELECT `+draftColumns+` WHERE d.workspace_id=$1 AND d.id=$2`, workspaceID, id))
+		return err
+	})
+	return draft, err
 }
 
 // CreateDraft queues a draft of a reply to the conversation, with the person's optional prompt. It
@@ -331,7 +398,7 @@ func (s *Service) DraftOutcomes(ctx context.Context, workspaceID string, from, t
 				WHEN d.status='ready' THEN 'open'
 				WHEN t.state IN ('queued','running') THEN 'open' ELSE 'failed' END, count(*)
 			FROM ai_drafts d LEFT JOIN ai_tasks t ON t.workspace_id=d.workspace_id AND t.id=d.task_id
-			WHERE d.workspace_id=$1 AND d.created_at>=$2 AND d.created_at<$3 GROUP BY 1`, workspaceID, from, to)
+			WHERE d.workspace_id=$1 AND d.source='ai' AND d.created_at>=$2 AND d.created_at<$3 GROUP BY 1`, workspaceID, from, to)
 		if err != nil {
 			return err
 		}

@@ -94,21 +94,12 @@ func (a *API) setChannelAI(response http.ResponseWriter, request *http.Request) 
 		writeChannelAIError(response, err)
 		return
 	}
-	route := Route{Method: http.MethodPut, Pattern: channelAIRoute}
-	if who.IsToken() && !who.Allows(auth.PermAISettingsUpdate) {
-		a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
+	if !who.Can(auth.PermAISettingsUpdate) {
+		a.writePermissionMissing(response, request, who, auth.PermAISettingsUpdate)
 		return
 	}
-	// The route lets every role through so a token can file its request; changing the level is an admin's.
-	if !auth.HasPermission(who.Agent.Role, auth.PermissionAccessWrite) {
-		writeError(response, http.StatusForbidden, "forbidden", "Only admins change what AI does by itself on a channel.")
-		return
-	}
-	levels, err := a.ai.SetChannelLevel(request.Context(), who.Workspace.ID, aiActor(request), ref, request.PathValue("slot"), change, !who.IsToken())
-	if errors.Is(err, ai.ErrRaiseNeedsApproval) {
-		a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
-		return
-	}
+	// Raising what AI does by itself takes ai_settings:update, which this caller holds.
+	levels, err := a.ai.SetChannelLevel(request.Context(), who.Workspace.ID, aiActor(request), ref, request.PathValue("slot"), change, true)
 	if err != nil {
 		writeChannelAIError(response, err)
 		return

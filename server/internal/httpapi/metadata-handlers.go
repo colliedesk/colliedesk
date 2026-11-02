@@ -10,7 +10,8 @@ import (
 )
 
 func (a *API) listAgents(response http.ResponseWriter, request *http.Request) {
-	items, err := a.store.ListAgents(request.Context(), principal(request).Workspace.ID)
+	who := principal(request)
+	items, err := a.store.ListAgents(request.Context(), who.Workspace.ID, callerOf(who))
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -20,32 +21,14 @@ func (a *API) listAgents(response http.ResponseWriter, request *http.Request) {
 
 var uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-var agentUpdateRoute = Route{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite}
-
-// touchesAdmin reports whether a team change is about the admin role: it asks for it, or it changes
-// the role or the active state of a target that has it now. A rename alone is not, and an unknown
-// target is not (the update answers 404).
-func (a *API) touchesAdmin(request *http.Request, role *string, active *bool) (bool, error) {
-	if role == nil && active == nil {
-		return false, nil
-	}
-	if role != nil && *role == "admin" {
-		return true, nil
-	}
-	members, err := a.store.ListAgents(request.Context(), principal(request).Workspace.ID)
-	if err != nil {
-		return false, err
-	}
-	for _, member := range members {
-		if member.ID == request.PathValue("id") {
-			return member.Role == "admin", nil
-		}
-	}
-	return false, nil
+// callerOf is who changes roles or members: the person, and what this call may do.
+func callerOf(who auth.Principal) store.Caller {
+	return store.Caller{AgentID: who.Agent.ID, Permissions: who.Effective()}
 }
 
-// updateAgent changes the display name, the role or the active state of an agent. reassign_to only makes sense with
-// active=false: it names the agent that takes over the open and pending conversations.
+// updateAgent changes the display name or the active state of a member; roles change with
+// PUT /api/v1/agents/{id}/roles. reassign_to only makes sense with active=false: it names the member
+// that takes over the open and pending conversations.
 func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	var input struct {
 		DisplayName *string `json:"display_name,omitempty"`
@@ -57,6 +40,10 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Agent changes are invalid.")
 		return
 	}
+	if input.Role != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Roles change with PUT /api/v1/agents/{id}/roles (role_ids, or roles by name).")
+		return
+	}
 	if !uuidShape.MatchString(request.PathValue("id")) {
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return
@@ -65,8 +52,8 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 		writeStoreError(response, domain.ErrInvalidReassignTarget)
 		return
 	}
-	if input.DisplayName == nil && input.Role == nil && input.Active == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send a display name, a role or an active flag.")
+	if input.DisplayName == nil && input.Active == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send a display name or an active flag.")
 		return
 	}
 	if input.DisplayName != nil {
@@ -77,29 +64,13 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 		}
 		input.DisplayName = &name
 	}
-	if input.Role != nil && *input.Role != "admin" && *input.Role != "agent" {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Role must be admin or agent.")
-		return
-	}
 	if input.ReassignTo != nil && (input.Active == nil || *input.Active) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "reassign_to only applies when active is false.")
 		return
 	}
-	// A change that grants, keeps or takes the admin role waits for a person whatever the token's tier:
-	// promoting, reactivating an admin (it keeps the role), demoting or deactivating an admin.
-	if who := principal(request); who.IsToken() {
-		touchesAdmin, err := a.touchesAdmin(request, input.Role, input.Active)
-		if err != nil {
-			writeStoreError(response, err)
-			return
-		}
-		if touchesAdmin {
-			a.fileGrantRequest(response, request, agentUpdateRoute, who, input)
-			return
-		}
-	}
-	member, err := a.store.UpdateAgent(request.Context(), principal(request).Workspace.ID, request.PathValue("id"),
-		store.AgentUpdate{DisplayName: input.DisplayName, Role: input.Role, Active: input.Active, ReassignTo: input.ReassignTo})
+	who := principal(request)
+	member, err := a.store.UpdateAgent(request.Context(), who.Workspace.ID, callerOf(who), request.PathValue("id"),
+		store.AgentUpdate{DisplayName: input.DisplayName, Active: input.Active, ReassignTo: input.ReassignTo})
 	if err != nil {
 		writeStoreError(response, err)
 		return

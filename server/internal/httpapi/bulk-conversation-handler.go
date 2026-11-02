@@ -18,7 +18,7 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 			Notify       *bool           `json:"notify"`
 		} `json:"changes"`
 	}
-	raw, err := readBody(request)
+	_, err := readBody(request)
 	if err != nil || decodeJSON(request, &input) != nil || input.Changes == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Conversation changes are invalid.")
 		return
@@ -51,7 +51,7 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 		}
 	}
 	quiet := changes.Notify != nil && !*changes.Notify
-	if a.statusNeedsApproval(response, request, Route{Method: http.MethodPatch, Pattern: "/api/v1/conversations"}, principal(request), raw, input.IDs, changes.Status, quiet) {
+	if a.refuseStatusThatTells(response, request, principal(request), input.IDs, changes.Status, quiet) {
 		return
 	}
 	update := store.BulkConversationUpdate{Status: changes.Status, AddTagIDs: changes.AddTagIDs, RemoveTagIDs: changes.RemoveTagIDs, ActorID: principal(request).Agent.ID, TokenID: tokenOf(request), Quiet: quiet}

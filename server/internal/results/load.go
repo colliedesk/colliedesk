@@ -74,7 +74,7 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 	}
 	in.Conversations = conversations
 	drafts, err := tx.Query(ctx, `SELECT conversation_id::text,outcome,decided_at FROM ai_drafts
-		WHERE workspace_id=$1 AND outcome IN ('sent_unchanged','sent_edited','discarded') AND decided_at>$2 AND decided_at<=$3`,
+		WHERE workspace_id=$1 AND source='ai' AND outcome IN ('sent_unchanged','sent_edited','discarded') AND decided_at>$2 AND decided_at<=$3`,
 		workspaceID, m.Add(-30*Day), m)
 	if err != nil {
 		return in, fmt.Errorf("read AI drafts: %w", err)
