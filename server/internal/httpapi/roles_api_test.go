@@ -406,3 +406,22 @@ func memberEmail(t *testing.T, api http.Handler, admin, token string) string {
 	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
 	return me.Agent.Email
 }
+
+// A role named like another role's id never answers for that id: an id finds its role, a name its own.
+func TestARoleNamedLikeAnIDDoesNotTakeThatID(t *testing.T) {
+	desk := newRequestDesk(t, "Roles Lookalike")
+	agentRole := roleOf(t, desk.api, desk.admin, "Agent")
+	var impostor roleView
+	kbCall(t, desk.api, http.MethodPost, "/api/v1/roles", map[string]any{"name": strings.ToUpper(agentRole.ID), "permissions": []string{"tags:read"}}, desk.admin, http.StatusCreated, &impostor)
+	for range 5 {
+		if got := roleOf(t, desk.api, desk.admin, agentRole.ID); got.ID != agentRole.ID || got.Name != "Agent" {
+			t.Fatalf("GET /roles/%s answered %s (%s), want the Agent role", agentRole.ID, got.Name, got.ID)
+		}
+	}
+	if got := request(t, desk.api, http.MethodDelete, "/api/v1/roles/"+agentRole.ID, nil, desk.admin, nil); got.Code != http.StatusConflict || !strings.Contains(got.Body.String(), "system_role_locked") {
+		t.Fatalf("DELETE by the Agent role's id: %d %s, want 409 system_role_locked", got.Code, got.Body.String())
+	}
+	if got := roleOf(t, desk.api, desk.admin, impostor.ID); got.ID != impostor.ID {
+		t.Fatalf("the lookalike by its own id answered %s", got.ID)
+	}
+}

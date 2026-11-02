@@ -7750,7 +7750,7 @@ components:
       name: id
       in: path
       required: true
-      description: The role's id, or its name (matched without regard to case).
+      description: 'The role''s id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id.'
       schema: {type: string, minLength: 1, maxLength: 60}
     ID:
       name: id

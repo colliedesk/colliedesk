@@ -216,3 +216,27 @@ func TestSessionListMarksTheCallersSession(t *testing.T) {
 		t.Fatalf("agent view marks=%v, want only its own session, marked current", agentView)
 	}
 }
+
+// An invite whose every role was deleted while it was being redeemed never makes a member without a
+// role: the redeem is refused and nothing is created.
+func TestRedeemNeverMakesAMemberWithoutARole(t *testing.T) {
+	api, authService, pool := testAPIWithPool(t)
+	adminToken := createSession(t, api, authService, "Roleless Desk", "admin@roleless.example.com")
+	kbCall(t, api, http.MethodPost, "/api/v1/roles", map[string]any{"name": "Tagger", "permissions": []string{"tags:read"}}, adminToken, http.StatusCreated, nil)
+	var invite struct {
+		URL string `json:"url"`
+	}
+	kbCall(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "new@roleless.example.com", "roles": []string{"Tagger"}}, adminToken, http.StatusCreated, &invite)
+	// The race's outcome: the role is gone by the time the redeem gives it.
+	if _, err := pool.Exec(context.Background(), `UPDATE roles SET deleted_at=now() WHERE name='Tagger'`); err != nil {
+		t.Fatal(err)
+	}
+	redeemed := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, invite.URL)}, "", nil)
+	if redeemed.Code != http.StatusUnauthorized {
+		t.Fatalf("redeem of an invite whose roles are gone: %d %s, want 401", redeemed.Code, redeemed.Body.String())
+	}
+	var members int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM agents WHERE email='new@roleless.example.com'`).Scan(&members); err != nil || members != 0 {
+		t.Fatalf("the refused redeem created %d members (%v)", members, err)
+	}
+}

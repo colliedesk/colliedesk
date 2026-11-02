@@ -2,6 +2,13 @@
 -- goes; the old columns were kept up to date, so everything else signs in as before.
 SELECT set_config('app.privileged', 'on', true);
 DELETE FROM sessions WHERE scope = 'role';
+-- The requests the upgrade closed wait again, and the drafts it wrote from them go: the previous release
+-- shows those replies as requests. A reply a token wrote as a draft after the upgrade has no place in the
+-- previous release (it would pass for an AI draft) and is dropped with them.
+UPDATE agent_requests SET status = 'pending', decided_at = NULL, reason = NULL
+WHERE status = 'expired'
+    AND reason = 'Colliedesk removed agent requests: nothing ran. An agent token now acts at once when it holds the permission.';
+DELETE FROM ai_drafts WHERE source = 'written';
 ALTER TABLE ai_drafts DROP COLUMN cc;
 ALTER TABLE ai_drafts DROP COLUMN source;
 ALTER TABLE sessions DROP CONSTRAINT sessions_scope_role_ceiling;

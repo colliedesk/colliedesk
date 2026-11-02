@@ -207,3 +207,27 @@ func TestEveryWorkspaceGetsItsSystemRoles(t *testing.T) {
 		t.Fatal("the Agent role was deleted")
 	}
 }
+
+// Rolling back reopens the requests the upgrade closed and drops the drafts it wrote from them, so the
+// previous release finds its requests as they were and no reply a token wrote passes for an AI draft.
+func TestRolesRollbackReopensRequestsAndDropsWrittenDrafts(t *testing.T) {
+	pool, ids := migrateBeforeRoles(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE agent_requests SET status='expired', decided_at=now(), reason='Expired after 7 days.' WHERE workspace_id=$1 AND status='expired' AND id=(SELECT id FROM agent_requests WHERE workspace_id=$1 ORDER BY id LIMIT 1)`, ids["one"]); err != nil {
+		t.Fatal(err)
+	}
+	if err := rollbackLatest(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	var pending, otherExpired, drafts int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status='pending' AND decided_at IS NULL AND reason IS NULL),
+		count(*) FILTER (WHERE status='expired' AND reason='Expired after 7 days.') FROM agent_requests`).Scan(&pending, &otherExpired); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM ai_drafts`).Scan(&drafts); err != nil {
+		t.Fatal(err)
+	}
+	if pending != 5 || otherExpired != 1 || drafts != 0 {
+		t.Fatalf("after the rollback %d requests wait, %d closed for another reason stay closed, %d drafts remain; want 5, 1, 0", pending, otherExpired, drafts)
+	}
+}

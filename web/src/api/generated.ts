@@ -3398,7 +3398,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -3419,7 +3419,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -3439,7 +3439,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -9623,7 +9623,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description The role's id, or its name (matched without regard to case). */
+        /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
         RoleKey: string;
         ID: string;
         /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
@@ -16814,7 +16814,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -16840,7 +16840,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -16865,7 +16865,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -16900,7 +16900,7 @@ export interface operations {
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;
@@ -16931,7 +16931,7 @@ export interface operations {
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
-                /** @description The role's id, or its name (matched without regard to case). */
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
                 id: components["parameters"]["RoleKey"];
             };
             cookie?: never;

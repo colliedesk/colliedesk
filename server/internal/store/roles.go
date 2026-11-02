@@ -135,10 +135,12 @@ func scanRole(row pgx.Row) (roleRecord, error) {
 // roleOrder: Admin, Agent, then by name.
 const roleOrder = `CASE r.system WHEN 'admin' THEN 0 WHEN 'agent' THEN 1 ELSE 2 END, lower(r.name), r.id`
 
-// findRole finds a role of the workspace by id or by name (without regard to case). A deleted role is
+// findRole finds a role of the workspace by id or by name (without regard to case); a key shaped like a
+// uuid is always an id, so a role named like another's id never answers for it. A deleted role is
 // found only with deleted.
 func findRole(ctx context.Context, tx pgx.Tx, workspaceID, key string, deleted bool, lock bool) (roleRecord, error) {
-	query := `SELECT ` + roleColumns + ` FROM roles r WHERE r.workspace_id=$1 AND (r.id::text=$2 OR lower(btrim(r.name))=lower(btrim($2)))`
+	query := `SELECT ` + roleColumns + ` FROM roles r WHERE r.workspace_id=$1 AND CASE WHEN $2 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+		THEN r.id::text=lower($2) ELSE lower(btrim(r.name))=lower(btrim($2)) END`
 	if !deleted {
 		query += ` AND r.deleted_at IS NULL`
 	}
@@ -300,6 +302,13 @@ func syncLegacyRole(ctx context.Context, tx pgx.Tx, workspaceID, agentID string)
 // every call); unused invites to the member's address that would give a removed role back are revoked.
 func (s *Store) SetAgentRoles(ctx context.Context, workspaceID string, caller Caller, agentID string, roleIDs, roleNames []string) (domain.TeamMember, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.TeamMember, error) {
+		// The member's unused invites go first, before any other lock: a redeem in flight holds its link and
+		// then waits for the seat lock or the member's row, so taking those first would deadlock with it.
+		if _, err := tx.Exec(ctx, `SELECT p.id FROM pairing_links p JOIN agents a ON a.workspace_id=p.workspace_id AND p.email=a.email
+			WHERE p.workspace_id=$1 AND a.id=$2 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL
+			ORDER BY p.id FOR UPDATE OF p`, workspaceID, agentID); err != nil {
+			return domain.TeamMember{}, fmt.Errorf("lock invites: %w", err)
+		}
 		if err := lockRoles(ctx, tx, workspaceID); err != nil {
 			return domain.TeamMember{}, err
 		}
@@ -381,23 +390,37 @@ func (s *Store) SetAgentRoles(ctx context.Context, workspaceID string, caller Ca
 var ErrAgentNotFound = errors.New("agent not found")
 
 // GiveRolesOnJoin adds roles to a person who redeemed an invite. A person new to the workspace (created)
-// holds only them: the starting role the database gave on insert goes.
+// holds only them: the starting role the database gave on insert goes, but only once a role of the
+// invite was given, so no one joins without a role. An invite none of whose roles remain is
+// ErrInviteRolesGone.
 func GiveRolesOnJoin(ctx context.Context, tx pgx.Tx, workspaceID, agentID string, roleIDs []string, created bool, grantedBy *string) error {
 	if len(roleIDs) == 0 {
 		return nil
 	}
+	var given []string
+	rows, err := tx.Query(ctx, `INSERT INTO agent_roles(workspace_id,agent_id,role_id,granted_by_agent_id)
+		SELECT $1,$2,r.id,$4 FROM roles r WHERE r.workspace_id=$1 AND r.id=ANY($3::uuid[]) AND r.deleted_at IS NULL
+		ON CONFLICT (workspace_id,agent_id,role_id) DO UPDATE SET role_id=EXCLUDED.role_id
+		RETURNING role_id::text`, workspaceID, agentID, roleIDs, grantedBy)
+	if err != nil {
+		return fmt.Errorf("give invite roles: %w", err)
+	}
+	if given, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+		return fmt.Errorf("give invite roles: %w", err)
+	}
+	if len(given) == 0 {
+		return ErrInviteRolesGone
+	}
 	if created {
-		if _, err := tx.Exec(ctx, `DELETE FROM agent_roles WHERE workspace_id=$1 AND agent_id=$2 AND role_id<>ALL($3::uuid[])`, workspaceID, agentID, roleIDs); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM agent_roles WHERE workspace_id=$1 AND agent_id=$2 AND role_id<>ALL($3::uuid[])`, workspaceID, agentID, given); err != nil {
 			return fmt.Errorf("replace starting role: %w", err)
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO agent_roles(workspace_id,agent_id,role_id,granted_by_agent_id)
-		SELECT $1,$2,r.id,$4 FROM roles r WHERE r.workspace_id=$1 AND r.id=ANY($3::uuid[]) AND r.deleted_at IS NULL
-		ON CONFLICT DO NOTHING`, workspaceID, agentID, roleIDs, grantedBy); err != nil {
-		return fmt.Errorf("give invite roles: %w", err)
-	}
 	return syncLegacyRole(ctx, tx, workspaceID, agentID)
 }
+
+// ErrInviteRolesGone: every role an invite gives was deleted.
+var ErrInviteRolesGone = errors.New("every role of the invite was deleted")
 
 // RoleInvalidError is a role field the API refuses with 400.
 type RoleInvalidError struct{ Field, Message string }

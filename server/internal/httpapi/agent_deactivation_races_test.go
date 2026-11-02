@@ -199,3 +199,44 @@ func TestDeactivationAndRedeemTogetherNeitherDeadlockNorLeakASession(t *testing.
 		}
 	}
 }
+
+// Taking a role while a redeem of an invite that gives it is in flight waits for the redeem's link and
+// takes no other lock first, so the redeem can still lock the member and finish: no deadlock.
+func TestTakingARoleWhileItsInviteIsRedeemedDoesNotDeadlock(t *testing.T) {
+	f := newTeamFixture(t)
+	ctx := context.Background()
+	kbCall(t, f.api, http.MethodPost, "/api/v1/roles", map[string]any{"name": "Tagger", "permissions": []string{"tags:read"}}, f.admin, http.StatusCreated, nil)
+	if got := setRoles(t, f.api, f.admin, f.annID, "Agent", "Tagger"); got.code != http.StatusOK {
+		t.Fatalf("give Tagger: %d %s", got.code, got.body)
+	}
+	kbCall(t, f.api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "ann@team.example.com", "roles": []string{"Tagger"}}, f.admin, http.StatusCreated, nil)
+	ws := workspaceID(t, f.api, f.admin)
+
+	// A redeem that holds the invite's link and will next lock the member, as Redeem does.
+	tx := f.workspaceTx(t)
+	if _, err := tx.Exec(ctx, `SELECT id FROM pairing_links WHERE workspace_id=$1 AND kind='invite' AND email='ann@team.example.com' AND used_at IS NULL FOR UPDATE`, ws); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- serve(f.api, newRequest(t, http.MethodPut, "/api/v1/agents/"+f.annID+"/roles", map[string]any{"roles": []string{"Agent"}}, f.admin, nil))
+	}()
+	if response, waiting := blocked(done); !waiting {
+		t.Fatalf("taking the role finished with status %d while the invite's redeem held its link; it must wait for the link", response.Code)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '3s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT id FROM agents WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, ws, f.annID); err != nil {
+		t.Fatalf("the redeem could not lock the member while the role was being taken: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE pairing_links SET used_at=now() WHERE workspace_id=$1 AND kind='invite' AND email='ann@team.example.com' AND used_at IS NULL`, ws); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if response := <-done; response.Code != http.StatusOK {
+		t.Fatalf("taking the role after the redeem: status=%d body=%s, want 200", response.Code, response.Body.String())
+	}
+}
