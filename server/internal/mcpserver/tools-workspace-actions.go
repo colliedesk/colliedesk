@@ -1,205 +1,38 @@
 package mcpserver
 
 import (
-	"encoding/json"
-	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"encoding/base64"
+	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
-type restAgentRequest struct {
-	ID             string          `json:"id"`
-	Kind           string          `json:"kind"`
-	Status         string          `json:"status"`
-	Method         string          `json:"method"`
-	Path           string          `json:"path"`
-	Body           json.RawMessage `json:"body"`
-	Summary        string          `json:"summary"`
-	ConversationID *string         `json:"conversation_id"`
-	RequestedBy    struct {
-		TokenLabel string `json:"token_label"`
-	} `json:"requested_by"`
-	DecidedBy *struct {
-		Name string `json:"name"`
-	} `json:"decided_by"`
-	DecidedAt    *time.Time `json:"decided_at"`
-	Reason       *string    `json:"reason"`
-	ResultStatus *int       `json:"result_status"`
-	ResultNote   *string    `json:"result_note"`
-	CreatedAt    time.Time  `json:"created_at"`
-	ExpiresAt    time.Time  `json:"expires_at"`
-}
-
-// requestOut is a request as a model reads it. The answer of the approved call is left out: it can
-// hold customer text, and result_status says whether the call worked.
-type requestOut struct {
-	ID             string          `json:"id"`
-	Kind           string          `json:"kind"`
-	Status         string          `json:"status"`
-	Summary        string          `json:"summary"`
-	Call           string          `json:"call"`
-	Body           json.RawMessage `json:"body,omitempty"`
-	ConversationID string          `json:"conversation_id,omitempty"`
-	RequestedBy    string          `json:"requested_by"`
-	DecidedBy      string          `json:"decided_by,omitempty"`
-	DecidedAt      string          `json:"decided_at,omitempty"`
-	Reason         string          `json:"reason,omitempty"`
-	ResultStatus   *int            `json:"result_status,omitempty"`
-	ResultNote     string          `json:"result_note,omitempty"`
-	CreatedAt      string          `json:"created_at"`
-	ExpiresAt      string          `json:"expires_at"`
-}
-
-func requestView(item restAgentRequest) requestOut {
-	out := requestOut{ID: item.ID, Kind: item.Kind, Status: item.Status, Summary: item.Summary, Call: item.Method + " " + item.Path,
-		RequestedBy: item.RequestedBy.TokenLabel, ResultStatus: item.ResultStatus, CreatedAt: utc(item.CreatedAt), ExpiresAt: utc(item.ExpiresAt)}
-	if len(item.Body) > 0 && string(item.Body) != "null" {
-		out.Body = item.Body
-	}
-	if item.ConversationID != nil {
-		out.ConversationID = *item.ConversationID
-	}
-	if item.DecidedBy != nil {
-		out.DecidedBy = item.DecidedBy.Name
-	}
-	if item.DecidedAt != nil {
-		out.DecidedAt = utc(*item.DecidedAt)
-	}
-	if item.Reason != nil {
-		out.Reason = *item.Reason
-	}
-	if item.ResultNote != nil {
-		out.ResultNote = *item.ResultNote
-	}
-	return out
-}
-
-type filedOut struct {
-	AgentRequest filedRequest `json:"agent_request"`
-	Next         string       `json:"next"`
-}
-
-type filedRequest struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Status    string `json:"status"`
-	Summary   string `json:"summary"`
-	ExpiresAt string `json:"expires_at"`
-}
-
-// requestedOutput is what a model reads when its call was filed as an agent request instead of run.
-// It is a result, not an error: the call did what Colliedesk allows, and the model must know nothing
-// changed yet and how to follow the request.
-func requestedOutput(c *call, filed *agentRequested) filedOut {
-	if c.spec.Tier == auth.ScopeOperator {
-		return filedOut{AgentRequest: filedRequest{ID: filed.RequestID, Kind: "operator", Status: filed.Status, Summary: filed.Summary, ExpiresAt: filed.ExpiresAt},
-			Next: "Nothing changed yet: an operator must approve this in the operator console (Requests), within seven days. Tell the user it is waiting. Do not repeat the call: each call files another request."}
-	}
-	next := []string{"Colliedesk did not do this yet: a person must approve it in Colliedesk (Requests) first, within seven days. " +
-		"Tell the user it is waiting for approval. Follow it with colliedesk_request_get (request_id " + filed.RequestID + "); withdraw it with colliedesk_request_cancel. " +
-		"Do not repeat the call: each call files another request."}
-	if filed.Kind == "reply_draft" {
-		next = append(next, "The reply is a draft: a person can edit it, send it or discard it.")
-	}
-	if c.wrote {
-		next = append(next, "Changes this call made before this step are already saved.")
-	}
-	next = append(next, "If this call asked for more than this one change, the rest did not run: call the tool again after the request is approved.")
-	return filedOut{AgentRequest: filedRequest{ID: filed.RequestID, Kind: filed.Kind, Status: filed.Status, Summary: filed.Summary, ExpiresAt: filed.ExpiresAt},
-		Next: strings.Join(next, " ")}
-}
-
-// outputSchema is the advertised output schema of a tool. A tool that changes data may answer with an
-// agent request instead of its usual result, so its schema allows either shape.
-func outputSchema(spec Spec) string {
-	if spec.ReadOnly || strings.Contains(spec.Output, `"agent_request"`) {
-		return spec.Output
-	}
-	var schema map[string]any
-	if err := json.Unmarshal([]byte(spec.Output), &schema); err != nil {
-		return spec.Output
-	}
-	properties, _ := schema["properties"].(map[string]any)
-	if properties == nil {
-		properties = map[string]any{}
-	}
-	var filed map[string]any
-	_ = json.Unmarshal([]byte(filedSchema), &filed)
-	for name, property := range filed["properties"].(map[string]any) {
-		properties[name] = property
-	}
-	schema["properties"] = properties
-	required, hasRequired := schema["required"]
-	delete(schema, "required")
-	usual := map[string]any{}
-	if hasRequired {
-		usual["required"] = required
-	}
-	schema["anyOf"] = []any{usual, map[string]any{"required": filed["required"]}}
-	encoded, err := json.Marshal(schema)
-	if err != nil {
-		return spec.Output
-	}
-	return string(encoded)
-}
-
-func requestsList(c *call, arguments map[string]any) (any, error) {
-	args, err := decodeArguments[struct {
-		Status string `json:"status"`
-	}](arguments)
-	if err != nil {
+// passOn makes a change as the caller and answers what Colliedesk answered (nothing for a 204).
+func passOn(c *call, method, path string, body any) (map[string]any, error) {
+	var out map[string]any
+	if err := c.send(method, path, body, &out); err != nil {
 		return nil, err
 	}
-	query := url.Values{}
-	if args.Status != "" {
-		query.Set("status", args.Status)
+	if out == nil {
+		out = map[string]any{}
 	}
-	var page struct {
-		Items []restAgentRequest `json:"items"`
-	}
-	if err := c.get("/api/v1/agent-requests", query, &page); err != nil {
-		return nil, err
-	}
-	out := make([]requestOut, len(page.Items))
-	for index, item := range page.Items {
-		out[index] = requestView(item)
-	}
-	return map[string]any{"requests": out}, nil
+	return out, nil
 }
 
-func requestID(arguments map[string]any) (string, error) {
-	args, err := decodeArguments[struct {
-		RequestID string `json:"request_id"`
-	}](arguments)
-	return args.RequestID, err
+// personName names the person this token acts as, for a step only they can take.
+func personName(c *call) string {
+	if me, err := c.me(); err == nil {
+		return agentName(me.Agent)
+	}
+	return "the person this token acts as"
 }
 
-func requestGet(c *call, arguments map[string]any) (any, error) {
-	id, err := requestID(arguments)
-	if err != nil {
-		return nil, err
-	}
-	c.notFound = "No request " + id + " filed by this token. List yours with colliedesk_requests_list."
-	var item restAgentRequest
-	if err := c.get("/api/v1/agent-requests/"+url.PathEscape(id), nil, &item); err != nil {
-		return nil, err
-	}
-	return map[string]any{"request": requestView(item)}, nil
-}
-
-func requestCancel(c *call, arguments map[string]any) (any, error) {
-	id, err := requestID(arguments)
-	if err != nil {
-		return nil, err
-	}
-	c.notFound = "No request " + id + " filed by this token. List yours with colliedesk_requests_list."
-	var item restAgentRequest
-	if err := c.send(http.MethodPost, "/api/v1/agent-requests/"+url.PathEscape(id)+"/cancel", nil, &item); err != nil {
-		return nil, err
-	}
-	return map[string]any{"request": requestView(item)}, nil
+// forThePerson is the next step of an address only the token's person can finish, in their browser.
+func forThePerson(c *call, what string) string {
+	return fmt.Sprintf("Give this address to %s: %s It works only for them, in a browser signed in to Colliedesk, "+
+		"so do not open it yourself and do not pass it to anyone else.", personName(c), what)
 }
 
 func replyDraft(c *call, arguments map[string]any) (any, error) {
@@ -215,34 +48,47 @@ func replyDraft(c *call, arguments map[string]any) (any, error) {
 		return nil, &toolError{"The draft is empty. Write the reply text in body."}
 	}
 	c.notFound = notFoundConversation(args.ConversationID)
-	call := map[string]any{"kind": "outgoing", "body": args.Body, "draft": true}
+	body := map[string]any{"text": args.Body}
 	if len(args.CC) > 0 {
-		call["cc"] = args.CC
+		body["cc"] = args.CC
 	}
-	return ask(c, http.MethodPost, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/messages", call)
-}
-
-// ask makes a call that Colliedesk always files as an agent request for a token.
-func ask(c *call, method, path string, body any) (any, error) {
-	err := c.send(method, path, body, nil)
-	if err == nil {
-		return nil, &toolError{"Colliedesk ran this call without asking a person, which it never does for an agent token. Tell a workspace admin."}
+	var draft struct {
+		ID             string `json:"id"`
+		ConversationID string `json:"conversation_id"`
+		Status         string `json:"status"`
 	}
-	return nil, err
+	if err := c.send(http.MethodPost, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/reply-drafts", body, &draft); err != nil {
+		return nil, err
+	}
+	return map[string]any{"draft": draft,
+		"next": "Nothing reached the customer. A person sees the draft above the reply box and sends, edits or discards it."}, nil
 }
 
-func tokenCreateRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPost, "/api/v1/auth/tokens", arguments)
-}
-
-func workspaceExportRequest(c *call, arguments map[string]any) (any, error) {
+func workspaceExport(c *call, arguments map[string]any) (any, error) {
 	if delivery, _ := arguments["delivery"].(string); delivery == "download" {
-		return ask(c, http.MethodGet, "/api/v1/export", nil)
+		header, body, err := c.download("/api/v1/export", inlineFilesLimit+1)
+		if err != nil {
+			return nil, err
+		}
+		if len(body) > inlineFilesLimit {
+			return nil, &toolError{"The export is larger than " + inlineFilesLimitWords + ", too large for one answer. Call again with delivery link and give the link to the person you work for."}
+		}
+		filename := "colliedesk-export.zip"
+		if _, params, err := mime.ParseMediaType(header.Get("Content-Disposition")); err == nil && params["filename"] != "" {
+			filename = params["filename"]
+		}
+		return map[string]any{"filename": filename, "size": len(body), "data_base64": base64.StdEncoding.EncodeToString(body),
+			"next": "This is every conversation, message and contact of the workspace: keep it with the person you work for, never in a conversation, note or reply."}, nil
 	}
-	return ask(c, http.MethodPost, "/api/v1/export/link", nil)
+	out, err := passOn(c, http.MethodPost, "/api/v1/export/link", nil)
+	if err != nil {
+		return nil, err
+	}
+	out["next"] = "url is a path on this Colliedesk: put the address the person opens Colliedesk at in front of it and give it to the person you work for. It downloads the whole workspace once, then stops working. Never paste it in a conversation, note or reply."
+	return out, nil
 }
 
-func billingRequest(c *call, arguments map[string]any) (any, error) {
+func billingAction(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		Action           string `json:"action"`
 		Plan             string `json:"plan"`
@@ -254,41 +100,102 @@ func billingRequest(c *call, arguments map[string]any) (any, error) {
 	}
 	switch args.Action {
 	case "portal":
-		return ask(c, http.MethodPost, "/api/v1/billing/portal", nil)
+		out, err := passOn(c, http.MethodPost, "/api/v1/billing/portal", nil)
+		if err != nil {
+			return nil, err
+		}
+		out["next"] = forThePerson(c, "it opens the billing portal, where they change the plan, the card or download invoices.")
+		return out, nil
 	case "migration_request":
 		if strings.TrimSpace(args.FreshdeskAddress) == "" {
 			return nil, &toolError{"A migration request needs freshdesk_address, like yourcompany.freshdesk.com."}
 		}
-		return ask(c, http.MethodPost, "/api/v1/billing/migration-request", map[string]any{"freshdesk_address": args.FreshdeskAddress, "times": args.Times})
+		if _, err := passOn(c, http.MethodPost, "/api/v1/billing/migration-request", map[string]any{"freshdesk_address": args.FreshdeskAddress, "times": args.Times}); err != nil {
+			return nil, err
+		}
+		return map[string]any{"next": "Colliedesk support has the migration request and will write to " + personName(c) + "; colliedesk_billing_get shows when it was sent."}, nil
 	}
 	if args.Plan == "" {
 		return nil, &toolError{"A checkout needs a plan: solo_monthly, solo_yearly, small_monthly, small_yearly, team_monthly, team_yearly, team25_monthly, team25_yearly or founding."}
 	}
-	return ask(c, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": args.Plan})
+	out, err := passOn(c, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": args.Plan})
+	if err != nil {
+		return nil, err
+	}
+	out["next"] = forThePerson(c, "it opens the payment page for "+args.Plan+"; nothing is paid until they pay there.")
+	return out, nil
 }
 
-func emailChannelDisconnectRequest(c *call, _ map[string]any) (any, error) {
-	return ask(c, http.MethodDelete, "/api/v1/channels/email", nil)
+func emailChannelDisconnect(c *call, _ map[string]any) (any, error) {
+	if _, err := passOn(c, http.MethodDelete, "/api/v1/channels/email", nil); err != nil {
+		return nil, err
+	}
+	return map[string]any{"done": true, "next": "The default email channel is disconnected; its conversations stay. Connect it again in Settings → Channels or with colliedesk_channels_create."}, nil
 }
 
-func emailSecretRotateRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/secret"), nil)
+func emailSecretRotate(c *call, arguments map[string]any) (any, error) {
+	out, err := passOn(c, http.MethodPost, emailChannelPath(c, arguments, "/secret"), nil)
+	if err != nil {
+		return nil, err
+	}
+	out["next"] = "The old secret stopped working. Give the new one only to the person who updates the mail forwarder; never write it in a conversation, note or reply."
+	return out, nil
 }
 
-func gmailConnectRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/gmail"), nil)
+func consentLink(c *call, arguments map[string]any, provider, suffix string) (any, error) {
+	out, err := passOn(c, http.MethodPost, emailChannelPath(c, arguments, suffix), nil)
+	if err != nil {
+		return nil, err
+	}
+	out["next"] = forThePerson(c, "it opens "+provider+"'s page, where they sign in and agree within 10 minutes. colliedesk_email_channel_get then shows the connection.")
+	return out, nil
 }
 
-func gmailDisconnectRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/gmail"), nil)
+func gmailConnect(c *call, arguments map[string]any) (any, error) {
+	return consentLink(c, arguments, "Google", "/gmail")
 }
 
-func microsoftConnectRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/microsoft"), nil)
+func microsoftConnect(c *call, arguments map[string]any) (any, error) {
+	return consentLink(c, arguments, "Microsoft", "/microsoft")
 }
 
-func microsoftDisconnectRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/microsoft"), nil)
+func mailboxDisconnect(c *call, arguments map[string]any, provider, suffix, again string) (any, error) {
+	if _, err := passOn(c, http.MethodDelete, emailChannelPath(c, arguments, suffix), nil); err != nil {
+		return nil, err
+	}
+	return map[string]any{"done": true, "next": provider + " is disconnected; replies go out the way they did before. Connect it again with " + again + "."}, nil
+}
+
+func gmailDisconnect(c *call, arguments map[string]any) (any, error) {
+	return mailboxDisconnect(c, arguments, "Gmail", "/gmail", "colliedesk_gmail_connect")
+}
+
+func microsoftDisconnect(c *call, arguments map[string]any) (any, error) {
+	return mailboxDisconnect(c, arguments, "Microsoft 365", "/microsoft", "colliedesk_microsoft_connect")
+}
+
+func numberSeriesSet(c *call, arguments map[string]any) (any, error) {
+	series, _ := arguments["series"].(string)
+	body := map[string]any{}
+	for key, value := range arguments {
+		if key != "series" {
+			body[key] = value
+		}
+	}
+	return passOn(c, http.MethodPut, "/api/v1/conversation-number-series/"+url.PathEscape(series), body)
+}
+
+func responseTargetsSet(c *call, arguments map[string]any) (any, error) {
+	return passOn(c, http.MethodPut, "/api/v1/response-targets", arguments)
+}
+
+func workspaceSlugChange(c *call, arguments map[string]any) (any, error) {
+	out, err := passOn(c, http.MethodPatch, "/api/v1/workspace/slug", arguments)
+	if err != nil {
+		return nil, err
+	}
+	delete(out, "continue_url")
+	return map[string]any{"workspace": out}, nil
 }
 
 func numberSeriesList(c *call, _ map[string]any) (any, error) {
@@ -301,29 +208,10 @@ func numberSeriesList(c *call, _ map[string]any) (any, error) {
 	return map[string]any{"items": page.Items}, nil
 }
 
-func numberSeriesSetRequest(c *call, arguments map[string]any) (any, error) {
-	series, _ := arguments["series"].(string)
-	body := map[string]any{}
-	for key, value := range arguments {
-		if key != "series" {
-			body[key] = value
-		}
-	}
-	return ask(c, http.MethodPut, "/api/v1/conversation-number-series/"+url.PathEscape(series), body)
-}
-
 func responseTargetsGet(c *call, _ map[string]any) (any, error) {
 	var targets map[string]any
 	if err := c.get("/api/v1/response-targets", nil, &targets); err != nil {
 		return nil, err
 	}
 	return targets, nil
-}
-
-func responseTargetsSetRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPut, "/api/v1/response-targets", arguments)
-}
-
-func workspaceSlugRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPatch, "/api/v1/workspace/slug", arguments)
 }

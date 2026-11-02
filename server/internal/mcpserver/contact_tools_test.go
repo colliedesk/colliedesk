@@ -13,7 +13,7 @@ func TestContactUpdateRenamesAndNeedsTheSendTier(t *testing.T) {
 	grace := conversation["contact_id"].(string)
 	args := map[string]any{"contact_id": grace, "name": "Grace Hopper"}
 
-	requestedForTier(t, e, f.w.draft, "colliedesk_contact_update", args)
+	refusedWithoutPermission(t, e, f.w.draft, "colliedesk_contact_update", args)
 	out := e.ok(e.connect(f.w.send, ""), "colliedesk_contact_update", args)
 	if at(t, out, "contact", "untrusted_customer_content", "name") != "Grace Hopper" {
 		t.Fatalf("rename = %v", out)
@@ -32,7 +32,7 @@ func TestContactMergeMovesConversationsAndUnmergeMovesThemBack(t *testing.T) {
 	grace, alan := first["contact_id"].(string), second["contact_id"].(string)
 	args := map[string]any{"contact_id": grace, "duplicate_contact_id": alan}
 
-	requestedForTier(t, e, f.w.draft, "colliedesk_contact_merge", args)
+	refusedWithoutPermission(t, e, f.w.draft, "colliedesk_contact_merge", args)
 	send := e.connect(f.w.send, "")
 	merged := e.ok(send, "colliedesk_contact_merge", args)
 	mergeID, _ := at(t, merged, "merge", "merge_id").(string)
@@ -79,10 +79,7 @@ func TestConversationStartEmailsTheCustomerInOneStep(t *testing.T) {
 	if status, body := e.rest(http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@inbox.example.com"}, f.w.admin); status != http.StatusOK {
 		t.Fatalf("connect email: %d %v", status, body)
 	}
-	filed := requestedForTier(t, e, f.w.draft, "colliedesk_conversation_start", args)
-	if summary, _ := at(t, filed, "agent_request", "summary").(string); !strings.Contains(summary, "grace@cust.example.com") || !strings.Contains(summary, "It renews next week.") {
-		t.Errorf("the approver must see who is emailed and what: summary %q", summary)
-	}
+	refusedWithoutPermission(t, e, f.w.draft, "colliedesk_conversation_start", args)
 	out := e.ok(send, "colliedesk_conversation_start", args)
 	id := at(t, out, "conversation", "id").(string)
 	if at(t, out, "message", "delivery") == nil {

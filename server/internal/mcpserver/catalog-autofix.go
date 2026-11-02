@@ -28,12 +28,12 @@ func autofixStatusSpec() Spec {
 		Name:  "colliedesk_autofix_status",
 		Title: "Show Autofix counts",
 		Description: `Show whether Autofix is set up (connected_repos, repositories not paused) and how many fixes wait for a person (failed, merged and not yet released, ` +
-			`or sent and silent for 30 minutes) or are running.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/autofix/status"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["connected_repos","needs_person","running"],"properties":{"connected_repos":{"type":"integer"},"needs_person":{"type":"integer"},"running":{"type":"integer"}}}`,
-		run:    autofixStatus,
+			`or sent and silent for 30 minutes) or are running.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/autofix/status"},
+		Input:    noArguments,
+		Output:   `{"type":"object","required":["connected_repos","needs_person","running"],"properties":{"connected_repos":{"type":"integer"},"needs_person":{"type":"integer"},"running":{"type":"integer"}}}`,
+		run:      autofixStatus,
 	}
 }
 
@@ -43,9 +43,9 @@ func fixesListSpec() Spec {
 		Title: "List Autofix fixes",
 		Description: `List the workspace's fixes (conversations sent to a coding agent: Claude or Copilot through a GitHub issue, Cursor through its API), newest first, in pages, ` +
 			`optionally one group (needs_person, running or done), one repository (repo_id, from colliedesk_fix_get or the settings) and one agent (connector). ` + fixesDescriptionStates +
-			`Read one with colliedesk_fix_get for what was sent and its timeline. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/autofix/fixes"},
+			`Read one with colliedesk_fix_get for what was sent and its timeline. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/autofix/fixes"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"group":{"type":"string","enum":["needs_person","running","done"]},` +
 			`"repo_id":{"type":"string",` + uuid + `},"connector":{"type":"string","enum":["claude_issue","copilot_issue","cursor_api"]},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":100,"default":50},"cursor":{"type":"string","maxLength":200,"description":"next_cursor of the page before."}}}`,
@@ -59,12 +59,12 @@ func fixGetSpec() Spec {
 		Name:  "colliedesk_fix_get",
 		Title: "Show an Autofix fix",
 		Description: `Show one fix: where it is, its issue, Cursor run and pull request links, exactly what was sent (sent_title, sent_body) and its timeline (events). ` +
-			fixesDescriptionStates + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/autofix/fixes/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["fix_id"],"properties":{` + fixIDProperty + `}}`,
-		Output: `{"type":"object","required":["fix"],"properties":{"fix":` + fixSchema + `}}`,
-		run:    fixGet,
+			fixesDescriptionStates + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/autofix/fixes/{id}"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["fix_id"],"properties":{` + fixIDProperty + `}}`,
+		Output:   `{"type":"object","required":["fix"],"properties":{"fix":` + fixSchema + `}}`,
+		run:      fixGet,
 	}
 }
 
@@ -72,12 +72,12 @@ func conversationFixesListSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_conversation_fixes_list",
 		Title:       "List a conversation's Autofix fixes",
-		Description: `List every fix of a conversation, the latest attempt first. ` + fixesDescriptionStates + untrustedNotice + "\n\nTier: read.",
-		Tier:        "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/conversations/{id}/fixes"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
-		Output: `{"type":"object","required":["fixes"],"properties":{"fixes":{"type":"array","items":` + fixSchema + `}}}`,
-		run:    conversationFixesList,
+		Description: `List every fix of a conversation, the latest attempt first. ` + fixesDescriptionStates + untrustedNotice,
+		ReadOnly:    true,
+		REST:        []string{"GET /api/v1/conversations/{id}/fixes"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
+		Output:      `{"type":"object","required":["fixes"],"properties":{"fixes":{"type":"array","items":` + fixSchema + `}}}`,
+		run:         conversationFixesList,
 	}
 }
 
@@ -95,13 +95,20 @@ const (
 		`It passes through this conversation, so use a key you can revoke at Cursor; a service account key is advised, as a user key acts with all of its owner's rights.`
 )
 
-func codingAgentEnableRequestSpec() Spec {
-	return approvalSpec("colliedesk_coding_agent_enable_request", "Ask to turn on a coding agent for Autofix",
-		`Ask to turn on one coding agent fixes can be sent to (Claude or Copilot through a GitHub issue, Cursor through its API), with the admin's consent to the data it receives. `+
-			`consent_version is the version of the consent text (consent_version in the Autofix settings). Turning an agent on lets ticket text leave for that vendor, so a person always decides.`,
-		[]string{"PUT /api/v1/autofix/connectors/{kind}"},
-		`{"type":"object","additionalProperties":false,"required":["kind","consent_version"],"properties":{`+codingAgentKindProperty+`,`+
-			`"consent_version":{"type":"string","minLength":1,"maxLength":40}}}`, codingAgentEnableRequest)
+func codingAgentEnableSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_coding_agent_enable",
+		Title: "Turn on a coding agent for Autofix",
+		Description: `Turn on one coding agent fixes can be sent to (Claude or Copilot through a GitHub issue, Cursor through its API), with consent to the data it receives, ` +
+			`recorded in the name of the person this token acts as. consent_version is the version of the consent text (consent_version in the Autofix settings). ` +
+			`Turning an agent on lets ticket text leave for that vendor: say so to the person you work for first. Turn it off with colliedesk_coding_agent_disable.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/autofix/connectors/{kind}"},
+		Input: `{"type":"object","additionalProperties":false,"required":["kind","consent_version"],"properties":{` + codingAgentKindProperty + `,` +
+			`"consent_version":{"type":"string","minLength":1,"maxLength":40}}}`,
+		Output: codingAgentOutput,
+		run:    codingAgentEnable,
+	}
 }
 
 func codingAgentDisableSpec() Spec {
@@ -109,8 +116,8 @@ func codingAgentDisableSpec() Spec {
 		Name:  "colliedesk_coding_agent_disable",
 		Title: "Turn off a coding agent for Autofix",
 		Description: `Turn off one coding agent: no new fix goes to it and fixes not sent yet are cancelled (connector_disabled); fixes already sent go on, the consent on record and Cursor's key stay. ` +
-			`Turn it on again with colliedesk_coding_agent_enable_request.` + "\n\nTier: admin.",
-		Tier:   "admin",
+			`Turn it on again with colliedesk_coding_agent_enable.`,
+
 		REST:   []string{"DELETE /api/v1/autofix/connectors/{kind}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` + codingAgentKindProperty + `}}`,
 		Output: codingAgentOutput,
@@ -123,8 +130,8 @@ func codingAgentCheckSpec() Spec {
 		Name:  "colliedesk_coding_agent_check",
 		Title: "Check a coding agent for Autofix",
 		Description: `Check what Colliedesk can check of one coding agent and keep the result in last_check: for Claude and Copilot, that the GitHub App is installed and the connected repositories are private ` +
-			`(the setup on the vendor's side is a checklist a person ticks); for Cursor, that Cursor accepts the key and reaches the connected repositories when it can say.` + "\n\nTier: read.",
-		Tier:   "read",
+			`(the setup on the vendor's side is a checklist a person ticks); for Cursor, that Cursor accepts the key and reaches the connected repositories when it can say.`,
+
 		REST:   []string{"POST /api/v1/autofix/connectors/{kind}/check"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` + codingAgentKindProperty + `}}`,
 		Output: codingAgentOutput,
@@ -134,11 +141,10 @@ func codingAgentCheckSpec() Spec {
 
 func cursorKeySetSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_cursor_key_set",
-		Title: "Set the Cursor key for Autofix",
-		Description: `Set the workspace's Cursor API key, which fixes sent to Cursor use. ` + cursorKeyNotice +
-			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
-		Tier:   "admin",
+		Name:        "colliedesk_cursor_key_set",
+		Title:       "Set the Cursor key for Autofix",
+		Description: `Set the workspace's Cursor API key, which fixes sent to Cursor use. ` + cursorKeyNotice,
+
 		REST:   []string{"PUT /api/v1/autofix/connectors/cursor_api/key"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["key"],"properties":{"key":{"type":"string","minLength":8,"maxLength":500}}}`,
 		Output: codingAgentOutput,
@@ -151,8 +157,8 @@ func cursorKeyRemoveSpec() Spec {
 		Name:  "colliedesk_cursor_key_remove",
 		Title: "Remove the Cursor key of Autofix",
 		Description: `Erase the workspace's Cursor key now: Cursor takes no new fix until a key is set again with colliedesk_cursor_key_set; runs already sent go on at Cursor ` +
-			`and are followed again once a key is set.` + "\n\nTier: admin.",
-		Tier:   "admin",
+			`and are followed again once a key is set.`,
+
 		REST:   []string{"DELETE /api/v1/autofix/connectors/cursor_api/key"},
 		Input:  noArguments,
 		Output: codingAgentOutput,

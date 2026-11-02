@@ -46,12 +46,12 @@ func helpCenterThemeGetSpec() Spec {
 		Name:  "colliedesk_help_center_theme_get",
 		Title: "Read the help center's brand",
 		Description: `Return the brand of the public help center: logo and favicon (media library ids), logo text, website and contact links, colors, fonts and custom CSS, ` +
-			`with the contrast of every color pair (checks). A null color or font is the default look.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/help-center/theme"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
-		run:    helpCenterThemeGet,
+			`with the contrast of every color pair (checks). A null color or font is the default look.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/help-center/theme"},
+		Input:    noArguments,
+		Output:   `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
+		run:      helpCenterThemeGet,
 	}
 }
 
@@ -61,12 +61,12 @@ func helpCenterThemeCheckSpec() Spec {
 		Title: "Check a help center brand without saving it",
 		Description: `Check a candidate brand the way colliedesk_help_center_theme_update would, and save nothing. ` + themeContrastRule +
 			`ok is false when a pair fails; fields then says, per color, its ratio and the nearest color that passes. A field of the wrong shape or a logo that is not a library image is an error. ` +
-			`With preview (home or article), html also holds that page rendered with the theme from the workspace's published articles, the way the settings card shows it.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
-		Input:  themeCheckInputSchema,
-		Output: `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
-		run:    helpCenterThemeCheck,
+			`With preview (home or article), html also holds that page rendered with the theme from the workspace's published articles, the way the settings card shows it.`,
+		ReadOnly: true,
+		REST:     []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
+		Input:    themeCheckInputSchema,
+		Output:   `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
+		run:      helpCenterThemeCheck,
 	}
 }
 
@@ -78,13 +78,13 @@ func helpCenterThemeUpdateSpec() Spec {
 			themeContrastRule + `A failing pair is refused with the nearest passing color; colliedesk_help_center_theme_check tries a theme first. ` +
 			`The logo and favicon must be images of the media library outside its trash; one the theme already has may stay while it is in the trash, so sending the theme back whole still saves. They are kept while the help center names them and kept no more once it names another. Fonts are stacks of the reader's own system fonts. ` +
 			`Custom CSS follows the theme on every page; one that could load anything is refused with its line and column. custom_css is required: send the CSS to keep, or null or "" to clear it. ` +
-			`A custom token needs help_center:update and kb_articles:publish; without either it files a request for a person to approve. ` +
-			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST:   []string{"PUT /api/v1/help-center/theme"},
-		Input:  themeInputSchema,
-		Output: `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
-		run:    helpCenterThemeUpdate,
+			`It changes every public page, so it needs kb_articles:publish as well as help_center:update. ` +
+			`It is safe to repeat.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/help-center/theme"},
+		Input:      themeInputSchema,
+		Output:     `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
+		run:        helpCenterThemeUpdate,
 	}
 }
 

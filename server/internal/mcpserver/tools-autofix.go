@@ -124,8 +124,8 @@ func codingAgentAnswer(c *call, method, path string, body any) (any, error) {
 	return map[string]any{"coding_agent": agent}, nil
 }
 
-func codingAgentEnableRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPut, codingAgentPath(arguments, ""), map[string]any{"consent_version": arguments["consent_version"]})
+func codingAgentEnable(c *call, arguments map[string]any) (any, error) {
+	return codingAgentAnswer(c, http.MethodPut, codingAgentPath(arguments, ""), map[string]any{"consent_version": arguments["consent_version"]})
 }
 
 func codingAgentDisable(c *call, arguments map[string]any) (any, error) {

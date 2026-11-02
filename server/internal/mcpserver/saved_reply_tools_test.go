@@ -78,19 +78,16 @@ func TestLowerTiersProposeSavedReplyChangesThroughTheTools(t *testing.T) {
 	_, list := e.rest(http.MethodGet, "/api/v1/saved-replies", nil, w.admin)
 	seen := at(t, list["items"].([]any)[0], "updated_at").(string)
 
-	edit := requestedForTier(t, e, w.draft, "colliedesk_saved_reply_update", map[string]any{"saved_reply_id": id, "updated_at": seen, "body": "Thanks a lot."})
-	if summary := at(t, edit, "agent_request", "summary").(string); !strings.Contains(summary, `"Closing"`) || !strings.Contains(summary, "Thanks a lot.") {
-		t.Errorf("edit proposal summary = %q", summary)
-	}
-	requestedForTier(t, e, w.read, "colliedesk_saved_reply_create", map[string]any{"title": "Greeting", "body": "Hello."})
-	requestedForTier(t, e, w.draft, "colliedesk_saved_reply_delete", map[string]any{"saved_reply_id": id, "updated_at": seen})
-	requestedForTier(t, e, w.read, "colliedesk_saved_reply_version_restore", map[string]any{"saved_reply_id": id, "version": 1, "updated_at": seen})
+	refusedWithoutPermission(t, e, w.draft, "colliedesk_saved_reply_update", map[string]any{"saved_reply_id": id, "updated_at": seen, "body": "Thanks a lot."})
+	refusedWithoutPermission(t, e, w.read, "colliedesk_saved_reply_create", map[string]any{"title": "Greeting", "body": "Hello."})
+	refusedWithoutPermission(t, e, w.draft, "colliedesk_saved_reply_delete", map[string]any{"saved_reply_id": id, "updated_at": seen})
+	refusedWithoutPermission(t, e, w.read, "colliedesk_saved_reply_version_restore", map[string]any{"saved_reply_id": id, "version": 1, "updated_at": seen})
 
 	_, after := e.rest(http.MethodGet, "/api/v1/saved-replies", nil, w.admin)
 	if items := after["items"].([]any); len(items) != 1 || at(t, items[0], "body") != "Thanks." {
-		t.Fatalf("proposals changed the saved replies before approval: %v", items)
+		t.Fatalf("refused calls changed the saved replies: %v", items)
 	}
-	// Reading needs only the read tier.
+	// Reading needs only saved_replies:read.
 	read := e.connect(w.read, "")
 	e.ok(read, "colliedesk_saved_replies_list", nil)
 	e.ok(read, "colliedesk_saved_reply_history", map[string]any{"saved_reply_id": id})

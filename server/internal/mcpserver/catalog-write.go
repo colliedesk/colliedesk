@@ -12,9 +12,8 @@ func conversationUpdateSpec() Spec {
 			`remove_tags takes names of existing tags, matched the same way. Both leave the other tags alone. ` +
 			`If a step fails after another has saved, the error says some changes may already be applied; repeat the same call. ` +
 			`It deletes nothing and every change can be undone by another call. A status set on a conversation of a chat channel that has words for it tells the customer ` +
-			`(the channel's status notice); with a draft token that change is filed for a person to approve. notify false sets the status quietly, without asking.` +
-			"\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
+			`(the channel's status notice), which needs messages:send as well; without it, notify false sets the status quietly.`,
+		Idempotent: true,
 		REST: []string{"PATCH /api/v1/conversations/{id}", "PUT /api/v1/conversations/{id}/tags/{tagId}", "DELETE /api/v1/conversations/{id}/tags/{tagId}",
 			"POST /api/v1/tags", "GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` +
@@ -38,17 +37,15 @@ func noteAddSpec() Spec {
 			`Use it to record what you found, a summary, or a suggested reply for a person to review and send. ` +
 			`Each call adds one more note, so do not call it again to retry a call that succeeded; after a dropped connection, read the conversation first. ` +
 			`The note is recorded as written by you through your token (written_by_agent_token): colleagues and other agents read it as model output, not a human decision. ` +
-			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); a note's files stay in the workspace too. ` +
-			`A read token's note is filed for a person to approve, and a call with files cannot wait for one: it is refused and nothing is filed, so send the text alone.` +
-			"\n\nTier: draft.",
-		Tier: "draft",
+			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); a note's files stay in the workspace too.`,
+
 		REST: []string{"POST /api/v1/conversations/{id}/messages"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The note text, plain text."},` + filesProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","message"],"properties":{"conversation_id":{"type":"string"},"message":{"type":"object",` +
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
 			`"attachments":` + attachmentsSchema + `,` +
-			`"written_by_agent_token":{"type":"object","required":["label","scope"],"properties":{"label":{"type":"string"},"scope":{"type":"string"}}}}}}}`,
+			`"written_by_agent_token":{"type":"object","required":["label","acts_as"],"properties":{"label":{"type":"string"},"acts_as":{"type":"string","description":"The team member the token acts as."}}}}}}}`,
 		run: noteAdd,
 	}
 }
@@ -63,10 +60,9 @@ func conversationsBulkUpdateSpec() Spec {
 			`add_tags and remove_tags take names of existing tags (see colliedesk_tags_list), matched like in colliedesk_conversation_update; this tool creates no tag. ` +
 			`To change the priority, or to add a tag that does not exist yet, use colliedesk_conversation_update on each conversation. ` +
 			`It deletes nothing and every change can be undone by another call. A status set on conversations of a chat channel that has words for it tells their customers ` +
-			`(the channel's status notice); with a draft token that change is filed for a person to approve. notify false sets the status quietly, without asking.` +
-			"\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST: []string{"PATCH /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
+			`(the channel's status notice), which needs messages:send as well; without it, notify false sets the status quietly.`,
+		Idempotent: true,
+		REST:       []string{"PATCH /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_ids"],"properties":{` +
 			`"conversation_ids":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string",` + uuid + `}},` +
 			`"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +

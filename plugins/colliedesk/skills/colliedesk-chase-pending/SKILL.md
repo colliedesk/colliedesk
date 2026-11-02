@@ -41,5 +41,5 @@ waiting.
 
 1. [Work the inbox](https://colliedesk.com/docs/inbox.md)
 2. [Response targets](https://colliedesk.com/docs/response-targets.md)
-3. [Agent requests and reply drafts](https://colliedesk.com/docs/agent-requests.md)
+3. [Roles and permissions](https://colliedesk.com/docs/roles-and-permissions.md)
 4. [Agent skills](https://colliedesk.com/docs/agent-skills.md)

@@ -34,9 +34,7 @@ func TestHelpCenterDomainToolsSetCheckAndRemove(t *testing.T) {
 		t.Fatalf("get = %v", got)
 	}
 	send := e.connect(w.send, "")
-	if proposed := e.ok(send, "colliedesk_help_center_domain_set", map[string]any{"hostname": "help.tools.example"}); proposed["agent_request"] == nil {
-		t.Fatalf("send token set = %v, want an agent request", proposed)
-	}
+	e.refused(send, "colliedesk_help_center_domain_set", map[string]any{"hostname": "help.tools.example"})
 	admin := e.connect(w.adminTier, "")
 	if message := e.fails(admin, "colliedesk_help_center_domain_set", map[string]any{"hostname": "192.0.2.1"}); !strings.Contains(message, "IP address") {
 		t.Fatalf("an IP address: %q", message)

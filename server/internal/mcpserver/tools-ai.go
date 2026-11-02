@@ -99,7 +99,7 @@ func aiProviderRemove(c *call, arguments map[string]any) (any, error) {
 	return removed, nil
 }
 
-func aiSlotSetRequest(c *call, arguments map[string]any) (any, error) {
+func aiSlotSet(c *call, arguments map[string]any) (any, error) {
 	slot, _ := arguments["slot"].(string)
 	body := map[string]any{}
 	for key, value := range arguments {
@@ -107,7 +107,7 @@ func aiSlotSetRequest(c *call, arguments map[string]any) (any, error) {
 			body[key] = value
 		}
 	}
-	return ask(c, http.MethodPut, "/api/v1/ai/slots/"+url.PathEscape(slot), body)
+	return passOn(c, http.MethodPut, "/api/v1/ai/slots/"+url.PathEscape(slot), body)
 }
 
 func aiUsageGet(c *call, arguments map[string]any) (any, error) {
@@ -359,13 +359,16 @@ func aiChatSessionGet(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"chat": chat}, nil
 }
 
-func aiChatSessionDeleteRequest(c *call, arguments map[string]any) (any, error) {
+func aiChatSessionDelete(c *call, arguments map[string]any) (any, error) {
 	path, err := aiChatPath(arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = aiChatNotFound
-	return ask(c, http.MethodDelete, path, nil)
+	if _, err := passOn(c, http.MethodDelete, path, nil); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": true}, nil
 }
 
 func aiChatPreview(c *call, arguments map[string]any) (any, error) {
@@ -422,7 +425,7 @@ func channelAIIntakeEvaluationRecord(c *call, arguments map[string]any) (any, er
 		}
 	}
 	c.notFound = channelNotFound
-	return ask(c, http.MethodPost, "/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/evaluations", body)
+	return passOn(c, http.MethodPost, "/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/evaluations", body)
 }
 
 func channelAISet(c *call, arguments map[string]any) (any, error) {
@@ -442,9 +445,9 @@ func channelAISet(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"channel_ai": levels}, nil
 }
 
-func aiSourceConsentRequest(c *call, arguments map[string]any) (any, error) {
+func aiSourceConsentSet(c *call, arguments map[string]any) (any, error) {
 	class, _ := arguments["source_class"].(string)
-	return ask(c, http.MethodPut, "/api/v1/ai/source-consents/"+url.PathEscape(class), nil)
+	return passOn(c, http.MethodPut, "/api/v1/ai/source-consents/"+url.PathEscape(class), nil)
 }
 
 func aiSourceConsentRemove(c *call, arguments map[string]any) (any, error) {

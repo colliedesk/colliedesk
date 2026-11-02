@@ -5,11 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 )
 
-func TestCatalogToolsMapOntoRealRoutesAndStateTheirTier(t *testing.T) {
+func TestCatalogToolsMapOntoRealRoutesAndStateWhatTheyNeed(t *testing.T) {
 	routes := map[string]bool{}
 	for _, route := range httpapi.Routes() {
 		routes[route.Method+" "+route.Pattern] = true
@@ -20,8 +21,13 @@ func TestCatalogToolsMapOntoRealRoutesAndStateTheirTier(t *testing.T) {
 			t.Errorf("tool name %q is duplicated or not underscore_case", spec.Name)
 		}
 		names[spec.Name] = true
-		if !slices.Contains([]string{"read", "draft", "send", "admin", "any", "operator"}, spec.Tier) {
-			t.Errorf("%s: tier %q", spec.Name, spec.Tier)
+		if want := "\n\nNeeds: "; !spec.Operator && !strings.Contains(spec.Description, want) {
+			t.Errorf("%s: its description does not end with what it needs", spec.Name)
+		}
+		for _, need := range spec.Needs {
+			if !slices.Contains(auth.AllPermissions(), need) {
+				t.Errorf("%s needs %q, which is not a permission", spec.Name, need)
+			}
 		}
 		for _, route := range spec.REST {
 			method, pattern, _ := strings.Cut(route, " ")

@@ -48,5 +48,5 @@ the person with the channel working or a short list of what only they can do.
 4. [Help chat](https://colliedesk.com/docs/help-chat.md)
 5. [Zalo OA](https://colliedesk.com/docs/zalo.md)
 6. [Review](https://colliedesk.com/docs/review.md)
-7. [Agent requests and reply drafts](https://colliedesk.com/docs/agent-requests.md)
+7. [Roles and permissions](https://colliedesk.com/docs/roles-and-permissions.md)
 8. [Agent skills](https://colliedesk.com/docs/agent-skills.md)

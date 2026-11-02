@@ -13,7 +13,7 @@ import (
 // joinTeam invites email with the agent role through REST and redeems the link, as a person would.
 func joinTeam(t *testing.T, e *env, w workspace, email string) {
 	t.Helper()
-	status, created := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": email, "role_ceiling": "agent"}, w.admin)
+	status, created := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": email, "roles": []string{"Agent"}}, w.admin)
 	if status != http.StatusCreated {
 		t.Fatalf("invite %s: status=%d body=%v", email, status, created)
 	}
@@ -26,14 +26,14 @@ func joinTeam(t *testing.T, e *env, w workspace, email string) {
 	}
 }
 
-func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
+func TestAnAdminRoleTokenRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("Settings Tools Desk", "admin@settings-tools.example.com")
 	joinTeam(t, e, w, "agent@settings-tools.example.com")
 	session := e.connect(w.adminTier, "")
 
 	who := e.ok(session, "colliedesk_whoami", nil)
-	if who["token_tier"] != "admin" || at(t, who, "agent", "role") != "admin" || !strings.Contains(stringify(who), "colliedesk_session_revoke") {
+	if at(t, who, "token", "role") != "Admin" || !strings.Contains(stringify(who), "colliedesk_session_revoke") {
 		t.Fatalf("whoami of an admin token = %v", who)
 	}
 	updated := e.ok(session, "colliedesk_workspace_settings_update", map[string]any{"timezone": "Europe/Berlin"})
@@ -64,13 +64,10 @@ func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	}
 	e.ok(session, "colliedesk_team_member_update", map[string]any{"member": "agent@settings-tools.example.com", "active": true})
 
-	asked := requestedForTier(t, e, w.adminTier, "colliedesk_invite_create", map[string]any{"email": "asked@settings-tools.example.com"})
-	if strings.Contains(stringify(asked), "token=") {
-		t.Fatalf("invite request = %v", asked)
-	}
-	status, invited := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "new@settings-tools.example.com", "role_ceiling": "agent"}, w.admin)
-	if status != http.StatusCreated {
-		t.Fatalf("a person invites: %d %v", status, invited)
+	invited := e.ok(session, "colliedesk_invite_create", map[string]any{"email": "new@settings-tools.example.com", "roles": []string{"agent"}})
+	link, _ := invited["url"].(string)
+	if !strings.Contains(link, "token=") || at(t, invited, "invite", "roles", 0) != "Agent" || !strings.Contains(stringify(invited), "privately") {
+		t.Fatalf("invite = %v, want the one-time link once, the Agent role by name and how to pass the link on", invited)
 	}
 	inviteID := at(t, invited, "invite", "id").(string)
 	if listed := stringify(e.ok(session, "colliedesk_invites_list", nil)); !strings.Contains(listed, inviteID) || strings.Contains(listed, "token=") {
@@ -129,31 +126,30 @@ func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	}
 }
 
-func TestLowerTiersAskForSettingsChangesAndAdminGrantsAlwaysWait(t *testing.T) {
+// A token without a permission is refused at once with the permission it lacks, and nothing changes:
+// nothing waits for a person.
+func TestATokenWithoutThePermissionIsRefusedAndNothingChanges(t *testing.T) {
 	e := newEnv(t)
-	w := e.newWorkspace("Settings Requests Desk", "admin@settings-requests.example.com")
+	w := e.newWorkspace("Settings Refusals Desk", "admin@settings-requests.example.com")
 	joinTeam(t, e, w, "agent@settings-requests.example.com")
 
-	timezone := requestedForTier(t, e, w.send, "colliedesk_workspace_settings_update", map[string]any{"timezone": "Asia/Tokyo"})
-	if summary := at(t, timezone, "agent_request", "summary").(string); !strings.Contains(summary, "UTC → Asia/Tokyo") {
-		t.Errorf("timezone request summary = %q", summary)
-	}
-	requestedForTier(t, e, w.read, "colliedesk_my_timezone_set", map[string]any{"timezone": "Asia/Tokyo"})
-	requestedForTier(t, e, w.draft, "colliedesk_web_form_update", map[string]any{"enabled": true, "allowed_origins": []any{}})
-	requestedForTier(t, e, w.adminTier, "colliedesk_invite_create", map[string]any{"email": "boss@settings-requests.example.com", "role": "admin"})
-	requestedForTier(t, e, w.adminTier, "colliedesk_team_member_update", map[string]any{"member": "agent@settings-requests.example.com", "role": "admin"})
+	refusedWithoutPermission(t, e, w.send, "colliedesk_workspace_settings_update", map[string]any{"timezone": "Asia/Tokyo"})
+	refusedWithoutPermission(t, e, w.read, "colliedesk_my_timezone_set", map[string]any{"timezone": "Asia/Tokyo"})
+	refusedWithoutPermission(t, e, w.draft, "colliedesk_web_form_update", map[string]any{"enabled": true, "allowed_origins": []any{}})
+	refusedWithoutPermission(t, e, w.send, "colliedesk_invite_create", map[string]any{"email": "boss@settings-requests.example.com", "roles": []string{"Admin"}})
+	refusedWithoutPermission(t, e, w.send, "colliedesk_member_roles_set", map[string]any{"member": "agent@settings-requests.example.com", "add_roles": []string{"Admin"}})
 	if mine := e.ok(e.connect(w.draft, ""), "colliedesk_my_timezone_set", map[string]any{"timezone": nil}); mine["your_timezone"] != nil {
 		t.Fatalf("draft clears its own timezone = %v", mine)
 	}
 
 	_, me := e.rest(http.MethodGet, "/api/v1/auth/me", nil, w.admin)
 	if at(t, me, "workspace", "timezone") != "UTC" {
-		t.Fatalf("a request changed the workspace before approval: %v", me)
+		t.Fatalf("a refused call changed the workspace: %v", me)
 	}
 	_, team := e.rest(http.MethodGet, "/api/v1/agents", nil, w.admin)
 	for _, item := range team["items"].([]any) {
-		if at(t, item, "email") == "agent@settings-requests.example.com" && at(t, item, "role") != "agent" {
-			t.Fatalf("a promotion ran before approval: %v", item)
+		if at(t, item, "email") == "agent@settings-requests.example.com" && strings.Contains(stringify(item.(map[string]any)), `"Admin"`) {
+			t.Fatalf("a refused call gave the Admin role: %v", item)
 		}
 	}
 	// Reading the settings needs only read, and shows no secret.
@@ -168,7 +164,7 @@ func TestSettingsToolsStayInTheirWorkspace(t *testing.T) {
 	w := e.newWorkspace("Own Settings", "admin@own-settings.example.com")
 	other := e.newWorkspace("Other Settings", "admin@other-settings.example.com")
 	joinTeam(t, e, other, "agent@other-settings.example.com")
-	status, invited := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "pending@other-settings.example.com", "role_ceiling": "agent"}, other.admin)
+	status, invited := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "pending@other-settings.example.com", "roles": []string{"Agent"}}, other.admin)
 	if status != http.StatusCreated {
 		t.Fatalf("invite: %d %v", status, invited)
 	}

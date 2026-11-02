@@ -71,10 +71,6 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 	if failure, ok := err.(*restError); ok && failure.Status == http.StatusConflict && failure.Code == "reply_conflict" {
 		return nil, c.replyConflict(args.ConversationID, *args.SeenReplyNumber)
 	}
-	if failure, ok := err.(*restError); ok && failure.Status == http.StatusBadRequest && args.AIDraftID != "" && strings.Contains(failure.Message, "ai_draft_id") {
-		return nil, &toolError{"ai_draft_id goes only with a reply this token sends itself, and a token below send files the reply for a person instead. Nothing was sent or filed. " +
-			"Call again without ai_draft_id: the reply is filed as a draft for a person to send."}
-	}
 	if err == nil {
 		c.wrote = true
 	}

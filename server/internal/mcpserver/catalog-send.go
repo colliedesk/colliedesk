@@ -1,6 +1,6 @@
 package mcpserver
 
-// The tools below need the send tier: they reach a customer or change what the whole team works with.
+// The tools below reach a customer or change what the whole team works with.
 
 const confirmFirst = `Before you call it, show the user what you will do and get their yes, unless they already told you to do exactly this. `
 
@@ -11,16 +11,15 @@ func replySendSpec() Spec {
 		Description: `Send a reply on a conversation. Colliedesk emails it to the customer (and to cc) through the workspace's email channel. ` +
 			`It cannot be undone: an email that left cannot be called back. ` + confirmFirst +
 			`Each call sends one more email, so never call it again to retry a call that succeeded; read the conversation first. ` +
-			`To have a person check the words first, use colliedesk_reply_draft; with a token below send this tool files the same draft for a person to send. ` +
+			`To have a person check the words first, or when you may not send (no messages:send), use colliedesk_reply_draft. ` +
 			`The reply is recorded as written by you through your token (written_by_agent_token). delivery says whether the email is queued. ` +
 			`Pass seen_reply_number, the latest_reply_number of the colliedesk_conversation_get you read: when someone replied since, nothing is sent and the error shows their reply; read the conversation again before you send. ` +
 			`When a team member has a reply to this customer open and not sent yet, the result carries a warning; say so to the user. ` +
 			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); they are emailed with the reply. ` +
-			`Pass ai_draft_id when the reply is written from an AI draft (colliedesk_ai_draft_get), so the draft records how close the reply stayed to it; a draft that is not this conversation's ready one is refused and nothing is sent. ` +
-			`With a token below send the reply is filed for a person to send, and then neither files nor ai_draft_id can go with it: the call is refused and nothing is filed. Send the text alone, and a person attaches the files after approval.` +
-			"\n\nTier: send.",
-		Tier: "send", Destructive: true,
-		REST: []string{"POST /api/v1/conversations/{id}/messages", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/agents", "GET /api/v1/inbox/activity"},
+			`Pass ai_draft_id when the reply is written from an AI draft (colliedesk_ai_draft_get), so the draft records how close the reply stayed to it; a draft that is not this conversation's ready one is refused and nothing is sent. `,
+		Destructive: true,
+		BodyNeeds:   []string{"messages:send"},
+		REST:        []string{"POST /api/v1/conversations/{id}/messages", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/agents", "GET /api/v1/inbox/activity"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body","seen_reply_number"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},` +
 			`"seen_reply_number":{"type":"integer","minimum":0,"description":"latest_reply_number from the colliedesk_conversation_get you based this reply on."},` +
@@ -31,7 +30,7 @@ func replySendSpec() Spec {
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
 			`"attachments":` + attachmentsSchema + `,"delivery":{"type":"string","description":"queued, sent or failed; absent when the reply is not emailed (no email channel)."},` +
 			`"cc":{"type":"array","items":{"type":"string"}},` +
-			`"written_by_agent_token":{"type":"object","required":["label","scope"],"properties":{"label":{"type":"string"},"scope":{"type":"string"}}}}},` +
+			`"written_by_agent_token":{"type":"object","required":["label","acts_as"],"properties":{"label":{"type":"string"},"acts_as":{"type":"string","description":"The team member the token acts as."}}}}},` +
 			`"warning":{"type":"string","description":"A team member had a reply to this customer open and not sent yet."}}}`,
 		run: replySend,
 	}
@@ -43,10 +42,9 @@ func replyRetrySpec() Spec {
 		Title: "Retry a failed reply",
 		Description: `Send again a reply whose email delivery failed (delivery "failed" in colliedesk_conversation_get). It goes to the same recipients. ` +
 			`It cannot be undone: the customer receives the email. ` + confirmFirst +
-			`Only a failed delivery can be retried; a queued or sent one is refused, so a repeat never sends twice.` +
-			"\n\nTier: send.",
-		Tier: "send", Destructive: true,
-		REST: []string{"POST /api/v1/conversations/{id}/messages/{messageId}/retry"},
+			`Only a failed delivery can be retried; a queued or sent one is refused, so a repeat never sends twice.`,
+		Destructive: true,
+		REST:        []string{"POST /api/v1/conversations/{id}/messages/{messageId}/retry"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","message_id"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},"message_id":{"type":"string",` + uuid + `,"description":"The id of the failed reply."}}}`,
 		Output: `{"type":"object","required":["conversation_id","message_id","delivery"],"properties":{"conversation_id":{"type":"string"},"message_id":{"type":"string"},"delivery":{"type":"string"}}}`,
@@ -61,9 +59,8 @@ func conversationCreateSpec() Spec {
 		Description: `Open a new conversation with a customer, with a subject and no messages yet. It sends nothing; write to the customer with colliedesk_reply_send afterwards, ` +
 			`or open and email in one step with colliedesk_conversation_start. ` +
 			`Find the customer with colliedesk_contacts_find, or add one with colliedesk_contact_create. ` +
-			`Each call opens one more conversation, so do not repeat a call that succeeded. Close one you opened by mistake with colliedesk_conversation_update.` +
-			"\n\nTier: send.",
-		Tier: "send",
+			`Each call opens one more conversation, so do not repeat a call that succeeded. Close one you opened by mistake with colliedesk_conversation_update.`,
+
 		REST: []string{"POST /api/v1/conversations"},
 		Input: `{"type":"object","additionalProperties":false,"required":["contact_id","subject"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `},"subject":{"type":"string","minLength":1,"maxLength":500},` +
@@ -79,8 +76,8 @@ func contactCreateSpec() Spec {
 		Title: "Add a customer",
 		Description: `Add a customer (contact) with a name and an email address. It sends nothing. ` +
 			`Look with colliedesk_contacts_find first, so the same person is not added twice.` +
-			"\n\n" + untrustedNotice + "\n\nTier: send.",
-		Tier: "send",
+			"\n\n" + untrustedNotice,
+
 		REST: []string{"POST /api/v1/contacts"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name","email"],"properties":{` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},"email":{"type":"string","minLength":3,"maxLength":254}}}`,
@@ -94,9 +91,8 @@ func tagRenameSpec() Spec {
 		Name:  "colliedesk_tag_rename",
 		Title: "Rename a tag",
 		Description: `Rename a tag of the workspace. Every conversation with the tag shows the new name. ` +
-			`Rename it back to undo. tag is matched like in colliedesk_conversation_update (exact spelling first, then the one tag that differs only in case).` +
-			"\n\nTier: send.",
-		Tier: "send",
+			`Rename it back to undo. tag is matched like in colliedesk_conversation_update (exact spelling first, then the one tag that differs only in case).`,
+
 		REST: []string{"PATCH /api/v1/tags/{id}", "GET /api/v1/tags"},
 		Input: `{"type":"object","additionalProperties":false,"required":["tag","new_name"],"properties":{` +
 			`"tag":{"type":"string","minLength":1,"maxLength":100,"description":"The current name."},"new_name":{"type":"string","minLength":1,"maxLength":100}}}`,
@@ -111,10 +107,9 @@ func tagDeleteSpec() Spec {
 		Title: "Delete a tag",
 		Description: `Delete a tag from the workspace and take it off every conversation that has it. ` +
 			`It cannot be undone: a tag made again with the same name is a new, empty tag, and the conversations are not tagged again. ` + confirmFirst +
-			`To take a tag off one conversation only, use colliedesk_conversation_update (remove_tags).` +
-			"\n\nTier: send.",
-		Tier: "send", Destructive: true,
-		REST: []string{"DELETE /api/v1/tags/{id}", "GET /api/v1/tags"},
+			`To take a tag off one conversation only, use colliedesk_conversation_update (remove_tags).`,
+		Destructive: true,
+		REST:        []string{"DELETE /api/v1/tags/{id}", "GET /api/v1/tags"},
 		Input: `{"type":"object","additionalProperties":false,"required":["tag"],"properties":{` +
 			`"tag":{"type":"string","minLength":1,"maxLength":100,"description":"The name of the tag to delete."}}}`,
 		Output: `{"type":"object","required":["deleted"],"properties":{"deleted":{"type":"object","required":["id","name"],"properties":{"id":{"type":"string"},"name":{"type":"string"}}}}}`,
@@ -128,12 +123,11 @@ func tokenRevokeSpec() Spec {
 		Title: "Revoke this token",
 		Description: `Revoke the agent token this connection uses, so nobody can use it again. Every later call with it fails. ` +
 			`It cannot be undone: a workspace admin must create a new token (Settings, Sessions and devices) to connect again. ` +
-			`Use it when the user asks you to disconnect, or when you believe the token leaked. ` + confirmFirst +
-			"\n\nTier: any (works with every token).",
-		Tier: "any", Destructive: true,
-		REST:   []string{"POST /api/v1/auth/logout"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["revoked","message"],"properties":{"revoked":{"type":"boolean"},"message":{"type":"string"}}}`,
-		run:    tokenRevoke,
+			`Use it when the user asks you to disconnect, or when you believe the token leaked. ` + confirmFirst,
+		Destructive: true,
+		REST:        []string{"POST /api/v1/auth/logout"},
+		Input:       noArguments,
+		Output:      `{"type":"object","required":["revoked","message"],"properties":{"revoked":{"type":"boolean"},"message":{"type":"string"}}}`,
+		run:         tokenRevoke,
 	}
 }

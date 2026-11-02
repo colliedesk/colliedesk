@@ -70,9 +70,7 @@ func TestSendTokenUploadsVideosAndManagesTheMediaLibrary(t *testing.T) {
 	e.ok(session, "colliedesk_kb_media_replace_undo", map[string]any{"replacement_id": at(t, replaced, "replacement_id")})
 
 	reader := e.connect(w.read, "")
-	if message := e.fails(reader, "colliedesk_kb_video_upload_start", map[string]any{"size": 10}); !strings.Contains(strings.ToLower(message), "file") {
-		t.Fatalf("read token upload: %s", message)
-	}
+	e.refused(reader, "colliedesk_kb_video_upload_start", map[string]any{"size": 10})
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

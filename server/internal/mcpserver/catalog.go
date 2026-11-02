@@ -7,10 +7,15 @@ type Spec struct {
 	Description string
 	// Doc is one Markdown sentence for people: the "What it does" of the tool table in the user guide.
 	Doc string
-	// Tier is the lowest agent token tier that may call the tool: read, draft, send or admin. "any" means
-	// every valid token, because the tool needs nothing a read token lacks. "operator" is an operator token
-	// on OperatorPath, never a workspace token.
-	Tier       string
+	// Needs is what a caller must hold to use the tool: every permission the routes in REST need
+	// (httpapi.RouteAccessTable), worked out by Catalog, never written by hand. Empty means any valid
+	// token or sign-in.
+	Needs []string
+	// BodyNeeds is what the tool also needs because of the body it always sends to a route whose
+	// handler decides by the body (a reply needs messages:send where a note needs messages:note).
+	BodyNeeds []string
+	// Operator marks an operator tool: served on OperatorPath to operator tokens only, never to a workspace.
+	Operator   bool
 	ReadOnly   bool
 	Idempotent bool
 	// Destructive marks a tool whose effect cannot be undone now: it reaches a customer, deletes for
@@ -44,17 +49,18 @@ func Catalog() []Spec {
 		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
 		helpCenterThemeGetSpec(), helpCenterThemeCheckSpec(), helpCenterSearchConsoleGetSpec(), helpCenterFreshdeskRedirectGetSpec(), helpCenterDomainGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
-		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
-		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
-		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), microsoftConnectRequestSpec(), microsoftDisconnectRequestSpec(), workspaceSlugRequestSpec(), numberSeriesListSpec(), numberSeriesSetRequestSpec(), responseTargetsGetSpec(), responseTargetsSetRequestSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
+		replyDraftSpec(),
+		workspaceExportSpec(), billingActionSpec(), emailChannelDisconnectSpec(),
+		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
+		rolesListSpec(), roleCreateSpec(), roleUpdateSpec(), roleDeleteSpec(), roleResetSpec(), roleRestoreSpec(), memberRolesSetSpec(),
 		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), helpCenterSearchConsoleUpdateSpec(), helpCenterDomainSetSpec(), helpCenterDomainCheckSpec(), helpCenterDomainRemoveSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), emailTestMessageSendSpec(), emailForwardingConfirmationGetSpec(), billingGetSpec(),
-		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
+		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoSpec(),
 		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
-		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
-		aiChatUsageGetSpec(), aiChatSessionsListSpec(), aiChatSessionGetSpec(), aiChatSessionDeleteRequestSpec(), aiChatPreviewSpec(),
-		channelAIGetSpec(), channelAISetSpec(), aiSourceConsentRequestSpec(), aiSourceConsentRemoveSpec(),
+		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
+		aiChatUsageGetSpec(), aiChatSessionsListSpec(), aiChatSessionGetSpec(), aiChatSessionDeleteSpec(), aiChatPreviewSpec(),
+		channelAIGetSpec(), channelAISetSpec(), aiSourceConsentSetSpec(), aiSourceConsentRemoveSpec(),
 		channelAIIntakeReadinessSpec(), channelAIIntakeEvaluationsListSpec(), channelAIIntakeEvaluationRecordSpec(),
 		conversationChatGetSpec(), channelThreadsListSpec(), channelThreadItemsSpec(), channelSendersSpec(), channelUnresolvedItemsSpec(),
 		intakeListSpec(), intakeGetSpec(), intakeDecideSpec(), intakeRequeueSpec(), intakeSummarySpec(), intakeStatsSpec(), conversationIntakeGetSpec(),
@@ -64,16 +70,20 @@ func Catalog() []Spec {
 		resultsGetSpec(), resultsShareLinkGetSpec(), resultsShareLinkCreateSpec(), resultsShareLinkRevokeSpec(), resultsEmailSetSpec(),
 		setupProgressGetSpec(), setupGuideSetSpec(),
 		channelsListSpec(), channelsGetSpec(), channelsEventsSpec(), channelsCreateSpec(), channelsUpdateSpec(), channelsCheckSpec(), channelsHeldReplaySpec(),
-		channelsCredentialsSetSpec(), channelsDeleteRequestSpec(), channelsHeldDiscardRequestSpec(),
+		channelsCredentialsSetSpec(), channelsDeleteSpec(), channelsHeldDiscardSpec(),
 		autofixStatusSpec(), fixesListSpec(), fixGetSpec(), conversationFixesListSpec(),
-		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectRequestSpec(), githubDisconnectRequestSpec(),
-		autofixRepoConnectSpec(), autofixRepoUpdateSpec(), autofixRepoDisconnectSpec(), autofixRepoNotesIncludeRequestSpec(), autofixRepoNotesExcludeSpec(),
-		fixPreviewSpec(), fixSendRequestSpec(), fixRetryRequestSpec(), fixCancelSpec(), fixDeployedSpec(), fixUndeployedSpec(), fixPRLinkSpec(), fixPRUnlinkSpec(),
-		codingAgentEnableRequestSpec(), codingAgentDisableSpec(), codingAgentCheckSpec(), cursorKeySetSpec(), cursorKeyRemoveSpec(),
+		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectSpec(), githubDisconnectSpec(),
+		autofixRepoConnectSpec(), autofixRepoUpdateSpec(), autofixRepoDisconnectSpec(), autofixRepoNotesIncludeSetSpec(), autofixRepoNotesExcludeSpec(),
+		fixPreviewSpec(), fixSendSpec(), fixRetrySpec(), fixCancelSpec(), fixDeployedSpec(), fixUndeployedSpec(), fixPRLinkSpec(), fixPRUnlinkSpec(),
+		codingAgentEnableSpec(), codingAgentDisableSpec(), codingAgentCheckSpec(), cursorKeySetSpec(), cursorKeyRemoveSpec(),
 	}
 	specs = append(specs, operatorSpecs()...)
 	for i := range specs {
 		specs[i].Doc = toolDocs[specs[i].Name]
+		if !specs[i].Operator {
+			specs[i].Needs = routeNeeds(specs[i].REST, specs[i].BodyNeeds)
+			specs[i].Description += needsLine(specs[i].Needs)
+		}
 	}
 	return specs
 }

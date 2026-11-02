@@ -17,12 +17,12 @@ func helpCenterSearchConsoleGetSpec() Spec {
 		Name:  "colliedesk_help_center_search_console_get",
 		Title: "Read the help center's Search Console tokens",
 		Description: `Return the Google and Bing verification tokens of the public help center (null when not set). ` +
-			`Each is served as a meta tag on this workspace's help center pages only.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/help-center/search-console"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
-		run:    helpCenterSearchConsoleGet,
+			`Each is served as a meta tag on this workspace's help center pages only.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/help-center/search-console"},
+		Input:    noArguments,
+		Output:   `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
+		run:      helpCenterSearchConsoleGet,
 	}
 }
 
@@ -32,13 +32,13 @@ func helpCenterSearchConsoleUpdateSpec() Spec {
 		Title: "Set the help center's Search Console tokens",
 		Description: `Set or remove the Google (google-site-verification) and Bing (msvalidate.01) verification tokens so the team can verify its help center host in Search Console and Webmaster Tools. ` +
 			`Send only the content value of the meta tag, not the whole tag; anything else is refused and nothing is saved. A field left out stays; null or "" removes it. ` +
-			`The tags change every public page: a token needs help_center:update and kb_articles:publish; without either it files a request for a person to approve. ` +
-			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST:   []string{"PUT /api/v1/help-center/search-console"},
-		Input:  searchConsoleInput,
-		Output: `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
-		run:    helpCenterSearchConsoleUpdate,
+			`The tags change every public page, so it needs kb_articles:publish as well as help_center:update. ` +
+			`It is safe to repeat.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/help-center/search-console"},
+		Input:      searchConsoleInput,
+		Output:     `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
+		run:        helpCenterSearchConsoleUpdate,
 	}
 }
 

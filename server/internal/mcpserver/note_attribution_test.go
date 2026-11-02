@@ -19,7 +19,4 @@ func TestNoteAddedThroughMCPNamesTheTokenInTheTimeline(t *testing.T) {
 	if label := at(t, items[0], "agent_token", "label"); label != "test draft" {
 		t.Errorf("agent_token.label = %v, want the label of the draft token (test draft); message %v", label, items[0])
 	}
-	if scope := at(t, items[0], "agent_token", "scope"); scope != "draft" {
-		t.Errorf("agent_token.scope = %v, want draft", scope)
-	}
 }
