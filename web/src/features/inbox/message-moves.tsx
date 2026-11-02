@@ -15,6 +15,7 @@ import { messageMovesApi } from './message-moves-api';
 import type { MessageMove, MessageMoveResult, MoveInput } from './message-moves-api';
 import { moveMessages as m } from './message-moves-messages';
 import './message-moves.css';
+import { useHolds } from '../../lib/permissions-context';
 
 // Moving customer messages out of a conversation (docs/user/inbox.md "Move messages to another
 // conversation"): a menu on each customer message, the dialog that moves or splits them, and the moves log at
@@ -33,7 +34,9 @@ function useMoves(conversationID: string) {
 }
 
 function useIntake(conversationID: string) {
-  return useQuery({ queryKey: intakeKey(conversationID), queryFn: () => messageMovesApi.intake(conversationID) });
+  // What intake did with a message is read with the messages (messages:read).
+  const reads = useHolds()('messages:read');
+  return useQuery({ queryKey: intakeKey(conversationID), queryFn: () => messageMovesApi.intake(conversationID), enabled: reads });
 }
 
 // A move changes both conversations' timelines, the list, the conversations' moves and the intake queue.

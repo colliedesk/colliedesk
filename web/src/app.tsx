@@ -6,7 +6,7 @@ import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
-import { closedScreen, firstOpenArea, railAreas } from './lib/areas';
+import { closedScreen, firstOpenArea, railAreasFor } from './lib/areas';
 import { PermissionsContext } from './lib/permissions-context';
 import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
@@ -121,7 +121,7 @@ function AppLayout() {
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
         {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
-      {shows('kb_articles:read') && <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+      {(shows('kb_articles:read') || shows('kb_media:read')) && <Link to={me.data && !can(me.data, 'kb_articles:read') ? '/knowledge/media' : '/knowledge'} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
       {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
         onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
@@ -415,7 +415,7 @@ declare module '@tanstack/react-router' {
 
 // ClosedScreen stands for a page the session's roles may not read: what it needs, who to ask, and where it can go.
 function ClosedScreen({ label, permission, me }: { label: string; permission: TokenPermission; me: NonNullable<Parameters<typeof can>[0]> }) {
-  const open = railAreas.filter((area) => !area.permission || can(me, area.permission));
+  const open = railAreasFor(me);
   return <main className="settings-page closed-screen">
     <header><h1>{label}</h1><p role="status">{messages.closedScreen(label)} {messages.closedScreenAsk(permission)}</p></header>
     <p className="muted-copy">{messages.closedScreenOpen}</p>

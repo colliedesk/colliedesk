@@ -110,6 +110,7 @@ export const messages = {
   assignTo: 'Assign to',
   assignToMe: 'Me',
   anotherTeammate: 'Another teammate',
+  messagesClosed: 'Your roles do not let you read the messages of a conversation (messages:read).',
   resolve: 'Resolve',
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',

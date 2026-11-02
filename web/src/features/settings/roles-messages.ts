@@ -70,6 +70,7 @@ export const roleMessages = {
   deleted: (name: string) => `${name} deleted.`,
   undo: 'Undo',
   undoFailed: 'Undo did not work; restore it from Deleted roles.',
+  undoRetry: 'Undo did not get through; try again.',
   inUse: (members: number, invites: number, tokens: number) => {
     const parts = [members > 0 ? plural(members, 'person', 'people') : '', invites > 0 ? plural(invites, 'invite') : '', tokens > 0 ? plural(tokens, 'agent token') : ''].filter(Boolean);
     return `In use by ${parts.join(', ')}. Take it off them first.`;

@@ -1239,3 +1239,19 @@ test('a role that reads only conversations asks for nothing else and is offered 
   expect(screen.queryByRole('textbox', { name: /new tag name/i })).not.toBeInTheDocument();
   for (const call of [api.agents, api.tags, api.savedReplies, api.emailChannel]) expect(call).not.toHaveBeenCalled();
 });
+
+// A role that reads conversations but not their messages, saved views, channels or contacts opens a
+// conversation that says why its messages are not shown, with no Views menu and no New conversation.
+test('a role without messages:read is told why the messages are not shown, and nothing it cannot use is offered', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: ['conversations:read', 'messages:send'] });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.messages.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByText('Your roles do not let you read the messages of a conversation (messages:read).')).toBeInTheDocument();
+  expect(api.messages).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /Views/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+});

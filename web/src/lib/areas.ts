@@ -33,15 +33,21 @@ export function closedScreen(path: string, session: Session): { label: string; p
   return screen && !can(session, screen.permission) ? { label: screen.label, permission: screen.permission } : undefined;
 }
 
-// The rail's destinations in order, and what each needs; Settings always opens (profile, sessions).
-export const railAreas: Array<{ to: '/' | '/knowledge' | '/results' | '/settings'; label: string; permission?: TokenPermission }> = [
-  { to: '/', label: messages.inbox, permission: 'conversations:read' },
-  { to: '/knowledge', label: messages.knowledge, permission: 'kb_articles:read' },
-  { to: '/results', label: messages.results, permission: 'results:read' },
-  { to: '/settings', label: messages.settings },
-];
+// The rail's destinations in order, for a session: each shows when its permission is held. Knowledge opens on
+// its articles, or on the media library for a role that reads only media.
+export type RailArea = { to: '/' | '/knowledge' | '/knowledge/media' | '/results' | '/settings'; label: string };
+export function railAreasFor(session: Session): RailArea[] {
+  const reads = (permission: TokenPermission) => can(session, permission);
+  return [
+    ...(reads('conversations:read') ? [{ to: '/' as const, label: messages.inbox }] : []),
+    ...(reads('kb_articles:read') ? [{ to: '/knowledge' as const, label: messages.knowledge }]
+      : reads('kb_media:read') ? [{ to: '/knowledge/media' as const, label: messages.knowledge }] : []),
+    ...(reads('results:read') ? [{ to: '/results' as const, label: messages.results }] : []),
+    { to: '/settings' as const, label: messages.settings },
+  ];
+}
 
 // firstOpenArea is where a session lands when the inbox is closed to it.
-export function firstOpenArea(session: Session) {
-  return railAreas.find((area) => !area.permission || can(session, area.permission))!.to;
+export function firstOpenArea(session: Session): RailArea['to'] {
+  return railAreasFor(session)[0].to;
 }

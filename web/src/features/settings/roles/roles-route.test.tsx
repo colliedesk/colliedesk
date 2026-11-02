@@ -137,3 +137,22 @@ test('Undo after a delete brings the role back and says so, without offering Und
   expect(within(screen.getByRole('status')).queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
   expect(mocks.api.restoreRole).toHaveBeenCalledWith(zero.id, expect.any(String));
 });
+
+test('an Undo that fails on the way can be tried again', async () => {
+  const client = setUp();
+  const zero = roleOf({ id: '13131313-1313-4131-8131-131313131313', name: 'Zero', system: null }, ['tags:read'], { deletable: true });
+  mocks.api.role.mockResolvedValue(zero);
+  (mocks.api as Record<string, ReturnType<typeof vi.fn>>).deleteRole = vi.fn().mockResolvedValue(undefined);
+  mocks.api.restoreRole.mockReset();
+  mocks.api.restoreRole.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(zero);
+  const form = render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'edit', id: zero.id }} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete role' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+  form.unmount();
+  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  fireEvent.click(within(await screen.findByRole('status')).getByRole('button', { name: 'Undo' }));
+  await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Undo did not get through; try again.'));
+  fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Undo' }));
+  await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Zero is back.'));
+});

@@ -171,15 +171,15 @@ export function InboxRoute() {
   // they go out together with the list and the detail instead of after one of them. Without an address the id
   // is the first row of the list, which is the one thing that has to be waited for.
   const openID = activeID ?? selected?.id;
-  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID),
+  // What the session may read decides what the page asks for: a list it may not read is not asked for.
+  const reads = (permission: TokenPermission) => can(me.data, permission);
+  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID) && reads('messages:read'),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
   const viewing = useInboxViewing();
   // Replies an AI agent left for a person to send (written drafts), shown above the composer of the open
   // conversation whether or not AI drafts are on. The inbox filter "has a draft waiting" finds the others.
-  // What the session may read decides what the page asks for: a list it may not read is not asked for.
-  const reads = (permission: TokenPermission) => can(me.data, permission);
   const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
   const selectedDrafts = waitingWritten(drafts.data?.items);
   const [draftNotice, setDraftNotice] = useState<string>();
@@ -323,7 +323,7 @@ export function InboxRoute() {
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}
-    viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
+    viewsMenu={(!me.data || reads('saved_views:read')) && <SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     noticesFailed={Boolean(selected && opened.isError && mayTell(selected) && noticesOf(selected) === undefined)}
@@ -339,7 +339,7 @@ export function InboxRoute() {
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
-    timelineLoading={Boolean(selected) && timeline.isPending}
+    timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
@@ -369,7 +369,8 @@ export function InboxRoute() {
     }}
     onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
-    onNewConversation={me.data && !reads('messages:send') ? undefined : () => setStarting(true)} />
+    // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
+    onNewConversation={me.data && !(['messages:send', 'channels:read', 'contacts:read'] as const).every(reads) ? undefined : () => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
   </PermissionsContext.Provider>;

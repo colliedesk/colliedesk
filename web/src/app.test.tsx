@@ -618,3 +618,17 @@ test('a role that reads only the knowledge base lands in Knowledge and is offere
   const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
   for (const path of ['/api/v1/conversations', '/api/v1/inbox/activity', '/api/v1/intake/summary', '/api/v1/results', '/api/v1/tags', '/api/v1/agents']) expect(asked, path).not.toContain(path);
 });
+
+test('a role that reads only media lands in the media library, and the rail takes it there', async () => {
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['kb_media:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/media': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/kb/media-uploads': () => json(200, { items: [] }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/media'));
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/media');
+});

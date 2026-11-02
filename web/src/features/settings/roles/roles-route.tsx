@@ -18,8 +18,8 @@ import './roles.css';
 // page: list, new (with an optional role to start from) or a role's id.
 export type RolesPage = { kind: 'list' } | { kind: 'new'; from?: string } | { kind: 'edit'; id: string };
 
-// undo, when given, is the id of a role just deleted, which Undo restores.
-type RolesStatus = { text: string; undo?: string; team?: boolean };
+// undo, when given, is the role just deleted (id and name), which Undo restores.
+type RolesStatus = { text: string; undo?: { id: string; name: string }; team?: boolean };
 // carried is what a save says, kept for the list it opens: the form and the list are two routes, so the
 // list is a new page that would otherwise forget it.
 let carried: RolesStatus | undefined;
@@ -34,13 +34,15 @@ export function RolesRoute({ page }: { page: RolesPage }) {
   const client = useQueryClient();
   // Once Undo worked the line says so and offers it no more; a failed Undo says that instead.
   const restore = useCreateMutation({ create: (id: string, key: string) => api.restoreRole(id, key) });
-  const undo = async (id: string) => {
+  const undo = async (role: { id: string; name: string }) => {
     try {
-      const restored = await restore.mutateAsync(id);
+      const restored = await restore.mutateAsync(role.id);
       void client.invalidateQueries({ queryKey: ['roles'] });
       setStatus({ text: m.restored(restored.name) });
-    } catch {
-      setStatus((now) => (now ? { ...now, undo: undefined, text: `${now.text} ${m.undoFailed}` } : now));
+    } catch (error) {
+      // A refusal (the role is gone, or its name was taken meanwhile) ends Undo; a failure on the way may be tried again.
+      const final = error instanceof InvalidRequestError || (error instanceof Error && error.message === 'API 404');
+      setStatus({ text: `${m.deleted(role.name)} ${final ? m.undoFailed : m.undoRetry}`, undo: final ? undefined : role });
     }
   };
   const [focusStatus, setFocusStatus] = useState(false);
@@ -196,7 +198,7 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
     // lists reload. Removing its entry would make the page, still shown, fetch it once more and get 404.
     void client.invalidateQueries({ queryKey: ['roles'], predicate: (query) => query.queryKey[1] !== 'one' });
     const id = original!.id;
-    onDone({ text: m.deleted(original!.name), undo: id });
+    onDone({ text: m.deleted(original!.name), undo: { id, name: original!.name } });
   }, onError: fail });
   const busy = create.isPending || update.isPending || remove.isPending;
   if (editing && role.isPending) return <section className="settings-card" aria-busy="true"><div className="roles-loading">{[0, 1, 2, 3].map((row) => <span key={row} className="roles-skeleton" />)}</div></section>;
