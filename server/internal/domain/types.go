@@ -328,12 +328,15 @@ type Message struct {
 	// AIDraftID names the AI draft a reply was written from.
 	AIDraftID *string `json:"ai_draft_id"`
 	// AIDraftOutcome says whether the reply was sent as the draft was written or edited.
-	AIDraftOutcome *string        `json:"ai_draft_outcome"`
-	Kind           string         `json:"kind"`
-	Body           string         `json:"body"`
-	BodyHTML       *string        `json:"body_html"`
-	Origin         *MessageOrigin `json:"origin"`
-	Attachments    []Attachment   `json:"attachments"`
+	AIDraftOutcome *string `json:"ai_draft_outcome"`
+	// AIDraftSource says who wrote that draft: ai, or written by an agent token (DraftedBy).
+	AIDraftSource *string        `json:"ai_draft_source"`
+	DraftedBy     *MessageToken  `json:"drafted_by"`
+	Kind          string         `json:"kind"`
+	Body          string         `json:"body"`
+	BodyHTML      *string        `json:"body_html"`
+	Origin        *MessageOrigin `json:"origin"`
+	Attachments   []Attachment   `json:"attachments"`
 	// CC lists the addresses an outgoing reply was copied to; empty for every other message.
 	CC        []string         `json:"cc"`
 	CreatedAt time.Time        `json:"created_at"`

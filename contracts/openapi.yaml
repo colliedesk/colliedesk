@@ -8256,14 +8256,14 @@ components:
         contact_labels:
           type: object
           additionalProperties: false
-          description: 'Words of the channel''s language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Removing one needs the approval raising AI needs.'
+          description: 'Words of the channel''s language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Adding or removing one needs ai_settings:update.'
           properties:
             account: {type: array, maxItems: 50, items: {type: string, minLength: 1, maxLength: 80}}
             id: {type: array, maxItems: 50, items: {type: string, minLength: 1, maxLength: 80}}
         redact_patterns:
           type: array
           maxItems: 20
-          description: 'The channel''s own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs.'
+          description: 'The channel''s own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Adding or removing one needs ai_settings:update.'
           items:
             type: object
             additionalProperties: false
@@ -11170,7 +11170,7 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, ai_draft_outcome, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, ai_draft_outcome, ai_draft_source, drafted_by, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
         channel_id: {type: [string, 'null'], format: uuid, description: The channel that carried the message; null for a note and for messages stored before channels were recorded.}
         other_contact_id: {type: [string, 'null'], format: uuid, description: 'A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.'}
@@ -11184,6 +11184,12 @@ components:
 
         ai_draft_id: {type: [string, 'null'], format: uuid, description: The AI draft the reply was written from.}
         ai_draft_outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, null], description: 'Whether the reply kept the draft''s words (sent_unchanged, 90 % or more) or was edited; null without a draft.'}
+        ai_draft_source: {type: [string, 'null'], enum: [ai, written, null], description: 'Who wrote the draft the reply came from: ai (built-in AI) or written (an agent token, through POST /conversations/{id}/reply-drafts); null without a draft.'}
+        drafted_by:
+          description: 'For a reply sent from a written draft, the agent token that wrote it; null otherwise. author_* is the person who sent it.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageAgentToken'}
         reply_number:
           type: [integer, 'null']
           minimum: 1

@@ -4843,12 +4843,12 @@ export interface components {
             instructions?: string;
             /** @description Words that mark a secret in the channel's language (a password, a code). */
             redact_keywords?: string[];
-            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Removing one needs the approval raising AI needs. */
+            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Adding or removing one needs ai_settings:update. */
             contact_labels?: {
                 account?: string[];
                 id?: string[];
             };
-            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs. */
+            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Adding or removing one needs ai_settings:update. */
             redact_patterns?: {
                 pattern: string;
                 /** @enum {string} */
@@ -7898,6 +7898,13 @@ export interface components {
              * @enum {string|null}
              */
             ai_draft_outcome: "sent_unchanged" | "sent_edited" | null;
+            /**
+             * @description Who wrote the draft the reply came from: ai (built-in AI) or written (an agent token, through POST /conversations/{id}/reply-drafts); null without a draft.
+             * @enum {string|null}
+             */
+            ai_draft_source: "ai" | "written" | null;
+            /** @description For a reply sent from a written draft, the agent token that wrote it; null otherwise. author_* is the person who sent it. */
+            drafted_by: null | components["schemas"]["MessageAgentToken"];
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
             /** Format: uuid */

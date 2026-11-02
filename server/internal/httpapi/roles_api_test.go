@@ -363,7 +363,19 @@ func TestAWrittenReplyDraftWaitsForAPersonToSend(t *testing.T) {
 	if len(filtered.Items) != 1 || filtered.Items[0].ID != desk.conversation {
 		t.Fatalf("has_pending_draft = %+v", filtered.Items)
 	}
-	kbCall(t, desk.api, http.MethodPost, "/api/v1/conversations/"+desk.conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Thanks, it is fixed.", "ai_draft_id": draft.ID}, desk.admin, http.StatusCreated, nil)
+	var sent struct {
+		AuthorName    string  `json:"author_name"`
+		AIDraftSource *string `json:"ai_draft_source"`
+		DraftedBy     *struct {
+			Label     string `json:"label"`
+			AgentName string `json:"agent_name"`
+		} `json:"drafted_by"`
+	}
+	kbCall(t, desk.api, http.MethodPost, "/api/v1/conversations/"+desk.conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Thanks, it is fixed.", "ai_draft_id": draft.ID}, desk.admin, http.StatusCreated, &sent)
+	// The reply says the token wrote it, not AI: the timeline names who drafted it and who sent it.
+	if sent.AIDraftSource == nil || *sent.AIDraftSource != "written" || sent.DraftedBy == nil || sent.DraftedBy.Label != "Writer" || sent.DraftedBy.AgentName == "" {
+		t.Fatalf("sent reply = %+v, want ai_draft_source written and drafted_by the Writer token", sent)
+	}
 }
 
 // A member's permissions are read with the session: holding several roles costs no extra statement.

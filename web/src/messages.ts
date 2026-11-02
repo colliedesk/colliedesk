@@ -372,6 +372,8 @@ export const messages = {
   fromAIDraft: 'from an AI draft',
   fromAIDraftEdited: 'from an AI draft, edited',
   fromAIDraftUnchanged: 'from an AI draft, sent as written',
+  draftedByToken: (token: string, person: string, outcome: 'sent_unchanged' | 'sent_edited' | null) =>
+    `Drafted by ${token}, agent token of ${person}${outcome === 'sent_unchanged' ? ', sent as written' : outcome === 'sent_edited' ? ', edited' : ''}`,
   aiDraftsOff: 'Off',
   aiDraftsOffName: 'Draft with AI (off)',
   aiDraftsOffAdmin: 'Reply drafts are off. Turn them on in Settings → Built-in AI.',

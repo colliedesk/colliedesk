@@ -184,6 +184,8 @@ export const messageSchema = z.object({
   // An older server sends no draft id.
   ai_draft_id: z.string().uuid().nullable().catch(null),
   ai_draft_outcome: z.enum(['sent_unchanged', 'sent_edited']).nullable().catch(null),
+  ai_draft_source: z.enum(['ai', 'written']).nullable().catch(null),
+  drafted_by: messageAgentTokenSchema.nullable().catch(null),
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
