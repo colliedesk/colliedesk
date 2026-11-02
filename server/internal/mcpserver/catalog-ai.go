@@ -143,7 +143,7 @@ func aiProviderRemoveSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_provider_remove",
 		Title: "Delete an AI provider",
-		Description: `Delete a provider and erase its key now. The features that used it turn off and stay off until an admin picks another provider ` +
+		Description: `Delete a provider and erase its key now. The features that used it turn off and stay off until someone picks another provider ` +
 			`(turned_off lists them). It cannot be undone: there is no trash, so to bring it back add the provider again with its key.`,
 		Destructive: true,
 		REST:        []string{"DELETE /api/v1/ai/providers/{id}"},

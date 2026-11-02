@@ -62,7 +62,7 @@ func kbVideoUploadListSpec() Spec {
 		Name:  "colliedesk_kb_video_upload_list",
 		Title: "List the knowledge base video uploads in progress",
 		Description: `List the workspace's uploads in progress, the oldest first, with who started each, the bytes received and when its parts expire. ` +
-			`At most 3 can be in progress; cancel one you started (an admin cancels any) to make room.`,
+			`At most 3 can be in progress; cancel one you started (with kb_media:purge you cancel any) to make room.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/kb/media-uploads"},
 		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
@@ -75,7 +75,7 @@ func kbVideoUploadCancelSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_kb_video_upload_cancel",
 		Title:       "Cancel a knowledge base video upload",
-		Description: `Cancel an upload in progress and throw its parts away. Only the person who started it, or an admin, can.`,
+		Description: `Cancel an upload in progress and throw its parts away. Only the person who started it can, or someone with kb_media:purge.`,
 		Idempotent:  true,
 		REST:        []string{"DELETE /api/v1/kb/media-uploads/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["upload_id"],"properties":{` + kbUploadIDProperty + `}}`,

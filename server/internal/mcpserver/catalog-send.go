@@ -122,7 +122,7 @@ func tokenRevokeSpec() Spec {
 		Name:  "colliedesk_token_revoke",
 		Title: "Revoke this token",
 		Description: `Revoke the agent token this connection uses, so nobody can use it again. Every later call with it fails. ` +
-			`It cannot be undone: a workspace admin must create a new token (Settings, Sessions and devices) to connect again. ` +
+			`It cannot be undone: the person you work for must create a new token (Settings → External AI agents) to connect again. ` +
 			`Use it when the user asks you to disconnect, or when you believe the token leaked. ` + confirmFirst,
 		Destructive: true,
 		REST:        []string{"POST /api/v1/auth/logout"},

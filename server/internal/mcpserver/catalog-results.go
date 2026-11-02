@@ -67,7 +67,7 @@ func resultsEmailSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_results_email_set",
 		Title: "Turn your weekly results email on or off",
-		Description: `Turn the weekly results email on or off for the team member this token acts as. It goes to admins only, on Mondays at 8:00 in the workspace's timezone, ` +
+		Description: `Turn the weekly results email on or off for the team member this token acts as. It goes only to people who hold results:share, on Mondays at 8:00 in the workspace's timezone, ` +
 			`when the server can send email. Safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PATCH /api/v1/agents/me/results-email"},

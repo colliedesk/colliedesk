@@ -9,7 +9,7 @@ import (
 // waits for a person's approval and there are no tiers. A workspace tool, its guide sentence and the
 // server's instructions never tell a model otherwise. Operator tools still file operator requests.
 func TestNoWorkspaceToolTalksAboutRequestsOrTiers(t *testing.T) {
-	stale := regexp.MustCompile(`(?i)\bagent[ _]requests?\b|request_get|colliedesk_[a-z_]*_request\b|\(Requests\)|\btiers?\b|token_tier|waits? for (a person's )?approval|a person approves|needs? a person's approval`)
+	stale := regexp.MustCompile(`(?i)\bagent[ _]requests?\b|request_get|colliedesk_[a-z_]*_request\b|\(Requests\)|\btiers?\b|token_tier|waits? for (a person's )?approval|a person approves|admin token|below .?admin.?\b|an admin.s token|waits in a request|loosening it waits|a raise waits|needs? a person's approval`)
 	check := func(where, text string) {
 		t.Helper()
 		if found := stale.FindString(text); found != "" {

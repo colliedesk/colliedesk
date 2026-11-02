@@ -32,7 +32,7 @@ func (c *call) refuse(err error, notFound string) error {
 	case failure.Status == 401:
 		return &toolError{"This Colliedesk token is no longer valid: it was revoked or it expired. Ask the person you work for to create a new one in Settings → External AI agents."}
 	case failure.Status == 402 && failure.Code == "workspace_locked":
-		return &toolError{"This workspace is locked: its trial ended and no plan is active. Only exporting the data works until an admin chooses a plan, so no inbox tool can read or change anything now."}
+		return &toolError{"This workspace is locked: its trial ended and no plan is active. Only exporting the data works until someone with billing:manage chooses a plan, so no inbox tool can read or change anything now."}
 	case failure.Status == 402:
 		return &toolError{"Colliedesk refused because of the plan: " + failure.Message}
 	case failure.Status == 403:
