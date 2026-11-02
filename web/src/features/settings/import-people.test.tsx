@@ -3,15 +3,16 @@ import { expect, test, vi } from 'vitest';
 import type { ImportPerson } from '../../api/imports';
 import type { Invite, TeamMember } from '../../api/schemas';
 import { ImportPeople } from './import-people';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import type { ImportPeopleProps } from './import-people';
 
 const person = (change: Partial<ImportPerson>): ImportPerson => ({
   external_id: '101', name: 'Alice', email: 'alice@acme.example', active: true, linked_agent_id: null, linked_by_email: false, pending: false,
   updated_at: '2026-10-22T08:00:00Z', ...change,
 });
-const sam: TeamMember = { id: '33333333-3333-4333-8333-333333333333', email: 'sam@acme.example', display_name: 'Sam', role: 'admin', timezone_override: null,
+const sam: TeamMember = { id: '33333333-3333-4333-8333-333333333333', email: 'sam@acme.example', display_name: 'Sam', roles: rolesOf('admin'), manageable: true, timezone_override: null,
   deactivated_at: null, last_active_at: null, open_conversations: 0 };
-const invite: Invite = { id: '44444444-4444-4444-8444-444444444444', email: 'carol@acme.example', role_ceiling: 'agent', created_by_email: 'sam@acme.example',
+const invite: Invite = { id: '44444444-4444-4444-8444-444444444444', email: 'carol@acme.example', roles: rolesOf('agent'), created_by_email: 'sam@acme.example',
   created_at: '2026-10-22T08:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
 
 function show(people: ImportPerson[], props: Partial<ImportPeopleProps> = {}) {

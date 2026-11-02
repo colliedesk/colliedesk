@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import type { TeamMember } from '../../api/schemas';
+import type { Role, TeamMember } from '../../api/schemas';
+import { permissionsOf, roleOf, rolesOf } from '../../test-roles';
+import { settingsMessages } from './settings-messages';
 import { TeamSection } from './team-section';
 
 const member = (overrides: Partial<TeamMember> & Pick<TeamMember, 'id' | 'email'>): TeamMember => ({
-  display_name: '', role: 'agent', timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
+  display_name: '', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
 });
-const admin = member({ id: '11111111-1111-4111-8111-111111111111', email: 'admin@example.com', display_name: 'Ada Admin', role: 'admin', last_active_at: '2026-10-15T09:30:00Z' });
+const admin = member({ id: '11111111-1111-4111-8111-111111111111', email: 'admin@example.com', display_name: 'Ada Admin', roles: rolesOf('admin'), last_active_at: '2026-10-15T09:30:00Z' });
 const ann = member({ id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', open_conversations: 2 });
 const bob = member({ id: '33333333-3333-4333-8333-333333333333', email: 'bob@example.com', display_name: 'Bob Builder' });
 const cy = member({ id: '44444444-4444-4444-8444-444444444444', email: 'cy@example.com', deactivated_at: '2026-10-10T00:00:00Z', last_active_at: '2026-10-09T08:00:00Z' });
@@ -31,25 +33,38 @@ test('an agent sees the team read-only', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('choosing a role changes nothing until Apply is pressed', () => {
-  const onChangeRole = vi.fn();
-  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onChangeRole={onChangeRole} />);
-  expect(screen.queryByRole('button', { name: 'Apply role for ann@example.com' })).not.toBeInTheDocument();
-  const select = screen.getByRole('combobox', { name: 'Role of ann@example.com' });
-  fireEvent.change(select, { target: { value: 'admin' } });
-  expect(onChangeRole).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Apply role for ann@example.com' }));
-  expect(onChangeRole).toHaveBeenCalledWith(ann.id, 'admin');
+const adminRole = roleOf(rolesOf('admin')[0], permissionsOf('admin'));
+const agentRole = roleOf(rolesOf('agent')[0], permissionsOf('agent'));
+const editor = roleOf({ id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null }, ['kb_articles:read'], { tokens: [{ id: 't1', label: 'Claude on laptop', owner: 'ann@example.com' }] });
+
+test('changing roles changes nothing until Apply is pressed, then sets the whole list', async () => {
+  const onSetRoles = vi.fn().mockResolvedValue(undefined);
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={onSetRoles} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: ann@example.com' }));
+  const group = screen.getByRole('group', { name: 'Roles of ann@example.com' });
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Editor/ }));
+  expect(onSetRoles).not.toHaveBeenCalled();
+  fireEvent.click(within(group).getByRole('button', { name: 'Apply' }));
+  await vi.waitFor(() => expect(onSetRoles).toHaveBeenCalledWith(ann.id, [agentRole.id, editor.id]));
 });
 
-test('putting the role back hides Apply, and a self demotion is applied the same explicit way', () => {
-  const onChangeRole = vi.fn();
-  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onChangeRole={onChangeRole} />);
-  const own = screen.getByRole('combobox', { name: 'Role of Ada Admin' });
-  fireEvent.change(own, { target: { value: 'agent' } });
-  expect(onChangeRole).not.toHaveBeenCalled();
-  fireEvent.change(own, { target: { value: 'admin' } });
-  expect(screen.queryByRole('button', { name: 'Apply role for Ada Admin' })).not.toBeInTheDocument();
+test('taking a role a token follows says which tokens stop, and nobody is left without a role', () => {
+  const holder = { ...ann, roles: [...rolesOf('agent'), { id: editor.id, name: 'Editor', system: null }] };
+  render(<TeamSection members={[admin, holder]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: ann@example.com' }));
+  const group = screen.getByRole('group', { name: 'Roles of ann@example.com' });
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Editor/ }));
+  expect(group).toHaveTextContent('Claude on laptop');
+  expect(within(group).getByRole('button', { name: 'Remove and stop 1 token' })).toBeEnabled();
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Agent/ }));
+  expect(within(group).getByRole('button', { name: 'Remove and stop 1 token' })).toBeDisabled();
+  expect(group).toHaveTextContent('Everyone needs at least one role.');
+});
+
+test('a member who holds more than you has no Change roles button', () => {
+  render(<TeamSection members={[{ ...admin, manageable: false }, ann]} currentAgentId={ann.id} canManage roles={[agentRole]} myPermissions={permissionsOf('agent')} timezone="UTC" />);
+  expect(screen.queryByRole('button', { name: 'Change roles: Ada Admin' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Change roles: ann@example.com' })).toBeInTheDocument();
 });
 
 test('deactivating asks first, shows the open work and moves it to Unassigned by default', () => {
@@ -100,7 +115,7 @@ test('someone with no open work gets a plain confirmation and nothing to move', 
 
 test('deactivating yourself warns that you will be signed out', () => {
   // A second admin exists: the last active admin is never offered Deactivate.
-  render(<TeamSection members={[admin, { ...ann, role: 'admin' }]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  render(<TeamSection members={[admin, { ...ann, roles: rolesOf('admin') }]} currentAgentId={admin.id} canManage timezone="UTC" />);
   fireEvent.click(screen.getByRole('button', { name: 'Deactivate Ada Admin' }));
   expect(screen.getByRole('group', { name: 'Deactivate Ada Admin?' })).toHaveTextContent('You will be signed out');
 });
@@ -141,13 +156,21 @@ test('confirming leaves focus on the row, not on the page body', () => {
 });
 
 test('the only active admin cannot deactivate or demote themself; with a second admin they can', () => {
-  const { rerender } = render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  const props = { currentAgentId: admin.id, canManage: true, roles: [adminRole, agentRole], myPermissions: permissionsOf('admin'), timezone: 'UTC' };
+  const { rerender } = render(<TeamSection members={[admin, ann]} {...props} />);
   expect(screen.queryByRole('button', { name: 'Deactivate Ada Admin' })).not.toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Deactivate ann@example.com' })).toBeInTheDocument();
-  rerender(<TeamSection members={[admin, { ...ann, role: 'admin' }]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  const adminBox = screen.getByRole('checkbox', { name: /Admin/ });
+  expect(adminBox).toHaveAttribute('aria-disabled', 'true');
+  expect(adminBox).toHaveAccessibleDescription(settingsMessages.teamLastAdmin);
+  fireEvent.click(adminBox);
+  expect(adminBox).toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  rerender(<TeamSection members={[admin, { ...ann, roles: rolesOf('admin') }]} {...props} />);
   expect(screen.getByRole('button', { name: 'Deactivate Ada Admin' })).toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  expect(screen.getByRole('checkbox', { name: /Admin/ })).not.toHaveAttribute('aria-disabled');
 });
 
 test('an admin renames a member from their row, and saving an empty name clears it', () => {

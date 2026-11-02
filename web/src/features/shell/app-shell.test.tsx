@@ -1,12 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { AppShell } from './app-shell';
 
 const me = {
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'agent' as const, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('agent'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC',
-  scope: null, permissions: [],
+  token: null, permissions: permissionsOf('agent'),
   plan: null,
   ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false,
 };
@@ -65,7 +66,7 @@ test('the avatar opens an account menu with who is signed in and Sign out', () =
 });
 
 test('the account menu names the person and their role, and leaves the workspace and address to the bar above', () => {
-  render(<AppShell me={{ ...me, agent: { ...me.agent, display_name: 'Sam Lee', role: 'admin' } }} onSignOut={() => {}}><p>inbox</p></AppShell>);
+  render(<AppShell me={{ ...me, agent: { ...me.agent, display_name: 'Sam Lee', roles: rolesOf('admin') } }} onSignOut={() => {}}><p>inbox</p></AppShell>);
   fireEvent.click(screen.getByRole('button', { name: 'Account' }));
   const menu = screen.getByRole('group', { name: 'Account' });
   expect(menu).toHaveTextContent('Sam Lee');

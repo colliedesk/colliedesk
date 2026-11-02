@@ -73,7 +73,7 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
           {plainAuthor && <span className="message-author">{item.author_name}</span>}
           {noticeAuthor && <span className="message-author">{noticeAuthor}</span>}
           {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
-          {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
+          {item.agent_token && <span className="message-author">{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item)}</span>

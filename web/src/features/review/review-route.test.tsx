@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { AGENT, CARD, CHANNEL, CONVERSATION, detail, gathering } from './intake.test.fixture';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { ReviewRoute } from './review-route';
 
 const { api, ConflictError } = vi.hoisted(() => ({ api: { me: vi.fn(), agents: vi.fn() },
@@ -16,7 +17,7 @@ const page = (items = [gathering()]) => ({ items, next_cursor: null });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: AGENT, role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: AGENT, roles: rolesOf('agent') } });
   api.agents.mockResolvedValue({ items: [{ id: AGENT, display_name: 'Ann Agent', email: 'ann@example.com' }] });
   summary.mockResolvedValue({ available: true, waiting: 1, deciding: 0, scopes: [{ channel_id: CHANNEL, channel_name: 'Zalo HC Labs', scope: 'group' }] });
   intake.list.mockResolvedValue(page());

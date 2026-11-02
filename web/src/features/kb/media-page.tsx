@@ -17,6 +17,7 @@ import { MediaDetail } from './media-detail';
 import { MediaCard, SelectCard, mediaName, usageLabel } from './media-grid';
 import { mediaMessages } from './media-messages';
 import { baseName, useUploadQueue } from './media-uploads';
+import { can } from '../../lib/can';
 import type { UploadQueue, UploadRow } from './media-uploads';
 
 export interface MediaSearch {
@@ -174,7 +175,7 @@ function InProgress({ queue, items, onChanged }: { queue: UploadQueue; items: KB
   const file = useRef<HTMLInputElement>(null);
   const resuming = useRef<KBMediaUpload | undefined>(undefined);
   const timezone = me.data?.timezone ?? 'UTC';
-  const admin = me.data?.agent.role === 'admin';
+  const admin = can(me.data, 'kb_media:purge');
   const cancel = async (upload: KBMediaUpload) => {
     setProblem(undefined);
     try {
@@ -588,7 +589,7 @@ function Trash({ onChanged }: { onChanged: () => void }) {
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const selection = useSelection(items);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const admin = me.data?.agent.role === 'admin';
+  const admin = can(me.data, 'kb_media:purge');
   const timezone = me.data?.timezone ?? 'UTC';
   const [now] = useState(() => new Date());
   const [deleting, setDeleting] = useState(false);

@@ -335,7 +335,7 @@ export const messages = {
   planAndBilling: 'Plan and billing',
   manageBilling: 'Manage billing',
   billingActionFailed: 'The billing action failed. Try again.',
-  roles: { admin: 'Admin', agent: 'Agent' },
+  roles: 'Roles',
   statuses: { open: 'Open', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
   // Most urgent first, the order of every list of priorities.
   priorities: { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' },
@@ -355,7 +355,8 @@ export const messages = {
   review: 'Review',
   reviewWaiting: (count: number) => `Review, ${count} waiting`,
   someone: 'someone',
-  replyDraftBy: (person: string, token: string) => `Reply draft by ${person} via ${token}`,
+  replyDraftBy: (person: string, token: string) => `Draft from ${token}, agent token of ${person}`,
+  replyDraftOf: (person: string) => `Draft from ${person}`,
   draftText: 'Draft text',
   sendDraft: 'Send',
   discardDraft: 'Discard',

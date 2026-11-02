@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { BillingRoute } from './billing-route';
 import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { readPlanIntent, rememberPlanIntent } from './plan-intent';
 
 const { api, importsApi, InvalidRequestError } = vi.hoisted(() => ({
@@ -19,7 +20,7 @@ const embed = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed.create } }));
 
 const me = (role: 'admin' | 'agent', admins?: string[]) => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC',
   plan: admins ? { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, admins } : null,

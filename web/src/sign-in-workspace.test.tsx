@@ -7,6 +7,7 @@ import { createQueryClient } from './query-client';
 import { presenceViewPart } from './features/inbox/presence-part';
 import { autofixPart } from './features/autofix/autofix-part';
 import { leaveTo } from './lib/leave-to';
+import { permissionsOf, rolesOf } from './test-roles';
 import { readPlanIntent } from './features/settings/plan-intent';
 
 // Each workspace's desk runs on its own host; APP_ORIGIN finds workspaces and signs new teams up. Clerk
@@ -33,9 +34,9 @@ beforeAll(async () => {
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const me = {
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'agent', timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('agent'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, plan: null,
+  timezone: 'UTC', token: null, permissions: permissionsOf('agent'), plan: null,
 };
 const handoffURL = 'https://beta-desk.example.com/sign-in?next=%2Fsettings#handoff=one-time';
 // appOrigin is where this page runs (jsdom's origin) on APP_ORIGIN, or another origin on a workspace host.

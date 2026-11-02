@@ -21,6 +21,7 @@ import { channelsMessages as m } from './channels-messages';
 import './channels.css';
 import { useCreateAction } from '../../../api/use-create';
 import { takeSetupReturn } from '../../../channels/setup-return';
+import { can } from '../../../lib/can';
 import { useBillingShown } from '../../billing/billing-shown';
 
 // The pages under /settings/channels. Everything a type adds comes from the web registry
@@ -54,7 +55,7 @@ const withSearch = (path: string, search: ChannelsSearch) => {
 export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'channels:update');
   const billingShown = useBillingShown(isAdmin);
   const timezone = me.data?.timezone ?? 'UTC';
   const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,

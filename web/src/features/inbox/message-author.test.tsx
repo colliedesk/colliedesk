@@ -33,7 +33,7 @@ test('a reply and a note written in Colliedesk name the team member who wrote th
 
 test('a message an agent token wrote names the person once, in the token line', () => {
   const written: Message = { ...base, id: '44444444-4444-4444-8444-444444444444', kind: 'note', body: 'Checked the logs.', author_agent_id: ada, author_name: 'Ada Admin',
-    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', scope: 'draft', agent_name: 'Ada Admin' } };
+    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', agent_name: 'Ada Admin' } };
   render(<TimelinePanel items={[written]} timezone="UTC" />);
   const article = screen.getByRole('article');
   expect(within(article).getByText('by Ada Admin via Support bot')).toBeInTheDocument();

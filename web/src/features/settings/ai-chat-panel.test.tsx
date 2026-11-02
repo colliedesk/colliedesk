@@ -4,12 +4,13 @@ import type { ReactNode } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AIChatSession, AIChatSummary, AIChatUsage } from '../../api/ai';
 import { AIChatPanel, ChatTranscript } from './ai-chat-panel';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { AIChatSettingsRoute } from './ai-chat-route';
 
 const aiApi = vi.hoisted(() => ({ chatUsage: vi.fn(), chatSessions: vi.fn(), chatSession: vi.fn(), deleteChatSession: vi.fn(), chatPreview: vi.fn() }));
 vi.mock('../../api/ai', () => ({ aiApi }));
 vi.mock('../../api/client', async (actual) => ({ ...(await actual<object>()), api: {
-  me: () => Promise.resolve({ agent: { role: 'admin' }, timezone: 'UTC' }), config: () => Promise.resolve({ billing: { enabled: false } }) } }));
+  me: () => Promise.resolve({ agent: { roles: rolesOf('admin') }, timezone: 'UTC' }), config: () => Promise.resolve({ billing: { enabled: false } }) } }));
 vi.mock('./settings-nav', () => ({ SettingsNav: () => null }));
 
 const summary = (change: Partial<AIChatSummary> = {}): AIChatSummary => ({

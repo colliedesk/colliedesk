@@ -8,6 +8,7 @@ import { readPlanIntent, rememberPlanIntent } from './features/settings/plan-int
 import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 import { presenceViewPart } from './features/inbox/presence-part';
+import { permissionsOf, rolesOf } from './test-roles';
 import { autofixPart } from './features/autofix/autofix-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
@@ -29,9 +30,9 @@ afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); clerk.si
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const locked = { error: { code: 'workspace_locked', message: 'This workspace is locked because its trial or subscription ended.' } };
 const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, plan,
+  timezone: 'UTC', token: null, permissions: permissionsOf(role), plan,
 });
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };

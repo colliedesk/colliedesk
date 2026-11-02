@@ -1,6 +1,7 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { agentRoleRef, builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 import { SettingsRoute } from './settings-route';
 
 const api = vi.hoisted(() => ({
@@ -9,7 +10,7 @@ const api = vi.hoisted(() => ({
   saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
-  connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(),
+  connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(), roles: vi.fn(), setAgentRoles: vi.fn(),
 }));
 const errors = vi.hoisted(() => {
   class InvalidRequestError extends Error {}
@@ -20,13 +21,13 @@ vi.mock('../../api/client', () => ({ api, ...errors }));
 vi.mock('../kb/help-center-card', () => ({ HelpCenterSettings: () => <p>Help center card</p> }));
 
 const me = (role: 'admin' | 'agent') => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC', plan: null,
 });
 
 const teammate = (id: string, email: string, overrides = {}) => ({
-  id, email, display_name: '', role: 'agent', timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
+  id, email, display_name: '', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
 });
 const SAM = '11111111-1111-4111-8111-111111111111';
 const ANN = '33333333-3333-4333-8333-333333333333';
@@ -34,9 +35,10 @@ const ANN = '33333333-3333-4333-8333-333333333333';
 function show(role: 'admin' | 'agent', sessions: unknown[] = [], emailChannel?: unknown, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   api.me.mockResolvedValue(me(role));
   api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
-  api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
+  api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { roles: rolesOf(role) }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
   api.sessions.mockResolvedValue({ items: sessions });
+  api.roles.mockResolvedValue({ items: builtInRoles });
   api.savedReplies.mockResolvedValue({ items: [] });
   api.invites.mockResolvedValue({ items: [] });
   api.webForm.mockResolvedValue({ enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/beta-desk' });
@@ -150,20 +152,21 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
 });
 
 test('an agent creates an agent token above Sessions; the list reloads to show it and the token is kept in no cache', async () => {
-  const session = { id: '77777777-7777-4777-8777-777777777777', agent_id: SAM, agent_email: 'sam@example.com', label: 'Claude Code', scope: 'draft',
-    current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
+  const session = { id: '77777777-7777-4777-8777-777777777777', agent_id: SAM, agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Claude Code',
+    token: { kind: 'role', role: agentRoleRef, role_held: true, permissions: permissionsOf('agent'), legacy_tier: null }, role: null, permissions: permissionsOf('agent'), current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   show('agent', [], undefined, client);
   api.createAgentToken.mockResolvedValue({ token: 'cdk_agent_routetoken', session });
   const card = await screen.findByRole('region', { name: 'External AI agents' });
-  expect(within(card).getByRole('radio', { name: 'Admin' })).toBeDisabled();
+  expect(within(card).getByRole('radio', { name: 'Follow my role' })).toBeChecked();
+  expect(within(card).getByRole('combobox')).toHaveDisplayValue('Agent');
   expect(card.compareDocumentPosition(screen.getByRole('region', { name: 'Sessions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   api.sessions.mockResolvedValue({ items: [session] });
   const before = api.sessions.mock.calls.length;
   fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   expect(await within(card).findByDisplayValue('cdk_agent_routetoken')).toBeInTheDocument();
-  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', { scope: 'draft' }, expect.any(String));
+  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', { role_id: agentRoleRef.id }, expect.any(String));
   await waitFor(() => expect(api.sessions.mock.calls.length).toBeGreaterThan(before));
   expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
   const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);
@@ -284,13 +287,14 @@ test('a burst of Create invite presses sends one invite under one key, and the b
   let answer!: (value: unknown) => void;
   api.createInvite.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
   fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'new@example.com' } });
+  await screen.findByRole('button', { name: 'Roles: Agent' });
   const create = screen.getByRole('button', { name: 'Create invite' });
   fireEvent.click(create); fireEvent.click(create); fireEvent.click(create);
   await waitFor(() => expect(api.createInvite).toHaveBeenCalled());
   await new Promise((resolve) => { setTimeout(resolve, 20); });
   expect(api.createInvite).toHaveBeenCalledTimes(1);
-  expect(api.createInvite).toHaveBeenCalledWith('new@example.com', 'agent', expect.stringMatching(/^[\x21-\x7e]{1,200}$/));
+  expect(api.createInvite).toHaveBeenCalledWith('new@example.com', [agentRoleRef.id], expect.stringMatching(/^[\x21-\x7e]{1,200}$/));
   await waitFor(() => expect(create).toBeDisabled());
-  answer({ invite: { id: 'i1', email: 'new@example.com', role_ceiling: 'agent', created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2026-11-04T07:00:00Z', used_at: null, revoked_at: null }, url: 'https://desk.example.com/invite#t' });
+  answer({ invite: { id: 'i1', email: 'new@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2026-11-04T07:00:00Z', used_at: null, revoked_at: null }, url: 'https://desk.example.com/invite#t' });
   await waitFor(() => expect(create).toBeEnabled());
 });

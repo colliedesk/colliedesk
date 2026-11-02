@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
@@ -386,7 +387,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
   const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha, beta, gamma], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -411,7 +412,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
 
 test('a refused bulk change reloads the list, so a conversation that is gone stops being selectable', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -603,7 +604,7 @@ test('the server limit from the config warns about oversized files before anythi
 test('a saved reply inserted the moment a conversation is selected already has the customer name, with no extra request', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   api.contact.mockReset();
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -622,7 +623,7 @@ test('a saved reply inserted the moment a conversation is selected already has t
 
 test('a saved reply signs with the email name of an agent who has no display name', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'qa-b@hclabs.colliedesk.com', display_name: '', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'qa-b@hclabs.colliedesk.com', display_name: '', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -641,7 +642,7 @@ test('a saved reply signs with the email name of an agent who has no display nam
 test('Manage saved replies opens Settings in a new tab, so a draft is not lost', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const open = vi.spyOn(window, 'open').mockReturnValue(null);
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -916,7 +917,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
     replies_via: { id: '55555555-5555-4555-8555-555555555555', name: 'Email', enabled: false } };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -940,7 +941,7 @@ test('a web form conversation with no email connected can still be answered, and
   const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
     replies_via: null };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -965,7 +966,7 @@ test('a conversation whose channel was removed takes private notes but no reply'
   const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'email', name: 'Email', enabled: false, deleted: true,
     replies_via: null };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'email' as const, channel_ref: ref };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -996,7 +997,7 @@ test('with two mailboxes the composer names the one a reply leaves from', async 
   const beta = { ...conversation('22222222-2222-4222-8222-222222222223', 'Beta conversation'),
     channel_ref: { ...ref, id: '33333333-3333-4333-8333-333333333334', name: 'Careers', enabled: false, deleted: true,
       replies_via: { id: '44444444-4444-4444-8444-444444444445', name: 'Support', enabled: true, instead_of: { id: '33333333-3333-4333-8333-333333333334', name: 'Careers' } } } };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.emailChannel.mockResolvedValue({ channel: { support_address: 'support@desk.example', domain_verified_at: '2026-10-01T00:00:00Z' }, inbound_url: 'https://desk.example.com/x',
     smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
   api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
@@ -1034,7 +1035,7 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: gmail === 'connected' ? address : null,
     gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/cb', connection: { provider: 'google', address, status: gmail, error_code: gmail === 'failed' ? 'revoked' : null,
       error: null, failed_at: null, connected_at: '2026-09-01T00:00:00Z' } } });
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
@@ -1123,7 +1124,7 @@ const unfinished = { steps: [
   { key: 'email', state: 'none', detail: null }, { key: 'import', state: 'none', detail: null },
   { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null },
 ], complete: false, recommended: null };
-const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', role: 'admin', email: 'ann@example.com', display_name: 'Ann' }, onboarding_goal: null, setup_guide_hidden: hidden });
+const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', roles: rolesOf('admin'), email: 'ann@example.com', display_name: 'Ann' }, permissions: permissionsOf('admin'), onboarding_goal: null, setup_guide_hidden: hidden });
 
 test('a workspace with conversations keeps the setup guide folded in the corner until the agent opens it', async () => {
   localStorage.clear();

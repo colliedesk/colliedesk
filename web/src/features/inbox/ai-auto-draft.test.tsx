@@ -7,7 +7,7 @@ import type { AIDraft } from './ai-draft-api';
 const conversation = '22222222-2222-4222-8222-222222222222';
 
 function draft(change: Partial<AIDraft> = {}): AIDraft {
-  return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', error_code: null, prompt: '', text: 'Hi Jordan, I refunded INV-20932.',
+  return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', source: 'ai', cc: null, written_by: null, error_code: null, prompt: '', text: 'Hi Jordan, I refunded INV-20932.',
     missing_info: null, sources: [], warnings: [], model: 'claude-sonnet-5-5', outcome: null, similarity: null, sent_message_id: null, requested_by_agent_id: null,
     automatic: true, answers_message_id: '66666666-6666-4666-8666-666666666666', reply_needed: true, created_at: '2026-10-22T10:31:00Z', ready_at: '2026-10-22T10:31:20Z',
     decided_at: null, ...change };

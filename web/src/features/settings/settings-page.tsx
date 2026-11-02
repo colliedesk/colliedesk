@@ -4,6 +4,7 @@ import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
+import type { Role } from '../../api/schemas';
 import { NameForm } from './name-form';
 import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
@@ -33,7 +34,11 @@ interface SettingsPageProps {
   // The invite just created: its one-time link, or none when a repeat of the press came back without it.
   createdInvite?: { url?: string };
   creatingInvite?: boolean;
-  onCreateInvite?: (email: string, role: 'admin' | 'agent') => void;
+  onCreateInvite?: (email: string, roleIds: string[]) => void;
+  // The roles an invite may give.
+  inviteRoles?: Role[];
+  // Revoking needs team:revoke.
+  canRevokeInvites?: boolean;
   onRevokeSession?: (id: string) => void;
   onRevokeInvite?: (id: string) => void;
   onSetWorkspaceTimezone?: (timezone: string) => void;
@@ -62,7 +67,7 @@ interface SettingsPageProps {
 // workspace shares. A section nav jumps to each; it lists only the sections this person can see,
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
-  workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite,
+  workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite, inviteRoles,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, savedRepliesSection, helpCenterSection, exportSection, showBilling = false }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
@@ -93,7 +98,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           </section>}
           {teamSection}
           <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInvite={createdInvite} creatingInvite={creatingInvite}
-            inviteError={inviteError} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />
+            inviteError={inviteError} roles={inviteRoles} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />
           {agentsSection}
           <SessionsSection sessions={sessions} timezone={timezone} onRevokeSession={onRevokeSession} />
           {savedRepliesSection}

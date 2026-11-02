@@ -11,6 +11,7 @@ import { readPendingCheckout } from './checkout-pending';
 import { freshdeskAgentCount } from './freshdesk-agents';
 import { readPlanIntent } from './plan-intent';
 import { useCheckout } from './use-checkout';
+import { can } from '../../lib/can';
 import { hasSeenWelcome, markWelcomeSeen } from './welcome-seen';
 
 interface BillingRouteProps {
@@ -25,7 +26,7 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'billing:manage');
   const enabled = config.data?.billing.enabled === true;
   // Switched off by the operator: nothing is sold, but a workspace that has or had a subscription still sees
   // it and the portal that cancels it.

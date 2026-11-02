@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { DetailsPanel } from './details-panel';
 
-const active = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', role: 'agent' as const, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
+const active = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
 const gone = { ...active, id: '33333333-3333-4333-8333-333333333333', email: 'cy@example.com', display_name: 'Cy', deactivated_at: '2026-10-10T00:00:00Z' };
 // The signed-in agent.
 const tom = { ...active, id: '66666666-6666-4666-8666-666666666666', email: 'tom@example.com', display_name: 'Tom' };

@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { Me } from '../../api/schemas';
 import { track } from '../../lib/product-analytics';
 import { useNow } from '../../lib/use-now';
+import { can } from '../../lib/can';
 import { billingMessages } from '../settings/billing-messages';
 
 const storageKey = 'colliedesk-survey-switch-blocker-v1';
@@ -34,7 +35,7 @@ export function TrialSurvey({ me, analytics, now }: TrialSurveyProps) {
   const plan = me.plan;
   if (done === 'thanks') return <section className="trial-survey"><p role="status">{billingMessages.surveyThanks}</p></section>;
   if (done === 'closed' || skipped) return null;
-  if (!analytics?.enabled || analytics.realm !== 'cloud' || me.agent.role !== 'admin' || plan?.plan !== 'trial') return null;
+  if (!analytics?.enabled || analytics.realm !== 'cloud' || !can(me, 'billing:manage') || plan?.plan !== 'trial') return null;
   const msLeft = Date.parse(plan.trial_ends_at) - (now ?? clock).getTime();
   if (!(msLeft <= 7 * dayMs)) return null;
 

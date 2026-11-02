@@ -19,7 +19,8 @@ import { useSettleTargets, useSLARefresh } from './sla-refresh';
 import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
-import { usePendingRequests } from '../requests/use-pending-requests';
+import { aiDraftApi, waitingWritten } from './ai-draft-api';
+import { can } from '../../lib/can';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
@@ -139,7 +140,7 @@ export function InboxRoute() {
   useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
   const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
-  const isAdmin = me.data?.agent?.role === 'admin';
+  const isAdmin = can(me.data, 'channels:update');
   const activeID = selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen.
   const shownID = activeID ?? conversations.data?.items[0]?.id;
@@ -171,20 +172,16 @@ export function InboxRoute() {
   const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
-  // Reply drafts AI agents left: the list marks their conversations, the open one shows them above the composer.
-  const pending = usePendingRequests().data?.items;
-  const drafts = useMemo(() => (pending ?? []).filter((item) => item.kind === 'reply_draft' && item.conversation_id), [pending]);
-  const draftConversationIds = useMemo(() => new Set(drafts.map((item) => item.conversation_id!)), [drafts]);
   // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
   const viewing = useInboxViewing();
-  // The poll carries no body, so the open conversation reads its drafts in full.
-  const draftDetails = useQueries({ queries: drafts.filter((item) => item.conversation_id === selected?.id)
-    .map((item) => ({ queryKey: ['agent-requests', 'one', item.id], queryFn: () => api.agentRequest(item.id) })) });
-  const selectedDrafts = draftDetails.flatMap((query) => (query.data?.status === 'pending' ? [query.data] : []));
+  // Replies an AI agent left for a person to send (written drafts), shown above the composer of the open
+  // conversation whether or not AI drafts are on. The inbox filter "has a draft waiting" finds the others.
+  const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) });
+  const selectedDrafts = waitingWritten(drafts.data?.items);
   const [draftNotice, setDraftNotice] = useState<string>();
-  const afterDraft = (conversationId: string | null) => {
-    void client.invalidateQueries({ queryKey: ['agent-requests'] });
-    if (conversationId) void client.invalidateQueries({ queryKey: ['messages', conversationId] });
+  const afterDraft = (conversationId: string) => {
+    void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+    void client.invalidateQueries({ queryKey: ['messages', conversationId] });
     return refresh();
   };
   const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
@@ -224,7 +221,7 @@ export function InboxRoute() {
   const removed = via?.deleted === true && via.replies_via === null;
   const channelNotice = via && (removed ? messages.channelRemoved(via.name) : via.replies_via === null ? messages.repliesNotConnected
     : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
-  const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  const outbound = channelNotice ?? outboundNotice(emailChannel.data, can(me.data, 'channels:update'));
   // Which mailbox a reply leaves from, once there are two; and why, when the one it was pinned to is gone.
   const sender = via?.replies_via;
   const sendsFrom = !sender || outbound ? undefined : sender.instead_of ? messages.sendsInsteadOf(sender.instead_of.name, sender.name)
@@ -342,30 +339,31 @@ export function InboxRoute() {
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'}
+    canManage={can(me.data, 'ai_settings:update')}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
-    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
+    replyDrafts={selectedDrafts} viewers={viewing}
     openViewers={presence.viewers} onReplyDraft={setWritingReply} onReplyEdited={presence.markEdited}
     onSendDraft={async (draft, edit) => {
-      // The draft goes only if no reply came after the newest one on the approver's screen; one that did
-      // leaves the draft waiting, shown in the timeline, to be read before sending again.
+      // The draft goes as a reply only if no reply came after the newest one on screen; one that did leaves
+      // the draft waiting, shown in the timeline, to be read before sending again.
       const seen = timeline.data?.items.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0);
-      let outcome;
       try {
-        outcome = await api.approveAgentRequest(draft.id, seen === undefined ? edit : { ...edit, seen_reply_number: seen });
+        await api.createMessage(draft.conversation_id, 'outgoing', edit?.body ?? draft.text ?? '', [], edit?.cc ?? draft.cc ?? [], seen, draft.id);
       } catch (error) {
-        if (!(error instanceof ReplyConflictError)) throw error;
+        if (!(error instanceof ReplyConflictError)) {
+          setDraftNotice(messages.draftRefused(error instanceof Error ? error.message : undefined));
+          throw error;
+        }
         await afterDraft(draft.conversation_id);
         setDraftNotice(error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply);
         return;
       }
-      track('agent_request_decided', { decision: 'approved' });
+      track('reply_draft_decided', { decision: 'sent' });
+      setDraftNotice(undefined);
       await afterDraft(draft.conversation_id);
-      // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
-      setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
-    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }}
+    onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
     onNewConversation={() => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}

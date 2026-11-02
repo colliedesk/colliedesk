@@ -85,7 +85,7 @@ test('names the agent token that wrote a message and leaves a person\'s message 
   const written: Message = {
     ...base, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', kind: 'outgoing', body: 'Your refund is on its way.',
     author_agent_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', scope: 'send', agent_name: 'Ada Admin' }, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
+    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', agent_name: 'Ada Admin' }, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
   };
   render(<TimelinePanel items={[written, note]} timezone="UTC" />);
   const [byToken, byPerson] = screen.getAllByRole('article');

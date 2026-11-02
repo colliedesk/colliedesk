@@ -11,7 +11,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -61,6 +61,12 @@ export class InvalidRequestError extends Error {
     this.name = 'InvalidRequestError';
     this.detail = detail;
   }
+}
+
+// PermissionError is a 403 that says which permission the caller lacks (permission_missing), or a role or
+// a member beyond theirs; its message says how to get it. It is an InvalidRequestError so forms show it.
+export class PermissionError extends InvalidRequestError {
+  override name = 'PermissionError';
 }
 
 // ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
@@ -132,11 +138,13 @@ async function outboundRefusal(response: Response): Promise<Error> {
   try {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown; reason?: unknown } };
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo, reason } = body.error ?? {};
+    // A permission the caller lacks, a role beyond theirs, a member who outranks them: the message says
+    // what is missing and how to get it, and detail keeps missing_permissions and ask.
+    if (['permission_missing', 'role_exceeds_yours', 'member_outranks_you', 'role_not_yours', 'person_only'].includes(String(code)) && typeof message === 'string' && message)
+      return new PermissionError(message, body.error as { code?: unknown; [field: string]: unknown });
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
-    // An agent asking for an admin token: the reason is shown next to the form.
-    if (code === 'admin_token_needs_admin' && typeof message === 'string' && message) return new InvalidRequestError(message);
-    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited', 'ai_drafts_rate_limited', 'rate_limited'].includes(String(code)) && typeof message === 'string' && message)
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'ai_checks_rate_limited', 'ai_drafts_rate_limited', 'rate_limited'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
@@ -294,12 +302,21 @@ export const api = {
   updateAgentTimezone: (timezone: RequestBody<'updateAgentTimezone'>['timezone']) => request('/api/v1/agents/me/timezone', agentSchema, { method: 'PATCH', body: json<'updateAgentTimezone'>({ timezone }) }),
   updateAgentDisplayName: (display_name: RequestBody<'updateAgentDisplayName'>['display_name']) => request('/api/v1/agents/me/display-name', agentSchema, { method: 'PATCH', body: json<'updateAgentDisplayName'>({ display_name }) }),
   updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
+  // The whole list of a member's roles.
+  setAgentRoles: (id: string, roleIds: string[]) => request(`/api/v1/agents/${id}/roles`, teamMemberSchema, { method: 'PUT', body: json<'setAgentRoles'>({ role_ids: roleIds }) }),
+  roles: (deleted = false) => request(`/api/v1/roles${deleted ? '?deleted=true' : ''}`, roleListSchema),
+  role: (id: string) => request(`/api/v1/roles/${encodeURIComponent(id)}`, roleSchema),
+  createRole: (value: RequestBody<'createRole'>, key: string) => request('/api/v1/roles', roleSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createRole'>(value) }),
+  updateRole: (id: string, value: RequestBody<'updateRole'>) => request(`/api/v1/roles/${encodeURIComponent(id)}`, roleSchema, { method: 'PATCH', body: json<'updateRole'>(value) }),
+  deleteRole: (id: string) => requestNoContent(`/api/v1/roles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  resetRole: (id: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/reset`, roleSchema, { method: 'POST' }),
+  restoreRole: (id: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/restore`, roleSchema, { method: 'POST' }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
-  // A token holds a tier (scope) or its own permissions, never both.
+  // A token follows one of the person's roles (role_id) or holds a fixed list of permissions, never both.
   createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>, key: string) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createAgentToken'>({ label, ...choice }) }),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
-  createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling'], key: string) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createInvite'>({ email, role_ceiling }) }),
+  createInvite: (email: string, roleIds: string[], key: string) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createInvite'>({ email, ...(roleIds.length > 0 ? { role_ids: roleIds } : {}) }) }),
   revokeInvite: (id: string) => requestNoContent(`/api/v1/auth/invites/${id}`, { method: 'DELETE' }),
   // signal lets a newer search cancel the request of the one it replaced.
   conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
@@ -341,20 +358,4 @@ export const api = {
   savedReplyVersions: (id: string, beforeVersion?: number) => request(`/api/v1/saved-replies/${id}/versions${beforeVersion ? `?before_version=${beforeVersion}` : ''}`, savedReplyVersionListSchema),
   restoreSavedReplyVersion: (id: string, version: number, updatedAt: string) => request(`/api/v1/saved-replies/${id}/versions/${version}/restore`, savedReplySchema,
     { method: 'POST', body: json<'restoreSavedReplyVersion'>({ updated_at: updatedAt }) }),
-  // Without full a request carries no body: the poll every tab runs stays small.
-  agentRequests: (status?: NonNullable<operations['listAgentRequests']['parameters']['query']>['status'], full = false) => {
-    const query = new URLSearchParams();
-    if (status) query.set('status', status);
-    if (full) query.set('detail', 'full');
-    const search = query.toString();
-    return request(`/api/v1/agent-requests${search ? `?${search}` : ''}`, agentRequestListSchema);
-  },
-  agentRequest: (id: string) => request(`/api/v1/agent-requests/${id}`, agentRequestSchema),
-  // Approving runs the agent's call as the signed-in person. A reply draft may come with its edited
-  // text and the copies to keep (never new ones).
-  approveAgentRequest: (id: string, edit: OptionalBody<'approveAgentRequest'> = {}) => request(`/api/v1/agent-requests/${id}/approve`, approvedAgentRequestSchema,
-    { method: 'POST', body: optionalJson<'approveAgentRequest'>(edit) }),
-  rejectAgentRequest: (id: string, reason?: string) => request(`/api/v1/agent-requests/${id}/reject`, agentRequestSchema,
-    { method: 'POST', body: optionalJson<'rejectAgentRequest'>(reason ? { reason } : {}) }),
-  cancelAgentRequest: (id: string) => request(`/api/v1/agent-requests/${id}/cancel`, agentRequestSchema, { method: 'POST' }),
 };

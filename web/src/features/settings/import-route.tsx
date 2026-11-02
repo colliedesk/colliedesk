@@ -8,6 +8,7 @@ import { importMessages } from './import-messages';
 import { ImportPage } from './import-page';
 import { ImportPeople } from './import-people';
 import type { CreatedInvite } from './import-people';
+import { can } from '../../lib/can';
 import { useBillingShown } from '../billing/billing-shown';
 
 // While a job moves, the page reads it again every few seconds: one row of the server's database.
@@ -28,7 +29,7 @@ export function ImportRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'imports:run');
   const billingShown = useBillingShown(isAdmin);
   const imports = useQuery({
     queryKey: ['imports'], queryFn: importsApi.list, enabled: isAdmin,
@@ -76,7 +77,7 @@ export function ImportRoute() {
   const unlink = useMutation({ mutationFn: (externalId: string) => importsApi.unlink(peopleJob?.id ?? '', externalId), ...peopleChanged });
   // Each invite's one-time link shows in its person's row: the server never shows it again.
   const [createdInvites, setCreatedInvites] = useState<CreatedInvite[]>([]);
-  const invite = useCreateMutation({ create: (email: string, key: string) => api.createInvite(email, 'agent', key), onSuccess: (created) => {
+  const invite = useCreateMutation({ create: (email: string, key: string) => api.createInvite(email, [], key), onSuccess: (created) => {
     setCreatedInvites((links) => [...links.filter((link) => link.inviteId !== created.invite.id),
       { inviteId: created.invite.id, email: created.invite.email, url: created.url, expiresAt: created.invite.expires_at }]);
     void client.invalidateQueries({ queryKey: ['invites'] });

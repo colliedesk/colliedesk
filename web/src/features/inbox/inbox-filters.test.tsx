@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { InboxQuery } from '../../lib/inbox-query';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { InboxFilters } from './inbox-filters';
 
 // The workspace's channels, read once the menu opens or a channel is filtered on: one of each type unless a test says more.
@@ -13,7 +14,7 @@ const billing = { id: '33333333-3333-4333-8333-333333333333', name: 'Billing', c
 const vip = { id: '44444444-4444-4444-8444-444444444444', name: 'VIP', color: '#64748b' };
 const tags = [billing, vip];
 // Ann is the signed-in agent; Bo is her teammate.
-const ann = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', role: 'agent' as const, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
+const ann = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
 const bo = { ...ann, id: '99999999-9999-4999-8999-999999999999', email: 'bo@example.com', display_name: 'Bo' };
 
 // Filters follows the query it is given, like the inbox does with the address.

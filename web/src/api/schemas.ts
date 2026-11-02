@@ -6,7 +6,6 @@ export type JsonResponse<Operation extends keyof operations, Status extends keyo
   operations[Operation]['responses'][Status] extends { content: { 'application/json': infer Body } } ? Body : never;
 
 const nullableDate = z.string().datetime().nullable();
-export const roleSchema = z.enum(['admin', 'agent']);
 export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 // How a conversation started: the values known today, which the filters offer, and any other channel type the
@@ -64,13 +63,15 @@ export const exportLinkSchema = z.object({ url: z.string().min(1), expires_in_se
 export const migrationRequestSchema = z.object({ freshdesk_address: z.string(), times: z.string(), requested_at: z.string().datetime() }) satisfies z.ZodType<Generated<'MigrationRequest'>>;
 export const foundingSlotsSchema = z.object({ slots: z.number().int(), taken: z.number().int().nullable(), open: z.boolean() }) satisfies z.ZodType<Generated<'FoundingSlots'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
+export const roleRefSchema = z.object({ id: z.string().uuid(), name: z.string(), system: z.enum(['admin', 'agent']).nullable() }) satisfies z.ZodType<Generated<'RoleRef'>>;
+export type RoleRef = z.infer<typeof roleRefSchema>;
 export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
-  role: roleSchema, timezone_override: z.string().nullable(),
+  roles: z.array(roleRefSchema), timezone_override: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'Agent'>>;
 export const teamMemberSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
-  role: roleSchema, timezone_override: z.string().nullable(),
+  roles: z.array(roleRefSchema), manageable: z.boolean(), timezone_override: z.string().nullable(),
   deactivated_at: z.string().datetime().nullable(), last_active_at: z.string().datetime().nullable(), open_conversations: z.number().int(),
 }) satisfies z.ZodType<Generated<'TeamMember'>>;
 const savedReplyPersonSchema = z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }) satisfies z.ZodType<Generated<'SavedReplyPerson'>>;
@@ -165,13 +166,17 @@ export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
   size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), inline: z.boolean(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
-// A token holds a tier (a preset) or, as custom, its own list of permissions.
-export const tokenScopeSchema = z.enum(['read', 'draft', 'send', 'admin', 'custom']) satisfies z.ZodType<Generated<'TokenScope'>>;
-export type TokenScope = Generated<'TokenScope'>;
-export type TokenPreset = Generated<'TokenPreset'>;
 export type TokenPermission = Generated<'TokenPermission'>;
+const tokenPermissionSchema = z.string() as z.ZodType<TokenPermission>;
+// What an agent token was given: it follows one role of its person, or holds a fixed list; legacy ones
+// were made before roles.
+export const tokenGrantSchema = z.object({
+  kind: z.enum(['role', 'custom', 'legacy']), role: roleRefSchema.nullable(), role_held: z.boolean(),
+  permissions: z.array(tokenPermissionSchema), legacy_tier: z.enum(['read', 'draft', 'send', 'admin', 'custom']).nullable(),
+}) satisfies z.ZodType<Generated<'TokenGrant'>>;
+export type TokenGrant = z.infer<typeof tokenGrantSchema>;
 export const messageAgentTokenSchema = z.object({
-  id: z.string().uuid(), label: z.string(), scope: tokenScopeSchema, agent_name: z.string(),
+  id: z.string().uuid(), label: z.string(), agent_name: z.string(),
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
@@ -232,12 +237,12 @@ export const webFormSettingsSchema = z.object({
 export const testMessageResultSchema = z.object({ conversation_id: z.string(), message_id: z.string(), sent_to: z.string() }) satisfies z.ZodType<JsonResponse<'sendEmailTestMessage', 201>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
-  id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
-  scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()), current: z.boolean(),
+  id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), agent_name: z.string(), label: z.string(),
+  token: tokenGrantSchema.nullable(), role: roleRefSchema.nullable(), permissions: z.array(z.string()), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
-  id: z.string().uuid(), email: z.string().email(), role_ceiling: roleSchema, created_by_email: z.string().email(),
+  id: z.string().uuid(), email: z.string().email(), roles: z.array(roleRefSchema), created_by_email: z.string().email(),
   created_at: z.string().datetime(), expires_at: z.string().datetime(), used_at: nullableDate, revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Invite'>>;
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
@@ -253,7 +258,7 @@ export const setupProgressSchema = z.object({
 export type SetupProgress = z.infer<typeof setupProgressSchema>;
 export const setupGuideHiddenSchema = z.object({ hidden: z.boolean() }) satisfies z.ZodType<JsonResponse<'setSetupGuideHidden', 200>>;
 export const meSchema = z.object({
-  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()).catch([]),
+  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), token: tokenGrantSchema.nullable(), permissions: z.array(tokenPermissionSchema).catch([]),
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
   // An older server has no setup guide to hide.
@@ -328,30 +333,13 @@ export type SavedReplyVersion = Generated<'SavedReplyVersion'>;
 export type SavedReplyVersionPage = z.infer<typeof savedReplyVersionListSchema>;
 export type TrashedSavedReplyPage = z.infer<typeof trashedSavedReplyListSchema>;
 
-export const agentRequestStatusSchema = z.enum(['pending', 'approved', 'failed', 'rejected', 'cancelled', 'expired']);
-// A stored call body and a call's answer are any JSON value.
-const anyJson = z.unknown() as z.ZodType<Generated<'AgentRequest'>['body']>;
-export const agentRequestSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['reply_draft', 'action']), status: agentRequestStatusSchema,
-  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
-  approvable_by: z.enum(['agent', 'admin', 'owner']), summary: z.string(),
-  conversation_id: z.string().uuid().nullable(),
-  // What approving a status change would tell customers, one per chat channel.
-  notices: z.array(z.object({ channel_id: z.string().uuid(), channel_name: z.string(), example_ref: z.string(), text: z.string(), told: z.number().int() })).nullable().optional(),
-  saved_reply: z.object({
-    id: z.string().uuid(),
-    before: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime() }).nullable(),
-    current: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime(), deleted_at: nullableDate }).nullable(),
-    restores: z.object({ version: z.number().int(), title: z.string(), body: z.string() }).nullable(),
-  }).nullable(),
-  requested_by: z.object({
-    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: tokenScopeSchema, token_permissions: z.array(z.string()).catch([]), token_revoked: z.boolean(),
-    agent_id: z.string().uuid().nullable(), agent_name: z.string().nullable(),
-  }),
-  decided_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(),
-  decided_at: nullableDate, reason: z.string().nullable(), result_status: z.number().int().nullable(), result: anyJson,
-  result_note: z.string().nullable(), created_at: z.string().datetime(), expires_at: z.string().datetime(),
-}) satisfies z.ZodType<Generated<'AgentRequest'>>;
-export type AgentRequest = z.infer<typeof agentRequestSchema>;
-export const agentRequestListSchema = z.object({ items: z.array(agentRequestSchema) }) satisfies z.ZodType<JsonResponse<'listAgentRequests', 200>>;
-export const approvedAgentRequestSchema = z.object({ request: agentRequestSchema, result: anyJson }) satisfies z.ZodType<JsonResponse<'approveAgentRequest', 200>>;
+export const roleSchema = z.object({
+  id: z.string().uuid(), name: z.string(), description: z.string(), system: z.enum(['admin', 'agent']).nullable(),
+  permissions: z.array(tokenPermissionSchema), editable: z.boolean(), deletable: z.boolean(), assignable: z.boolean(),
+  members: z.array(z.object({ id: z.string().uuid(), name: z.string(), active: z.boolean() })),
+  invites: z.number().int(),
+  tokens: z.array(z.object({ id: z.string().uuid(), label: z.string(), owner: z.string() })),
+  updated_by: z.string().nullable(), deleted_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'Role'>>;
+export type Role = z.infer<typeof roleSchema>;
+export const roleListSchema = z.object({ items: z.array(roleSchema) }) satisfies z.ZodType<JsonResponse<'listRoles', 200>>;

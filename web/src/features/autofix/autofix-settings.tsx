@@ -9,6 +9,7 @@ import { autofixMessages } from './autofix-messages';
 import { RedirectRefused } from './fix-view';
 import { AutofixSettingsPage } from './autofix-settings-page';
 import type { SettingsActions } from './autofix-settings-page';
+import { can } from '../../lib/can';
 import { useBillingShown } from '../billing/billing-shown';
 
 // The vendor-side checklist (Claude workflow, Copilot turned on) is the admin's own ticks: Colliedesk can't see those
@@ -94,9 +95,9 @@ export function AutofixSettingsRoute() {
     setKey: (key) => change(() => autofixApi.setCursorKey(key))(),
     removeKey: () => change(() => autofixApi.removeCursorKey())(),
   };
-  const billingShown = useBillingShown(me.data?.agent.role === 'admin');
+  const billingShown = useBillingShown(can(me.data, 'billing:read'));
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
-  const isAdmin = me.data.agent.role === 'admin';
+  const isAdmin = can(me.data, 'autofix_settings:update');
   return <main className="settings-page panel">
     <div className="settings-layout">
       <SettingsNav page="/settings/autofix" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
