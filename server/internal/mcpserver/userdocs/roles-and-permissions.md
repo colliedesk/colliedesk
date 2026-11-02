@@ -72,12 +72,16 @@ gives it and no token follows it; otherwise the page names them. A deleted role 
 
 ## What a person with a narrow role sees
 
-The app shows only what your roles let you read. The left rail lists the areas you can open; a role
-without `conversations:read` opens on the knowledge base (or the first area it can open) instead of
-the inbox. Opening a screen your roles do not cover says so: "Your roles do not let you open …", names
-the permission it needs, and links the areas you can open. In a conversation, **Reply** and **New
-conversation** are shown only with `messages:send`, and saved replies, knowledge base articles, tags
-and the team list only with their `:read` permission. **Settings** shows only the sections you can read.
+The app shows only what your roles let you read. The left rail lists the areas you can open (Inbox
+with `conversations:read`, Knowledge with `kb_articles:read`, or the media library with only
+`kb_media:read`, Results with `results:read`; Settings always). A role without `conversations:read`
+opens on the first of those instead of the inbox. Opening a screen your roles do not cover says so:
+"Your roles do not let you open …", names the permission it needs, and links the areas you can open.
+
+In a conversation, **Reply** is shown only with `messages:send`, and **New conversation** only with
+`messages:send`, `channels:read` and `contacts:read`. Without `messages:read` a conversation opens
+but says its messages are not shown. Saved replies, saved views, knowledge base articles, tags and the
+team list appear only with their `:read` permission. **Settings** shows only the sections you can read.
 
 ## Give people roles
 
