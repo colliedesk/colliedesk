@@ -73,6 +73,29 @@ func assertAgentSession(t *testing.T, api http.Handler, redeemedResponse *httpte
 	}
 }
 
+// Asking to sign in as admin through a link whose person will not hold the Admin role is refused, and
+// the link stays usable.
+func TestRedeemAskingForAdminWithoutTheAdminRoleIsRefused(t *testing.T) {
+	api, authService := testAPI(t)
+	adminToken := createSession(t, api, authService, "Escalate Desk", "admin@escalate.example.com")
+	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "sam@escalate.example.com"}, adminToken, nil)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create invite status=%d body=%s", created.Code, created.Body.String())
+	}
+	var invite struct {
+		URL string `json:"url"`
+	}
+	decode(t, created, &invite)
+	escalate := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, invite.URL), "requested_role": "admin"}, "", nil)
+	if escalate.Code != http.StatusUnauthorized {
+		t.Fatalf("redeem asking for admin status=%d body=%s, want 401", escalate.Code, escalate.Body.String())
+	}
+	joined := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, invite.URL)}, "", nil)
+	if joined.Code != http.StatusOK {
+		t.Fatalf("the refused link must stay usable: status=%d body=%s", joined.Code, joined.Body.String())
+	}
+}
+
 func TestInviteRoleCeilingAndSessionRevocation(t *testing.T) {
 	api, authService := testAPI(t)
 	adminToken := createSession(t, api, authService, "Access Desk", "admin@access.example.com")

@@ -137,10 +137,12 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
                 <label><input type="radio" name="agent-token-access" checked={mode === 'role'} onChange={() => setMode('role')} />{text.followRole}</label>
                 <p className="muted-copy">{text.followRoleHelp}</p>
                 {mode === 'role' && <>
-                  <label className="field"><span className="sr-only">{text.role}</span>
-                    <select value={role ?? ''} onChange={(event) => setRoleId(event.target.value)}>
-                      {ordered.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select></label>
+                  {ordered.length > 1
+                    ? <label className="field"><span className="sr-only">{text.role}</span>
+                      <select value={role ?? ''} onChange={(event) => setRoleId(event.target.value)}>
+                        {ordered.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select></label>
+                    : ordered[0] && <p className="muted-copy">{text.role}: <strong>{ordered[0].name}</strong></p>}
                   {rolePermissions && <p className="muted-copy">{permissionSummary(rolePermissionsNow)}{' '}
                     <button type="button" className="link-button" aria-expanded={showRole} aria-controls="agent-token-role-matrix"
                       onClick={() => setShowRole((shown) => !shown)}>{showRole ? text.hidePermissions : text.showThem}</button></p>}

@@ -172,6 +172,16 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 	if agentID == nil {
 		return Redeemed{}, fmt.Errorf("pairing link has no agent")
 	}
+	// Older clients may ask for admin: only a person who holds the Admin role gets it.
+	if requestedRole == "admin" {
+		var admin bool
+		if err := tx.QueryRow(ctx, `SELECT `+store.HoldsAdminRole+` FROM agents a WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, *agentID).Scan(&admin); err != nil {
+			return Redeemed{}, fmt.Errorf("requested role: %w", err)
+		}
+		if !admin {
+			return Redeemed{}, fmt.Errorf("requested role admin: the person does not hold the Admin role")
+		}
+	}
 	if _, err := tx.Exec(ctx, `UPDATE pairing_links SET used_at=$2 WHERE id=$1`, linkID, now); err != nil {
 		return Redeemed{}, fmt.Errorf("consume link: %w", err)
 	}

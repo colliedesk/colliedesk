@@ -27,6 +27,16 @@ function show(admin = true, onCreate = vi.fn().mockResolvedValue(created('draft'
 
 const nameField = () => screen.getByRole('textbox', { name: 'Name' });
 
+test('a person with one role sees it named, not a list with one choice, and the token follows it', () => {
+  const onCreate = vi.fn().mockResolvedValue(created('draft'));
+  render(<AgentTokensSection roles={rolesOf('agent')} rolePermissions={new Map([[rolesOf('agent')[0].id, permissionsOf('agent')]])} held={permissionsOf('agent')} origin={origin} onCreate={onCreate} />);
+  expect(screen.queryByRole('combobox', { name: 'Role' })).not.toBeInTheDocument();
+  expect(screen.getByText('Agent', { selector: 'strong' })).toBeInTheDocument();
+  fireEvent.change(nameField(), { target: { value: 'Claude' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+  expect(onCreate).toHaveBeenCalledWith('Claude', { role_id: rolesOf('agent')[0].id });
+});
+
 test('a token follows the role with the fewest permissions by default, is shown once, copied, then hidden for good', async () => {
   const onCreate = show();
   expect(screen.getByRole('radio', { name: 'Follow my role' })).toBeChecked();

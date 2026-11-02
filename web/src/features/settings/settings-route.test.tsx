@@ -159,7 +159,7 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
   api.createAgentToken.mockResolvedValue({ token: 'cdk_agent_routetoken', session });
   const card = await screen.findByRole('region', { name: 'External AI agents' });
   expect(within(card).getByRole('radio', { name: 'Follow my role' })).toBeChecked();
-  expect(within(card).getByRole('combobox')).toHaveDisplayValue('Agent');
+  expect(within(card).getByText('Agent', { selector: 'strong' })).toBeInTheDocument();
   expect(card.compareDocumentPosition(screen.getByRole('region', { name: 'Sessions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   api.sessions.mockResolvedValue({ items: [session] });
   const before = api.sessions.mock.calls.length;

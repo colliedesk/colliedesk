@@ -55,9 +55,9 @@ test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk 
 
   const accepted = await exchange(provider.token({ email: email.toUpperCase() }));
   expect(accepted.status()).toBe(200);
-  const body = await accepted.json() as { token?: string; agent: { email: string; role: string } };
+  const body = await accepted.json() as { token?: string; agent: { email: string; roles: { name: string; system: string | null }[] } };
   expect(body.token ?? '').toBe('');
-  expect(body.agent).toMatchObject({ email, role: 'admin' });
+  expect(body.agent).toMatchObject({ email, roles: [{ name: 'Admin', system: 'admin' }] });
 
   // The Colliedesk session is an ordinary browser session: the inbox opens and the device is listed.
   await page.goto(baseURL);

@@ -6,7 +6,7 @@ import { appNavigationWith, expectReadablePage, redeemLink } from './support/bro
 const baseURL = servers.main;
 const headers = { Origin: baseURL };
 
-test('invite teammate: admin invites, teammate joins under the agent ceiling, admin revokes, revoked session refused', { tag: '@onboarding' }, async ({ browser }) => {
+test('invite teammate: admin invites, teammate joins with the Agent role, admin revokes, revoked session refused', { tag: '@onboarding' }, async ({ browser }) => {
   const suffix = uniqueSuffix();
   const adminEmail = `admin-${suffix}@example.com`;
   const teammateEmail = `Sam.${suffix}@Example.com`;
@@ -16,7 +16,8 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
 
   await admin.getByRole('link', { name: 'Settings' }).click();
   await admin.getByLabel('Invite email').fill(teammateEmail);
-  await admin.getByRole('combobox', { name: 'Role', exact: true }).selectOption('agent');
+  // An invite gives the Agent role unless the admin picks other roles.
+  await expect(admin.getByRole('button', { name: 'Roles: Agent' })).toBeVisible();
   await admin.getByRole('button', { name: 'Create invite' }).click();
   const inviteURL = await admin.getByRole('textbox', { name: 'One-time invite link' }).inputValue();
   expect(inviteURL).toMatch(new RegExp(`^${baseURL}/sign-in\\?token=`));
@@ -25,15 +26,16 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
 
   const teammateContext = await browser.newContext();
   const teammate = await teammateContext.newPage();
-  // The ceiling is a maximum: asking for more than the invite allows is refused and keeps the link usable.
+  // The invite gives roles; asking to sign in as more than they give is refused and keeps the link usable.
   const escalate = await teammate.request.post(`${baseURL}/api/v1/auth/redeem`, {
     data: { token: new URL(inviteURL).searchParams.get('token'), requested_role: 'admin', session_type: 'cookie' },
   });
   expect(escalate.status()).toBe(401);
   await redeemLink(teammate, inviteURL);
   await expect(appNavigationWith(teammate, teammateEmail.toLowerCase())).toHaveCount(1);
-  const me = await (await teammate.request.get(`${baseURL}/api/v1/auth/me`)).json() as { agent: { role: string; email: string } };
-  expect(me.agent).toMatchObject({ role: 'agent', email: teammateEmail.toLowerCase() });
+  const me = await (await teammate.request.get(`${baseURL}/api/v1/auth/me`)).json() as { agent: { roles: { name: string }[]; email: string }; permissions: string[] };
+  expect(me.agent).toMatchObject({ roles: [{ name: 'Agent' }], email: teammateEmail.toLowerCase() });
+  expect(me.permissions).not.toContain('team:invite');
 
   // Agents work conversations but cannot invite, manage the email channel or change the workspace timezone.
   await teammate.getByRole('link', { name: 'Settings' }).click();
@@ -49,7 +51,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   await expect(teammate.getByText('Support address:')).toBeVisible();
   await expect(teammate.getByRole('button', { name: 'Save support address' })).toHaveCount(0);
   for (const [method, path, data] of [
-    ['post', '/api/v1/auth/invites', { email: `x-${suffix}@example.com`, role_ceiling: 'agent' }],
+    ['post', '/api/v1/auth/invites', { email: `x-${suffix}@example.com` }],
     ['put', '/api/v1/channels/email', { support_address: `support-${suffix}@example.com` }],
     ['patch', '/api/v1/workspace/timezone', { timezone: 'Europe/Berlin' }],
   ] as const) {

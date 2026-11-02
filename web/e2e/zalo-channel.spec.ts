@@ -288,7 +288,7 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   }
 });
 
-test('zalo channel: a token’s status change that would tell nobody by the time a person looks says so under its title', async ({ page }) => {
+test('zalo channel: a token that may not write to customers is refused a status change that would tell one, and sets it quietly', async ({ page }) => {
   const suffix = uniqueSuffix();
   const oa = `46${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const app = '1188200455';
@@ -317,17 +317,19 @@ test('zalo channel: a token’s status change that would tell nobody by the time
     expect(id).not.toBe('');
   }).toPass({ timeout: 20_000 });
 
-  // A draft token may not write to customers: its Pending, which would tell, waits for a person.
-  const created = await page.request.post(`${baseURL}/api/v1/auth/tokens`, { headers: { ...headers, 'Idempotency-Key': `t-${suffix}` }, data: { label: 'Queue triage', scope: 'draft' } });
+  // A token without messages:send may not write to customers: a Pending that would tell one is refused
+  // and names the permission; the same change made quietly goes through.
+  const created = await page.request.post(`${baseURL}/api/v1/auth/tokens`, { headers: { ...headers, 'Idempotency-Key': `t-${suffix}` },
+    data: { label: 'Queue triage', permissions: ['conversations:read', 'conversations:update', 'messages:read'] } });
   expect(created.status()).toBe(201);
   const { token } = await created.json() as { token: string };
-  const asked = await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers: { Authorization: `Bearer ${token}` }, data: { status: 'pending' } });
-  expect(asked.status()).toBe(202);
-  // Before anyone approves, the team sets Pending quietly: approving it now would tell nobody.
-  expect((await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers, data: { status: 'pending', notify: false } })).status()).toBe(200);
-
-  await page.goto(`${baseURL}/requests`);
-  const card = page.getByRole('article').filter({ hasText: 'Queue triage' });
-  await expect(card.getByRole('note')).toHaveText('Approving it now tells no customer: the status is set already.');
-  await expect(card.locator('pre.request-body')).toHaveCount(0);
+  const bearer = { Authorization: `Bearer ${token}` };
+  const refused = await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers: bearer, data: { status: 'pending' } });
+  expect(refused.status()).toBe(403);
+  const why = await refused.json() as { error: { code: string; missing_permissions: string[]; missing_from: string; message: string } };
+  expect(why.error).toMatchObject({ code: 'permission_missing', missing_permissions: ['messages:send'], missing_from: 'token' });
+  expect(why.error.message).toContain('notify: false');
+  expect((await page.request.patch(`${baseURL}/api/v1/conversations/${id}`, { headers: bearer, data: { status: 'pending', notify: false } })).status()).toBe(200);
+  const after = await (await page.request.get(`${baseURL}/api/v1/conversations/${id}`)).json() as { status: string };
+  expect(after.status).toBe('pending');
 });

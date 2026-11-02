@@ -17,10 +17,11 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 5. **Open at the core.** Roadmap, decisions and code are public. Write as if a stranger will read
    it tomorrow.
 6. **Agents can do what people can do.** Every action in the web app is available to an AI agent:
-   through an API route classified for a token tier in `server/internal/httpapi/token-scope.go`
-   and an MCP tool, or as a request a person approves. A new feature ships its route
-   classification and its MCP tool in the same PR; a gap is listed with its tracking issue
-   (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink (ceilings in the test).
+   through an API route classified with the permission it needs in `routeAccess`
+   (`server/internal/httpapi/token-scope.go`) and an MCP tool, or person-only with a stated reason.
+   A new feature ships its route classification and its MCP tool in the same PR; a gap is listed
+   with its tracking issue (person-only rows in `routeAccess`, `mcpToolPending`) and those lists
+   only shrink (ceilings in the test).
    `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
    `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
 7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
@@ -57,7 +58,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 ## Hit every surface
 
 - **Entry points:** a feature reachable in the UI is also reachable through the API and through
-  MCP with the right token tier (item 6 above; the gate test names what to edit).
+  MCP with the permission it needs (item 6 above; the gate test names what to edit).
 - **Reverse states:** every way in has a way out and a way to see it.
 - **Contracts:** anything crossing the wire is typed in `contracts/openapi.yaml`.
 - **Docs:** a user-visible change updates its page in `docs/user/` (server operation: `docs/self-host/`). Internal docs record decisions
@@ -89,7 +90,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 `@onboarding` tests in `web/e2e/` differ.
 
 - `self-host first run: fresh database, create-workspace, pairing link, empty inbox that explains the next step` (`web/e2e/onboarding-self-host.spec.ts`)
-- `invite teammate: admin invites, teammate joins under the agent ceiling, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
+- `invite teammate: admin invites, teammate joins with the Agent role, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
 - `email channel: forwarded mail opens a conversation, the reply is delivered by SMTP with threading headers, the customer reply threads back` (`web/e2e/onboarding-email.spec.ts`)
 - `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: an account without canned responses still migrates its tickets and says so` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
