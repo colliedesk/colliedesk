@@ -174,8 +174,8 @@ func TestHelpCenterDomainTokenTiers(t *testing.T) {
 		if call.method == http.MethodPut {
 			body = map[string]any{"hostname": "docs.tokens.example"}
 		}
-		if response := request(t, api, call.method, call.path, body, send, nil); response.Code != http.StatusAccepted {
-			t.Fatalf("send token %s %s status=%d body=%s, want 202", call.method, call.path, response.Code, response.Body.String())
+		if response := request(t, api, call.method, call.path, body, send, nil); response.Code != http.StatusForbidden {
+			t.Fatalf("send token %s %s status=%d body=%s, want 403", call.method, call.path, response.Code, response.Body.String())
 		}
 	}
 	view := setDomain(t, api, adminToken, "docs.tokens.example", http.StatusOK)
@@ -669,8 +669,8 @@ func TestHelpCenterDomainNeedsPublishPermission(t *testing.T) {
 			body = map[string]any{"hostname": "help.publish.example"}
 		}
 		response := request(t, api, call.method, call.path, body, writer, nil)
-		if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
-			t.Fatalf("without publish %s: status=%d body=%s, want 202 with agent request", call.method, response.Code, response.Body.String())
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "permission_missing") {
+			t.Fatalf("without publish %s: status=%d body=%s, want 403 permission_missing", call.method, response.Code, response.Body.String())
 		}
 	}
 	var before domainView

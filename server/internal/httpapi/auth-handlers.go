@@ -81,6 +81,9 @@ type mePlan struct {
 	Admins []string `json:"admins,omitempty"`
 }
 
+// maxPlanNames bounds the people listed to someone who must ask one of them for a plan.
+const maxPlanNames = 5
+
 func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	var err error
 	identity := principal(request)
@@ -98,6 +101,7 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 				writeStoreError(response, err)
 				return
 			}
+			plan.Admins = plan.Admins[:min(len(plan.Admins), maxPlanNames)]
 		}
 	}
 	goal, err := a.store.OnboardingGoal(request.Context(), identity.Workspace.ID)

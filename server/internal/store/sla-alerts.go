@@ -78,8 +78,9 @@ func (s *Store) PrepareSLAAlert(ctx context.Context, due SLAAlertDue) (SLAAlert,
 			&alert.DisplayRef, &assignee); err != nil {
 			return struct{}{}, fmt.Errorf("read response alert: %w", err)
 		}
-		rows, err := tx.Query(ctx, `SELECT email FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL AND sla_alert_email
-			AND CASE WHEN $2::uuid IS NULL THEN role='admin' ELSE id=$2::uuid END ORDER BY email`, due.WorkspaceID, assignee)
+		// An unassigned conversation's alert goes to those who set the response targets (workspace:update).
+		rows, err := tx.Query(ctx, `SELECT a.email FROM agents a WHERE a.workspace_id=$1 AND a.deactivated_at IS NULL AND a.sla_alert_email
+			AND CASE WHEN $2::uuid IS NULL THEN `+HoldsPermission("$3")+` ELSE a.id=$2::uuid END ORDER BY a.email`, due.WorkspaceID, assignee, "workspace:update")
 		if err != nil {
 			return struct{}{}, fmt.Errorf("read response alert recipients: %w", err)
 		}

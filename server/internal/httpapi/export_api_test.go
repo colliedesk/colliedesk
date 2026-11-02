@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,9 +78,13 @@ func newExportFixture(t *testing.T) exportFixture {
 	if response := request(t, api, http.MethodDelete, deletePath(t, api, admin, trashed), nil, admin, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("trash saved reply status=%d", response.Code)
 	}
-	drafter := issueToken(t, api, admin, "Export drafter", "draft").Token
-	if response := request(t, api, http.MethodDelete, deletePath(t, api, admin, closing), nil, drafter, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("propose deleting a saved reply status=%d", response.Code)
+	// A request a token filed before agent requests were removed stays in the export, with the reply it
+	// acted on and its snapshot.
+	issueToken(t, api, admin, "Export drafter", "draft")
+	if _, err := pool.Exec(context.Background(), `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,kind,method,route,path,summary,status,decided_at,reason,expires_at,saved_reply_id,saved_reply_before)
+		SELECT s.workspace_id,s.id,s.label,'draft','action','DELETE','/api/v1/saved-replies/{id}','/api/v1/saved-replies/'||$1,'Delete the saved reply Closing','expired',now(),'removed',now(),
+			$1::uuid,'{"title":"Closing","body":"Thanks a lot."}'::jsonb FROM sessions s WHERE s.label='Export drafter'`, closing); err != nil {
+		t.Fatalf("seed an old request: %v", err)
 	}
 	workspace := workspaceID(t, api, admin)
 	attachmentID := seedAttachment(t, pool, storage, admin, api, firstMessage, "hello.txt", "hello")
@@ -333,8 +338,8 @@ func TestExportIsAdminOnly(t *testing.T) {
 	if got := request(t, f.api, http.MethodGet, "/api/v1/export", nil, "", nil).Code; got != http.StatusUnauthorized {
 		t.Errorf("anonymous status=%d, want 401", got)
 	}
-	if auth.HasPermission("agent", auth.PermissionWorkspaceExport) || !auth.HasPermission("admin", auth.PermissionWorkspaceExport) {
-		t.Error("workspace:export must belong to admins only")
+	if slices.Contains(auth.AgentRolePermissions(), auth.PermWorkspaceExport) || httpapi.RouteAccessTable()["GET /api/v1/export"].Permission != auth.PermWorkspaceExport {
+		t.Error("the export needs workspace:export, which the Agent role does not start with")
 	}
 }
 

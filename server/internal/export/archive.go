@@ -29,7 +29,7 @@ const (
 
 // Record files in archive order. A record of an earlier file after a later one is a programming
 // error, because a ZIP entry is written in one piece.
-var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
+var recordFiles = []string{"agents.ndjson", "roles.ndjson", "agent-roles.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson", "import-items.ndjson",
 	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-source-consents.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson", "ai-automatic-limits.ndjson", "response-targets.ndjson", "migration-requests.ndjson",
@@ -37,7 +37,7 @@ var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.n
 	"channels.ndjson", "channel-events.ndjson", "channel-ai-levels.ndjson", "channel-inbound-events.ndjson", "channel-threads.ndjson", "channel-thread-items.ndjson", "channel-senders.ndjson", "number-series.ndjson", "conversation-thread-items.ndjson", "conversation-thread-keys.ndjson", "intake-gatherings.ndjson", "intake-decisions.ndjson", "intake-eval-runs.ndjson", "message-moves.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
-	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
+	"agents.ndjson": "agents", "roles.ndjson": "roles", "agent-roles.ndjson": "agent_roles", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
 	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people", "import-items.ndjson": "import_items",
 	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-source-consents.ndjson": "ai_source_consents", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines", "ai-automatic-limits.ndjson": "ai_automatic_limits", "response-targets.ndjson": "response_targets", "migration-requests.ndjson": "migration_requests",
@@ -87,7 +87,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 	return &Writer{
 		zip: zip.NewWriter(out), out: out, opener: opener, workspaceID: workspaceID,
 		exportedAt: exportedAt.UTC(), current: -1,
-		counts: map[string]int{"agents": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
+		counts: map[string]int{"agents": 0, "roles": 0, "agent_roles": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
 			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0, "status_changes": 0},
 	}
 }
@@ -97,9 +97,13 @@ func (w *Writer) Workspace(workspace Workspace) error {
 	return nil
 }
 
-func (w *Writer) Agent(record Agent) error     { return w.record("agents.ndjson", record) }
-func (w *Writer) Contact(record Contact) error { return w.record("contacts.ndjson", record) }
-func (w *Writer) Tag(record Tag) error         { return w.record("tags.ndjson", record) }
+func (w *Writer) Agent(record Agent) error { return w.record("agents.ndjson", record) }
+
+func (w *Writer) Role(record Role) error { return w.record("roles.ndjson", record) }
+
+func (w *Writer) AgentRole(record AgentRole) error { return w.record("agent-roles.ndjson", record) }
+func (w *Writer) Contact(record Contact) error     { return w.record("contacts.ndjson", record) }
+func (w *Writer) Tag(record Tag) error             { return w.record("tags.ndjson", record) }
 func (w *Writer) ContactMerge(record ContactMerge) error {
 	return w.record("contact-merges.ndjson", record)
 }

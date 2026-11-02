@@ -25,10 +25,27 @@ func TestRegisteredRoutesExistInOpenAPI(t *testing.T) {
 			t.Errorf("contract lacks %s %s", registered.Method, registered.Pattern)
 			continue
 		}
-		if permission, ok := operation.Extensions["x-permission"].(string); !ok || permission != registered.Permission {
-			t.Errorf("%s %s permission=%v, want %s", registered.Method, registered.Pattern, operation.Extensions["x-permission"], registered.Permission)
+		if permission, ok := operation.Extensions["x-permission"].(string); !ok || permission != xPermission(registered) {
+			t.Errorf("%s %s x-permission=%v, want %s", registered.Method, registered.Pattern, operation.Extensions["x-permission"], xPermission(registered))
 		}
 	}
+}
+
+// xPermission is what the contract says a route needs: how it is reached (public, channels:inbound,
+// operator), or for a session route its row of routeAccess: the permission, authenticated for any
+// session, person for a person's session only.
+func xPermission(route httpapi.Route) string {
+	if route.Permission != auth.PermissionSession {
+		return route.Permission
+	}
+	access := httpapi.RouteAccessTable()[route.Method+" "+route.Pattern]
+	switch {
+	case access.Closed == httpapi.PersonOnly:
+		return "person"
+	case access.Anyone:
+		return "authenticated"
+	}
+	return access.Permission
 }
 
 func TestOpenAPIDeclaresAuthorizationResponses(t *testing.T) {

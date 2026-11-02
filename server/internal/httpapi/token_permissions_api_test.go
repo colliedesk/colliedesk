@@ -23,32 +23,24 @@ func issueCustomToken(t *testing.T, api http.Handler, sessionToken, label string
 	return issued
 }
 
-// Each route's permission is held by the tier the route had before permissions, so a preset token
-// reaches exactly what its tier reached (routeTiers is that list, written out by hand), and every
-// permission a token can hold opens at least one route.
-func TestEveryRoutePermissionIsHeldByTheTierTheRouteHad(t *testing.T) {
+// Every permission opens at least one route (or a handler's check), and every route names a known one.
+func TestEveryPermissionOpensARoute(t *testing.T) {
 	used := map[string]bool{}
-	for key, access := range httpapi.TokenAccessTable() {
-		if access.Permission == "" {
+	for key, access := range httpapi.RouteAccessTable() {
+		permission := access.Permission
+		if access.PersonNeeds != "" {
+			permission = access.PersonNeeds
+		}
+		if permission == "" || access.Tier == auth.ScopeOperator || strings.Contains(key, "/api/v1/operator/") {
 			continue
 		}
-		if auth.PermissionPreset(access.Permission) == auth.ScopeOperator {
-			continue // an operator token's permission, never a workspace token's (TestOperatorRealmIsSeparate)
-		}
-		used[access.Permission] = true
-		if !auth.ValidPermission(access.Permission) {
-			t.Errorf("%s names unknown permission %q", key, access.Permission)
-			continue
-		}
-		want := routeTiers[key]
-		if access.Approval || access.Tier == "handler" || want == "approval" || want == "handler" {
-			continue
-		}
-		if got := auth.PermissionPreset(access.Permission); got != want {
-			t.Errorf("%s needs %s, held from the %s tier; the route was %s", key, access.Permission, got, want)
+		used[permission] = true
+		if !auth.ValidPermission(permission) {
+			t.Errorf("%s names unknown permission %q", key, permission)
 		}
 	}
-	// Publishing is checked by the handlers that change what the help center shows.
+	// Publishing is checked by the handlers that change what the help center shows; messages:send by the
+	// reply and status handlers too.
 	used[auth.PermKBArticlesPublish] = true
 	for _, permission := range auth.TokenPermissions() {
 		if !used[permission.Name] {
@@ -60,28 +52,29 @@ func TestEveryRoutePermissionIsHeldByTheTierTheRouteHad(t *testing.T) {
 func TestCustomTokenHoldsExactlyItsPermissions(t *testing.T) {
 	desk := newRequestDesk(t, "Custom Token")
 	writer := issueCustomToken(t, desk.api, desk.admin, "KB writer", auth.PermKBArticlesUpdate, auth.PermKBArticlesRead, auth.PermKBArticlesCreate, auth.PermKBArticlesRead)
-	if writer.Session.Scope == nil || *writer.Session.Scope != auth.ScopeCustom {
-		t.Fatalf("session scope = %v, want custom", writer.Session.Scope)
+	if writer.Session.Token == nil || writer.Session.Token.Kind != "custom" {
+		t.Fatalf("session token = %+v, want custom", writer.Session.Token)
 	}
 	var me struct {
-		Scope       string   `json:"scope"`
+		Token struct {
+			Kind string `json:"kind"`
+		} `json:"token"`
 		Permissions []string `json:"permissions"`
 	}
 	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/auth/me", nil, writer.Token, nil), &me)
-	if want := []string{"kb_articles:create", "kb_articles:read", "kb_articles:update"}; me.Scope != "custom" || !slices.Equal(me.Permissions, want) {
-		t.Fatalf("me = %+v, want custom with %v (sorted, once each)", me, want)
+	if want := []string{"kb_articles:read", "kb_articles:create", "kb_articles:update"}; me.Token.Kind != "custom" || !slices.Equal(me.Permissions, want) {
+		t.Fatalf("me = %+v, want custom with %v (in the matrix order, once each)", me, want)
 	}
 	if response := request(t, desk.api, http.MethodGet, "/api/v1/kb/articles", nil, writer.Token, nil); response.Code != http.StatusOK {
 		t.Errorf("listing articles: status=%d body=%s", response.Code, response.Body.String())
 	}
-	// What it does not hold, even what every read token may do, waits for a person.
-	accepted(t, desk.api, http.MethodGet, "/api/v1/conversations", nil, writer.Token)
-	asked := accepted(t, desk.api, http.MethodPatch, "/api/v1/conversations/"+desk.conversation, map[string]any{"status": "pending"}, writer.Token)
-	if got := getRequest(t, desk.api, desk.admin, asked.RequestID); got.RequestedBy.TokenScope != "custom" || !slices.Equal(got.RequestedBy.TokenPermissions, me.Permissions) {
-		t.Errorf("request keeps %q %v, want the token's custom permissions", got.RequestedBy.TokenScope, got.RequestedBy.TokenPermissions)
+	// What it was not given is refused, even what its person holds; nothing changes.
+	refused(t, desk.api, http.MethodGet, "/api/v1/conversations", nil, writer.Token, "conversations:read")
+	if from := refused(t, desk.api, http.MethodPatch, "/api/v1/conversations/"+desk.conversation, map[string]any{"status": "pending"}, writer.Token, "conversations:update"); from != "token" {
+		t.Errorf("missing from %q, want token: its person holds it", from)
 	}
 	if got := conversationStatus(t, desk.api, desk.admin, desk.conversation); got != "open" {
-		t.Errorf("status = %s, want open until a person approves", got)
+		t.Errorf("status = %s, want open", got)
 	}
 	// Its own session and sign-out are every token's.
 	if response := request(t, desk.api, http.MethodPost, "/api/v1/auth/logout", nil, writer.Token, nil); response.Code >= 300 {
@@ -89,9 +82,10 @@ func TestCustomTokenHoldsExactlyItsPermissions(t *testing.T) {
 	}
 }
 
-func TestCustomTokenRequestsAreChecked(t *testing.T) {
+func TestTokenRequestsAreChecked(t *testing.T) {
 	desk := newRequestDesk(t, "Custom Checks")
 	agent := joinAsAgent(t, desk.api, desk.admin, "agent@custom-checks.example.com")
+	adminRole := roleID(t, desk.api, desk.admin, "Admin")
 	for _, item := range []struct {
 		name  string
 		token string
@@ -101,26 +95,28 @@ func TestCustomTokenRequestsAreChecked(t *testing.T) {
 	}{
 		{"unknown permission", desk.admin, map[string]any{"label": "x", "permissions": []string{"conversations:fly"}}, http.StatusBadRequest, "invalid_request"},
 		{"no permission", desk.admin, map[string]any{"label": "x", "permissions": []string{}}, http.StatusBadRequest, "invalid_request"},
-		{"scope and permissions", desk.admin, map[string]any{"label": "x", "scope": "read", "permissions": []string{"tags:read"}}, http.StatusBadRequest, "invalid_request"},
-		// An admin-only permission acts as the admin who created it: only an admin may give one.
-		{"agent gives an admin-only permission", agent, map[string]any{"label": "x", "permissions": []string{"kb_articles:read", "kb_media:purge"}}, http.StatusForbidden, "admin_token_needs_admin"},
+		{"a scope (the old tiers)", desk.admin, map[string]any{"label": "x", "scope": "read"}, http.StatusBadRequest, "invalid_request"},
+		{"role and permissions", desk.admin, map[string]any{"label": "x", "role_id": adminRole, "permissions": []string{"tags:read"}}, http.StatusBadRequest, "invalid_request"},
+		{"agent gives a permission they lack", agent, map[string]any{"label": "x", "permissions": []string{"kb_articles:read", "kb_media:purge"}}, http.StatusForbidden, "role_exceeds_yours"},
+		{"agent follows a role they lack", agent, map[string]any{"label": "x", "role_id": adminRole}, http.StatusForbidden, "role_not_yours"},
 		{"agent gives the agent's permissions", agent, map[string]any{"label": "x", "permissions": []string{"kb_articles:read", "messages:send"}}, http.StatusCreated, ""},
+		{"agent follows the Agent role", agent, map[string]any{"label": "y", "role_id": roleID(t, desk.api, agent, "Agent")}, http.StatusCreated, ""},
 	} {
 		response := request(t, desk.api, http.MethodPost, "/api/v1/auth/tokens", item.body, item.token, nil)
 		if response.Code != item.want || (item.code != "" && !strings.Contains(response.Body.String(), item.code)) {
 			t.Errorf("%s: status=%d body=%s, want %d %s", item.name, response.Code, response.Body.String(), item.want, item.code)
 		}
 	}
-	// A token asking for a token with an admin-only permission waits for an admin.
-	send := issueToken(t, desk.api, desk.admin, "Sender", "send").Token
-	asked := accepted(t, desk.api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "Purger", "permissions": []string{"kb_media:purge"}}, send)
-	if got := getRequest(t, desk.api, desk.admin, asked.RequestID).ApprovableBy; got != "admin" {
-		t.Errorf("a custom token with an admin-only permission is approvable by %q, want admin", got)
+	// A token never makes tokens: it would leave them behind when it is revoked.
+	admin := issueToken(t, desk.api, desk.admin, "Ops", "admin").Token
+	response := request(t, desk.api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "Child", "permissions": []string{"tags:read"}}, admin, nil)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "person_only") || !strings.Contains(response.Body.String(), "/settings") {
+		t.Errorf("a token making a token: status=%d body=%s, want 403 person_only that says where a person does it", response.Code, response.Body.String())
 	}
 }
 
 // A token without kb_articles:publish writes drafts; anything that changes what the public help
-// center shows waits for a person.
+// center shows is refused.
 func TestKBChangesThatReachTheHelpCenterNeedPublish(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "Publish Gate", "admin@publish-gate.example.com")
@@ -150,14 +146,14 @@ func TestKBChangesThatReachTheHelpCenterNeedPublish(t *testing.T) {
 		{"replace an image a published article shows", http.MethodPost, "/api/v1/kb/media/" + image.ID + "/replace", map[string]any{"with_media_id": other.ID}},
 	} {
 		response := request(t, api, call.method, call.path, call.body, writer, nil)
-		if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
-			t.Errorf("%s without publish: status=%d body=%s, want 202 with an agent request", call.name, response.Code, response.Body.String())
+		if missing, names, _ := permissionMissing(t, response); !missing || !slices.Contains(names, "kb_articles:publish") {
+			t.Errorf("%s without publish: status=%d body=%s, want 403 permission_missing kb_articles:publish", call.name, response.Code, response.Body.String())
 		}
 	}
 	var after kbArticleView
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+live.ID, nil, admin, http.StatusOK, &after)
 	if after.Title != "Live" || !strings.Contains(after.BodyMD, image.ID) {
-		t.Errorf("the published article changed before a person approved: %+v", after)
+		t.Errorf("a refused call changed the published article: %+v", after)
 	}
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+live.ID, map[string]any{"updated_at": live.UpdatedAt, "title": "Changed"}, publisher, http.StatusOK, nil)
 }
@@ -167,8 +163,8 @@ func TestAcceptingTriageNeedsConversationUpdate(t *testing.T) {
 	desk := newRequestDesk(t, "Triage Gate")
 	assist := issueCustomToken(t, desk.api, desk.admin, "Assist only", auth.PermConversationsRead, auth.PermAIAssistRead, auth.PermAIAssistCreate).Token
 	base := "/api/v1/conversations/" + desk.conversation + "/ai-triage/00000000-0000-4000-8000-000000000001"
-	accepted(t, desk.api, http.MethodPost, base+"/accept", map[string]any{"priority": "high"}, assist)
-	accepted(t, desk.api, http.MethodPost, base+"/undo", nil, assist)
+	refused(t, desk.api, http.MethodPost, base+"/accept", map[string]any{"priority": "high"}, assist, "conversations:update")
+	refused(t, desk.api, http.MethodPost, base+"/undo", nil, assist, "conversations:update")
 }
 
 // A custom token reaches only its own workspace.

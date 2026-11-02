@@ -104,7 +104,7 @@ func TestAKeyNeverWaitsInAnAgentRequest(t *testing.T) {
 				body = map[string]any{"api_key": importCanary}
 			}
 			response := request(t, api, call.method, call.path, body, token, nil)
-			if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "credentials_need_admin_token") {
+			if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "permission_missing") {
 				t.Fatalf("%s %s with a %s token: %d %s", call.method, call.path, tier, response.Code, response.Body.String())
 			}
 		}
@@ -112,26 +112,26 @@ func TestAKeyNeverWaitsInAnAgentRequest(t *testing.T) {
 	if n := count(`SELECT count(*) FROM agent_requests WHERE body::text LIKE '%'||$1||'%'`, importCanary); n != 0 {
 		t.Fatalf("%d agent requests hold the key", n)
 	}
+	// An Admin token gets past the check: here an import already waits, so it hears that, as a person would.
 	admin2 := issueToken(t, api, admin, "import admin", "admin").Token
-	if response := request(t, api, http.MethodPost, "/api/v1/imports", map[string]any{"source": "freshdesk", "domain": "acme.freshdesk.com", "api_key": importCanary}, admin2, nil); response.Code != http.StatusAccepted {
+	if response := request(t, api, http.MethodPost, "/api/v1/imports", map[string]any{"source": "freshdesk", "domain": "acme.freshdesk.com", "api_key": importCanary}, admin2, nil); response.Code != http.StatusAccepted &&
+		!strings.Contains(response.Body.String(), "import_running") {
 		t.Fatalf("an admin token: %d %s", response.Code, response.Body.String())
 	}
 }
 
-func TestAnUndoByAnAgentTokenWaitsForAPerson(t *testing.T) {
+func TestAnUndoByAnAgentTokenNeedsImportsUndo(t *testing.T) {
 	api, admin, _, _, jobs, count := newImportDesk(t)
-	token := issueToken(t, api, admin, "import admin", "admin").Token
-	response := request(t, api, http.MethodPost, "/api/v1/imports/"+jobs.finished+"/undo", nil, token, nil)
-	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), "request_id") {
-		t.Fatalf("status=%d body=%s, want an agent request", response.Code, response.Body.String())
-	}
+	send := issueToken(t, api, admin, "import send", "send").Token
+	refused(t, api, http.MethodPost, "/api/v1/imports/"+jobs.finished+"/undo", nil, send, "imports:undo")
 	if n := count(`SELECT count(*) FROM import_jobs WHERE kind='undo'`); n != 0 {
-		t.Fatal("an undo was queued before a person approved it")
+		t.Fatal("a refused token queued an undo")
 	}
 	request(t, api, http.MethodPost, "/api/v1/imports/"+jobs.waitingKey+"/cancel", nil, admin, nil) // it holds the workspace
-	direct := request(t, api, http.MethodPost, "/api/v1/imports/"+jobs.finished+"/undo", nil, admin, nil)
-	if direct.Code != http.StatusAccepted || !strings.Contains(direct.Body.String(), `"kind":"undo"`) {
-		t.Fatalf("an admin's undo: %d %s", direct.Code, direct.Body.String())
+	token := issueToken(t, api, admin, "import admin", "admin").Token
+	response := request(t, api, http.MethodPost, "/api/v1/imports/"+jobs.finished+"/undo", nil, token, nil)
+	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"kind":"undo"`) {
+		t.Fatalf("an Admin token's undo: %d %s, want the undo job", response.Code, response.Body.String())
 	}
 }
 

@@ -236,33 +236,24 @@ func TestEmailChannelRoutesStayInTheirWorkspace(t *testing.T) {
 	}
 }
 
-// A request an agent files about one mailbox names it, so the person approving knows which one.
-func TestARequestAboutAMailboxNamesIt(t *testing.T) {
+// A token without the permission a mailbox change needs is refused, and the refusal names the permission.
+func TestAMailboxChangeNeedsItsPermission(t *testing.T) {
 	api, service, _, _ := testAPIWithConfig(t, nil)
 	admin := createSession(t, api, service, "Named Requests", "admin@named-requests.example.com")
 	connectEmail(t, api, admin, "support@named-requests.example.com")
 	billing := addEmailChannel(t, api, admin, "billing@named-requests.example.com")
-	if response := request(t, api, http.MethodPatch, "/api/v1/channels/"+billing, map[string]any{"name": "Billing"}, admin, nil); response.Code != http.StatusOK {
-		t.Fatalf("rename: %d %s", response.Code, response.Body.String())
-	}
-	token := issueToken(t, api, admin, "Ops agent", "admin").Token
+	token := issueToken(t, api, admin, "Ops agent", "send").Token
 	for _, item := range []struct {
-		method, path string
-		body         any
-		want         string
+		method, path, permission string
 	}{
-		{http.MethodDelete, "/api/v1/channels/" + billing, nil, "Remove the channel Billing (billing@named-requests.example.com)"},
-		{http.MethodPost, "/api/v1/channels/" + billing + "/held/discard", nil, "Discard the held messages of the channel Billing (billing@named-requests.example.com)"},
-		{http.MethodPost, "/api/v1/channels/" + billing + "/email/secret", nil, "Rotate the inbound secret of the channel Billing (billing@named-requests.example.com)"},
-		{http.MethodPost, "/api/v1/channels/" + billing + "/email/gmail", nil, "Connect Gmail to the channel Billing (billing@named-requests.example.com)"},
-		{http.MethodDelete, "/api/v1/channels/" + billing + "/email/gmail", nil, "Disconnect Gmail from the channel Billing (billing@named-requests.example.com)"},
+		{http.MethodDelete, "/api/v1/channels/" + billing, "channels:manage_credentials"},
+		{http.MethodPost, "/api/v1/channels/" + billing + "/held/discard", "channels:update"},
+		{http.MethodPost, "/api/v1/channels/" + billing + "/email/secret", "channels:manage_credentials"},
+		{http.MethodPost, "/api/v1/channels/" + billing + "/email/gmail", "channels:manage_credentials"},
+		{http.MethodDelete, "/api/v1/channels/" + billing + "/email/gmail", "channels:manage_credentials"},
 	} {
-		created := accepted(t, api, item.method, item.path, item.body, token)
-		if !strings.HasPrefix(created.Summary, item.want) {
-			t.Errorf("%s %s: summary %q, want it to start with %q", item.method, item.path, created.Summary, item.want)
-		}
-		if strings.Contains(created.Summary, "secret-value") {
-			t.Errorf("%s %s: the summary shows the secret: %q", item.method, item.path, created.Summary)
+		if from := refused(t, api, item.method, item.path, nil, token, item.permission); from != "token" {
+			t.Errorf("%s %s: missing from %q, want token", item.method, item.path, from)
 		}
 	}
 }
@@ -297,8 +288,8 @@ func TestAChannelSecretNeverWaitsInARequest(t *testing.T) {
 	body := map[string]any{"name": "access_token", "value": value}
 	send := issueToken(t, api, admin, "Sender", "send").Token
 	if response := request(t, api, http.MethodPut, "/api/v1/channels/"+form.ID+"/credentials", body, send, nil); response.Code != http.StatusForbidden ||
-		!strings.Contains(response.Body.String(), "credentials_need_admin_token") {
-		t.Fatalf("a send token: %d %s, want 403 credentials_need_admin_token", response.Code, response.Body.String())
+		!strings.Contains(response.Body.String(), "permission_missing") {
+		t.Fatalf("a send token: %d %s, want 403 permission_missing", response.Code, response.Body.String())
 	}
 	adminToken := issueToken(t, api, admin, "Ops", "admin").Token
 	if response := request(t, api, http.MethodPut, "/api/v1/channels/"+form.ID+"/credentials", body, adminToken, nil); response.Code == http.StatusAccepted {

@@ -14,14 +14,12 @@ func TestMessageWithFilesIsGatedByTokenTierLikeJSON(t *testing.T) {
 	draft := issueToken(t, f.api, f.tokenA, "drafter", "draft")
 	file := []upload{{name: "log.txt", contentType: "text/plain", data: []byte("printer log")}}
 
-	// Below the tier a JSON call becomes an agent request; files cannot wait days for a person, so the
-	// multipart call is refused with the way forward.
+	// Without the permission a multipart call is refused like a JSON one, and nothing is stored.
 	refused := func(label, token, kind string) {
 		t.Helper()
 		response := f.post(t, f.conversationA, token, kind, file)
-		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") ||
-			!strings.Contains(response.Body.String(), "attach the files after approval") {
-			t.Errorf("%s: status=%d body=%s, want 403 files_need_approval", label, response.Code, response.Body.String())
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "permission_missing") {
+			t.Errorf("%s: status=%d body=%s, want 403 permission_missing", label, response.Code, response.Body.String())
 		}
 	}
 	refused("read adds a note with a file", read, "note")

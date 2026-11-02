@@ -124,48 +124,20 @@ func TestNewConversationThatCannotBeSentStoresNothing(t *testing.T) {
 	}
 }
 
-// A token below send gets an agent request; the person approving it must see who will be emailed, and a
-// token that may not send cannot slip extra recipients past them.
-func TestNewConversationFromATokenBelowSendNamesEveryRecipientForApproval(t *testing.T) {
-	api, service, _ := testAPIWithPool(t)
+// Starting a conversation writes to a customer: a token without messages:send is refused, and nothing is stored.
+func TestNewConversationFromATokenWithoutSendIsRefused(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "Approve Start", "admin@approve-start.example.com")
-	other := createSession(t, api, service, "Approve Start Other", "admin@approve-start-other.example.com")
 	connectEmail(t, api, admin, "support@approve-start.example.com")
 	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Pat Prospect", "email": "pat@prospect.example"})
-	foreign := create(t, api, other, "/api/v1/contacts", map[string]any{"name": "Zed", "email": "zed@elsewhere.example"})
 	draft := issueToken(t, api, admin, "draft starter", "draft").Token
-
-	response := request(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{
-		"contact_id": contact, "subject": "Your renewal", "body": "It renews next week.",
-	}, draft, nil)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("status=%d body=%s, want 202", response.Code, response.Body.String())
+	refused(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Your renewal", "body": "It renews next week."}, draft, "messages:send")
+	refused(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{"contact": map[string]any{"name": "Ned New", "email": "ned@new.example"}, "subject": "Welcome", "body": "Hello Ned."}, draft, "messages:send")
+	if n := queryString(t, pool, `SELECT count(*)::text FROM conversations`); n != "0" {
+		t.Fatalf("%s conversations stored", n)
 	}
-	var filed struct {
-		Summary string `json:"summary"`
-	}
-	decode(t, response, &filed)
-	for _, want := range []string{"Start a conversation by email", "pat@prospect.example", "Your renewal", "It renews next week."} {
-		if !strings.Contains(filed.Summary, want) {
-			t.Errorf("summary %q lacks %q", filed.Summary, want)
-		}
-	}
-	if got := request(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{
-		"contact_id": contact, "subject": "Hello", "body": "Hi", "cc": []string{"someone@else.example"},
-	}, draft, nil); got.Code != http.StatusBadRequest {
-		t.Errorf("a draft token copying someone answered %d, want 400", got.Code)
-	}
-	added := request(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{
-		"contact": map[string]any{"name": "Ned New", "email": "Ned@New.example"}, "subject": "Welcome", "body": "Hello Ned.",
-	}, draft, nil)
-	decode(t, added, &filed)
-	if added.Code != http.StatusAccepted || !strings.Contains(filed.Summary, "<ned@new.example>, a new customer") {
-		t.Errorf("a new customer's request %d summary %q must name the address and say it is new", added.Code, filed.Summary)
-	}
-	if got := request(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{
-		"contact_id": foreign, "subject": "Hello", "body": "Hi",
-	}, draft, nil); got.Code != http.StatusNotFound {
-		t.Errorf("a request for another workspace's contact answered %d, want 404", got.Code)
+	if n := queryString(t, pool, `SELECT count(*)::text FROM contacts WHERE email='ned@new.example'`); n != "0" {
+		t.Fatal("a refused start stored the new customer")
 	}
 }
 

@@ -145,7 +145,8 @@ func (s *Service) remind(ctx context.Context, workspaceID string, now time.Time)
 		if found.kind = dueKind(found.trialEnd, found.timezone, now); found.kind == "" {
 			return nil
 		}
-		rows, err := tx.Query(ctx, `SELECT id::text, lower(email) FROM agents WHERE workspace_id=$1 AND role='admin' AND deactivated_at IS NULL ORDER BY 2`, workspaceID)
+		// Those who can choose a plan (billing:manage) are reminded.
+		rows, err := tx.Query(ctx, `SELECT a.id::text, lower(a.email) FROM agents a WHERE a.workspace_id=$1 AND `+store.HoldsPermission("$2")+` AND a.deactivated_at IS NULL ORDER BY 2`, workspaceID, "billing:manage")
 		if err != nil {
 			return err
 		}

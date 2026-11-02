@@ -256,53 +256,39 @@ func TestDraftsNeverReachAutoAndIntakeNotAsAWorkspaceDefault(t *testing.T) {
 	}
 }
 
-// A level that lets AI do more by itself waits for a person, whatever the token holds; lowering it is
-// the admin tier's, and a lower tier's lowering waits too. Approving it applies it as the approver.
+// A token holding ai_settings:update raises and lowers a channel's level at once, as its person would;
+// one without it is refused and nothing changes.
 func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 	d := newLevelDesk(t)
 	admin := issueToken(t, d.api, d.adminA, "levels admin", "admin").Token
 	draft := issueToken(t, d.api, d.adminA, "levels draft", "draft").Token
 	raise := map[string]any{"scope": "group", "level": "auto"}
-	response := d.setLevel(t, admin, d.chatA, "intake", raise)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("admin token raises intake: %+v", response)
-	}
-	var filed struct {
-		RequestID string `json:"request_id"`
-		Summary   string `json:"summary"`
-	}
-	if err := json.Unmarshal([]byte(response.Body), &filed); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(filed.Summary, "intake") || !strings.Contains(filed.Summary, "group") || !strings.Contains(filed.Summary, "→ auto") {
-		t.Fatalf("summary = %q", filed.Summary)
+	if response := d.setLevel(t, draft, d.chatA, "intake", raise); response.Code != http.StatusForbidden || !strings.Contains(response.Body, "permission_missing") {
+		t.Fatalf("draft token raises intake: %+v", response)
 	}
 	if got := queryString(t, d.pool, `SELECT count(*)::text FROM channel_ai_levels`); got != "0" {
-		t.Fatalf("a filed raise wrote %s rows", got)
+		t.Fatalf("a refused raise wrote %s rows", got)
 	}
-	if approved := approve(t, d.api, d.adminA, filed.RequestID, nil); approved.Code != http.StatusOK {
-		t.Fatalf("approve: %d %s", approved.Code, approved.Body.String())
+	if response := d.setLevel(t, admin, d.chatA, "intake", raise); response.Code != http.StatusOK {
+		t.Fatalf("admin token raises intake: %+v", response)
 	}
 	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.EffectiveLevel != "auto" {
-		t.Fatalf("after approval: %+v", item)
+		t.Fatalf("after the raise: %+v", item)
 	}
-	// Lowering runs at once for the admin tier; a draft token's waits.
-	if response := d.setLevel(t, draft, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest"}); response.Code != http.StatusAccepted {
+	if response := d.setLevel(t, draft, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest"}); response.Code != http.StatusForbidden {
 		t.Fatalf("draft token lowers: %+v", response)
 	}
 	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest"}); response.Code != http.StatusOK {
 		t.Fatalf("admin token lowers: %+v", response)
 	}
-	// Removing a scope's own level raises when what it then follows is higher.
 	d.setLevel(t, d.adminA, d.formA, "triage", map[string]any{"scope": "", "level": "off"})
-	if response := d.setLevel(t, admin, d.formA, "triage", map[string]any{"scope": "", "level": nil}); response.Code != http.StatusAccepted {
+	if response := d.setLevel(t, admin, d.formA, "triage", map[string]any{"scope": "", "level": nil}); response.Code != http.StatusOK {
 		t.Fatalf("follow a higher workspace default: %+v", response)
 	}
-	// Loosening intake's options is a raise; tightening is not.
 	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"attach_threshold": 0.95}}); response.Code != http.StatusOK {
 		t.Fatalf("tighten: %+v", response)
 	}
-	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"attach_threshold": 0.8}}); response.Code != http.StatusAccepted {
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"attach_threshold": 0.8}}); response.Code != http.StatusOK {
 		t.Fatalf("loosen: %+v", response)
 	}
 	// Masking more is a tightening; masking less a raise; a label is a word, not a sentence.
@@ -311,7 +297,7 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 		t.Fatalf("mask more: %+v", response)
 	}
 	fewer := map[string]any{"attach_threshold": 0.95, "contact_labels": map[string]any{"account": []string{"stk"}, "id": []string{"cccd"}}}
-	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": fewer}); response.Code != http.StatusAccepted {
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": fewer}); response.Code != http.StatusOK {
 		t.Fatalf("mask less: %+v", response)
 	}
 	// A channel's own patterns: adding one tightens, taking one out is a raise, a pattern that would mask
@@ -322,7 +308,7 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 		t.Fatalf("add patterns: %+v", response)
 	}
 	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
-		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns[:1]}}); response.Code != http.StatusAccepted {
+		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns[:1]}}); response.Code != http.StatusOK {
 		t.Fatalf("take a pattern out: %+v", response)
 	}
 	for _, pattern := range []string{`\d*`, `\b`, `\b\d*`, `(?:\b)`, `\d*\b`, `(`, `[a-z]{999}[a-z]{999}[a-z]{999}`, strings.Repeat("a", 201)} {
@@ -500,12 +486,14 @@ func TestChannelLevelsAndSourceConsentsStayInTheirWorkspace(t *testing.T) {
 	}
 }
 
-// A source consent is data leaving, so a token asks for it; taking it back is the admin tier's.
-// Both are in the AI history.
-func TestASourceConsentWaitsForAPersonAndIsTakenBackAtOnce(t *testing.T) {
+// A source consent is data leaving: it takes ai_settings:update, for a token as for a person, and so
+// does taking it back. Both are in the AI history.
+func TestASourceConsentNeedsTheSettingsPermissionAndIsTakenBackAtOnce(t *testing.T) {
 	d := newLevelDesk(t)
+	send := issueToken(t, d.api, d.adminA, "consent send", "send").Token
+	refused(t, d.api, http.MethodPut, "/api/v1/ai/source-consents/images", nil, send, "ai_settings:update")
 	admin := issueToken(t, d.api, d.adminA, "consent admin", "admin").Token
-	if response := request(t, d.api, http.MethodPut, "/api/v1/ai/source-consents/images", nil, admin, nil); response.Code != http.StatusAccepted {
+	if response := request(t, d.api, http.MethodPut, "/api/v1/ai/source-consents/images", nil, admin, nil); response.Code != http.StatusOK {
 		t.Fatalf("token consent: %d %s", response.Code, response.Body.String())
 	}
 	if response := request(t, d.api, http.MethodPut, "/api/v1/ai/source-consents/passwords", nil, d.adminA, nil); response.Code != http.StatusNotFound {
@@ -523,7 +511,7 @@ func TestASourceConsentWaitsForAPersonAndIsTakenBackAtOnce(t *testing.T) {
 	if !removed.Removed {
 		t.Fatal("not removed")
 	}
-	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_settings_events WHERE workspace_id=$1 AND kind='source_consent_changed'`, d.workspaceA); got != "2" {
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_settings_events WHERE workspace_id=$1 AND kind='source_consent_changed'`, d.workspaceA); got != "3" {
 		t.Fatalf("consent events = %s", got)
 	}
 }

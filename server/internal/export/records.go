@@ -11,6 +11,28 @@ import (
 )
 
 // Agent is a person who signs in. Credentials, sessions and pairing links are never exported.
+// Role is a set of permissions people hold. Permissions is null for the built-in Admin role, which holds
+// every permission (also ones a later release adds); System is admin or agent for the two built-in roles.
+// A deleted role stays, with deleted_at, because tokens and invites of the past name it.
+type Role struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	System      *string    `json:"system"`
+	Permissions []string   `json:"permissions"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at"`
+}
+
+// AgentRole is one role a person holds.
+type AgentRole struct {
+	AgentID          string    `json:"agent_id"`
+	RoleID           string    `json:"role_id"`
+	GrantedByAgentID *string   `json:"granted_by_agent_id"`
+	GrantedAt        time.Time `json:"granted_at"`
+}
+
 type Agent struct {
 	ID               string    `json:"id"`
 	Email            string    `json:"email"`
@@ -1149,6 +1171,8 @@ type Conversation struct {
 type Sink interface {
 	Workspace(Workspace) error
 	Agent(Agent) error
+	Role(Role) error
+	AgentRole(AgentRole) error
 	Contact(Contact) error
 	ContactMerge(ContactMerge) error
 	Tag(Tag) error

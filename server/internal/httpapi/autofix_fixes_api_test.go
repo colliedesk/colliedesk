@@ -416,59 +416,32 @@ func TestASendLeftWaitingEndsAndAnInterruptedOneFindsItsIssue(t *testing.T) {
 	}
 }
 
-func TestAnAgentTokensSendWaitsForAPersonWhoConfirmsAsThemselves(t *testing.T) {
+// A token holding autofix:send sends at once; the GitHub confirmation address it gets back is for its
+// person, who confirms as themselves in a browser. A token without the permission is refused.
+func TestAnAgentTokensSendIsConfirmedByItsPersonAsThemselves(t *testing.T) {
 	s := newSendDesk(t, "Send Token", 205, 2005)
 	s.turnOn(t, autofix.ClaudeIssue, "")
 	token := issueToken(t, s.api, s.w.admin, "Triage agent", "send").Token
 
-	// Reading and previewing are the token's; sending is a request.
 	s.preview(t, token, autofix.ClaudeIssue)
-	asked := accepted(t, s.api, http.MethodPost, "/api/v1/conversations/"+s.conversation+"/fixes", s.sendBody(autofix.ClaudeIssue, "token-1"), token)
-	approved := approve(t, s.api, s.w.admin, asked.RequestID, nil)
-	if approved.Code != http.StatusOK || !strings.Contains(approved.Body.String(), "/login/oauth/authorize") {
-		t.Fatalf("approve: %d %s", approved.Code, approved.Body.String())
+	draft := issueToken(t, s.api, s.w.admin, "Drafter", "draft").Token
+	refused(t, s.api, http.MethodPost, "/api/v1/conversations/"+s.conversation+"/fixes", s.sendBody(autofix.ClaudeIssue, "token-0"), draft, "autofix:send")
+	sent := s.send(t, token, autofix.ClaudeIssue, "token-1", http.StatusCreated)
+	if sent.Fix.CreatedByKind != "token" || sent.Fix.CreatedByName == "" || sent.AuthorizeURL == nil || !strings.Contains(*sent.AuthorizeURL, "/login/oauth/authorize") {
+		t.Fatalf("sent = %+v", sent)
 	}
-	if stored := getRequest(t, s.api, token, asked.RequestID); strings.Contains(string(stored.Result), "oauth") || strings.Contains(string(stored.Result), "state=") {
-		t.Fatalf("the token can read the address: %s", stored.Result)
-	}
-	var answer struct {
-		Result struct {
-			Fix          autofix.Fix `json:"fix"`
-			AuthorizeURL string      `json:"authorize_url"`
-		} `json:"result"`
-	}
-	decode(t, approved, &answer)
-	if answer.Result.Fix.CreatedByKind != "token" || answer.Result.Fix.ApprovedRequestID == nil || *answer.Result.Fix.ApprovedRequestID != asked.RequestID ||
-		answer.Result.Fix.CreatedByName == "" {
-		t.Fatalf("fix = %+v", answer.Result.Fix)
-	}
-	s.authorize(t, answer.Result.AuthorizeURL, "ada", s.w.admin)
-	if fix := s.fix(t, answer.Result.Fix.ID); fix.State != autofix.Sent || *fix.GitHubLogin != "ada" {
-		t.Fatalf("approved send: %+v", fix.Fix)
+	s.authorize(t, *sent.AuthorizeURL, "ada", s.w.admin)
+	if fix := s.fix(t, sent.Fix.ID); fix.State != autofix.Sent || *fix.GitHubLogin != "ada" {
+		t.Fatalf("confirmed send: %+v", fix.Fix)
 	}
 	s.noTokenLeft(t)
 
-	// A draft token cancels and marks; a read token asks.
-	draft := issueToken(t, s.api, s.w.admin, "Drafter", "draft").Token
-	if response := checked(t, s.api, http.MethodPost, "/api/v1/autofix/fixes/"+answer.Result.Fix.ID+"/cancel", nil, draft, nil); response.Code != http.StatusOK {
+	// A draft token cancels and marks; a read token is refused.
+	if response := checked(t, s.api, http.MethodPost, "/api/v1/autofix/fixes/"+sent.Fix.ID+"/cancel", nil, draft, nil); response.Code != http.StatusOK {
 		t.Fatalf("draft cancel: %d %s", response.Code, response.Body.String())
 	}
 	read := issueToken(t, s.api, s.w.admin, "Reader", "read").Token
-	accepted(t, s.api, http.MethodPut, "/api/v1/autofix/fixes/"+answer.Result.Fix.ID+"/deployed", nil, read)
-}
-
-// The line a person reads before approving a send says what approving starts, in words: not the JSON of the
-// request and not what the customer wrote (the preview below it shows the text).
-func TestAnAgentTokensSendRequestIsSummarisedWithoutTheCustomersWords(t *testing.T) {
-	s := newSendDesk(t, "Send Summary", 215, 2015)
-	s.turnOn(t, autofix.ClaudeIssue, "")
-	token := issueToken(t, s.api, s.w.admin, "Triage agent", "send").Token
-	asked := accepted(t, s.api, http.MethodPost, "/api/v1/conversations/"+s.conversation+"/fixes", s.sendBody(autofix.ClaudeIssue, "summary-1"), token)
-	summary := getRequest(t, s.api, token, asked.RequestID).Summary
-	if !strings.HasPrefix(summary, "Send a conversation to a coding agent") || strings.Contains(summary, "The checkout button") || strings.Contains(summary, "customer-message") ||
-		strings.Contains(summary, `\u003c`) || strings.Contains(summary, "client_key") || !strings.Contains(summary, "Claude") {
-		t.Fatalf("summary = %q", summary)
-	}
+	refused(t, s.api, http.MethodPut, "/api/v1/autofix/fixes/"+sent.Fix.ID+"/deployed", nil, read, "autofix:update")
 }
 
 func TestAPersonsFixChangesReleaseAndPullRequests(t *testing.T) {

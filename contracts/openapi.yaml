@@ -5530,6 +5530,9 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '410':
+          description: A workspace session or token (no operator realm header). Agent requests were removed (`agent_requests_removed`).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/agent-requests/{id}/reject:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:
@@ -5560,6 +5563,9 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '410':
+          description: A workspace session or token (no operator realm header). Agent requests were removed (`agent_requests_removed`).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/agents/{id}/roles:
     parameters: [{$ref: '#/components/parameters/ID'}]
     put:
@@ -5687,6 +5693,8 @@ paths:
       operationId: resetRole
       x-permission: team:manage_roles
       description: Puts the built-in Agent role back to the permissions it starts with (409 for any other role). Same rules as a change of permissions.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       responses:
         '200':
           description: The role after the reset
@@ -5695,12 +5703,15 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/roles/{id}/restore:
     parameters: [{$ref: '#/components/parameters/RoleKey'}]
     post:
       operationId: restoreRole
       x-permission: team:manage_roles
       description: Brings a deleted role back; 409 `role_name_taken` when another role has its name now. Restoring a role that is not deleted changes nothing.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       responses:
         '200':
           description: The role
@@ -5709,6 +5720,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/conversations/{id}/reply-drafts:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:

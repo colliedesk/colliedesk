@@ -16,7 +16,7 @@ import (
 func invite(t *testing.T, f limitsFixture, admin string, number int) *responseView {
 	t.Helper()
 	response := request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
-		map[string]any{"email": fmt.Sprintf("teammate%d@limits-alpha.example.com", number), "role_ceiling": "agent"}, admin, nil)
+		map[string]any{"email": fmt.Sprintf("teammate%d@limits-alpha.example.com", number), "roles": []string{"Agent"}}, admin, nil)
 	return &responseView{Code: response.Code, Body: response.Body.String()}
 }
 
@@ -34,7 +34,7 @@ func TestTrialCapsAgentsAtTwentyFiveCountingPendingInvites(t *testing.T) {
 		}
 	}
 	twentySixth := request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
-		map[string]any{"email": "teammate25@limits-alpha.example.com", "role_ceiling": "agent"}, f.adminA, nil)
+		map[string]any{"email": "teammate25@limits-alpha.example.com", "roles": []string{"Agent"}}, f.adminA, nil)
 	if twentySixth.Code != http.StatusPaymentRequired {
 		t.Fatalf("twenty-sixth seat status=%d body=%s, want 402", twentySixth.Code, twentySixth.Body.String())
 	}
@@ -163,7 +163,7 @@ func TestReinvitingAnExistingAgentOrResendingAPendingInviteTakesNoSeat(t *testin
 
 	again := func(email string) int {
 		return request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
-			map[string]any{"email": email, "role_ceiling": "admin"}, f.adminA, nil).Code
+			map[string]any{"email": email, "roles": []string{"Admin"}}, f.adminA, nil).Code
 	}
 	if got := again("agent@limits-alpha.example.com"); got != http.StatusCreated {
 		t.Fatalf("role change for an existing agent at the cap status=%d, want 201", got)

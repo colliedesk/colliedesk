@@ -112,11 +112,11 @@ func TestDemotingRevokesThePersonsPendingAdminInvites(t *testing.T) {
 	if got := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, adminInvite)}, "", nil).Code; got != http.StatusUnauthorized {
 		t.Errorf("admin invite after the demotion status=%d, want 401", got)
 	}
-	if got := f.member(t, "bob@team.example.com").Role; got != "agent" {
+	if got := f.member(t, "bob@team.example.com").Role.main(); got != "agent" {
 		t.Fatalf("bob role=%q, want agent", got)
 	}
 	if got := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, agentInvite)}, "", nil).Code; got != http.StatusOK {
-		t.Errorf("agent invite after the demotion status=%d, want 200: only admin-ceiling invites are revoked", got)
+		t.Errorf("agent invite after the demotion status=%d, want 200: only invites giving a role taken are revoked", got)
 	}
 }
 

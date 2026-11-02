@@ -34,9 +34,8 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  "Applies one suggestion: a part already applied is not applied again.",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": "Dismisses one suggestion: a repeat finds it dismissed.",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    "Takes back what AI applied: undoing again changes nothing.",
-	"POST /api/v1/agent-requests/{id}/approve":                         "Decides one request: a decided request is refused (409), so its call runs once.",
-	"POST /api/v1/agent-requests/{id}/reject":                          "Decides one request: a decided request is refused (409).",
-	"POST /api/v1/agent-requests/{id}/cancel":                          "Cancels one request: a decided request is refused (409).",
+	"POST /api/v1/agent-requests/{id}/approve":                         "Decides one operator request (a decided one is refused, 409); a workspace call stores nothing (410).",
+	"POST /api/v1/agent-requests/{id}/reject":                          "Decides one operator request (a decided one is refused, 409); a workspace call stores nothing (410).",
 	"POST /api/v1/kb/collections/{id}/restore":                         "Brings one collection out of the trash: a repeat finds it restored.",
 	"POST /api/v1/kb/articles/{id}/restore":                            "Brings one article out of the trash: a repeat finds it restored.",
 	"POST /api/v1/kb/articles/{id}/ai-exclusion":                       "Sets one flag on an article: excluding an excluded article changes nothing.",
@@ -96,7 +95,7 @@ var postWithoutKey = map[string]string{
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
 // One DNS status check added for the workspace's single help center domain; eight Autofix routes, each
 // with its reason above.
-const maxPostWithoutKey = 68
+const maxPostWithoutKey = 67
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {

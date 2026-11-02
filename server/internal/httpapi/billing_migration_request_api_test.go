@@ -128,23 +128,23 @@ func TestAdminAsksForAMigrationAndSupportGetsTheDetails(t *testing.T) {
 	}
 }
 
-func TestMigrationRequestFromANonAdminOrAnAgentTokenSendsNothingUntilApproved(t *testing.T) {
+func TestMigrationRequestNeedsBillingManageFromAPersonOrAToken(t *testing.T) {
 	f, mailer := newMigrationFixture(t)
 	body := map[string]any{"freshdesk_address": "acme.freshdesk.com"}
 	if got := askForMigration(t, f, f.agentTokenA, body, nil).Code; got != http.StatusForbidden {
 		t.Fatalf("a team agent: status=%d, want 403", got)
 	}
-	token := issueToken(t, f.api, f.adminA, "billing helper", "admin").Token
-	created := accepted(t, f.api, http.MethodPost, migrationRequestPath, body, token)
+	send := issueToken(t, f.api, f.adminA, "billing reader", "send").Token
+	refused(t, f.api, http.MethodPost, migrationRequestPath, body, send, "billing:manage")
 	if len(mailer.all()) != 0 || billingMigrationRequestedAt(t, f, f.adminA) != nil {
-		t.Fatal("the agent's call sent mail or stored a request before a person approved")
+		t.Fatal("a refused call sent mail or stored a request")
 	}
-	approve := request(t, f.api, http.MethodPost, "/api/v1/agent-requests/"+created.RequestID+"/approve", nil, f.adminA, nil)
-	if approve.Code != http.StatusOK {
-		t.Fatalf("approve: %d %s", approve.Code, approve.Body.String())
+	token := issueToken(t, f.api, f.adminA, "billing helper", "admin").Token
+	if response := askForMigration(t, f, token, body, nil); response.Code != http.StatusOK {
+		t.Fatalf("an Admin token asks: %d %s", response.Code, response.Body.String())
 	}
 	if len(mailer.all()) != 1 || billingMigrationRequestedAt(t, f, f.adminA) == nil {
-		t.Fatalf("approval sent %d mails, want 1 and a stored request", len(mailer.all()))
+		t.Fatalf("the token's call sent %d mails, want 1 and a stored request", len(mailer.all()))
 	}
 }
 

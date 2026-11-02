@@ -180,7 +180,7 @@ func TestProblemReportOpensOneConversationInTheSupportDeskWithEverythingToCheckI
 		"9f3ac1d2b7e4", "0badc0ffee11", "GET /api/v1/conversations", "500", "502",
 		"TypeError: x is undefined", "window.onerror", "conversation_opened, inbox_searched",
 		"/conversations/abc", "TestBrowser/1.0", "1280", "720", "0.0.41",
-		me.Agent.ID, "ada@acme.example.com", "Ada Admin", "admin",
+		me.Agent.ID, "ada@acme.example.com", "Ada Admin", "roles Admin",
 		f.customerID, "Acme Desk", "acme-desk", reportBuildName, "self-hosted", requestID,
 	} {
 		if !strings.Contains(message.Body, want) {
@@ -368,11 +368,11 @@ func TestProblemReportCanBeFiledByAnAgentTokenOfAnyTier(t *testing.T) {
 	found := false
 	for _, item := range items {
 		for _, message := range f.messages(t, f.support, item.ID) {
-			found = found || (strings.Contains(message.Body, "Reported by a read token") && strings.Contains(message.Body, "agent token (read)"))
+			found = found || (strings.Contains(message.Body, "Reported by a read token") && strings.Contains(message.Body, "agent token (custom)"))
 		}
 	}
 	if !found {
-		t.Error("the report of a token does not say it came from an agent token and its tier")
+		t.Error("the report of a token does not say it came from an agent token and its kind")
 	}
 }
 

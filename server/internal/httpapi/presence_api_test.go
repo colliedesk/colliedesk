@@ -22,7 +22,6 @@ type presenceViewer struct {
 	AgentToken   *struct {
 		ID    string `json:"id"`
 		Label string `json:"label"`
-		Scope string `json:"scope"`
 	} `json:"agent_token"`
 }
 
@@ -316,7 +315,7 @@ func TestAgentTokenPresenceNamesTheTokenAndLastsTwoMinutes(t *testing.T) {
 	if got := viewerSummary(viewers); got != "Lan writing=true; Lan writing=false via Claude Code" {
 		t.Fatalf("admin sees %q", got)
 	}
-	if viewers[1].AgentToken.ID != token.Session.ID || viewers[1].AgentToken.Scope != "read" {
+	if viewers[1].AgentToken.ID != token.Session.ID {
 		t.Fatalf("token viewer = %+v", viewers[1].AgentToken)
 	}
 	d.leave(t, d.teammate, d.conversation, "lan-tab-one")

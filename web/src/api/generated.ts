@@ -16648,6 +16648,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description A workspace session or token (no operator realm header). Agent requests were removed (`agent_requests_removed`). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     rejectAgentRequest: {
@@ -16688,6 +16697,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description A workspace session or token (no operator realm header). Agent requests were removed (`agent_requests_removed`). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     setAgentRoles: {
@@ -16877,7 +16895,10 @@ export interface operations {
     resetRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path: {
                 /** @description The role's id, or its name (matched without regard to case). */
                 id: components["parameters"]["RoleKey"];
@@ -16899,12 +16920,16 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     restoreRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path: {
                 /** @description The role's id, or its name (matched without regard to case). */
                 id: components["parameters"]["RoleKey"];
@@ -16926,6 +16951,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     createReplyDraft: {

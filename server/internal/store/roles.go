@@ -66,7 +66,7 @@ const HoldsAdminRole = `EXISTS (SELECT 1 FROM agent_roles hr JOIN roles hp ON hp
 // NamesHolding lists the active members who hold permission, by name, sorted.
 func NamesHolding(ctx context.Context, tx pgx.Tx, workspaceID, permission string) ([]string, error) {
 	rows, err := tx.Query(ctx, `SELECT `+memberName+` FROM agents a WHERE a.workspace_id=$1 AND a.deactivated_at IS NULL AND `+HoldsPermission("$2")+`
-		ORDER BY lower(`+memberName+`)`, workspaceID, permission)
+		ORDER BY (COALESCE(btrim(a.display_name),'')=''), lower(a.display_name), a.email`, workspaceID, permission)
 	if err != nil {
 		return nil, fmt.Errorf("list members holding %s: %w", permission, err)
 	}

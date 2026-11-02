@@ -165,7 +165,7 @@ func TestAIChatsStayInTheirWorkspace(t *testing.T) {
 		wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/chat/sessions/"+id, nil, desk.adminA, nil), http.StatusNotFound, "not_found")
 		wantResponse(t, request(t, desk.api, http.MethodDelete, "/api/v1/ai/chat/sessions/"+id, nil, desk.adminA, nil), http.StatusNotFound, "not_found")
 	}
-	wantResponse(t, request(t, desk.api, http.MethodDelete, "/api/v1/ai/chat/sessions/"+open, nil, agent, nil), http.StatusForbidden, "forbidden")
+	wantResponse(t, request(t, desk.api, http.MethodDelete, "/api/v1/ai/chat/sessions/"+open, nil, agent, nil), http.StatusForbidden, "permission_missing")
 	if response := request(t, desk.api, http.MethodDelete, "/api/v1/ai/chat/sessions/"+open, nil, desk.adminA, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d %s", response.Code, response.Body.String())
 	}
@@ -192,5 +192,5 @@ func TestAIChatsStayInTheirWorkspace(t *testing.T) {
 	if usage.Answers != 1 || usage.Chats != 1 || usage.Rated != 1 || usage.AnswerLimit != nil || usage.SpentMicroUSD == nil {
 		t.Fatalf("usage = %+v", usage)
 	}
-	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/chat/usage", nil, agent, nil), http.StatusForbidden, "forbidden")
+	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/chat/usage", nil, agent, nil), http.StatusForbidden, "permission_missing")
 }

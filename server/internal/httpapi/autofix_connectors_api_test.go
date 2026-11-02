@@ -107,15 +107,15 @@ func TestOnlyAdminsChangeCodingAgentsAndTokensAskFirst(t *testing.T) {
 			t.Errorf("a member %s %s: %d", call.method, call.path, response.Code)
 		}
 	}
-	// Turning an agent on waits for a person whatever the token holds.
+	// A token holding autofix_settings:update turns an agent on as its person would.
 	adminToken := issueToken(t, api, admin, "Admin agent", "admin").Token
-	if response := request(t, api, http.MethodPut, "/api/v1/autofix/connectors/cursor_api", map[string]any{"consent_version": autofix.ConsentVersion}, adminToken, nil); response.Code != http.StatusAccepted {
+	if response := request(t, api, http.MethodPut, "/api/v1/autofix/connectors/cursor_api", map[string]any{"consent_version": autofix.ConsentVersion}, adminToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("an admin token turns an agent on: %d %s", response.Code, response.Body)
 	}
 	// A token below admin is refused the key, and the key never waits in a request.
 	sendToken := issueToken(t, api, admin, "Send agent", "send").Token
 	response := request(t, api, http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", map[string]any{"key": cursorCanaryKey}, sendToken, nil)
-	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "credentials_need_admin_token") {
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "permission_missing") {
 		t.Fatalf("a send token sets the key: %d %s", response.Code, response.Body)
 	}
 	if n := queryString(t, pool, `SELECT count(*)::text FROM agent_requests WHERE body::text LIKE '%'||$1||'%'`, cursorCanaryKey); n != "0" {
@@ -297,7 +297,7 @@ func TestTheSettingsCallCursorAFewTimesAMinuteAtMost(t *testing.T) {
 	}
 }
 
-func TestAnApprovedRequestTurnsAnAgentOnOnlyWithAConsentInTheApproversName(t *testing.T) {
+func TestATokenTurnsAnAgentOnOnlyWithAConsentInItsPersonsName(t *testing.T) {
 	standIn := cursortest.New(cursorCanaryKey)
 	defer standIn.Close()
 	api, service, _, _ := testAPIWithConfig(t, autofixConfig(standIn))
@@ -312,34 +312,25 @@ func TestAnApprovedRequestTurnsAnAgentOnOnlyWithAConsentInTheApproversName(t *te
 			t.Fatalf("no consent %v: %d %s", body, response.Code, response.Body)
 		}
 	}
+	// An Admin token turns the agent on at once, with the consent in its person's name; without a
+	// consent it is refused like a person, and a token without autofix_settings:update is refused.
 	token := issueToken(t, api, admin, "Setup agent", "admin").Token
-	file := func(body map[string]any) string {
-		response := request(t, api, http.MethodPut, path, body, token, nil)
-		var filed struct {
-			RequestID string `json:"request_id"`
-		}
-		decode(t, response, &filed)
-		if response.Code != http.StatusAccepted || filed.RequestID == "" {
-			t.Fatalf("filed: %d %s", response.Code, response.Body)
-		}
-		return filed.RequestID
-	}
-	// A request without a consent is refused when approved, and nothing turns on.
-	if response := approve(t, api, admin, file(map[string]any{}), nil); !strings.Contains(response.Body.String(), "consent_required") {
-		t.Fatalf("approved without a consent: %d %s", response.Code, response.Body)
+	send := issueToken(t, api, admin, "Sender", "send").Token
+	refused(t, api, http.MethodPut, path, map[string]any{"consent_version": autofix.ConsentVersion}, send, "autofix_settings:update")
+	if response := request(t, api, http.MethodPut, path, map[string]any{}, token, nil); !strings.Contains(response.Body.String(), "consent_required") {
+		t.Fatalf("a token without a consent: %d %s", response.Code, response.Body)
 	}
 	if response := request(t, api, http.MethodPost, path+"/check", nil, admin, nil); strings.Contains(response.Body.String(), `"enabled":true`) {
 		t.Fatalf("turned on without a consent: %s", response.Body)
 	}
-	response := approve(t, api, admin, file(map[string]any{"consent_version": autofix.ConsentVersion}), nil)
-	if response.Code != http.StatusOK {
-		t.Fatalf("approved: %d %s", response.Code, response.Body)
+	if response := request(t, api, http.MethodPut, path, map[string]any{"consent_version": autofix.ConsentVersion}, token, nil); response.Code != http.StatusOK {
+		t.Fatalf("a token with a consent: %d %s", response.Code, response.Body)
 	}
 	check := request(t, api, http.MethodPost, path+"/check", nil, admin, nil)
 	var agent codingAgent
 	decode(t, check, &agent)
 	if !agent.Enabled || agent.Consent == nil || agent.Consent.Name != "Ada Approver" || agent.Consent.Version != autofix.ConsentVersion {
-		t.Fatalf("the consent is not the approver's: %s", check.Body)
+		t.Fatalf("the consent is not the token's person's: %s", check.Body)
 	}
 }
 

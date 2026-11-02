@@ -18,6 +18,8 @@ const replyDraftsPath = "/api/v1/conversations/{id}/reply-drafts"
 
 const (
 	createRoleOperation       = "role"
+	resetRoleOperation        = "role_reset"
+	restoreRoleOperation      = "role_restore"
 	createReplyDraftOperation = "reply_draft"
 )
 
@@ -116,12 +118,14 @@ func (a *API) updateRole(response http.ResponseWriter, request *http.Request) {
 
 func (a *API) resetRole(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
-	role, err := a.store.ResetRole(request.Context(), who.Workspace.ID, callerOf(who), request.PathValue("id"), auth.AgentRolePermissions())
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusOK, role)
+	a.runOnce(response, request, http.StatusOK, resetRoleOperation, []string{request.PathValue("id")}, func(ctx context.Context) (any, error) {
+		role, err := a.store.ResetRole(ctx, who.Workspace.ID, callerOf(who), request.PathValue("id"), auth.AgentRolePermissions())
+		if err != nil {
+			writeStoreError(response, err)
+			return nil, errAnswered
+		}
+		return role, nil
+	})
 }
 
 func (a *API) deleteRole(response http.ResponseWriter, request *http.Request) {
@@ -135,12 +139,14 @@ func (a *API) deleteRole(response http.ResponseWriter, request *http.Request) {
 
 func (a *API) restoreRole(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
-	role, err := a.store.RestoreRole(request.Context(), who.Workspace.ID, callerOf(who), request.PathValue("id"))
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusOK, role)
+	a.runOnce(response, request, http.StatusOK, restoreRoleOperation, []string{request.PathValue("id")}, func(ctx context.Context) (any, error) {
+		role, err := a.store.RestoreRole(ctx, who.Workspace.ID, callerOf(who), request.PathValue("id"))
+		if err != nil {
+			writeStoreError(response, err)
+			return nil, errAnswered
+		}
+		return role, nil
+	})
 }
 
 // setAgentRoles sets the whole list of a member's roles, by ids or by names.

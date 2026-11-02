@@ -218,15 +218,9 @@ func TestKnowledgeBaseOrderTokenTiers(t *testing.T) {
 	first := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "First", "body_md": "1"})
 	second := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Second", "body_md": "2"})
 
-	filed := accepted(t, api, http.MethodPut, "/api/v1/kb/order", kbOrderBody(collection.ID, []string{}, []string{second.ID, first.ID}), read)
+	refused(t, api, http.MethodPut, "/api/v1/kb/order", kbOrderBody(collection.ID, []string{}, []string{second.ID, first.ID}), read, "kb_articles:update")
 	if got := kbSearch(t, api, admin, "collection_id="+collection.ID); !slices.Equal(got, []string{"First", "Second"}) {
-		t.Fatalf("a proposal reordered before approval: %v", got)
-	}
-	if response := approve(t, api, admin, filed.RequestID, nil); response.Code != http.StatusOK {
-		t.Fatalf("approve order status=%d body=%s", response.Code, response.Body.String())
-	}
-	if got := kbSearch(t, api, admin, "collection_id="+collection.ID); !slices.Equal(got, []string{"Second", "First"}) {
-		t.Fatalf("order after approval = %v", got)
+		t.Fatalf("a refused call reordered: %v", got)
 	}
 	kbCall(t, api, http.MethodPut, "/api/v1/kb/order", kbOrderBody(collection.ID, []string{}, []string{first.ID, second.ID}), send, http.StatusOK, nil)
 	if got := kbSearch(t, api, admin, "collection_id="+collection.ID); !slices.Equal(got, []string{"First", "Second"}) {

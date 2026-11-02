@@ -53,32 +53,17 @@ func TestExportKeepsWhoChangedAStatusAndTheWorkspaceSettings(t *testing.T) {
 			INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason) SELECT workspace_id,$1::uuid,id,'opened' FROM item`, d.conversation, d.channel); err != nil {
 			t.Fatal(err)
 		}
-		token := func(scope string) string {
-			t.Helper()
-			response := request(t, api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": account + " " + scope, "scope": scope}, d.admin, nil)
-			if response.Code != http.StatusCreated {
-				t.Fatalf("token: %d %s", response.Code, response.Body.String())
-			}
-			var created struct {
-				Token string `json:"token"`
-			}
-			decode(t, response, &created)
-			return created.Token
-		}
-		draftToken, sendToken := token("draft"), token("send")
+		draftToken, sendToken := issueToken(t, api, d.admin, account+" draft", "draft").Token, issueToken(t, api, d.admin, account+" send", "send").Token
 		d.draft = queryString(t, pool, `SELECT id::text FROM sessions WHERE label=$1`, account+" draft")
 		d.send = queryString(t, pool, `SELECT id::text FROM sessions WHERE label=$1`, account+" send")
 		path := "/api/v1/conversations/" + d.conversation
-		// A draft token asks a person first: the request keeps what the customer would be told.
-		response = request(t, api, http.MethodPatch, path, map[string]any{"status": "resolved"}, draftToken, nil)
-		if response.Code != http.StatusAccepted {
-			t.Fatalf("draft token: %d %s", response.Code, response.Body.String())
-		}
-		var filed struct {
-			RequestID string `json:"request_id"`
-		}
-		decode(t, response, &filed)
-		d.request = filed.RequestID
+		// A draft token may not tell the customer (messages:send): it is refused, and nothing changes.
+		refused(t, api, http.MethodPatch, path, map[string]any{"status": "resolved"}, draftToken, "messages:send")
+		// A request filed before agent requests were removed stays in the export with what it would have told.
+		d.request = queryString(t, pool, `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,kind,method,route,path,summary,conversation_id,status,decided_at,reason,expires_at,notices)
+			SELECT s.workspace_id,s.id,s.label,'draft','action','PATCH','/api/v1/conversations/{id}',$2,'Set to Resolved',$3::uuid,'expired',now(),'removed',now(),
+				jsonb_build_array(jsonb_build_object('channel_id',$4::text,'channel_name','Chat','example_ref','REF-1','text','REF-1: fixed by '||$5||'.','told',1))
+			FROM sessions s WHERE s.id=$1::uuid RETURNING id::text`, d.draft, path, d.conversation, d.channel, account)
 		// A send token changes it quietly, then a person reopens it.
 		if response := request(t, api, http.MethodPatch, path, map[string]any{"status": "pending", "notify": false}, sendToken, nil); response.Code != http.StatusOK {
 			t.Fatalf("send token, quiet: %d %s", response.Code, response.Body.String())
@@ -240,7 +225,7 @@ func TestExportNamesTheTokenThatMovedMessagesAndWroteANote(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "Token Moves", "admin@token-moves.example.com")
 	secret := connectEmail(t, api, admin, "support@token-moves.example.com")
-	response := request(t, api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "Claude moves", "scope": "send"}, admin, nil)
+	response := request(t, api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "Claude moves", "permissions": []string{"messages:read", "messages:note", "conversations:read", "conversations:update", "messages:send"}}, admin, nil)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("token: %d %s", response.Code, response.Body.String())
 	}

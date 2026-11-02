@@ -401,12 +401,9 @@ func TestKnowledgeBaseTokenTiers(t *testing.T) {
 	send := issueToken(t, api, admin, "Writer", "send").Token
 	collection := kbCollection(t, api, send, map[string]any{"name": "Agent docs"})
 
-	proposal := request(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Proposed", "body_md": "x"}, read, nil)
-	if proposal.Code != http.StatusAccepted {
-		t.Fatalf("read token create status=%d body=%s, want 202", proposal.Code, proposal.Body.String())
-	}
+	refused(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Proposed", "body_md": "x"}, read, "kb_articles:create")
 	if got := kbSearch(t, api, read, ""); len(got) != 0 {
-		t.Fatalf("a proposal wrote %v before approval", got)
+		t.Fatalf("a refused call wrote %v", got)
 	}
 	article := kbArticle(t, api, send, map[string]any{"collection_id": collection.ID, "title": "Written by an agent", "body_md": "x"})
 	if article.LastChange == nil || article.LastChange.Token == nil || article.LastChange.Token.Label != "Writer" {
@@ -416,15 +413,12 @@ func TestKnowledgeBaseTokenTiers(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/kb/images", bytes.NewReader(kbPNG))
 	req.Header.Set("Content-Type", "image/png")
 	req.Header.Set("Authorization", "Bearer "+read)
-	if response := serve(api, req); response.Code != http.StatusForbidden || errorCode(t, response) != "files_need_approval" {
+	if response := serve(api, req); response.Code != http.StatusForbidden || errorCode(t, response) != "permission_missing" {
 		t.Fatalf("read token image status=%d body=%s", response.Code, response.Body.String())
 	}
 	uploadKBImage(t, api, send, kbPNG, http.StatusCreated)
-	// Turning the help center on is an admin's: a send token files a request.
-	put := map[string]any{"enabled": true, "title": "Help", "locale": "en"}
-	if response := request(t, api, http.MethodPut, "/api/v1/help-center", put, send, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("send token help center status=%d body=%s, want 202", response.Code, response.Body.String())
-	}
+	// Turning the help center on takes help_center:update, which a send token was not given.
+	refused(t, api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": true, "title": "Help", "locale": "en"}, send, "help_center:update")
 }
 
 func TestHelpCenterSettingsAndContentVersion(t *testing.T) {
@@ -613,43 +607,30 @@ func TestKnowledgeBaseArticleNeverLandsInACollectionBeingDeleted(t *testing.T) {
 	}
 }
 
-// A lower tier's knowledge base write waits for a person; once approved it runs as that person, and
-// the version names the token that asked and the request.
-func TestApprovedKnowledgeBaseRequestsRunAndNameTheirToken(t *testing.T) {
+// A token without the permission a knowledge base write needs is refused; one with it writes at once,
+// and the version names the token.
+func TestKnowledgeBaseWritesNeedTheirPermissionAndNameTheirToken(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "KB Approvals", "admin@kb-approvals.example.com")
 	read := issueToken(t, api, admin, "Proposer", "read").Token
 	send := issueToken(t, api, admin, "Writer", "send").Token
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Docs"})
 
-	filed := accepted(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Proposed guide", "body_md": "Steps."}, read)
-	if response := approve(t, api, admin, filed.RequestID, nil); response.Code != http.StatusOK {
-		t.Fatalf("approve article status=%d body=%s", response.Code, response.Body.String())
-	}
+	body := map[string]any{"collection_id": collection.ID, "title": "Proposed guide", "body_md": "Steps."}
+	refused(t, api, http.MethodPost, "/api/v1/kb/articles", body, read, "kb_articles:create")
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", body, send, http.StatusCreated, nil)
 	var page struct {
 		Items []kbArticleView `json:"items"`
 	}
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles", nil, admin, http.StatusOK, &page)
 	if len(page.Items) != 1 || page.Items[0].Title != "Proposed guide" {
-		t.Fatalf("articles after approval = %+v", page.Items)
+		t.Fatalf("articles = %+v", page.Items)
 	}
 	change := page.Items[0].LastChange
-	if change == nil || change.AgentRequestID == nil || *change.AgentRequestID != filed.RequestID || change.Token == nil || change.Token.Label != "Proposer" || change.ChangedBy == nil {
-		t.Fatalf("approved version = %+v", change)
+	if change == nil || change.AgentRequestID != nil || change.Token == nil || change.Token.Label != "Writer" || change.ChangedBy == nil {
+		t.Fatalf("the token's version = %+v", change)
 	}
-
-	asked := accepted(t, api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": true, "title": "Help", "locale": "de"}, send)
-	if response := approve(t, api, admin, asked.RequestID, nil); response.Code != http.StatusOK {
-		t.Fatalf("approve help center status=%d body=%s", response.Code, response.Body.String())
-	}
-	var center struct {
-		Enabled bool   `json:"enabled"`
-		Locale  string `json:"locale"`
-	}
-	kbCall(t, api, http.MethodGet, "/api/v1/help-center", nil, admin, http.StatusOK, &center)
-	if !center.Enabled || center.Locale != "de" {
-		t.Fatalf("help center after approval = %+v", center)
-	}
+	refused(t, api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": true, "title": "Help", "locale": "de"}, send, "help_center:update")
 }
 
 // Uploading bytes the workspace already holds gives the same image, needs no storage room, and starts

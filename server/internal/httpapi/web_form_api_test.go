@@ -501,7 +501,7 @@ func manyOrigins(n int) []string {
 func TestAgentCanSeeButNotChangeTheWebForm(t *testing.T) {
 	f := newWebFormFixture(t, nil)
 	f.enable(t, f.adminA, siteOrigin)
-	invite := request(t, f.api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "agent@form-alpha.example.com", "role_ceiling": "agent"}, f.adminA, nil)
+	invite := request(t, f.api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "agent@form-alpha.example.com", "roles": []string{"Agent"}}, f.adminA, nil)
 	if invite.Code != http.StatusCreated {
 		t.Fatalf("invite status=%d body=%s", invite.Code, invite.Body.String())
 	}
