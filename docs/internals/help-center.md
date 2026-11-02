@@ -201,8 +201,7 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   (a JSON schema counts characters) and the settings field counts bytes.
 - **A save must name `custom_css`** (`HelpCenterThemeSave`, `customCSSRequired`). The save replaces the
   whole theme, so a body without the field, from a web bundle loaded before it existed or an agent
-  request filed before it, would clear the CSS silently. It is 422 `validation_failed` instead, an
-  agent request without it is not filed, and one stored earlier fails on approval with the same 422;
+  that does not know the field, would clear the CSS silently. It is 422 `validation_failed` instead;
   null or `""` clears it. The check and the preview save nothing and keep it optional.
 - **Search Console tokens are their own resource** (`/api/v1/help-center/search-console`), not theme
   fields. A field left out stays, because two optional tokens in a whole-replace body would let a
@@ -399,8 +398,8 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   counter per cache keeps a lookup that started before a forget from storing its answer. The cache
   only names a candidate: the page's own query (`OpenHelpCenterWorkspace`) reads the active domain, and
   a host that no longer matches gets the 404, so a removal is served nowhere from the next request on.
-- **The TXT token is readable by every tier.** `GET /help-center/domain` and its MCP tool are
-  read-tier and show the token. It is public in DNS once the record exists and proves only its own
+- **The TXT token is readable with `help_center:read`.** `GET /help-center/domain` and its MCP tool
+  show the token. It is public in DNS once the record exists and proves only its own
   claim, so hiding it below admin would protect nothing; it still never leaves in an export or a log.
 - **Old addresses move with a 301 built from the stored name.** The slug host and `/help/<slug>`
   redirect (no-store) to the custom domain with the escaped path and query, while the help center is

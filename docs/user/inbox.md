@@ -91,8 +91,8 @@ conversations with any of them; each filter you add narrows the list further.
   appears; tick it to show only conversations with all of them.
 - **Needs attention**: **Waiting on us** (the newest message that is not a private note came from the
   customer) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
-  **Reply draft waiting for approval** shows the conversations where an AI agent left a reply draft
-  that no one has sent or discarded yet.
+  A link with `?has_pending_draft=true` shows the conversations where an AI agent left a reply draft
+  that no one has sent or discarded yet (chip **Reply draft waiting for approval**).
 - **Channel**: how the conversation started. **Email**, **Web form**, **Help chat** and **Zalo OA** are
   listed once the workspace has a channel of that type. **Imported** (from another helpdesk) and **Started by the team**
   (created in Colliedesk by a teammate or an agent token) are always listed.

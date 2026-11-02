@@ -57,8 +57,9 @@ answers the same view. A change (rename, filters, scope) must send the `updated_
 since answers 409 `changed_elsewhere`, as saved replies do. There is no version history: a view is a few
 filters, and a delete waits in the trash. The down migration refuses while any view exists, as for saved reply history.
 
-Token tier: every write is `draft`. A view changes no conversation and nothing reaches a customer;
-renaming or deleting a tag is `send` because it rewrites every conversation that carries the tag.
+Permissions: a view's writes need `saved_views:create`, `:update` or `:delete`. A view changes no
+conversation and nothing reaches a customer; renaming or deleting a tag needs `tags:update` or
+`tags:delete` because it rewrites every conversation that carries the tag.
 
 ## Web app
 
@@ -70,7 +71,7 @@ cancels the request of the one it replaced.
 
 The Filter menu offers fewer controls than the address takes. An agent narrows the inbox many times a day,
 so the menu keeps the choices that triage needs and the rest stay link-only: `awaiting=customer`,
-`has_pending_draft` (the Requests page owns drafts waiting for approval), `assignee=anyone`, `source`,
+`has_pending_draft` (a reply draft an AI agent wrote waits on the conversation's draft card), `assignee=anyone`, `source`,
 `organization`, `channel=problem_report` (it reaches only the operator's workspace) and the date ranges
 (reporting, which Results and Export cover). A link that sets one still filters, counts on the Filter
 button and shows a chip that removes it; a channel value or a sort the menu does not offer stays listed

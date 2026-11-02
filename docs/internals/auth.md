@@ -12,12 +12,108 @@ useful token prefix: an attacker must still guess the complete random token, whi
 transport security remain separate controls. Constant-time comparison is required if a future auth
 path compares raw secrets or low-entropy values in application memory.
 
+## Roles and permissions
+
+Decided with the roles refactor (branch `feat/roles-permissions`): what a person or an agent token may do is a set of
+permissions, `resource:action` (`auth/token-permissions.go`, 62 of them), and a **role** is a named
+set of them. Code: `auth/principal.go`, `auth/permissions.go`, `auth/legacy.go`, `store/roles.go`,
+`httpapi/token-scope.go` (`routeAccess`), `httpapi/permission-errors.go`. User page:
+`docs/user/roles-and-permissions.md`.
+
+- **Tables.** `roles` (per workspace; `system` is `admin`, `agent` or null; soft delete with
+  `deleted_at`), `agent_roles` (a person holds one or more; `granted_by_agent_id`), `invite_roles` (what
+  an invite gives on joining, added to what the person holds). `sessions.role_id` is the role a session
+  is limited to: the role a token follows (`scope='role'`), or the Agent role for a person's session
+  from a pairing link that asked for it (`requested_role=agent`, shown "Limited to Agent"). The trigger
+  `workspaces_system_roles` makes the two built-in roles for every new workspace, and
+  `agents_starting_role` gives a new person the built-in role matching `agents.role`.
+- **Admin is every permission, stored as none.** The Admin role's `permissions` is null and is read
+  as the whole catalog (`roleRow.permissions`), so a permission a later release adds is Admin's at
+  once and never Agent's: Agent's list is fixed (`agentRolePermissions`, the same list the migration
+  writes; `TestTheAgentRoleStartsAsTheMigrationMadeIt`). Admin cannot be renamed, changed or deleted;
+  Agent can be changed and reset, not deleted. Nothing decides on `system` except these two rules,
+  the seat order and the last-admin rule (`Principal.IsAdmin`); every access check is a permission.
+- **One table for people and tokens.** Every route of `Routes()` has one `routeAccess` row: `need(p)`,
+  `byHandler(p)` (the handler decides by the body: a note needs `messages:note`, a reply
+  `messages:send`; a status that would tell a customer needs `messages:send`, `refuseStatusThatTells`),
+  `anyone`, `personOnly(why)`/`personOnlyNeeding(p, why)`, or `notForPeople`. `refuseByAccess` runs
+  right after `Authenticate`, before CSRF and the lock: a route missing from the table is closed to
+  everyone. There is no second, role-based table any more, and no handler checks `Role == "admin"`.
+  `kb_articles:publish` is still checked in the handlers (`refuseUnlessHeld`) on every change the help
+  center shows.
+- **A call may do what person ∩ token allows.** `Principal.person` is the union of the person's roles
+  (cut to `LimitedTo` for a limited session); `given` is what a token was given; `Can(p)` needs both.
+  Both are read on every call, so a role change, a role taken away or a deactivation applies to every
+  session and token at once. A token that follows a role gets the role's permissions as they are now
+  (`given = role.permissions()`), and nothing while its person no longer holds the role (`RoleHeld`
+  false: "Stopped" in Sessions; giving the role back starts it again). A custom token is a fixed list
+  (`scope='custom'`, `permissions text[]`), still cut by what the person holds now.
+- **Refusals say how to fix them.** A missing permission is 403 `permission_missing` with
+  `missing_permissions`, `missing_from` (`token` when the person holds it, `person` otherwise) and, for
+  `person`, `ask` (people who hold `team:manage_roles`). A person-only route answers 403 `person_only`
+  with `where`. MCP passes the same fields back in the tool error.
+- **Safety rules, all in `store/roles.go` under one lock.** A workspace keeps one active person with
+  Admin (`ErrLastAdmin`, 409 `last_admin`); nobody gives, assigns, invites with or edits a role beyond
+  what they hold (`ExceedsYoursError`, 403 `role_exceeds_yours`); nobody changes the roles, name or
+  active state, or signs out the sessions, of someone who holds a permission they do not
+  (`member_outranks_you`; Admin always may); a role in use (a member, an unused invite, a following
+  token) is not deleted (`role_in_use` names them). A token's call is checked against the token's
+  permissions, not only the person's.
+- **Creating a token is person-only** (`personOnlyNeeding(team:create_tokens, …)`): a token that made
+  tokens would leave them behind after it was revoked. That is why `maxPersonOnly` is 4 in
+  `mcpserver/agent_parity_test.go` (the two agent-request decision routes, the mail image proxy and
+  token creation; raising it needs the maintainer's written approval). A token is created with
+  `role_id` (one of the caller's roles, else 403 `role_not_yours`) or `permissions` (each held, else
+  `role_exceeds_yours`), never both; a `scope` is 400. The CLI's `--scope` maps `read`/`draft`/`send`
+  to that tier's old list and `admin` to the Admin role (`checkTokenRequest`).
+- **Tokens made before roles** keep `scope` as their tier and `legacy=true`. `legacyGiven` gives them
+  their old tier's list (or their custom list), minus `legacyNeverDirect`: the 14 permissions that
+  used to always wait for a person (invite, export, billing, channel credentials…). Keeping those
+  would let an old token export, invite or pay with nobody deciding. A tier below admin also keeps the
+  old agent ceiling (`legacyAgentCeiling`). `TestLegacyTokensLoseExactlyWhatAlwaysAskedAPerson`
+  checks this against the frozen tables in `httpapi/testdata/legacy-token-access.json`.
+- **Agent requests are gone.** Nothing waits for approval: a token with the permission acts, and gets
+  back the invite link, the new inbound secret, the export link or the share link itself. What needs a
+  person in a browser (Google/Microsoft/GitHub consent, a fix's GitHub confirmation, billing checkout
+  and portal) answers an address only the token's person can finish while signed in. A reply a token
+  may not send is a written draft (`POST /conversations/{id}/reply-drafts`, `ai_assist:create`): an
+  `ai_drafts` row with `source='written'` and its `cc`, shown as the draft card; without
+  `messages:send` its `cc` may name only people already on the conversation
+  (`store.ConversationParticipants`), so a prompt-injected draft cannot add an outside reader.
+  `agent_requests` stays, read-only history: the upgrade closed pending requests as `expired` with a
+  reason and copied pending reply drafts into `ai_drafts`; the export keeps `agent-requests.ndjson`.
+  `agent_requests:read`/`:cancel` were removed (62 permissions, not 64).
+- **Old columns are written, not read.** `agents.role` (`admin` when the person holds Admin,
+  `syncLegacyRole`), `pairing_links.role_ceiling`, `sessions.role_ceiling` and the tier in
+  `sessions.scope` stay in sync so a rollback from a backup works. Nothing decides on them; dropping
+  them is for a later release.
+
+### Traps
+
+- **One lock for every rule.** Role, member-role, seat and last-admin changes take the advisory lock
+  `agent-seats:<workspace>` (`lockRoles`), so two changes at once cannot both pass a rule. Taking a role
+  from someone locks their unused invites first, by id, before that lock and their row: a redeem in
+  flight holds its link and then waits for the seat lock, so the other order deadlocks.
+- **Taking a role revokes invites that give it back** to the same address, and stops every token of
+  theirs that follows it (the web form names them first).
+- **A role key shaped like a uuid is always an id** (`findRole`); `/roles/{id}` and the MCP tools also
+  take a name, so a role named like another role's id must never answer for it.
+- **An invite whose roles were all deleted** while it was being redeemed refuses the redeem
+  (`ErrInviteRolesGone`) rather than make a member without a role.
+- **Upgrade limits old sessions.** The migration set `role_id` = Agent on every person's session that
+  had `role_ceiling='agent'`, so an admin who signed in with an agent link stays limited to Agent in
+  that session until they sign in again.
+- **Rollback.** The down migration deletes tokens that follow a role (`scope='role'`, which the old
+  release cannot read), reopens the requests the upgrade closed and drops the written drafts.
+- **Operator requests remain.** `POST /agent-requests/{id}/approve` and `/reject` still serve the
+  operator console (`X-Colliedesk-Realm: operator`); for the workspace realm they answer 410.
+
 ## Agent tokens
 
-An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`, `admin`, or
-`custom` with its own `permissions`); a null scope is a person's full session. It reuses the session machinery on purpose: `label`, `last_seen_at` (the
-"last used" time, written at most once a minute), revoke. Code: `auth/token.go`, `auth/scope.go`,
-`auth/tokens.go`, `httpapi/token-scope.go`.
+An agent token is a `sessions` row with a non-null `scope` (`role`, `custom`, or a legacy tier); a
+null scope is a person's session. It reuses the session machinery on purpose: `label`,
+`last_seen_at` (the "last used" time, written at most once a minute), revoke. Code: `auth/token.go`,
+`auth/scope.go`, `auth/tokens.go`, `httpapi/token-scope.go`.
 
 - **Own prefix and hash domain.** The raw token is `cdk_agent_` plus 32 random bytes in base64url.
   The stored `token_hash` is `sha256("colliedesk-agent-token\x00" + raw)`; a person's session token
@@ -33,98 +129,21 @@ An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `se
   `Authenticate` skips the write while the stored `last_seen_at` is under 60 seconds old; later, the
   write moves `last_seen_at` and slides `expires_at` as before, so the expiry can lag the true last use
   by at most a minute (`TestSessionLastUseIsRecordedAtMostOncePerMinuteAndStillSlidesTheExpiry`).
-- **Role.** A `read`, `draft` or `send` token has `role_ceiling='agent'`, whoever creates it; an
-  `admin` token has `role_ceiling='admin'`. The CHECK `sessions_scope_role_ceiling` ties the two.
-  `Authenticate` computes the effective role from the agent's current `role` and the ceiling
-  (`CASE WHEN a.role='agent' OR s.role_ceiling='agent'`), and refuses a deactivated agent, so an
-  admin token of a demoted creator acts as an agent and one of a deactivated creator is a 401, the
-  same as their browser sessions. Only a session whose effective role is admin can create an admin
-  token (`ErrAdminTokenNeedsAdmin`, 403 `admin_token_needs_admin`); the CLI checks the agent's role.
-  A token never has more rights than the person, as they are now.
-- **Every UI action is available to agents.** Every route in `Routes()` has a row in `tokenTiers`
-  (`httpapi/token-scope.go`): a tier (`read`, `draft`, `send`, `admin`), `Approval` (an agent
-  request for every tier), `PersonOnly` (deciding an agent request; `Why` says why) or
-  `NotForPeople` (routes no session reaches: public pages, sign-in, provider webhooks). No other
-  route is closed to tokens. Every route a token may call, directly or as a request, is in some MCP
-  tool's `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`) with its tracking
-  issue. `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an unclassified or
-  stale row, a closed row of any other reason, a `PersonOnly` row without `Why`, an uncovered
-  callable route, a stale `mcpToolPending` entry, and a tool that calls a closed route; its message
-  names the file to edit. Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0;
-  `maxPersonOnly` is 2. Raising one needs the maintainer's written approval.
-- **Permissions, with the tiers as presets.** A token holds permissions, `resource:action`
-  (`auth/token-permissions.go`). Each permission names its preset, the lowest tier that holds it; a
-  tier holds every permission of its preset and below, worked out on every call (`Principal.Allows`),
-  so old tokens needed no data change and a later route of the send tier opens for every send token.
-  A custom token is stored as `scope='custom'` with its own `permissions text[]` (CHECK
-  `sessions_custom_permissions`); the list is validated in Go, not by the CHECK, so a new permission
-  needs no migration. A custom token with an admin-only permission (preset `admin`) gets the admin
-  ceiling and only an admin may create or approve one (`auth.NeedsAdmin`). Actions beyond CRUD name a
-  different risk: `send`, `publish`, `export`, `share`, `purge`, `manage_credentials`, `manage_roles`,
-  `revoke`, `invite`. The rule that keeps presets faithful: when routes of one resource had different
-  tiers, they are split into actions, and `TestEveryRoutePermissionIsHeldByTheTierTheRouteHad` holds
-  each route's permission to the tier it had. `kb_articles:publish` is checked in the handlers
-  (`askUnlessHeld`, `kb-handlers.go`) on every change to what the help center shows; accepting or
-  undoing an AI triage suggestion also needs `conversations:update`. A request keeps what its token
-  held (`agent_requests.token_permissions`). The contract's `TokenPermission` enum is the Go list in
-  its order (`TestTokenPermissionEnumOfTheContractIsTheServersList`), and the web form's copy is held
-  to the contract by `token-permissions.test.ts`.
-- **Permissions are a route table.** `tokenTiers` gives each route its permission (`grant`), a
-  permission decided by the handler (`byHandler`), `alwaysAsk`, or `anyToken`. `gateToken` lets a
-  token through when it holds the permission; without it, and on every `alwaysAsk` route, the call
-  becomes an agent request (below). A route missing at runtime is still closed to every token.
-  `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table, fails
-  until both agree, and checks that an allowed tier gets the route's success status and a lower one
-  gets 202. Posting a message is gated by the handler: a note needs `draft`, an outgoing reply
-  `send`; below that the JSON call becomes a request (a reply becomes a reply draft). The multipart
-  form (a message with files) is refused with 403 `files_need_approval` instead: a token below
-  `draft` before a file is read, a reply below `send` once the kind is read (the stored files are
-  discarded).
-- **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `gateToken` (202
-  agent request, or 403 `scope_insufficient` / `person_only`) → role permission → CSRF → locked
-  workspace. The tier check runs before the role check because a token below `admin` has the agent
-  role: a request for an admin route must be filed for an admin to approve, not refused as
-  `forbidden`. An `admin` token of a demoted creator passes the tier check and is then refused by
-  the role (403 `forbidden`).
-- **What each tier means.** `read`: conversations, messages, time entries, attachments, contacts,
-  tags, saved replies, the caller's inbox activity and the team list. `draft`: also status, priority,
-  assignee, applying and removing a tag (on one conversation or in bulk), creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
-  tags, creating contacts and conversations, and writing saved replies (create, edit, delete to the
-  trash, restore a version, undelete). Saved replies are text a person later sends to customers, so
-  they sit at `send`; `read` and `draft` propose through agent requests. Their routes on one reply
-  snapshot the reply into `agent_requests.saved_reply_before` when filed (and refuse a missing or
-  wrong-state reply with 404 instead of filing), so the Requests card shows a correct before/after
-  even after the reply changes; the replayed PATCH still carries the token's `updated_at`, so a
-  stale proposal fails with 409 instead of overwriting. Each change is a row in
-  `saved_reply_versions` naming the person (the approver for a request), the token and the request. Changing a tier is one edit to `tokenTiers`.
-  `read` also reads the session and invite lists and the email channel and web form settings: none
-  of those answers holds a token, an invite link or the inbound secret (`TestTokensReadSettingsWithoutLinksOrSecrets`
-  scans them). The role still applies: an agent-role token lists only its owner's sessions.
-  `draft` also sets the owner's own timezone. `admin`: workspace timezone, team member role and
-  active state, revoking invites and sessions, the web form, the email
-  channel and domain verification, and `GET /billing` (admin-only by role, so it is classified
-  `admin` and a lower tier files a request instead of a role refusal).
-- **Approval for every tier, `admin` included:** creating tokens, creating invites, export, billing
-  checkout and portal, disconnecting the email channel, rotating its secret, changing the slug
-  (`Approval` rows). The handlers file the rest themselves when the caller is a token
-  (`fileGrantRequest`): `updateAgent` when the change asks for the admin role or the target is an
-  admin now (`touchesAdmin`: promoting, demoting, deactivating, and reactivating an admin, which
-  would hand the role back; a `display_name` change alone is not about the role, so an admin token
-  renames an admin directly), and `revokeSession` when the target is a person's sign-in (not a token)
-  of anyone other than the token's own person.
-- **Credentials never reach a token.** Creating an invite is `Approval`, so a token never gets a
-  `201`; the approved call's answer is shown once to the approver and not kept (`withheldResults`),
-  so the token reading its request does not get the link either. A settings request
-  (`settingsFields` in `agent-request-settings.go`) is refused with 400 when its body is not a JSON
-  object or has a field the route does not take, so nothing pasted beside the real fields is stored
-  for days. Its summary says what changes, from what to what (`summarizeSettingsRequest`); a session
-  revoke names the session only when the token's role could list it.
-- **Owner requests.** A `/me` route (`ownerRoutes`: `PATCH /agents/me/timezone`, `PATCH /agents/me/display-name`) replays as the
-  approver, so only the person who owns the token may approve it (`approvable_by: owner`, 403
-  `owner_only` for anyone else); otherwise an admin approving would change the admin's own timezone or name.
-- **Revoking sessions from a token** is allowed at `admin` for agent tokens and the token person's
-  own sign-ins (security-positive: a leaked token can be cut off by an agent). The session list shows
-  the revocation; `revokeSession` also logs the token session that did it.
+- **Every UI action is available to agents.** Every route a token may call is in some MCP tool's
+  `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`) with its tracking issue.
+  `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an unclassified or stale
+  `routeAccess` row, a `PersonOnly` row without `Why`, an uncovered callable route, a stale
+  `mcpToolPending` entry, and a tool that calls a closed route; its message names the file to edit.
+  Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0, `maxPersonOnly` 4.
+- **The contract's `TokenPermission` enum is the Go list** in its order
+  (`TestTokenPermissionEnumOfTheContractIsTheServersList`); the web matrix's copy is held to the
+  contract by `token-permissions.test.ts`.
+- **Credentials in answers.** `read` permissions never return a token, an invite link or the inbound
+  secret (`TestTokensReadSettingsWithoutLinksOrSecrets`); only the creating call (with `team:invite`,
+  `channels:manage_credentials`, `workspace:export`, `results:share`) returns one, once.
+- **Revoking sessions from a token** follows the person's rules: its own person's sessions and tokens
+  always, another person's with `team:revoke` when the person outranks them. The session list shows the
+  revocation; `revokeSession` also logs the token session that did it.
 - **Domain verification from a token** is limited to 10 checks per workspace per hour (in-process
   sliding window, 429 with `Retry-After`), so an agent cannot make the server hammer DNS. People are
   not limited.
@@ -136,92 +155,17 @@ An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `se
   `sessions(workspace_id,id)`, so a message names only a token of its own workspace; added `NOT VALID`
   and validated by the next migration, because one migration is one transaction and `VALIDATE
   CONSTRAINT` only stops blocking writes in a transaction of its own) and the API
-  returns it as `agent_token` (`id`, `label`, `scope`, `agent_name`). The web shows "by Ada via
+  returns it as `agent_token` (`id`, `label`, `agent_name`). The web shows "by Ada via
   Claude Code". The column stays after the token is revoked, so what a revoked token wrote can still
   be told from what a person wrote. **Known limit:** only notes and replies are attributed. Status,
   priority, assignee and tag changes, the creation of conversations, contacts and tags, tag rename and
   delete, and retrying a reply record the agent but not the token. The repo has no conversation
   change log (a person's change is not attributed either); adding one is the way to close this.
-- **Rollback.** An image older than the migration needs nothing from the operator any more: it
-  cannot find a token (see the first item). Do not rely on a manual `UPDATE` of `sessions`. The down
-  migration of the admin tier revokes every admin token and stores it as `send` with the agent
-  ceiling, and records the admin token's requests under `send`, so the older constraints hold. This
-  loses the audit fact that those tokens and requests were `admin`; it is an accepted rollback cost
-  (rollback is not the production recovery path, and the tokens are revoked so nothing they could do
-  survives).
 - **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
-  runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
-  check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.
+  runs through the REST handler with that bearer, so `routeAccess` binds MCP tools without a second
+  check (`docs/internals/mcp.md`). A new route a tool uses needs a `routeAccess` row first.
 - The CLI (`collie token create`) resolves the workspace by slug through
   `PrivilegeWorkspaceBySlug`, like `pair`.
-
-## Agent requests
-
-A call an agent token may not make alone is stored as an agent request a person approves (#127);
-a reply from a token below `send` is the first kind, the reply draft (#114). Code:
-`httpapi/agent-request-*.go`, `store/agent-requests.go`, table `agent_requests` (RLS like every
-workspace table). User page: `docs/user/agent-requests.md`.
-
-- **Filing.** `gateToken` (or `createMessage` for a message) answers 202 with `request_id`,
-  `kind`, `status`, `summary`, `expires_at`. The row keeps method, route pattern, concrete path,
-  the JSON body (at most 64 KiB), the token id, label and tier, and the person who owns the token.
-  Only JSON or empty bodies are filed; multipart is 403 `files_need_approval` (files would sit in
-  storage for days, and a request must replay byte for byte). A request on a conversation route
-  checks the conversation exists in the workspace first, so another workspace's id is 404, not a
-  request. The summary is built from the route and the body the token sent, never from customer
-  text, because it reaches the model too; a reply draft's summary is the exception that names every
-  recipient (contact and cc), so a copy is never hidden behind the text. A token below `send` may
-  copy only addresses already on the conversation (`store.ConversationParticipants`: contact, mail
-  senders and copies, earlier reply copies), so a prompt-injected draft cannot add an outside
-  reader that a busy approver skims past. A token may have 50 pending requests and file 100 in any
-  rolling hour (429 with `Retry-After`; `agent_requests_token_idx`). A locked workspace files
-  nothing (402): its requests could not be approved.
-- **Approving is a replay as the approver.** Before anything changes, the approver's role is checked
-  against the permission of the route the call runs on (`approvalPermission`); a person below it gets
-  403 and the request keeps waiting for someone who may (`approvable_by` in the API, the UI hides
-  Approve). The whole approval (claim, replay, result) runs on `context.WithoutCancel` with a
-  two-minute timeout, so a closed tab never leaves a request claimed without a result
-  (`TestApprovalFinishesWhenTheApproverLeavesMidway`). `ClaimAgentRequest` locks the row (`FOR UPDATE`),
-  refuses anything not pending (409 `already_decided`) or from a revoked token (409
-  `token_revoked`), and commits `approved` before the call runs, so a double click runs it once
-  (`TestDoubleApproveRunsTheCallOnce`). `replayApproved` then builds an in-process request and
-  serves it through the API's own mux with an unexported context key that carries the approving
-  principal: `authorize` skips credential, gate and CSRF (all done on the approve call itself) and
-  applies the role permission and the lock as for that person. A non-2xx answer marks the request
-  `failed` with `result_status` (an agent approving an admin action: 403). The trade-off: a crash
-  between the claim and the result leaves `approved` with no `result_status`; we prefer that to
-  holding a row lock across a call that may send an email.
-- **What is kept.** The answer is stored up to 64 KiB, except for routes in `withheldResults`
-  (new token, inbound secret, export link, billing pages): the approver gets it once in the approve
-  answer, the row keeps `result_status` and a `result_note`. A credential or a payment page must not
-  reach the token that asked, nor sit in the database. `GET /api/v1/export` is replayed as
-  `POST /api/v1/export/link` (`approvalRunsAs`): a streamed archive in a request record would be
-  useless; the approver gets the same download the settings page uses.
-- **Edits.** The approve call may carry a reply draft's new text and the subset of its copies to
-  keep (`editedReply`; a copy the draft did not ask for is 400). The edit is stored in `edited_body`
-  and is what runs; `body` stays the agent's draft.
-- **Attribution.** A reply sent by approving a draft has `author_agent_id` = the approver,
-  `agent_token_id` = the token that drafted it (only when the approver did not change the words: an
-  edited text is the person's, so the token is not shown as its writer) and `agent_request_id` = the
-  request (composite FK,
-  added `NOT VALID` and validated by the next migration). Other approved actions are recorded on the
-  request only (`requested_by`, `decided_by`); they are not attributed in a timeline, the same known
-  limit as above.
-- **Retention and payload.** A decided request keeps its `body`, `edited_body` and `result` for 90
-  days; `serve` clears them at start and daily (`PruneAgentRequests`, privileged path
-  `PrivilegeAgentRequestPrune`), keeping the audit row. The list every tab polls returns no bodies
-  (`detail=full` adds them; `GET /agent-requests/{id}` always has them). Export writes
-  `agent-requests.ndjson` (the codebase's NDJSON naming, like `saved-replies.ndjson`) without
-  `result`, and messages carry `agent_request_id`.
-- **Expiry.** Seven days. Reads (list, get, every decision) first mark the workspace's overdue
-  pending rows `expired`, in the same transaction; there is no sweeper. A decided request never
-  runs again.
-- **Who sees what.** A token lists and reads only its own requests (another token's id is 404); a
-  person sees the workspace's. Approve and reject are `PersonOnly`: no token can decide, so an agent
-  never approves its own request. Cancel is open to the token that asked and to the person who owns
-  it; another person rejects instead.
-- **Rollback.** The down migration refuses while any request exists, like saved replies: requests
-  are the record of what agents asked and who approved it.
 
 ## Operators
 
@@ -329,17 +273,17 @@ and a deactivation never interleave: whichever starts first finishes first, and 
 The deactivation revokes links before it takes any other lock, because a redeem in flight holds its link and
 then waits for the seat lock or the agent row; the other order deadlocks. Code: `store/agents.go`, `auth/links.go`.
 
-Demoting an admin to agent also revokes the unused admin-ceiling invites sent to that address, so a pending
-invite cannot hand the role back. Inviting an existing agent still changes their role on redeem, as before.
+Taking a role from someone also revokes the unused invites to that address that give it, so a pending
+invite cannot hand the role back. Redeeming an invite as an existing member adds its roles to theirs.
 
 Lock order for anything that assigns conversations: the agent row (`store.ValidateAssignee`, `FOR SHARE`;
 deactivation uses `FOR UPDATE`), then the conversations in id order (`FOR NO KEY UPDATE`), then
 `conversation_tags`. A bulk path must follow the same order.
 
-The last-admin rule (409 `last_admin`) counts other active admins inside the transaction, under the
-agent-seats advisory lock, so two admins demoting each other at once cannot both succeed. A role change takes
-effect for new requests at once, but an existing session keeps the role ceiling its link gave it; the person
-signs in again to use a higher role.
+The last-admin rule (409 `last_admin`) counts other active holders of the Admin role inside the
+transaction, under the agent-seats advisory lock, so two admins taking Admin from each other at once cannot
+both succeed. A role change takes effect for every session and token at once; only a session limited to the
+Agent role (`sessions.role_id`) stays limited until the person signs in again.
 
 ### Verification traps
 
@@ -375,13 +319,11 @@ signs in again to use a higher role.
   orders concurrent writes of one reply, so numbers never collide. Restoring a version copies it into
   a new version (`restored_from_version`); history is never rewritten. The migration backfilled
   version 1 for every existing reply: kind `create` by its author when it was never edited, otherwise
-  kind `baseline` with no person (who wrote the current text is unknown). A restore request snapshots
-  the version it applies (`saved_reply_before.restores`) so the card shows the target text.
+  kind `baseline` with no person (who wrote the current text is unknown). Agent requests (removed) used to
+  snapshot the version a restore applied (`saved_reply_before.restores`); old rows keep it.
 - **Optimistic writes everywhere.** PATCH, DELETE (`?updated_at=`), restore-version and undelete all
-  compare `updated_at`; delete and undelete bump it. A stored agent request keeps the token's
-  `updated_at` in its path or body, so approving it after anyone changed the reply answers 409 and
-  changes nothing. A delete proposal without `updated_at` is refused with 400 before it is filed.
-  Side effect: a Freshdesk-imported reply that was trashed and restored counts as edited, so `import
+  compare `updated_at`; delete and undelete bump it. A token's write carries the `updated_at` it read like a
+  person's, so it never overwrites a version it did not see. Side effect: a Freshdesk-imported reply that was trashed and restored counts as edited, so `import
   undo` keeps it.
 - **Trash.** Delete sets `deleted_at`; the title index is partial (`WHERE deleted_at IS NULL`) so a
   trashed title can be reused, and undelete then answers 409 `duplicate_title` instead of hiding the

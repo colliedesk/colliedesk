@@ -23,8 +23,8 @@ The help center's AI chat: end users ask, an AI answers from the published artic
   provider the limits are the plan's (`domain.ChatLimitsFor`: answers and micro-dollars a month, a tenth
   a day), in the code, not in a table an admin edits. On a workspace's own provider, or a server without
   plan limits, the only limit is the slot's `monthly_cap_micro_usd`, if set.
-- **Transcripts are messages.** Reading them needs `messages:read` (agent role reads), deleting one is
-  an admin's and every agent token's delete is a request a person approves; the deletion is an
+- **Transcripts are messages.** Reading them needs `messages:read` (agent role reads), deleting one needs
+  `ai_settings:update`, for a person and an agent token alike; the deletion is an
   `ai_settings_events` row without texts. Texts go 90 days after a chat's last turn, the numbers stay
   400 days (`sweepChats` in the AI worker's sweep), transfer codes a day after they expired.
 - **Rate limits of the hand-off count the address, not the email.** An end user types any email, so
@@ -36,7 +36,7 @@ The help center's AI chat: end users ask, an AI answers from the published artic
 - Below the help center root on every address (`/chat/session`, `/chat/turns`, `/chat/turns/{id}`,
   `…/feedback`, `/chat/session/end`, `/chat/prewarm`; `httpapi/help-chat-handlers.go`), in the contract
   under the tag `HelpCenterChat` with the help center as server; `helpCenterPublicRoutes` (token-scope.go)
-  lists them with why no token tier classifies them, and `TestEveryHelpCenterRouteIsListedAndInTheContract`
+  lists them with why no `routeAccess` permission classifies them, and `TestEveryHelpCenterRouteIsListedAndInTheContract`
   keeps the routes, the list and the contract equal. `?channel=<id>` picks a help chat channel, its
   type's default otherwise.
 - **Off is the help center's 404.** Channel off, the chat feature off or unable to run, an unknown

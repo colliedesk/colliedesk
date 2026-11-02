@@ -92,8 +92,8 @@ OpenRouter (`openrouter.ai`) is the exception, and three traps live there:
    that cannot be read means no effort, which is how every call went before.
 2. **Routing.** `ai_providers.routing` (`{"data_collection":"deny","zdr":true}`, only what differs from
    OpenRouter's default) goes in `provider` beside `require_parameters`. Loosening it is a widening of
-   who receives customers' data, so `UpdateProvider` refuses it without `MayLoosen` and the route files
-   an agent's loosening for approval; tightening runs at once. The provider check runs with the routing,
+   who receives customers' data, so `UpdateProvider` refuses it without `MayLoosen`; the route passes
+   `MayLoosen` for any caller with `ai_settings:update`, person or token alike. The provider check runs with the routing,
    so a model no allowed provider serves fails before it is saved.
 3. **Cost.** `usage.cost` comes with every answer and is in OpenRouter's **credits**
    (https://openrouter.ai/docs/use-cases/usage-accounting), not dollars: it is stored as
@@ -142,10 +142,10 @@ it only makes a repeated prefix cheaper. Colliedesk keeps no AI answers in memor
    operator removed it (or the model) reads as on but not active, with `off_reason`.
 4. `ai_settings_events`: the history, with labels copied so it outlives the provider; `seq` orders the
    events of one transaction, which share `created_at`.
-5. Routes: reading is the `read` tier; provider changes are `admin`, and the two routes that carry a key
-   are `credentialRoutes` (a lower tier is refused, never filed, because an agent request keeps its
-   body). `PUT /api/v1/ai/slots/{slot}` is Approval for every token: it decides whether ticket data
-   leaves for a third party, the reason Approval exists.
+5. Routes: reading needs `ai_settings:read`; provider and slot changes `ai_settings:update`, and the
+   two routes that carry a key `ai_settings:manage_credentials`. `PUT /api/v1/ai/slots/{slot}` decides
+   whether ticket data leaves for a third party: a token with `ai_settings:update` does it at once (a
+   token made before roles lost that permission, `legacyNeverDirect`).
 6. Checks are synchronous (the admin waits, bounded at 20 s, well under proxy and MCP client limits) and
    capped at 10 a minute per workspace, since each is a billed call.
 
@@ -369,12 +369,14 @@ feature does by itself: `off`, `suggest`, `auto`.
    `auto`. Intake rows exist only on a scope its type declares (`Definition.IntakeScopes`, which the
    registry refuses unless the scope collects with a `Gather`); the database does not know the types,
    so `SetChannelLevel` checks and answers 422 `intake_not_supported`.
-4. **A raise waits for a person.** `PUT /channels/{id}/ai/{slot}` is classified `byHandler`: the
-   handler files every token's call below `ai_settings:update`, and `SetChannelLevel(mayRaise=false)`
-   refuses, under the slot rows' lock, a change that raises the configured level of any scope it
+4. **A raise needs `ai_settings:update`.** `PUT /channels/{id}/ai/{slot}` is classified `byHandler`:
+   the handler first refuses a call that could never run (`CheckChannelLevel`), then answers
+   `permission_missing` without `ai_settings:update`, then calls `SetChannelLevel(mayRaise=true)`. The
+   store keeps `mayRaise=false` for other callers, which refuses, under the slot rows' lock, a change that raises the configured level of any scope it
    reaches (removing a scope's row raises it when what it follows is higher) or loosens intake's
-   options (a lower threshold, a source turned on, other instructions); the handler files that too.
-   The level lives here, not in `channels.settings`, because `PATCH /channels/{id}` is a lower tier.
+   options (a lower threshold, a source turned on, other instructions).
+   The level lives here, not in `channels.settings`, because `PATCH /channels/{id}` needs only
+   `channels:update`.
 5. **A new consent takes back what ran by itself.** When `SetSlot` records consent again (another
    provider or model, or the feature turned on again), the workspace's level starts over (triage
    `suggest`, others `off`) and `lowerChannelLevels` lowers every channel row a step (auto → suggest,
@@ -388,8 +390,8 @@ feature does by itself: `off`, `suggest`, `auto`.
 6. **Two histories.** A change writes `ai_settings_events(channel_level_changed)` and
    `channel_events(ai_changed)`; the channel's history shows only which feature.
 7. **Source consents.** `ai_source_consents` holds an admin's consent per class of extra context
-   (`images`, `contact_profile`, `external:<name>`); giving one is Approval for every token (data
-   leaving), taking it back is the admin tier.
+   (`images`, `contact_profile`, `external:<name>`); giving and taking one back both need
+   `ai_settings:update`.
 
 ## Testing
 

@@ -205,16 +205,6 @@ same data the page's read (`store.ReadResults`: the state row and one snapshot o
 conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (5 ms locally); one seed
 serves all three. Do not widen any of them.
 
-## Pending agent requests budget
-
-`TestPendingAgentRequestsLatencyBudget` holds the store query behind
-`GET /api/v1/agent-requests?status=pending` to 20 ms p95. Every open tab polls it every 20 seconds
-for the Requests badge and the reply drafts in the inbox. The fixture is two workspaces with 5,000
-requests each from one token, 20 pending with bodies near the 64 KiB cap and the rest decided over
-the last week with 2 KiB bodies. The poll selects no body (`detail=full` does). The query first
-marks overdue pending rows expired, then lists; both use the `(workspace_id, status, created_at)`
-index. Measured on the dev host: 3 ms. Do not widen the 20 ms.
-
 ## Conversation presence budget
 
 `TestConversationPresenceLatencyBudget` holds the store call behind
