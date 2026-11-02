@@ -45,36 +45,48 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	}
 	principal := Principal{ViaCookie: viaCookie}
 	var trialEndsAt, createdAt, lastSeenAt time.Time
-	var trialExtended bool
+	var trialExtended, legacy bool
 	var activeAgents int
+	var scope string
+	var tokenPermissions []string
+	var roles []roleRow
+	var limit roleRow
 	// The active agents are counted only where plan limits apply, for the seat pause below.
 	countAgents := "0"
 	if s.planLimits {
 		countAgents = "(SELECT count(*) FROM agents x WHERE x.workspace_id=s.workspace_id AND x.deactivated_at IS NULL)"
 	}
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		// One query: the session, its person's roles (with their permissions) and the role the session is
+		// limited to or follows. The permissions are worked out from these in Go (principalFrom).
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
-			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,a.setup_guide_hidden,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),s.permissions,w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`
+			a.timezone_override,a.setup_guide_hidden,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),s.permissions,s.legacy,
+			w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`,
+			`+personRolesColumn+`,
+			COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
+			LEFT JOIN roles sr ON sr.workspace_id=s.workspace_id AND sr.id=s.role_id
 			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
-				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
-				&principal.Agent.TimezoneOverride, &principal.Agent.SetupGuideHidden, &principal.SessionID, &trialEndsAt, &principal.Scope, &principal.Permissions, &trialExtended, &createdAt, &lastSeenAt, &activeAgents)
+				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName,
+				&principal.Agent.TimezoneOverride, &principal.Agent.SetupGuideHidden, &principal.SessionID, &trialEndsAt, &scope, &tokenPermissions, &legacy,
+				&trialExtended, &createdAt, &lastSeenAt, &activeAgents, &roles, &limit.ID, &limit.Name, &limit.System, &limit.Permissions)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: session revoked, expired or not found", ErrInvalidCredential)
 		}
 		if err != nil {
 			return fmt.Errorf("authenticate session: %w", err)
 		}
+		principal.setAccess(roles, limit, scope, tokenPermissions, legacy)
 		// A browser attaches cookies by itself; an agent token is only ever sent on purpose, as a bearer.
-		if viaCookie && principal.Scope != "" {
+		if viaCookie && principal.IsToken() {
 			return fmt.Errorf("%w: agent tokens are not accepted as cookies", ErrInvalidCredential)
 		}
 		if slug, ok := workspacehost.Slug(ctx); ok && principal.Workspace.Slug != slug {
 			return fmt.Errorf("%w: the session belongs to another workspace's host", ErrInvalidCredential)
 		}
 		expires := now.Add(sessionLifetime)
-		if principal.Scope != "" {
+		if principal.IsToken() {
 			// A token that is used every day still ends one year after its creation.
 			limit := createdAt.Add(agentTokenMaxAge)
 			if !now.Before(limit) {
@@ -116,11 +128,11 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	return principal, nil
 }
 
+// ListSessions lists the caller's own sessions and tokens, and everyone's with team:revoke.
 func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]domain.Session, error) {
-	query := `SELECT ` + sessionColumns + `
-		FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id WHERE s.workspace_id=$1`
+	query := `SELECT ` + sessionColumns + sessionFrom + ` WHERE s.workspace_id=$1`
 	args := []any{principal.Workspace.ID}
-	if principal.Agent.Role != "admin" {
+	if !principal.Can(PermTeamRevoke) {
 		query += " AND s.agent_id=$2"
 		args = append(args, principal.Agent.ID)
 	}
@@ -137,24 +149,50 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 	return sessions, err
 }
 
-// sessionColumns is the select list scanSession reads; the query joins sessions s to agents a.
-const sessionColumns = `s.id::text,s.agent_id::text,a.email,s.label,s.scope,s.permissions,s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
+// sessionColumns is the select list scanSession reads, from sessionFrom.
+const sessionColumns = `s.id::text,s.agent_id::text,a.email,COALESCE(NULLIF(btrim(a.display_name),''),a.email),s.label,COALESCE(s.scope,''),s.permissions,s.legacy,
+	COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions,
+	EXISTS (SELECT 1 FROM agent_roles ar WHERE ar.workspace_id=s.workspace_id AND ar.agent_id=s.agent_id AND ar.role_id=s.role_id),
+	s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
+
+// sessionFrom joins a session to its person and its role.
+const sessionFrom = ` FROM sessions s` + sessionJoins
+
+const sessionJoins = ` JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id
+	LEFT JOIN roles sr ON sr.workspace_id=s.workspace_id AND sr.id=s.role_id`
 
 func scanSession(row pgx.Row) (domain.Session, error) {
 	var session domain.Session
-	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.Label, &session.Scope, &session.Permissions, &session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
+	var scope string
+	var permissions []string
+	var legacy, held bool
+	var role roleRow
+	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.AgentName, &session.Label, &scope, &permissions, &legacy,
+		&role.ID, &role.Name, &role.System, &role.Permissions, &held,
+		&session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
 		return domain.Session{}, fmt.Errorf("scan session: %w", err)
 	}
 	session.CreatedAt = domain.UTC(session.CreatedAt)
 	session.LastSeenAt = domain.UTC(session.LastSeenAt)
 	session.ExpiresAt = domain.UTC(session.ExpiresAt)
 	session.RevokedAt = domain.UTCOptional(session.RevokedAt)
-	// A preset token lists the permissions its tier holds today; a person's session lists none.
-	if session.Scope != nil && *session.Scope != ScopeCustom {
-		session.Permissions = PresetPermissions(*session.Scope)
+	session.Permissions = []string{}
+	switch {
+	case scope == "" && role.ID != "":
+		ref := role.ref()
+		session.Role = &ref
+	case scope == "":
+	case legacy:
+		tier := scope
+		session.Token = &domain.TokenGrant{Kind: domain.TokenKindLegacy, LegacyTier: &tier, Permissions: legacyGiven(scope, permissions).Sorted()}
+	case scope == ScopeRole:
+		ref := role.ref()
+		session.Token = &domain.TokenGrant{Kind: domain.TokenKindRole, Role: &ref, RoleHeld: held, Permissions: role.permissions().Sorted()}
+	default:
+		session.Token = &domain.TokenGrant{Kind: domain.TokenKindCustom, Permissions: NewPermissionSet(permissions).Sorted()}
 	}
-	if session.Permissions == nil {
-		session.Permissions = []string{}
+	if session.Token != nil {
+		session.Permissions = session.Token.Permissions
 	}
 	return session, nil
 }
@@ -179,16 +217,34 @@ func listSessions(ctx context.Context, tx pgx.Tx, query string, args []any) ([]d
 	return sessions, nil
 }
 
+// MissingPermissionError: the call needs a permission this principal lacks.
+type MissingPermissionError struct{ Permission string }
+
+func (e *MissingPermissionError) Error() string { return "missing permission " + e.Permission }
+
+// RevokeSession revokes one session or token of the workspace. The caller's own always; another
+// person's needs team:revoke and every permission that person holds (*domain.ExceedsYoursError). An id
+// of no session of the workspace reports false.
 func (s *Service) RevokeSession(ctx context.Context, principal Principal, sessionID string) (bool, error) {
-	command := `UPDATE sessions SET revoked_at=COALESCE(revoked_at,$3) WHERE id=$1 AND workspace_id=$2`
-	args := []any{sessionID, principal.Workspace.ID, s.now()}
-	if principal.Agent.Role != "admin" {
-		command += " AND agent_id=$4"
-		args = append(args, principal.Agent.ID)
-	}
 	var revoked bool
 	err := s.db.InWorkspace(ctx, principal.Workspace.ID, func(tx pgx.Tx) error {
-		result, err := tx.Exec(ctx, command, args...)
+		var owner string
+		err := tx.QueryRow(ctx, `SELECT agent_id::text FROM sessions WHERE workspace_id=$1 AND id::text=$2`, principal.Workspace.ID, sessionID).Scan(&owner)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if owner != principal.Agent.ID {
+			if !principal.Can(PermTeamRevoke) {
+				return &MissingPermissionError{Permission: PermTeamRevoke}
+			}
+			if err := store.RequireOutranksTx(ctx, tx, principal.Workspace.ID, store.Caller{AgentID: principal.Agent.ID, Permissions: principal.Effective()}, owner); err != nil {
+				return err
+			}
+		}
+		result, err := tx.Exec(ctx, `UPDATE sessions SET revoked_at=COALESCE(revoked_at,$3) WHERE id=$1 AND workspace_id=$2`, sessionID, principal.Workspace.ID, s.now())
 		revoked = result.RowsAffected() == 1
 		return err
 	})

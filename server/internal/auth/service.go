@@ -38,22 +38,6 @@ type Service struct {
 	signupKey []byte
 }
 
-type Principal struct {
-	Workspace domain.Workspace
-	Agent     domain.Agent
-	SessionID string
-	ViaCookie bool
-	// Scope is the tier of an agent token (read, draft, send or admin), custom for a token that holds
-	// its own list of Permissions; empty for a full session. Ask Allows, not Scope, what a token may do.
-	Scope string
-	// Permissions is a custom token's list; nil for a preset token and a full session.
-	Permissions []string
-	// Access is the workspace's plan at the time of the request, derived inside the transaction that
-	// authenticated the session so the lock check costs no transaction of its own. The zero value
-	// (self-hosted, no plan limits) is never locked.
-	Access domain.Access
-}
-
 func New(pool *pgxpool.Pool, origin string) *Service {
 	return NewWithDB(database.New(pool), origin)
 }
@@ -115,13 +99,14 @@ func (s *Service) Pair(ctx context.Context, workspaceSlug, email string) (string
 	}
 	var link createdLink
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		var agentID, role string
-		if err := tx.QueryRow(ctx, `SELECT id::text,role FROM agents WHERE workspace_id=$1 AND email=lower($2) AND deactivated_at IS NULL`, workspaceID, email).
-			Scan(&agentID, &role); err != nil {
+		var agentID string
+		if err := tx.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1 AND email=lower($2) AND deactivated_at IS NULL`, workspaceID, email).
+			Scan(&agentID); err != nil {
 			return fmt.Errorf("find agent: %w", err)
 		}
+		// The link signs the person in with all their roles (ceiling admin means no limit).
 		var err error
-		link, err = s.createLinkTx(ctx, tx, workspaceID, agentID, strings.ToLower(email), "pairing", role, nil)
+		link, err = s.createLinkTx(ctx, tx, workspaceID, agentID, strings.ToLower(email), "pairing", "admin", nil)
 		return err
 	})
 	if err != nil {

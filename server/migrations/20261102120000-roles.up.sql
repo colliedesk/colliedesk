@@ -125,6 +125,19 @@ INSERT INTO agent_roles(workspace_id, agent_id, role_id, granted_at)
 SELECT a.workspace_id, a.id, r.id, a.created_at
 FROM agents a JOIN roles r ON r.workspace_id = a.workspace_id AND r.system = a.role;
 
+-- A new member starts with the built-in role its role column names, so no way of adding someone (the
+-- first admin, an invite, an import, a test) leaves them without a role. Code that gives other roles,
+-- such as an invite with its own, replaces this one in the same transaction.
+CREATE FUNCTION agents_starting_role() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO agent_roles(workspace_id, agent_id, role_id, granted_at)
+    SELECT NEW.workspace_id, NEW.id, r.id, NEW.created_at FROM roles r WHERE r.workspace_id = NEW.workspace_id AND r.system = NEW.role
+    ON CONFLICT DO NOTHING;
+    RETURN NEW;
+END
+$$;
+CREATE TRIGGER agents_starting_role AFTER INSERT ON agents FOR EACH ROW EXECUTE FUNCTION agents_starting_role();
+
 -- A session may be limited to one role: an agent token that follows it (scope 'role'), or a person's
 -- session from a pairing link that asked for the Agent role. legacy marks the tokens made before roles.
 ALTER TABLE sessions ADD COLUMN role_id uuid;

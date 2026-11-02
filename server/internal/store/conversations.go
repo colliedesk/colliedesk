@@ -368,9 +368,9 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 		q.and("c.last_public_kind='outgoing'")
 	}
 	if filter.HasPendingDraft != nil {
-		// Expiry is applied lazily, so a pending row past its expiry no longer waits.
-		draft := `EXISTS(SELECT 1 FROM agent_requests r WHERE r.workspace_id=c.workspace_id AND r.conversation_id=c.id
-			AND r.kind='reply_draft' AND r.status='pending' AND r.expires_at>` + q.arg(now) + `)`
+		// A reply someone (usually an agent token) wrote for a person to send waits above the reply box.
+		draft := `EXISTS(SELECT 1 FROM ai_drafts d WHERE d.workspace_id=c.workspace_id AND d.conversation_id=c.id
+			AND d.source='written' AND d.status='ready' AND d.outcome IS NULL)`
 		q.and(negateUnless(*filter.HasPendingDraft, draft))
 	}
 	if filter.DeliveryFailed != nil {

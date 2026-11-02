@@ -1,55 +1,99 @@
 package auth
 
+import (
+	"slices"
+
+	"github.com/colliedesk/colliedesk/server/internal/store"
+)
+
+// The store works out the Admin role and role checks from the same catalog.
+func init() { store.SetPermissionCatalog(AllPermissions()) }
+
+// What a route of Routes() needs to be reached at all. Which permission a signed-in caller needs is
+// in httpapi.routeAccess, the one table for people and agent tokens.
 const (
-	PermissionPublic             = "public"
-	PermissionAuthenticated      = "authenticated"
-	PermissionConversationsRead  = "conversations:read"
-	PermissionConversationsWrite = "conversations:write"
-	PermissionContactsRead       = "contacts:read"
-	PermissionContactsWrite      = "contacts:write"
-	PermissionAccessRead         = "access:read"
-	PermissionAccessWrite        = "access:write"
-	// PermissionBillingManage covers plan, checkout and the billing portal; admins only.
-	PermissionBillingManage = "billing:manage"
-	// PermissionWorkspaceExport covers the bulk export of every record of the workspace, contact
-	// details included; admins only.
-	PermissionWorkspaceExport = "workspace:export"
-	// PermissionWorkspaceImport covers imports from another helpdesk inside the app: they read and
-	// write the whole workspace and carry the other helpdesk's admin key; admins only.
-	PermissionWorkspaceImport = "workspace:import"
+	// PermissionPublic: no session (sign-in, the public help center, a share link).
+	PermissionPublic = "public"
+	// PermissionSession: a person's session or an agent token of the workspace.
+	PermissionSession = "session"
 	// PermissionChannelInbound marks routes authenticated by a channel secret instead of a session.
 	PermissionChannelInbound = "channels:inbound"
 )
 
-var agentPermissions = map[string]bool{
-	PermissionAuthenticated:      true,
-	PermissionConversationsRead:  true,
-	PermissionConversationsWrite: true,
-	PermissionContactsRead:       true,
-	PermissionContactsWrite:      true,
-	PermissionAccessRead:         true,
+// agentRolePermissions is what the built-in Agent role starts with: everything the agent role could do
+// before roles (every permission below the admin tier of agent tokens), and team:create_tokens, since a
+// person only ever gives a token what they hold. Migration 20261102120000-roles writes the same list
+// (colliedesk_agent_role_permissions); TestTheAgentRoleStartsAsTheMigrationMadeIt keeps them equal.
+// A permission a later release adds does not join it: the workspace decides.
+var agentRolePermissions = []string{
+	PermConversationsRead, PermConversationsUpdate, PermMessagesRead, PermMessagesNote, PermMessagesSend,
+	PermAIAssistRead, PermAIAssistCreate, PermContactsRead, PermContactsCreate, PermContactsUpdate, PermTagsRead,
+	PermTagsCreate, PermTagsUpdate, PermTagsDelete, PermSavedRepliesRead, PermSavedRepliesCreate,
+	PermSavedRepliesUpdate, PermSavedRepliesDelete, PermSavedViewsRead, PermSavedViewsCreate,
+	PermSavedViewsUpdate, PermSavedViewsDelete, PermKBArticlesRead, PermKBArticlesCreate, PermKBArticlesUpdate,
+	PermKBArticlesDelete, PermKBArticlesPublish, PermKBMediaRead, PermKBMediaCreate, PermKBMediaUpdate,
+	PermKBMediaDelete, PermHelpCenterRead, PermResultsRead, PermProfileUpdate, PermTeamRead, PermChannelsRead,
+	PermAISettingsRead, PermAutofixRead, PermAutofixUpdate, PermAutofixSend, PermAutofixSettingsRead,
+	PermTeamCreateTokens,
 }
 
-func HasPermission(role, permission string) bool {
-	if permission == PermissionPublic {
-		return true
+// AgentRolePermissions lists what the built-in Agent role starts with (and goes back to on a reset).
+func AgentRolePermissions() []string { return slices.Clone(agentRolePermissions) }
+
+// AllPermissions lists every permission, in the order the permission matrix shows them; the built-in
+// Admin role holds all of them.
+func AllPermissions() []string {
+	names := make([]string, len(tokenPermissions))
+	for index, item := range tokenPermissions {
+		names[index] = item.Name
 	}
-	if role == "admin" {
-		return true
-	}
-	return role == "agent" && agentPermissions[permission]
+	return names
 }
 
-func CanDelegate(role, ceiling string) bool {
-	if role != "admin" {
-		return false
+// PermissionSet is a set of permissions.
+type PermissionSet map[string]bool
+
+// NewPermissionSet holds the valid names among names.
+func NewPermissionSet(names []string) PermissionSet {
+	set := PermissionSet{}
+	for _, name := range names {
+		if ValidPermission(name) {
+			set[name] = true
+		}
 	}
-	return ceiling == "admin" || ceiling == "agent"
+	return set
 }
 
-func effectiveRole(agentRole, ceiling string) string {
-	if agentRole == "agent" || ceiling == "agent" {
-		return "agent"
+// Sorted lists the set in the matrix order.
+func (s PermissionSet) Sorted() []string {
+	names := make([]string, 0, len(s))
+	for _, item := range tokenPermissions {
+		if s[item.Name] {
+			names = append(names, item.Name)
+		}
 	}
-	return "admin"
+	return names
+}
+
+// Intersect is the permissions in both sets.
+func (s PermissionSet) Intersect(other PermissionSet) PermissionSet {
+	both := PermissionSet{}
+	for name := range s {
+		if other[name] {
+			both[name] = true
+		}
+	}
+	return both
+}
+
+// Missing lists the names this set does not hold, in the matrix order.
+func (s PermissionSet) Missing(names []string) []string {
+	want := NewPermissionSet(names)
+	var missing []string
+	for _, name := range want.Sorted() {
+		if !s[name] {
+			missing = append(missing, name)
+		}
+	}
+	return missing
 }

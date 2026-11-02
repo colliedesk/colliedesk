@@ -57,7 +57,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
 	if tokenID != nil && tokenLabel != nil && tokenScope != nil && tokenAgent != nil {
-		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, Scope: *tokenScope, AgentName: *tokenAgent}
+		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, AgentName: *tokenAgent}
 	}
 	if channelMeta != nil {
 		message.ChannelMeta = channelMeta

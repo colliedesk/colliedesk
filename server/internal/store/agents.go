@@ -12,11 +12,12 @@ import (
 // openAssigned is the work a deactivation moves: conversations still being handled.
 const openAssigned = `status IN ('open','pending')`
 
-func (s *Store) ListAgents(ctx context.Context, workspaceID string) ([]domain.TeamMember, error) {
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.TeamMember, error) { return listAgents(ctx, tx, workspaceID) })
+// ListAgents lists the team; Manageable says which members the caller may change.
+func (s *Store) ListAgents(ctx context.Context, workspaceID string, caller Caller) ([]domain.TeamMember, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.TeamMember, error) { return listAgents(ctx, tx, workspaceID, caller) })
 }
 
-func listAgents(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.TeamMember, error) {
+func listAgents(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller) ([]domain.TeamMember, error) {
 	rows, err := tx.Query(ctx, teamMemberSelect+` WHERE a.workspace_id=$1 ORDER BY a.email`, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("list agents: %w", err)
@@ -24,7 +25,7 @@ func listAgents(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Te
 	defer rows.Close()
 	members := make([]domain.TeamMember, 0)
 	for rows.Next() {
-		member, err := scanTeamMember(rows)
+		member, err := scanTeamMember(rows, caller)
 		if err != nil {
 			return nil, err
 		}
@@ -36,17 +37,23 @@ func listAgents(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Te
 	return members, nil
 }
 
-const teamMemberSelect = `SELECT a.id::text,a.email,a.display_name,a.role,a.timezone_override,a.deactivated_at,
+const teamMemberSelect = `SELECT a.id::text,a.email,a.display_name,` + AgentRolesColumn + `,` + HeldPermissionsColumns + `,a.timezone_override,a.deactivated_at,
 	(SELECT max(s.last_seen_at) FROM sessions s WHERE s.workspace_id=a.workspace_id AND s.agent_id=a.id),
 	(SELECT count(*) FROM conversations c WHERE c.workspace_id=a.workspace_id AND c.assignee_id=a.id AND c.` + openAssigned + `)
 	FROM agents a`
 
-func scanTeamMember(row pgx.Row) (domain.TeamMember, error) {
+func scanTeamMember(row pgx.Row, caller Caller) (domain.TeamMember, error) {
 	var member domain.TeamMember
-	if err := row.Scan(&member.ID, &member.Email, &member.DisplayName, &member.Role, &member.TimezoneOverride,
+	var admin bool
+	var held []string
+	if err := row.Scan(&member.ID, &member.Email, &member.DisplayName, &member.Roles, &admin, &held, &member.TimezoneOverride,
 		&member.DeactivatedAt, &member.LastActiveAt, &member.OpenConversations); err != nil {
 		return domain.TeamMember{}, fmt.Errorf("scan agent: %w", err)
 	}
+	if admin {
+		held = allPermissions
+	}
+	member.Manageable = caller.holds(permManageRoles) && len(caller.missing(held)) == 0
 	member.DeactivatedAt = domain.UTCOptional(member.DeactivatedAt)
 	member.LastActiveAt = domain.UTCOptional(member.LastActiveAt)
 	return member, nil
@@ -89,17 +96,17 @@ func ValidateAssignee(ctx context.Context, tx pgx.Tx, workspaceID, agentID strin
 // receives the open and pending conversations when Active is false; nil leaves them unassigned.
 type AgentUpdate struct {
 	DisplayName *string
-	Role        *string
 	Active      *bool
 	ReassignTo  *string
 }
 
-// UpdateAgent changes the display name, the role and the active state of an agent of the workspace in one transaction.
+// UpdateAgent changes the display name and the active state of a member in one transaction; roles change
+// with SetAgentRoles. The caller must hold every permission the member holds (*domain.ExceedsYoursError).
 // Deactivating also revokes the agent's sessions and unused links and moves the open and pending
 // conversations; reactivating takes a seat again on the hosted cloud (a *domain.PlanLimitError when
-// none is free). A change that would leave no active admin returns domain.ErrLastAdmin, and a bad
+// none is free). Deactivating the last active member with the Admin role returns domain.ErrLastAdmin, and a bad
 // hand-over target domain.ErrInvalidReassignTarget; either leaves everything as it was.
-func (s *Store) UpdateAgent(ctx context.Context, workspaceID, agentID string, update AgentUpdate) (domain.TeamMember, error) {
+func (s *Store) UpdateAgent(ctx context.Context, workspaceID string, caller Caller, agentID string, update AgentUpdate) (domain.TeamMember, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.TeamMember, error) {
 		var email string
 		err := tx.QueryRow(ctx, `SELECT email FROM agents WHERE workspace_id=$1 AND id=$2`, workspaceID, agentID).Scan(&email)
@@ -120,25 +127,24 @@ func (s *Store) UpdateAgent(ctx context.Context, workspaceID, agentID string, up
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "agent-seats:"+workspaceID); err != nil {
 			return domain.TeamMember{}, fmt.Errorf("lock agent seats: %w", err)
 		}
-		var role string
-		var wasActive bool
-		err = tx.QueryRow(ctx, `SELECT role,deactivated_at IS NULL FROM agents WHERE workspace_id=$1 AND id=$2 FOR UPDATE`,
-			workspaceID, agentID).Scan(&role, &wasActive)
+		var wasActive, admin bool
+		err = tx.QueryRow(ctx, `SELECT a.deactivated_at IS NULL,`+HoldsAdminRole+` FROM agents a WHERE a.workspace_id=$1 AND a.id=$2 FOR UPDATE`,
+			workspaceID, agentID).Scan(&wasActive, &admin)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.TeamMember{}, fmt.Errorf("update agent: agent not found")
 		}
 		if err != nil {
 			return domain.TeamMember{}, fmt.Errorf("load agent: %w", err)
 		}
-		newRole, nowActive := role, wasActive
-		if update.Role != nil {
-			newRole = *update.Role
+		if err := requireOutranks(ctx, tx, workspaceID, caller, agentID); err != nil {
+			return domain.TeamMember{}, err
 		}
+		nowActive := wasActive
 		if update.Active != nil {
 			nowActive = *update.Active
 		}
-		if wasActive && role == "admin" && (!nowActive || newRole != "admin") {
-			if err := requireOtherAdmin(ctx, tx, workspaceID, agentID); err != nil {
+		if wasActive && admin && !nowActive {
+			if err := requireAnotherActiveAdmin(ctx, tx, workspaceID, agentID); err != nil {
 				return domain.TeamMember{}, err
 			}
 		}
@@ -162,31 +168,8 @@ func (s *Store) UpdateAgent(ctx context.Context, workspaceID, agentID string, up
 				return domain.TeamMember{}, fmt.Errorf("rename agent: %w", err)
 			}
 		}
-		if newRole != role {
-			if _, err := tx.Exec(ctx, `UPDATE agents SET role=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, agentID, newRole); err != nil {
-				return domain.TeamMember{}, fmt.Errorf("change agent role: %w", err)
-			}
-			// An unused admin invite would hand the role back when it is redeemed.
-			if newRole == "agent" {
-				if err := s.revokeUnusedLinks(ctx, tx, workspaceID, "", email, "admin"); err != nil {
-					return domain.TeamMember{}, err
-				}
-			}
-		}
-		return scanTeamMember(tx.QueryRow(ctx, teamMemberSelect+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, agentID))
+		return loadTeamMember(ctx, tx, workspaceID, caller, agentID)
 	})
-}
-
-func requireOtherAdmin(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) error {
-	var others int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM agents WHERE workspace_id=$1 AND id<>$2 AND role='admin' AND deactivated_at IS NULL`,
-		workspaceID, agentID).Scan(&others); err != nil {
-		return fmt.Errorf("count admins: %w", err)
-	}
-	if others == 0 {
-		return domain.ErrLastAdmin
-	}
-	return nil
 }
 
 // deactivateAgent sets deactivated_at, revokes the agent's sessions, and hands the

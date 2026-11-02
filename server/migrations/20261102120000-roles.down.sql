@@ -16,6 +16,8 @@ ALTER TABLE sessions DROP COLUMN legacy;
 ALTER TABLE sessions DROP COLUMN role_id;
 DROP TABLE invite_roles;
 ALTER TABLE pairing_links DROP CONSTRAINT pairing_links_workspace_id_id_key;
+DROP TRIGGER agents_starting_role ON agents;
+DROP FUNCTION agents_starting_role();
 DROP TABLE agent_roles;
 DROP TRIGGER workspaces_system_roles ON workspaces;
 DROP FUNCTION workspaces_system_roles();
