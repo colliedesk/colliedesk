@@ -335,10 +335,10 @@ export type TrashedSavedReplyPage = z.infer<typeof trashedSavedReplyListSchema>;
 
 export const roleSchema = z.object({
   id: z.string().uuid(), name: z.string(), description: z.string(), system: z.enum(['admin', 'agent']).nullable(),
-  permissions: z.array(tokenPermissionSchema), editable: z.boolean(), deletable: z.boolean(), assignable: z.boolean(),
+  permissions: z.array(tokenPermissionSchema), default_permissions: z.array(tokenPermissionSchema).nullable(), editable: z.boolean(), deletable: z.boolean(), assignable: z.boolean(),
   members: z.array(z.object({ id: z.string().uuid(), name: z.string(), active: z.boolean() })),
   invites: z.number().int(),
-  tokens: z.array(z.object({ id: z.string().uuid(), label: z.string(), owner: z.string() })),
+  tokens: z.array(z.object({ id: z.string().uuid(), label: z.string(), owner: z.string(), owner_id: z.string().uuid() })),
   updated_by: z.string().nullable(), deleted_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Role'>>;
 export type Role = z.infer<typeof roleSchema>;

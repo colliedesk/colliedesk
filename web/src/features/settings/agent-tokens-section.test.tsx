@@ -214,3 +214,14 @@ test('a fixed token needs one permission', () => {
   expect(onCreate).not.toHaveBeenCalled();
   expect(screen.getByRole('alert')).toHaveTextContent('Tick at least one permission');
 });
+
+// The role a token follows by default is the one with the fewest permissions among the person's roles now,
+// also when those roles arrive or change after the form opened.
+test('the default role follows the person\'s roles as they change', () => {
+  const admin = rolesOf('admin')[0];
+  const permissions = new Map<string, readonly string[]>([[admin.id, permissionsOf('admin')], [editor.id, ['kb_articles:read', 'kb_articles:update']]]);
+  const { rerender } = render(<AgentTokensSection roles={[admin]} rolePermissions={permissions} held={permissionsOf('admin')} origin={origin} onCreate={vi.fn()} />);
+  expect(screen.getByText('Admin', { selector: 'strong' })).toBeInTheDocument();
+  rerender(<AgentTokensSection roles={[admin, editor]} rolePermissions={permissions} held={permissionsOf('admin')} origin={origin} onCreate={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue(editor.id);
+});

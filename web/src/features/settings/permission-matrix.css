@@ -21,7 +21,8 @@
 .permission-chip[data-locked] { border-style: dashed; border-color: var(--text-3); color: var(--text-3); cursor: not-allowed; }
 .permission-chip[data-locked] input { cursor: not-allowed; }
 .permission-chip[data-changed] { box-shadow: 0 0 0 2px var(--warn); }
-.permission-lock, .permission-lock svg { display: inline-flex; width: 12px; height: 12px; flex: none; }
+.permission-lock, .permission-lock svg, .permission-check, .permission-check svg { display: inline-flex; width: 12px; height: 12px; flex: none; }
+.permission-check { color: var(--accent); }
 .permission-all { --control: 28px; font-size: var(--fs-label); }
 .permission-describe { margin: 0; min-height: 1.5em; border-top: 1px solid var(--line); padding-top: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
 @media (max-width: 44rem) {

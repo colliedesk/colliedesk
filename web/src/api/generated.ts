@@ -6375,6 +6375,8 @@ export interface components {
         Role: {
             /** Format: uuid */
             id: string;
+            /** @description For the built-in Agent role, the permissions it holds until changed (what POST /roles/{id}/reset restores); null for every other role. */
+            default_permissions: components["schemas"]["TokenPermission"][] | null;
             name: string;
             description: string;
             /** @enum {string|null} */
@@ -6396,10 +6398,15 @@ export interface components {
             }[];
             /** @description Pending invites that would give it. */
             invites: number;
-            /** @description Live agent tokens that follow it, by label and owner name. */
+            /** @description Live agent tokens that follow it, by label and owner (name and id). */
             tokens: {
                 /** Format: uuid */
                 id: string;
+                /**
+                 * Format: uuid
+                 * @description The person whose token it is.
+                 */
+                owner_id: string;
                 label: string;
                 owner: string;
             }[];

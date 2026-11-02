@@ -147,8 +147,11 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
   const sessions = await screen.findByRole('region', { name: 'Sessions' });
   const signOut = await within(sessions).findByRole('button', { name: 'Sign out' });
   const before = api.me.mock.calls.length;
+  const rolesBefore = api.roles.mock.calls.length;
   fireEvent.click(signOut);
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
+  // A revoked token no longer follows its role: the roles list, which names those tokens, reloads too.
+  await waitFor(() => expect(api.roles.mock.calls.length).toBeGreaterThan(rolesBefore));
 });
 
 test('an agent creates an agent token above Sessions; the list reloads to show it and the token is kept in no cache', async () => {
@@ -163,11 +166,15 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
   expect(card.compareDocumentPosition(screen.getByRole('region', { name: 'Sessions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   api.sessions.mockResolvedValue({ items: [session] });
   const before = api.sessions.mock.calls.length;
+  await waitFor(() => expect(api.roles).toHaveBeenCalled());
+  const rolesBefore = api.roles.mock.calls.length;
   fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   expect(await within(card).findByDisplayValue('cdk_agent_routetoken')).toBeInTheDocument();
   expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', { role_id: agentRoleRef.id }, expect.any(String));
   await waitFor(() => expect(api.sessions.mock.calls.length).toBeGreaterThan(before));
+  // The new token follows a role: the roles list, which Team reads to warn before a role is taken, reloads.
+  await waitFor(() => expect(api.roles.mock.calls.length).toBeGreaterThan(rolesBefore));
   expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
   const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);
   expect(cached).not.toContain('cdk_agent_routetoken');

@@ -4,7 +4,7 @@ export const settingsMessages = {
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
   helpCenterDescription: 'The public pages of your published knowledge base articles.',
   workspaceTimezone: 'Workspace timezone',
-  sessionStates: { active: 'Active', revoked: 'Revoked', expired: 'Expired' },
+  sessionStates: { active: 'Active', stopped: 'Stopped', revoked: 'Revoked', expired: 'Expired' },
   followsRole: (role: string) => `Follows role ${role}`,
   stoppedToken: (person: string, role: string) => `Stopped: ${person} no longer holds ${role}`,
   stoppedHelp: 'Giving the role back starts it again.',

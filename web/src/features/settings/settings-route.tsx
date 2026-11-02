@@ -61,11 +61,12 @@ export function SettingsRoute() {
       if (!created.token) throw new AnsweredWithoutSecret();
       keep({ ...created, token: created.token });
     },
-    onSettled: () => refresh('sessions'),
+    // Roles name the tokens that follow them (Team warns with those names before a role is taken).
+    onSettled: () => { void refresh('sessions'); void refresh('roles'); },
   });
   const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
   // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
-  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); } });
+  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); void refresh('roles'); } });
   const workspaceTimezone = useMutation({ mutationFn: api.updateWorkspaceTimezone, onSuccess: () => refresh('me') });
   // The name shows in the workspace switcher and the header, which read it from me.
   const workspaceName = useMutation({ mutationFn: (name: string) => api.updateWorkspaceName(name), onSuccess: () => refresh('me') });

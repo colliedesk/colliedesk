@@ -15,5 +15,5 @@ export const permissionsOf = (role: 'admin' | 'agent'): TokenPermission[] => (ro
 
 // roleOf is a whole role as GET /roles lists it.
 export const roleOf = (ref: RoleRef, permissions: readonly string[], extra: Partial<Role> = {}): Role => ({ ...ref, description: '', permissions: permissions as Role['permissions'],
-  editable: true, deletable: false, assignable: true, members: [], invites: 0, tokens: [], updated_by: null, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', ...extra });
+  default_permissions: ref.system === 'agent' ? agentPermissions : null, editable: true, deletable: false, assignable: true, members: [], invites: 0, tokens: [], updated_by: null, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', ...extra });
 export const builtInRoles: Role[] = [roleOf(adminRoleRef, permissionsOf('admin')), roleOf(agentRoleRef, permissionsOf('agent'))];

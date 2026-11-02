@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TokenPermission } from '../../api/schemas';
-import { ExternalLinkIcon, LockIcon } from '../../ui/icons';
+import { CheckIcon, ExternalLinkIcon, LockIcon } from '../../ui/icons';
 import { actionLabel, allPermissions, tokenResources } from './token-permissions';
 import { roleMessages as text } from './roles-messages';
 import './permission-matrix.css';
@@ -24,15 +24,19 @@ export function PermissionMatrix({ picked, allowed, onToggle, onSetMany, readOnl
   const [focused, setFocused] = useState<TokenPermission>();
   const description = allPermissions.find((item) => item.name === focused)?.describe ?? text.describeHint;
   // The count is announced after a bulk change, or once the person stops ticking for a second.
+  // It reads the count of the render after the change, so it is never one tick behind.
   const [announced, setAnnounced] = useState('');
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const count = text.selectedCount(picked.length, allPermissions.length);
-  const announce = (now: boolean) => {
-    clearTimeout(timer.current);
-    if (now) setAnnounced(count);
-    else timer.current = setTimeout(() => setAnnounced(text.selectedCount(picked.length, allPermissions.length)), 1000);
-  };
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const pending = useRef<'now' | 'later' | undefined>(undefined);
+  const announce = (now: boolean) => { pending.current = now ? 'now' : 'later'; };
+  useEffect(() => {
+    const when = pending.current;
+    pending.current = undefined;
+    if (when === 'now') { setAnnounced(count); return undefined; }
+    if (when !== 'later') return undefined;
+    const timer = setTimeout(() => setAnnounced(count), 1000);
+    return () => clearTimeout(timer);
+  }, [count]);
   const lockedNote = `${idPrefix}-locked-note`;
   const editable = (name: TokenPermission) => !readOnly && allowed.has(name);
   const viewOnly = () => {
@@ -82,6 +86,7 @@ export function PermissionMatrix({ picked, allowed, onToggle, onSetMany, readOnl
                       onFocus={() => setFocused(item.name)}
                       onChange={() => { if (!locked && !readOnly) { onToggle?.(item.name); announce(false); } }} />
                     {locked && <span className="permission-lock" aria-hidden="true"><LockIcon /></span>}
+                    {picked.includes(item.name) && <span className="permission-check" aria-hidden="true"><CheckIcon /></span>}
                     {actionLabel(item.name)}
                     {item.outside && <span className="permission-outside" aria-hidden="true"><ExternalLinkIcon /></span>}
                   </label>

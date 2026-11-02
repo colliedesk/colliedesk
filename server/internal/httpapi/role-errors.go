@@ -42,15 +42,19 @@ func writeRoleError(response http.ResponseWriter, err error) bool {
 		writeErrorWith(response, http.StatusConflict, "role_changed", message, map[string]any{"updated_by": changed.UpdatedBy})
 	case errors.As(err, &inUse):
 		parts := []string{}
-		if n := len(inUse.Members); n > 0 {
-			parts = append(parts, itoa(n)+" people ("+strings.Join(inUse.Members, ", ")+")")
+		count := func(names []string, one, many string) {
+			if len(names) == 0 {
+				return
+			}
+			word := many
+			if len(names) == 1 {
+				word = one
+			}
+			parts = append(parts, itoa(len(names))+" "+word+" ("+strings.Join(names, ", ")+")")
 		}
-		if n := len(inUse.Invites); n > 0 {
-			parts = append(parts, itoa(n)+" pending invites ("+strings.Join(inUse.Invites, ", ")+")")
-		}
-		if n := len(inUse.Tokens); n > 0 {
-			parts = append(parts, itoa(n)+" agent tokens ("+strings.Join(inUse.Tokens, ", ")+")")
-		}
+		count(inUse.Members, "person", "people")
+		count(inUse.Invites, "pending invite", "pending invites")
+		count(inUse.Tokens, "agent token", "agent tokens")
 		writeErrorWith(response, http.StatusConflict, "role_in_use",
 			"This role is in use by "+strings.Join(parts, ", ")+". Take it off them first: change their roles, revoke the invites and tokens.",
 			map[string]any{"in_use": map[string]any{"members": inUse.Members, "invites": inUse.Invites, "tokens": inUse.Tokens}})

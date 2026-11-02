@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { Role } from '../../api/schemas';
 import { LockIcon } from '../../ui/icons';
 import { roleMessages as text } from './roles-messages';
+import './role-pickers.css';
 
 interface RoleCheckboxesProps {
   roles: Role[];

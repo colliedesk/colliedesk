@@ -96,6 +96,11 @@ test('an agent token shows what it was given and when it ends; a browser session
   expect(row('Claude Code')).toHaveTextContent(/Expires Oct 14, 2037/);
   expect(row('Stopped bot')).toHaveTextContent('Stopped: Sam no longer holds Editor');
   expect(row('Stopped bot')).toHaveTextContent('Giving the role back starts it again.');
+  // A stopped token is not called Active next to the line that says it stopped.
+  expect(row('Stopped bot')).not.toHaveTextContent('Active');
+  expect(within(row('Stopped bot')).getByRole('button', { name: /Revoke|Sign out/ })).toBeInTheDocument();
+  expect(row('Stopped bot')).toHaveTextContent(/Expires Nov 2, 2037/);
+  expect(row('Claude Code')).toHaveTextContent('Active');
   expect(row('Old bot')).toHaveTextContent('Created before roles · was send');
   expect(row('Revoked bot')).not.toHaveTextContent(/Expires/);
   expect(row('Chrome')).not.toHaveTextContent(/Expires|Follows|Fixed/);

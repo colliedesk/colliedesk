@@ -7,7 +7,10 @@ import (
 )
 
 // The store works out the Admin role and role checks from the same catalog.
-func init() { store.SetPermissionCatalog(AllPermissions()) }
+func init() {
+	store.SetPermissionCatalog(AllPermissions())
+	store.SetAgentRoleDefaults(AgentRolePermissions())
+}
 
 // What a route of Routes() needs to be reached at all. Which permission a signed-in caller needs is
 // in httpapi.routeAccess, the one table for people and agent tokens.

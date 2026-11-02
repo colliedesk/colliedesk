@@ -47,8 +47,10 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
   // The role with the fewest permissions comes first, and is the one a new token follows by default.
   const ordered = [...roles].sort((a, b) => (rolePermissions ? permissionsOf(a.id).length - permissionsOf(b.id).length : 0));
   const [mode, setMode] = useState<'role' | 'pick'>('role');
-  const [roleId, setRoleId] = useState<string | undefined>(ordered[0]?.id);
-  const role = roleId ?? ordered[0]?.id;
+  // Only a role the person picked is kept; until then, and when it is no longer theirs, the default is the
+  // role with the fewest permissions among the roles they hold now.
+  const [roleId, setRoleId] = useState<string>();
+  const role = roleId !== undefined && ordered.some((item) => item.id === roleId) ? roleId : ordered[0]?.id;
   // A fixed list starts from the permissions of the role chosen above.
   const [picked, setPicked] = useState<TokenPermission[]>([]);
   const [showRole, setShowRole] = useState(false);

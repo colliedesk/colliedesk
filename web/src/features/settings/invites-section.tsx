@@ -5,6 +5,7 @@ import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
+import './role-pickers.css';
 
 // inviteState makes every way an invite can end visible: used, revoked or expired.
 function inviteState(invite: Invite): keyof typeof settingsMessages.inviteStates {

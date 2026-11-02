@@ -6,6 +6,7 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { displayNameMaxLength } from './display-name-field';
+import './role-pickers.css';
 
 interface TeamSectionProps {
   members: TeamMember[];
@@ -163,7 +164,7 @@ function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel
   const locked = new Map<string, string>();
   if (lastAdmin && admin) locked.set(admin.id, settingsMessages.teamLastAdmin);
   const removed = member.roles.filter((role) => !chosen.includes(role.id)).map((role) => role.id);
-  const stopping = roles.filter((role) => removed.includes(role.id)).flatMap((role) => role.tokens.filter((token) => token.owner === name).map((token) => token.label));
+  const stopping = roles.filter((role) => removed.includes(role.id)).flatMap((role) => role.tokens.filter((token) => token.owner_id === member.id).map((token) => token.label));
   const keepsManage = chosen.some((id) => { const role = roles.find((item) => item.id === id); return role?.system === 'admin' || role?.permissions.includes('team:manage_roles'); });
   const losesManage = isSelf && myPermissions.includes('team:manage_roles') && !keepsManage;
   const apply = async () => {
@@ -182,7 +183,7 @@ function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onCancel(); } }}>
       <RoleCheckboxes idPrefix={`member-${member.id}`} roles={roles} chosen={chosen} onChange={setChosen} locked={locked}
         note={(role) => {
-          const tokens = role.tokens.filter((token) => token.owner === name).map((token) => token.label);
+          const tokens = role.tokens.filter((token) => token.owner_id === member.id).map((token) => token.label);
           return removed.includes(role.id) && tokens.length > 0 ? <p className="warning-note">{roleMessages.tokensStop(name, tokens)}</p> : null;
         }} />
       {losesManage && <p className="warning-note">{roleMessages.loseManageTeam}</p>}

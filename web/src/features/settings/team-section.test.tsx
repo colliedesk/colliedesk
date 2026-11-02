@@ -35,7 +35,7 @@ test('an agent sees the team read-only', () => {
 
 const adminRole = roleOf(rolesOf('admin')[0], permissionsOf('admin'));
 const agentRole = roleOf(rolesOf('agent')[0], permissionsOf('agent'));
-const editor = roleOf({ id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null }, ['kb_articles:read'], { tokens: [{ id: 't1', label: 'Claude on laptop', owner: 'ann@example.com' }] });
+const editor = roleOf({ id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null }, ['kb_articles:read'], { tokens: [{ id: 't1', label: 'Claude on laptop', owner: 'ann@example.com', owner_id: '22222222-2222-4222-8222-222222222222' }] });
 
 test('changing roles changes nothing until Apply is pressed, then sets the whole list', async () => {
   const onSetRoles = vi.fn().mockResolvedValue(undefined);
@@ -49,10 +49,11 @@ test('changing roles changes nothing until Apply is pressed, then sets the whole
 });
 
 test('taking a role a token follows says which tokens stop, and nobody is left without a role', () => {
-  const holder = { ...ann, roles: [...rolesOf('agent'), { id: editor.id, name: 'Editor', system: null }] };
+  // The token is matched by its owner's id, not the name, which a rename or a namesake changes.
+  const holder = { ...ann, display_name: 'Ann', roles: [...rolesOf('agent'), { id: editor.id, name: 'Editor', system: null }] };
   render(<TeamSection members={[admin, holder]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={vi.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: ann@example.com' }));
-  const group = screen.getByRole('group', { name: 'Roles of ann@example.com' });
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ann' }));
+  const group = screen.getByRole('group', { name: 'Roles of Ann' });
   fireEvent.click(within(group).getByRole('checkbox', { name: /Editor/ }));
   expect(group).toHaveTextContent('Claude on laptop');
   expect(within(group).getByRole('button', { name: 'Remove and stop 1 token' })).toBeEnabled();

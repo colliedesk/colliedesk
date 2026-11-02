@@ -4,9 +4,14 @@
 .roles-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .roles-loading { display: grid; gap: var(--space-2); }
 .roles-skeleton { display: block; height: 3.25rem; border-radius: var(--radius); background: var(--surface-2); }
-.role-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.6fr) auto; align-items: center; gap: var(--space-2) var(--space-4); }
+/* .data-list makes its rows flex and each of their divs a grid of four columns; a role row is a grid of its own. */
+.data-list article.role-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.6fr) auto; align-items: center; gap: var(--space-2) var(--space-4); }
+.data-list article.role-row > div { display: grid; grid-template-columns: none; width: auto; gap: 2px; }
+.data-list article.role-row > .role-row-actions { display: flex; }
 .role-row-main { display: grid; gap: 2px; min-width: 0; }
 .role-row-main strong { font-weight: 500; }
+/* A role's name and who holds it wrap rather than cut off: they are what the list is read for. */
+.roles-list strong, .roles-list span { overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 .role-built-in { font-size: var(--fs-label); }
 .role-description { overflow-wrap: anywhere; }
 .role-row-meta { display: grid; gap: 2px; color: var(--text-2); font-size: var(--fs-small); min-width: 0; }
@@ -22,21 +27,10 @@
 .role-delete { border-top: 1px solid var(--line); padding-top: var(--space-3); }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { position: static; }
-.role-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
-.role-chip { display: inline-flex; align-items: center; min-height: 24px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1px var(--line-control); padding: 0 var(--space-2); color: var(--text-1); font-size: var(--fs-label); }
-.team-roles, .invite-roles { display: grid; gap: var(--space-2); grid-column: 1 / -1; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
-.role-checkboxes { display: grid; gap: var(--space-2); }
-.role-checkbox label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.role-checkbox[data-locked] label { color: var(--text-3); }
-.role-checkbox p { margin: 0 0 0 var(--space-6); }
-.role-lock svg { width: 12px; height: 12px; }
-.role-checkbox-name { font-weight: 500; }
-.badge-warn { display: inline-flex; align-items: center; gap: var(--space-1); }
-.token-stopped { display: grid; gap: 2px; }
 @media (max-width: 44rem) {
   .roles-heading { display: grid; }
   .roles-new { width: 100%; text-align: center; }
-  .role-row { grid-template-columns: 1fr; }
+  .data-list article.role-row { grid-template-columns: 1fr; }
   .role-meta-wide { display: none; }
   .role-meta-narrow { display: block; }
   .role-row-actions { justify-content: flex-start; }

@@ -31,9 +31,10 @@ type RoleMember struct {
 
 // RoleToken is a live agent token that follows a role.
 type RoleToken struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Owner string `json:"owner"`
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Owner   string `json:"owner"`
+	OwnerID string `json:"owner_id"`
 }
 
 // Role is a role as the Roles page and GET /api/v1/roles show it. Permissions is every permission for
@@ -50,10 +51,12 @@ type Role struct {
 	Members     []RoleMember `json:"members"`
 	Invites     int          `json:"invites"`
 	Tokens      []RoleToken  `json:"tokens"`
-	UpdatedBy   *string      `json:"updated_by"`
-	DeletedAt   *time.Time   `json:"deleted_at"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	// DefaultPermissions is what the built-in Agent role holds until changed; nil for every other role.
+	DefaultPermissions []string   `json:"default_permissions"`
+	UpdatedBy          *string    `json:"updated_by"`
+	DeletedAt          *time.Time `json:"deleted_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // Ref is the role's name card.

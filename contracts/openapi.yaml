@@ -9584,9 +9584,13 @@ components:
         A set of permissions people hold. A person holds every permission of each of their roles. Admin
         always holds every permission (including ones a later release adds) and cannot be changed or
         deleted; Agent can be changed and renamed but not deleted.
-      required: [id, name, description, system, permissions, editable, deletable, assignable, members, invites, tokens, updated_by, deleted_at, created_at, updated_at]
+      required: [id, name, description, system, permissions, default_permissions, editable, deletable, assignable, members, invites, tokens, updated_by, deleted_at, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
+        default_permissions:
+          type: ['array', 'null']
+          items: {$ref: '#/components/schemas/TokenPermission'}
+          description: 'For the built-in Agent role, the permissions it holds until changed (what POST /roles/{id}/reset restores); null for every other role.'
         name: {type: string, minLength: 1, maxLength: 60}
         description: {type: string, maxLength: 300}
         system: {type: ['string', 'null'], enum: [admin, agent, null]}
@@ -9607,12 +9611,13 @@ components:
         invites: {type: integer, minimum: 0, description: Pending invites that would give it.}
         tokens:
           type: array
-          description: Live agent tokens that follow it, by label and owner name.
+          description: Live agent tokens that follow it, by label and owner (name and id).
           items:
             type: object
-            required: [id, label, owner]
+            required: [id, label, owner, owner_id]
             properties:
               id: {type: string, format: uuid}
+              owner_id: {type: string, format: uuid, description: The person whose token it is.}
               label: {type: string}
               owner: {type: string}
         updated_by: {type: ['string', 'null'], description: 'Name of the last person to change it; null for a built-in role nobody changed.'}

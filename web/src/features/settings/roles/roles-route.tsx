@@ -18,22 +18,43 @@ import './roles.css';
 // page: list, new (with an optional role to start from) or a role's id.
 export type RolesPage = { kind: 'list' } | { kind: 'new'; from?: string } | { kind: 'edit'; id: string };
 
+type RolesStatus = { text: string; undo?: () => void; team?: boolean };
+// carried is what a save says, kept for the list it opens: the form and the list are two routes, so the
+// list is a new page that would otherwise forget it.
+let carried: RolesStatus | undefined;
+
 export function RolesRoute({ page }: { page: RolesPage }) {
   const navigate = useNavigate();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
   const shown: Shown = { general: false, team: false, channels: true, savedReplies: true, exportData: false, billing: billingShown, ai: true, roles: true };
-  const [status, setStatus] = useState<{ text: string; undo?: () => void; team?: boolean }>();
-  return <main className="settings-page panel">
+  const [status, setStatus] = useState<RolesStatus>();
+  const statusLine = useRef<HTMLParagraphElement>(null);
+  const [focusStatus, setFocusStatus] = useState(false);
+  useEffect(() => {
+    if (carried) {
+      setStatus(carried);
+      setFocusStatus(true);
+      carried = undefined;
+    }
+  }, []);
+  // After a save or a delete the list opens with what happened, and focus goes there rather than to the page.
+  useEffect(() => {
+    if (focusStatus && status) {
+      statusLine.current?.focus();
+      setFocusStatus(false);
+    }
+  }, [focusStatus, status]);
+  return <main className="settings-page panel roles-page">
     <header><h1>{m.heading}</h1></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/roles" shown={shown} />
       <div className="settings-sections">
-        {status && <p role="status" className="notice notice-plain roles-status"><span>{status.text}</span>
+        {status && <p ref={statusLine} tabIndex={-1} role="status" className="notice notice-plain roles-status"><span>{status.text}</span>
           {status.team && <a href="/settings#team-heading">{m.goToTeam}</a>}
           {status.undo && <button type="button" className="link-action" onClick={status.undo}>{m.undo}</button>}</p>}
         {page.kind === 'list' ? <RoleList onStatus={setStatus} />
-          : <RoleForm key={page.kind === 'edit' ? page.id : `new-${page.from ?? ''}`} page={page} onDone={(text) => { setStatus(text); void navigate({ to: '/settings/roles' }); }} />}
+          : <RoleForm key={page.kind === 'edit' ? page.id : `new-${page.from ?? ''}`} page={page} onDone={(text) => { carried = text; setStatus(text); void navigate({ to: '/settings/roles' }); }} />}
       </div>
     </div>
   </main>;
@@ -124,6 +145,9 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
   const startList = (startFrom !== undefined ? roles.data?.items.find((item) => item.id === startFrom)?.permissions : base?.permissions) ?? AGENT_START;
   const currentPicked = picked ?? (startList.filter((item) => item !== undefined) as TokenPermission[]);
   const isAdminRole = original?.system === 'admin';
+  // Who to ask when the role may only be read: the active holders of a role that may change roles.
+  const canChangeRoles = [...new Set((roles.data?.items ?? []).filter((item) => item.system === 'admin' || item.permissions.includes('team:manage_roles'))
+    .flatMap((item) => item.members.filter((member) => member.active).map((member) => member.name)))];
   const readOnly = Boolean(original && !original.editable);
   const before = new Set(original?.permissions ?? []);
   const removed = original ? original.permissions.filter((item) => !currentPicked.includes(item)) : [];
@@ -136,7 +160,10 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
   const toggle = (permission: TokenPermission) => setPicked(currentPicked.includes(permission) ? currentPicked.filter((item) => item !== permission) : [...currentPicked, permission]);
   const setMany = (permissions: TokenPermission[], on: boolean) => setPicked(on ? [...new Set([...currentPicked, ...permissions])] : currentPicked.filter((item) => !permissions.includes(item)));
   const fail = (error: unknown) => {
-    if (error instanceof ConflictError && error.detail?.code === 'role_name_taken') setProblem({ text: error.message, field: true });
+    if (error instanceof ConflictError && error.detail?.code === 'role_name_taken') {
+      setProblem({ text: error.message, field: true });
+      nameField.current?.focus();
+    }
     else if (error instanceof ConflictError && error.detail?.code === 'role_changed') setProblem({ text: m.changedBy(typeof error.detail.updated_by === 'string' ? error.detail.updated_by : null), changedBy: true });
     else setProblem({ text: error instanceof InvalidRequestError && error.message ? error.message : m.saveFailed });
   };
@@ -149,16 +176,16 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
     void client.invalidateQueries({ queryKey: ['me'] });
     onDone({ text: m.saved(saved.name, saved.members.length, saved.tokens.length) });
   }, onError: fail });
-  const reset = useMutation({ mutationFn: () => api.resetRole(original!.id), onSuccess: (saved) => {
-    void client.invalidateQueries({ queryKey: ['roles'] });
-    onDone({ text: m.saved(saved.name, saved.members.length, saved.tokens.length) });
-  }, onError: fail });
+  // Reset to default fills the matrix with the built-in list; Save role then shows what changes, like any edit.
+  const resetToDefault = () => { setPicked([...(original?.default_permissions ?? [])]); setConfirming(false); setProblem(undefined); };
   const remove = useMutation({ mutationFn: () => api.deleteRole(original!.id), onSuccess: () => {
-    void client.invalidateQueries({ queryKey: ['roles'] });
+    // The deleted role's own page is not asked for again: it is gone, and the list opens next.
+    client.removeQueries({ queryKey: ['roles', 'one', original!.id] });
+    void client.invalidateQueries({ queryKey: ['roles'], predicate: (query) => query.queryKey[1] !== 'one' });
     const id = original!.id;
     onDone({ text: m.deleted(original!.name), undo: () => { void api.restoreRole(id).then(() => client.invalidateQueries({ queryKey: ['roles'] })); } });
   }, onError: fail });
-  const busy = create.isPending || update.isPending || reset.isPending || remove.isPending;
+  const busy = create.isPending || update.isPending || remove.isPending;
   if (editing && role.isPending) return <section className="settings-card" aria-busy="true"><div className="roles-loading">{[0, 1, 2, 3].map((row) => <span key={row} className="roles-skeleton" />)}</div></section>;
   if (editing && role.isError) {
     return <section className="settings-card"><div className="settings-body" role="alert"><p>{m.deletedWhileOpen}</p>
@@ -199,7 +226,10 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
           <option value="">{m.startNothing}</option>
           {roles.data?.items.filter((item) => item.system !== 'admin').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select></label>}
-      {original && inUse && <p className="muted-copy">{m.affected(original.members.map((item) => item.name), original.tokens.map((item) => `${item.label} (${item.owner})`))}</p>}
+      {original && inUse && <p className="muted-copy">
+        {original.members.length > 0 && <>{m.heldByLabel} <LinkedNames names={original.members.map((item) => item.name)} href="/settings#team-heading" />. </>}
+        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings#sessions-heading" />.</>}
+      </p>}
       {original?.system === 'agent' && <p className="notice notice-plain"><span>{m.agentBuiltIn(original.members.length)}</span></p>}
       <fieldset className="role-permissions"><legend>{m.permissions}</legend>
         {isAdminRole ? <p>{m.adminAlways}</p> : <>
@@ -208,18 +238,19 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
             onSetMany={(items, on) => { setMany(items, on); setConfirming(false); }} readOnly={readOnly} changed={changed} />
         </>}
       </fieldset>
-      {readOnly && original && !isAdminRole && <p className="muted-copy">{m.askSomeone([])}</p>}
-      {confirming && <div className="role-confirm" role="group" aria-labelledby="role-confirm-heading">
+      {readOnly && original && !isAdminRole && <p className="muted-copy">{m.askSomeone(canChangeRoles)}</p>}
+      {!readOnly && !isAdminRole && currentPicked.length === 0 && <p className="warning-note">{m.noPermissions}</p>}
+      {problem && !problem.field && <p role="alert" className="error-copy">{problem.text}{problem.changedBy && <> <button type="button" className="link-action" onClick={() => void reload()}>{m.reload}</button></>}</p>}
+      {!readOnly && !isAdminRole && <div className="role-save-bar" id="role-save">
+  {confirming && <div className="role-confirm" id="role-confirm" role="group" aria-labelledby="role-confirm-heading">
         <p id="role-confirm-heading">{removed.length > 0 && m.removing(label(removed))} {added.length > 0 && m.adding(label(added))}</p>
         <p>{m.whoChanges(original!.members.map((item) => item.name), original!.tokens.map((item) => `${item.label} (${item.owner})`))}</p>
         {losesManage && <p className="warning-note">{m.loseManage}</p>}
       </div>}
-      {problem && !problem.field && <p role="alert" className="error-copy">{problem.text}{problem.changedBy && <> <button type="button" className="link-action" onClick={() => void reload()}>{m.reload}</button></>}</p>}
-      {!readOnly && !isAdminRole && <div className="role-save-bar" id="role-save">
         <span className="button-row">
-          <button ref={saveButton} type="submit" className="primary-action" disabled={busy}>{busy ? m.saving : confirming ? m.saveAndApply : m.save}</button>
+          <button ref={saveButton} type="submit" className="primary-action" disabled={busy} aria-describedby={confirming ? 'role-confirm' : undefined}>{busy ? m.saving : confirming ? m.saveAndApply : m.save}</button>
           {confirming && <button type="button" onClick={() => setConfirming(false)}>{m.backToEditing}</button>}
-          {original?.system === 'agent' && <button type="button" disabled={busy} onClick={() => reset.mutate()}>{m.resetDefault}</button>}
+          {original?.system === 'agent' && <button type="button" disabled={busy} onClick={resetToDefault}>{m.resetDefault}</button>}
           <a className="button" href="/settings/roles">{m.cancel}</a>
         </span>
       </div>}
@@ -235,4 +266,10 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
       </div>}
     </form>
   </section>;
+}
+
+// LinkedNames lists names as links to where they are managed, three at most and then how many more.
+function LinkedNames({ names, href, max = 3 }: { names: readonly string[]; href: string; max?: number }) {
+  const shown = names.slice(0, max);
+  return <>{shown.map((name, index) => <span key={`${name}-${index}`}>{index > 0 && ', '}<a href={href}>{name}</a></span>)}{names.length > max && m.andMore(names.length - max)}</>;
 }

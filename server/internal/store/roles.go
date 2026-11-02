@@ -19,6 +19,13 @@ var allPermissions []string
 // SetPermissionCatalog records every permission, in the matrix order. auth calls it once.
 func SetPermissionCatalog(names []string) { allPermissions = slices.Clone(names) }
 
+// agentRoleDefaults is what the built-in Agent role holds until a workspace changes it, set by auth like
+// the catalog; a role shows it so Reset to default can say what it would change before it does.
+var agentRoleDefaults []string
+
+// SetAgentRoleDefaults records the Agent role's built-in permissions (auth.AgentRolePermissions).
+func SetAgentRoleDefaults(names []string) { agentRoleDefaults = slices.Clone(names) }
+
 // Caller is who changes roles: the person (AgentID) and what this call may do (Permissions, the
 // effective ones: an agent token's, limited to its person's).
 type Caller struct {
@@ -699,6 +706,9 @@ func loadRole(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller,
 	role := domain.Role{ID: record.ID, Name: record.Name, Description: record.Description, System: record.System,
 		Permissions: record.permissions(), UpdatedBy: record.UpdatedBy, DeletedAt: record.DeletedAt,
 		CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, Members: []domain.RoleMember{}, Tokens: []domain.RoleToken{}}
+	if record.System != nil && *record.System == domain.SystemRoleAgent {
+		role.DefaultPermissions = slices.Clone(agentRoleDefaults)
+	}
 	rows, err := tx.Query(ctx, `SELECT a.id::text,`+memberName+`,a.deactivated_at IS NULL FROM agent_roles ar
 		JOIN agents a ON a.workspace_id=ar.workspace_id AND a.id=ar.agent_id
 		WHERE ar.workspace_id=$1 AND ar.role_id=$2 ORDER BY a.deactivated_at IS NOT NULL, lower(`+memberName+`)`, workspaceID, record.ID)
@@ -716,7 +726,7 @@ func loadRole(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller,
 		WHERE i.workspace_id=$1 AND i.role_id=$2 AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at>now()`, workspaceID, record.ID).Scan(&role.Invites); err != nil {
 		return domain.Role{}, fmt.Errorf("role invites: %w", err)
 	}
-	rows, err = tx.Query(ctx, `SELECT s.id::text,s.label,`+memberName+` FROM sessions s JOIN agents a ON a.workspace_id=s.workspace_id AND a.id=s.agent_id
+	rows, err = tx.Query(ctx, `SELECT s.id::text,s.label,`+memberName+`,a.id::text FROM sessions s JOIN agents a ON a.workspace_id=s.workspace_id AND a.id=s.agent_id
 		WHERE s.workspace_id=$1 AND s.role_id=$2 AND s.scope='role' AND s.revoked_at IS NULL AND s.expires_at>now() ORDER BY lower(s.label)`, workspaceID, record.ID)
 	if err != nil {
 		return domain.Role{}, fmt.Errorf("role tokens: %w", err)

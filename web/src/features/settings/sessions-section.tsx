@@ -5,10 +5,13 @@ import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { permissionLabel } from './token-permissions';
 import { StopIcon } from './stop-icon';
+import './role-pickers.css';
 
 function sessionState(session: Session): keyof typeof settingsMessages.sessionStates {
   if (session.revoked_at) return 'revoked';
-  return Date.parse(session.expires_at) <= Date.now() ? 'expired' : 'active';
+  if (Date.parse(session.expires_at) <= Date.now()) return 'expired';
+  // A token whose person no longer holds the role it follows works again once they do: stopped, not active.
+  return session.token?.kind === 'role' && !session.token.role_held ? 'stopped' : 'active';
 }
 
 interface SessionsSectionProps {
@@ -51,8 +54,8 @@ export function SessionsSection({ sessions, timezone, onRevokeSession }: Session
             <span>{settingsMessages.sessionStates[state]}</span>
             <time>{formatDate(session.last_seen_at, timezone)}</time>
             <TokenDetail session={session} />
-            {session.token && state === 'active' && <span>{settingsMessages.tokenExpires} <time dateTime={session.expires_at}>{formatDate(session.expires_at, timezone)}</time></span>}</div>
-          {state === 'active' && <button type="button" className="danger-action" onClick={() => onRevokeSession?.(session.id)}>
+            {session.token && (state === 'active' || state === 'stopped') && <span>{settingsMessages.tokenExpires} <time dateTime={session.expires_at}>{formatDate(session.expires_at, timezone)}</time></span>}</div>
+          {(state === 'active' || state === 'stopped') && <button type="button" className="danger-action" onClick={() => onRevokeSession?.(session.id)}>
             {session.current ? messages.signOut : settingsMessages.revoke}</button>}
         </article>;
       })}</div></div>

@@ -16,6 +16,7 @@ type roleView struct {
 	Name        string   `json:"name"`
 	System      *string  `json:"system"`
 	Permissions []string `json:"permissions"`
+	Defaults    []string `json:"default_permissions"`
 	Editable    bool     `json:"editable"`
 	Deletable   bool     `json:"deletable"`
 	Assignable  bool     `json:"assignable"`
@@ -23,8 +24,9 @@ type roleView struct {
 		Name string `json:"name"`
 	} `json:"members"`
 	Tokens []struct {
-		Label string `json:"label"`
-		Owner string `json:"owner"`
+		Label   string `json:"label"`
+		Owner   string `json:"owner"`
+		OwnerID string `json:"owner_id"`
 	} `json:"tokens"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -67,6 +69,9 @@ func TestEveryWorkspaceStartsWithAdminAndAgentAndMembersHoldWhatTheyHad(t *testi
 		len(roles.Items[0].Permissions) != len(auth.AllPermissions()) || len(roles.Items[1].Permissions) != 42 {
 		t.Fatalf("roles = %+v, want Admin with every permission and Agent with 42", roles.Items)
 	}
+	if roles.Items[0].Defaults != nil || !slices.Equal(roles.Items[1].Defaults, auth.AgentRolePermissions()) {
+		t.Fatalf("defaults: Admin %v, Agent %v; want none and the Agent role's built-in list", roles.Items[0].Defaults, roles.Items[1].Defaults)
+	}
 	if roles.Items[0].Editable || roles.Items[1].Editable || roles.Items[1].Assignable {
 		t.Fatalf("an agent may change or give a role: %+v", roles.Items)
 	}
@@ -98,7 +103,7 @@ func TestARoleGivesItsPermissionsAndAMemberHoldsEveryRole(t *testing.T) {
 	}
 	// A role in use is not deleted; once nobody holds it, it is, and it comes back.
 	response := request(t, desk.api, http.MethodDelete, "/api/v1/roles/"+role.ID, nil, desk.admin, nil)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "role_in_use") || !strings.Contains(response.Body.String(), "agent@roles-give.example.com") {
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "role_in_use") || !strings.Contains(response.Body.String(), "in use by 1 person (agent@roles-give.example.com)") {
 		t.Fatalf("delete a role in use: %d %s, want 409 role_in_use naming who holds it", response.Code, response.Body.String())
 	}
 	if got := setRoles(t, desk.api, desk.admin, agentID, "Agent"); got.code != http.StatusOK {
@@ -293,7 +298,7 @@ func TestARoleTokenStopsWhileItsPersonLacksTheRoleAndStartsAgain(t *testing.T) {
 	refused(t, desk.api, http.MethodGet, "/api/v1/conversations", nil, token, "conversations:read")
 	var role roleView
 	kbCall(t, desk.api, http.MethodGet, "/api/v1/roles/Tag%20keeper", nil, desk.admin, http.StatusOK, &role)
-	if len(role.Tokens) != 1 || role.Tokens[0].Label != "Tagger" || role.Tokens[0].Owner != "agent@roles-token.example.com" {
+	if len(role.Tokens) != 1 || role.Tokens[0].Label != "Tagger" || role.Tokens[0].Owner != "agent@roles-token.example.com" || role.Tokens[0].OwnerID != agentID {
 		t.Fatalf("the role names %+v, want the token following it", role.Tokens)
 	}
 	setRoles(t, desk.api, desk.admin, agentID, "Agent")
