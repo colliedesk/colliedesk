@@ -112,3 +112,23 @@ test('a taken name puts focus back on the name, with the reason', async () => {
   await vi.waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
   expect(name).toHaveFocus();
 });
+
+test('Undo after a delete brings the role back and says so, without offering Undo again', async () => {
+  const client = setUp();
+  const zero = roleOf({ id: '12121212-1212-4121-8121-121212121212', name: 'Zero', system: null }, ['tags:read'], { deletable: true });
+  mocks.api.role.mockResolvedValue(zero);
+  (mocks.api as Record<string, ReturnType<typeof vi.fn>>).deleteRole = vi.fn().mockResolvedValue(undefined);
+  mocks.api.restoreRole.mockResolvedValue(zero);
+  const form = render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'edit', id: zero.id }} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete role' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+  form.unmount();
+  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  const status = await screen.findByRole('status');
+  expect(status).toHaveTextContent('Zero deleted.');
+  fireEvent.click(within(status).getByRole('button', { name: 'Undo' }));
+  await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Zero is back.'));
+  expect(within(screen.getByRole('status')).queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  expect(mocks.api.restoreRole).toHaveBeenCalledWith(zero.id);
+});

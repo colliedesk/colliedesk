@@ -18,7 +18,8 @@ import './roles.css';
 // page: list, new (with an optional role to start from) or a role's id.
 export type RolesPage = { kind: 'list' } | { kind: 'new'; from?: string } | { kind: 'edit'; id: string };
 
-type RolesStatus = { text: string; undo?: () => void; team?: boolean };
+// undo, when given, takes the change back and answers what to say then.
+type RolesStatus = { text: string; undo?: () => Promise<string>; team?: boolean };
 // carried is what a save says, kept for the list it opens: the form and the list are two routes, so the
 // list is a new page that would otherwise forget it.
 let carried: RolesStatus | undefined;
@@ -30,6 +31,18 @@ export function RolesRoute({ page }: { page: RolesPage }) {
   const shown: Shown = { general: false, team: false, channels: true, savedReplies: true, exportData: false, billing: billingShown, ai: true, roles: true };
   const [status, setStatus] = useState<RolesStatus>();
   const statusLine = useRef<HTMLParagraphElement>(null);
+  const [undoing, setUndoing] = useState(false);
+  // Once Undo worked the line says so and offers it no more; a failed Undo says that instead.
+  const undo = async (run: () => Promise<string>) => {
+    setUndoing(true);
+    try {
+      setStatus({ text: await run() });
+    } catch {
+      setStatus((now) => (now ? { ...now, text: `${now.text} ${m.undoFailed}` } : now));
+    } finally {
+      setUndoing(false);
+    }
+  };
   const [focusStatus, setFocusStatus] = useState(false);
   useEffect(() => {
     if (carried) {
@@ -52,7 +65,7 @@ export function RolesRoute({ page }: { page: RolesPage }) {
       <div className="settings-sections">
         {status && <p ref={statusLine} tabIndex={-1} role="status" className="notice notice-plain roles-status"><span>{status.text}</span>
           {status.team && <a href="/settings#team-heading">{m.goToTeam}</a>}
-          {status.undo && <button type="button" className="link-action" onClick={status.undo}>{m.undo}</button>}</p>}
+          {status.undo && <button type="button" className="link-action" disabled={undoing} onClick={() => void undo(status.undo!)}>{m.undo}</button>}</p>}
         {page.kind === 'list' ? <RoleList onStatus={setStatus} />
           : <RoleForm key={page.kind === 'edit' ? page.id : `new-${page.from ?? ''}`} page={page} onDone={(text) => { carried = text; setStatus(text); void navigate({ to: '/settings/roles' }); }} />}
       </div>
@@ -120,7 +133,7 @@ const AGENT_START: TokenPermission[] = [];
 
 // RoleForm creates a role, or shows and changes one. A change of permissions to a role someone holds or
 // a token follows is shown first, with who it reaches, and saved only on Save and apply.
-function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>; onDone: (status: { text: string; team?: boolean; undo?: () => void }) => void }) {
+function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>; onDone: (status: RolesStatus) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const roles = useQuery({ queryKey: ['roles'], queryFn: () => api.roles() });
@@ -183,7 +196,11 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
     client.removeQueries({ queryKey: ['roles', 'one', original!.id] });
     void client.invalidateQueries({ queryKey: ['roles'], predicate: (query) => query.queryKey[1] !== 'one' });
     const id = original!.id;
-    onDone({ text: m.deleted(original!.name), undo: () => { void api.restoreRole(id).then(() => client.invalidateQueries({ queryKey: ['roles'] })); } });
+    onDone({ text: m.deleted(original!.name), undo: async () => {
+      const restored = await api.restoreRole(id);
+      void client.invalidateQueries({ queryKey: ['roles'] });
+      return m.restored(restored.name);
+    } });
   }, onError: fail });
   const busy = create.isPending || update.isPending || remove.isPending;
   if (editing && role.isPending) return <section className="settings-card" aria-busy="true"><div className="roles-loading">{[0, 1, 2, 3].map((row) => <span key={row} className="roles-skeleton" />)}</div></section>;
