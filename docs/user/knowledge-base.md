@@ -309,7 +309,7 @@ it. Articles in the trash count toward the 2,000 articles a workspace can hold.
 
 ## Help center settings
 
-Open **Settings → Help center**. Every agent sees whether the help center is on. An admin can turn
+Open **Settings → Help center**. Everyone with `help_center:read` (Agent and Admin hold it) sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
@@ -438,7 +438,7 @@ address name** (Settings → Email) changes every help center address, and old l
 ### Custom domain
 
 The help center can answer on an address of your own domain, such as `help.example.com`. Open
-**Settings → Help center → Custom domain**. Every agent sees the domain and its state; an admin sets,
+**Settings → Help center → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
 checks and removes it.
 
 1. Type the host name in **Host name** and press **Set domain**. The card then shows the DNS records

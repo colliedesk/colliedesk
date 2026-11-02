@@ -67,13 +67,13 @@ The channel's page then has four tabs of its own, before AI and History:
 4. **Messages**: the commands customers type and what the OA says by itself; see
    [The Messages tab](#the-messages-tab).
 
-Agents see the same tabs and change nothing.
+Everyone with `channels:read` sees the same tabs; changing them needs `channels:update`.
 
 **Pause processing**, at the top of the channel's page (admins), asks first, then keeps every message
 Zalo delivers and opens nothing, adds nothing and sends nothing until **Resume processing**: what arrived
 is then handled in order by the channel's rules. While paused the channel reads **Processing paused**,
 here and in **Channels**, with since when and how many messages wait (counted again every 20 seconds
-while the page is open). Agents see the same and are told an admin resumes it.
+while the page is open). Everyone with `channels:read` sees the same and is told an admin resumes it.
 
 Pausing is not turning the channel off: a channel turned off keeps its messages for an admin to open
 or discard ([Turn a channel off](channels.md#turn-a-channel-off)). A channel paused and off says to turn it on first, and stays paused when
