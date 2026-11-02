@@ -192,8 +192,8 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
   // Reset to default fills the matrix with the built-in list; Save role then shows what changes, like any edit.
   const resetToDefault = () => { setPicked([...(original?.default_permissions ?? [])]); setConfirming(false); setProblem(undefined); };
   const remove = useMutation({ mutationFn: () => api.deleteRole(original!.id), onSuccess: () => {
-    // The deleted role's own page is not asked for again: it is gone, and the list opens next.
-    client.removeQueries({ queryKey: ['roles', 'one', original!.id] });
+    // The deleted role's own page is not asked for again (it is gone, and the list opens next): only the
+    // lists reload. Removing its entry would make the page, still shown, fetch it once more and get 404.
     void client.invalidateQueries({ queryKey: ['roles'], predicate: (query) => query.queryKey[1] !== 'one' });
     const id = original!.id;
     onDone({ text: m.deleted(original!.name), undo: async () => {

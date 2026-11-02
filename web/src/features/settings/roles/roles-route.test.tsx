@@ -121,8 +121,13 @@ test('Undo after a delete brings the role back and says so, without offering Und
   mocks.api.restoreRole.mockResolvedValue(zero);
   const form = render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'edit', id: zero.id }} /></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Delete role' }));
+  const asked = mocks.api.role.mock.calls.length;
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
   await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+  // The deleted role is not asked for again, so its page never flashes "This role was deleted".
+  await new Promise((resolve) => { setTimeout(resolve, 50); });
+  expect(mocks.api.role.mock.calls.length).toBe(asked);
+  expect(screen.queryByText('This role was deleted.')).not.toBeInTheDocument();
   form.unmount();
   render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
   const status = await screen.findByRole('status');
