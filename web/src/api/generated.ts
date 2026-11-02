@@ -420,7 +420,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent, with a tier (`scope`) or its own list of `permissions` (resource:action), never both. A tier is a preset: its permissions are worked out on every call. A token that holds nothing admin-only has the agent role whatever the creator's role is. An `admin` token, and a custom token with an admin-only permission (`TokenPermission`, preset admin), act with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in person, needing `team:create_tokens`. Send `role_id` (one of the caller's own roles; 403 `role_not_yours` otherwise) for a token that follows that role: it changes when the role changes and stops while the person no longer holds it. Or send `permissions` (resource:action, each one the caller holds; 403 `role_exceeds_yours` names the others) for a fixed list. Never both. Whichever it is, a call never gets more than the person holds at that moment. People only: an agent token gets 403 `person_only` (a token that made tokens would leave them behind after it was revoked). A `scope` (the old tiers) is refused with 400. It appears in `GET /api/v1/auth/sessions` with its label and what it was given, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -437,7 +437,7 @@ export interface paths {
         };
         get: operations["listInvites"];
         put?: never;
-        /** @description Creates an invite and returns its one-time URL once. An agent token's call, whatever its tier and role ceiling, is filed as an agent request (202): the link is a credential, so only the person who approves sees it, once, and the stored request does not keep it. */
+        /** @description Creates an invite and returns its one-time URL once, to a person or an agent token alike. Needs `team:invite`, and every permission of the roles it gives (403 `role_exceeds_yours`). The invited person gets these roles on joining, added to any they hold. A `role_ceiling` (the old field) is refused with 400. */
         post: operations["createInvite"];
         delete?: never;
         options?: never;
@@ -2013,7 +2013,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Change an agent's display name, role or active state; send at least one of `display_name`, `role` and `active`. Renaming is not a change to the admin role, so an `admin` agent token renames anyone directly; a rename sent with a role or active change follows the rules of that change. Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
+        /** @description Change a member's display name or active state; send at least one of `display_name` and `active`. Roles change with `PUT /api/v1/agents/{id}/roles` (a `role` here is refused with 400). The caller needs `team:manage_roles` and every permission the member holds (403 `member_outranks_you`), and the workspace keeps at least one active member with the Admin role (409 `last_admin`). Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
         patch: operations["updateAgent"];
         trace?: never;
     };
@@ -3315,42 +3315,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agent-requests": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Calls of agent tokens that wait for a person, and what became of them: pending first, then newest first, at most 200. An agent token sees only the requests it made; a person sees the whole workspace's. A pending request past its `expires_at` (seven days) is answered as `expired`. */
-        get: operations["listAgentRequests"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agent-requests/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        /** @description One agent request. An agent token finds only the requests it made (404 otherwise). */
-        get: operations["getAgentRequest"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/agent-requests/{id}/approve": {
         parameters: {
             query?: never;
@@ -3392,7 +3356,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agent-requests/{id}/cancel": {
+    "/api/v1/agents/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets the whole list of a member's roles (sending the list they have changes nothing). Send `role_ids` or `roles` (names), not both, with at least one role. Needs `team:manage_roles`, every permission the member holds (403 `member_outranks_you`) and every permission of each role added or removed (403 `role_exceeds_yours`). Taking the Admin role from the last active member who holds it is 409 `last_admin`. Agent tokens of the member that follow a removed role stop at once and start again when the role is given back; pending invites to the member's address that give a removed role are revoked. */
+        put: operations["setAgentRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's roles, Admin and Agent first, then by name; with `deleted=true` only the deleted ones, to restore. */
+        get: operations["listRoles"];
+        put?: never;
+        /** @description Creates a role. Its permissions may be empty, and must all be ones the caller holds (403 `role_exceeds_yours` names the others). Names are unique without regard to case among roles that are not deleted (409 `role_name_taken`). */
+        post: operations["createRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        get: operations["getRole"];
+        put?: never;
+        post?: never;
+        /** @description Deletes a role no one uses: 409 `role_in_use` with `in_use` naming the members, pending invites and live agent tokens that still use it; 409 `system_role_locked` for Admin and Agent. A deleted role can be restored (`POST /api/v1/roles/{id}/restore`). */
+        delete: operations["deleteRole"];
+        options?: never;
+        head?: never;
+        /** @description Renames a role, changes its description or its permissions. Admin cannot be changed (409 `system_role_locked`). The caller must hold every permission the role has now and every one it would have (403 `role_exceeds_yours`). With `expected_updated_at` a role changed since answers 409 `role_changed` with `updated_by`. Its members and the agent tokens that follow it get the new permissions at once. */
+        patch: operations["updateRole"];
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Puts the built-in Agent role back to the permissions it starts with (409 for any other role). Same rules as a change of permissions. */
+        post: operations["resetRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Brings a deleted role back; 409 `role_name_taken` when another role has its name now. Restoring a role that is not deleted changes nothing. */
+        post: operations["restoreRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/reply-drafts": {
         parameters: {
             query?: never;
             header?: never;
@@ -3403,8 +3465,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Withdraws a pending request. The token that made it, or the person who owns that token, may cancel it (another token gets 404, another person 403: they reject instead). */
-        post: operations["cancelAgentRequest"];
+        /** @description Leaves the words of a reply for a person to send: a ready draft (`source: written`) above the reply box, which a person sends, edits or discards like an AI draft. Calls no AI provider and works while AI drafts are off. A new one replaces the earlier draft of the same person and token. Without `messages:send` the copies may name only addresses already in the conversation (400 otherwise). It expires like an AI draft and goes when the conversation is resolved or closed. */
+        post: operations["createReplyDraft"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4663,117 +4725,6 @@ export interface components {
             finished_at: string | null;
             /** Format: date-time */
             updated_at: string;
-        };
-        /** @enum {string} */
-        AgentRequestStatus: "pending" | "approved" | "failed" | "rejected" | "cancelled" | "expired";
-        AgentRequestAccepted: {
-            /** Format: uuid */
-            request_id: string;
-            /** @enum {string} */
-            kind: "reply_draft" | "action";
-            status: components["schemas"]["AgentRequestStatus"];
-            /** @description What the call does, for the person deciding */
-            summary: string;
-            /** Format: date-time */
-            expires_at: string;
-            message: string;
-        };
-        AgentRequest: {
-            /** Format: uuid */
-            id: string;
-            /**
-             * @description reply_draft: an outgoing reply a token may not send; action: any other call
-             * @enum {string}
-             */
-            kind: "reply_draft" | "action";
-            status: components["schemas"]["AgentRequestStatus"];
-            /** @enum {string} */
-            method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-            /** @description The route pattern, for example /api/v1/conversations/{id} */
-            route: string;
-            /** @description The concrete path that runs on approval */
-            path: string;
-            /** @description The JSON body of the call as the token sent it; null when it had none, in a list without detail=full, and 90 days after the decision. */
-            body: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            /** @description A reply draft as the approver edited it (text changed, copies removed); this is what ran. Null when not edited. */
-            edited_body: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            /**
-             * @description The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting. owner: the call changes the settings of the person who owns the token (a /me route), so only that person can approve it (403 owner_only for anyone else).
-             * @enum {string}
-             */
-            approvable_by: "agent" | "admin" | "owner";
-            summary: string;
-            /** Format: uuid */
-            conversation_id: string | null;
-            /** @description What a status change tells customers, one per chat channel, always through that chat's channel: while it waits, what approving it would tell now; once approved, what it was to tell as it ran, read just before (an empty list when it told nobody: each conversation had that status already, or its approval failed; a change of several tells a few seconds later, and not one whose status changes again before then); once rejected or expired, what it would have told when the token asked. Kept with the call and cleared with it after the retention. Null for other calls and a quiet change, and in a list without detail=full. */
-            notices?: {
-                /** Format: uuid */
-                channel_id: string;
-                channel_name: string;
-                /** @description The display_ref of one of its conversations, whose notice text is */
-                example_ref: string;
-                /** @description The notice as that conversation's customer would read it, its placeholders filled */
-                text: string;
-                /** @description How many of the conversations it tells on this channel */
-                told: number;
-            }[] | null;
-            /** @description For a request that edits, deletes or restores a saved reply: the reply as it was when the token asked (before) and as it is now (current, null once it is deleted for good), so the change can be shown as a difference. Only with detail=full and on a single request; null otherwise. */
-            saved_reply: null | {
-                /** Format: uuid */
-                id: string;
-                before: null | components["schemas"]["SavedReplyText"];
-                /** @description For a request that restores a version, that version's number, title and text as they were when the token asked; null otherwise. */
-                restores: null | {
-                    version: number;
-                    title: string;
-                    body: string;
-                };
-                current: null | {
-                    title: string;
-                    body: string;
-                    /** Format: date-time */
-                    updated_at: string;
-                    /** Format: date-time */
-                    deleted_at: string | null;
-                };
-            };
-            requested_by: {
-                /** Format: uuid */
-                token_id: string | null;
-                token_label: string;
-                token_scope: components["schemas"]["TokenScope"];
-                /** @description What the token held when it asked (resource:action); empty for a request older than permissions. */
-                token_permissions: string[];
-                /** @description A request of a revoked token can only be rejected. */
-                token_revoked: boolean;
-                /** Format: uuid */
-                agent_id: string | null;
-                /** @description The person who owns the token */
-                agent_name: string | null;
-            };
-            decided_by: null | {
-                /** Format: uuid */
-                agent_id: string | null;
-                name: string;
-            };
-            /** Format: date-time */
-            decided_at: string | null;
-            reason: string | null;
-            /** @description HTTP status the approved call answered */
-            result_status: number | null;
-            /** @description The JSON answer of the approved call, at most 64 KiB; null when withheld (see result_note) or none. */
-            result: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            result_note: string | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            expires_at: string;
         };
         PublicConfig: {
             /** @description Which features of the server run here: their settings are complete and the operator has not switched them off (operator console → Features, `features.<name>`). The web app shows only those. A route of a feature switched off answers 409 `feature_off`; what the feature holds (connections, fixes, subscriptions, queued replies) stays and is used again once it is on. */
@@ -6055,6 +6006,20 @@ export interface components {
             conversation_id: string;
             /** @enum {string} */
             status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /**
+             * @description ai: written by the AI provider; written: words an agent token (or a person) left for a person to send (POST /api/v1/conversations/{id}/reply-drafts), shown even while AI drafts are off. Results and similarity count only ai.
+             * @enum {string}
+             */
+            source: "ai" | "written";
+            /** @description Only on a written draft: the copies to send it with. */
+            cc: string[] | null;
+            /** @description Only on a written draft: who left it. */
+            written_by: null | {
+                /** @description The agent token that wrote it; null when a person did. */
+                token_label: string | null;
+                /** @description The person, or the person behind the token. */
+                agent_name: string;
+            };
             /** @description Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled… */
             error_code: string | null;
             /** @description What the person asked for; erased 90 days after the draft ended. */
@@ -6393,8 +6358,101 @@ export interface components {
         CloudWorkspaceChoices: {
             workspaces: components["schemas"]["WorkspaceChoice"][];
         };
-        /** @enum {string} */
-        Role: "admin" | "agent";
+        /**
+         * @description Kept for older clients that redeem a pairing link: `agent` limits the new session to the Agent role; `admin` is refused unless the link's person may sign in unrestricted.
+         * @enum {string}
+         */
+        SignInRole: "admin" | "agent";
+        /** @description A role, by name. `system` marks the two built-in roles; null for a role the workspace made. */
+        RoleRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string|null} */
+            system: "admin" | "agent" | null;
+        };
+        /** @description A set of permissions people hold. A person holds every permission of each of their roles. Admin always holds every permission (including ones a later release adds) and cannot be changed or deleted; Agent can be changed and renamed but not deleted. */
+        Role: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            /** @enum {string|null} */
+            system: "admin" | "agent" | null;
+            /** @description Admin lists every permission. */
+            permissions: components["schemas"]["TokenPermission"][];
+            /** @description False for Admin, and for a role holding a permission the caller lacks. */
+            editable: boolean;
+            /** @description False for the two built-in roles, while the role is in use (members, pending invites, live tokens), or when the caller may not edit it. */
+            deletable: boolean;
+            /** @description The caller may give this role to someone: holds team:manage_roles and every permission of the role. */
+            assignable: boolean;
+            /** @description Members holding it, active and deactivated, by display name or email. */
+            members: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                active: boolean;
+            }[];
+            /** @description Pending invites that would give it. */
+            invites: number;
+            /** @description Live agent tokens that follow it, by label and owner name. */
+            tokens: {
+                /** Format: uuid */
+                id: string;
+                label: string;
+                owner: string;
+            }[];
+            /** @description Name of the last person to change it; null for a built-in role nobody changed. */
+            updated_by: string | null;
+            /**
+             * Format: date-time
+             * @description Set on a deleted role (listed only with ?deleted=true); restore brings it back.
+             */
+            deleted_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RoleInput: {
+            name: string;
+            description?: string;
+            /** @description May be empty; every one must be a permission the caller holds (403 role_exceeds_yours). */
+            permissions: components["schemas"]["TokenPermission"][];
+        };
+        /** @description Send at least one of name, description and permissions. */
+        RoleUpdate: {
+            name?: string;
+            description?: string;
+            permissions?: components["schemas"]["TokenPermission"][];
+            /**
+             * Format: date-time
+             * @description The updated_at the editor started from; 409 role_changed when the role changed since.
+             */
+            expected_updated_at?: string;
+        };
+        /** @description Role names, matched without regard to case; an unknown name is 400 and the message lists the valid names. */
+        RoleNames: string[];
+        RoleIDs: string[];
+        /** @description What an agent token was given. Its effective permissions are these, limited to what its person holds now. */
+        TokenGrant: {
+            /**
+             * @description role: follows one of its person's roles; custom: a fixed list chosen at creation; legacy: created before roles.
+             * @enum {string}
+             */
+            kind: "role" | "custom" | "legacy";
+            role: null | components["schemas"]["RoleRef"];
+            /** @description For kind role: false while its person no longer holds the role (the token is stopped until the role is given back). True otherwise. */
+            role_held: boolean;
+            /** @description What the token was given (a role token: the role's permissions now). */
+            permissions: components["schemas"]["TokenPermission"][];
+            /**
+             * @description Only for kind legacy: what it was created as.
+             * @enum {string|null}
+             */
+            legacy_tier: "read" | "draft" | "send" | "admin" | "custom" | null;
+        };
         /** @enum {string} */
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
@@ -6514,7 +6572,8 @@ export interface components {
             /** Format: email */
             email: string;
             display_name: string;
-            role: components["schemas"]["Role"];
+            /** @description The roles the person holds: Admin first, then Agent, then by name. */
+            roles: components["schemas"]["RoleRef"][];
             timezone_override: string | null;
         };
         /** @description Leading and trailing spaces are removed; the rest may be at most 80 characters and may not hold control characters or text-direction overrides. An empty string clears the name. */
@@ -6525,7 +6584,9 @@ export interface components {
             /** Format: email */
             email: string;
             display_name: string;
-            role: components["schemas"]["Role"];
+            roles: components["schemas"]["RoleRef"][];
+            /** @description The caller may change this member (roles, name, active): holds team:manage_roles and every permission the member holds. */
+            manageable: boolean;
             timezone_override: string | null;
             /**
              * Format: date-time
@@ -6606,10 +6667,10 @@ export interface components {
             timezone: string;
             /** @description The goal given at cloud sign-up; the empty inbox starts with the matching step. Null when none was given and on self-hosted instances. */
             onboarding_goal: null | components["schemas"]["OnboardingGoal"];
-            /** @description The tier of the agent token making the call, custom for one with its own permissions; null for a person's own session. */
-            scope: null | components["schemas"]["TokenScope"];
-            /** @description What the agent token making the call holds (resource:action); empty for a person's own session. */
-            permissions: string[];
+            /** @description What the agent token making the call was given; null for a person's own session. */
+            token: null | components["schemas"]["TokenGrant"];
+            /** @description What this call may do (resource:action), sorted: the person's roles, and for an agent token what it was given limited to that. */
+            permissions: components["schemas"]["TokenPermission"][];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
@@ -6623,25 +6684,15 @@ export interface components {
                 locked: boolean;
                 /** @description True when a Freshdesk import already extended the trial. */
                 trial_extended: boolean;
-                /** @description The display names of the workspace's admins, so a person who is not an admin knows whom to ask for a plan. Sent only to a non-admin, only while the plan is trial or none; left out otherwise. */
+                /** @description The display names of the members who can change the plan (billing:manage), so a person who cannot knows whom to ask. Sent only to a person without billing:manage, only while the plan is trial or none; left out otherwise. */
                 admins?: string[];
             };
         };
         /**
-         * @description A tier to create a token with; each holds every permission of its own preset and below (TokenPermission).
+         * @description A permission a role or an agent token can hold, resource:action. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPreset: "read" | "draft" | "send" | "admin";
-        /**
-         * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
-         * @enum {string}
-         */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
-        /**
-         * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
-         * @enum {string}
-         */
-        TokenScope: "read" | "draft" | "send" | "admin" | "custom";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
         AgentToken: {
             /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
@@ -6654,10 +6705,14 @@ export interface components {
             agent_id: string;
             /** Format: email */
             agent_email: string;
+            /** @description Display name of the person, or the email when there is none. */
+            agent_name: string;
             label: string;
-            /** @description The tier of an agent token, custom for one with its own permissions; null for a person's session, which has no tier. */
-            scope: null | components["schemas"]["TokenScope"];
-            /** @description What an agent token holds (resource:action), its tier's permissions or its own list; empty for a person's session. */
+            /** @description What an agent token was given; null for a person's session. */
+            token: null | components["schemas"]["TokenGrant"];
+            /** @description A person's session limited to one role (a pairing link that asked for the Agent role); null otherwise and for a token. */
+            role: null | components["schemas"]["RoleRef"];
+            /** @description What an agent token was given (resource:action), the same as token.permissions; empty for a person's session. */
             permissions: string[];
             /** @description True for the session that made this request, so a client can mark "this device". */
             current: boolean;
@@ -6675,7 +6730,8 @@ export interface components {
             id: string;
             /** Format: email */
             email: string;
-            role_ceiling: components["schemas"]["Role"];
+            /** @description The roles the invited person gets on joining, added to any they already hold. */
+            roles: components["schemas"]["RoleRef"][];
             /** Format: email */
             created_by_email: string;
             /** Format: date-time */
@@ -7874,7 +7930,6 @@ export interface components {
             id: string;
             /** @description Name the token was given when it was created, for example Claude Code */
             label: string;
-            scope: components["schemas"]["TokenScope"];
             /** @description Display name, or the email when there is none, of the agent the token acts as */
             agent_name: string;
         };
@@ -8835,6 +8890,25 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. */
+                missing_permissions?: components["schemas"]["TokenPermission"][];
+                /**
+                 * @description Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.
+                 * @enum {string}
+                 */
+                missing_from?: "token" | "person";
+                /** @description Only on permission_missing from the person: names of active members who can change roles (team:manage_roles). */
+                ask?: string[];
+                /** @description Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading. */
+                where?: string;
+                /** @description Only on role_in_use: what still uses the role. */
+                in_use?: {
+                    members: string[];
+                    invites: string[];
+                    tokens: string[];
+                };
+                /** @description Only on role_changed: who changed the role last. */
+                updated_by?: string | null;
                 /** @description Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…). */
                 check_error_code?: string;
                 /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
@@ -9187,15 +9261,6 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
-        AgentRequestAccepted: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["AgentRequestAccepted"];
             };
         };
         /** @description Session created from a one-time link */
@@ -9558,6 +9623,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The role's id, or its name (matched without regard to case). */
+        RoleKey: string;
         ID: string;
         /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
         WebFormPressKey: string;
@@ -10270,7 +10337,7 @@ export interface operations {
             content: {
                 "application/json": {
                     token: string;
-                    requested_role?: components["schemas"]["Role"];
+                    requested_role?: components["schemas"]["SignInRole"];
                     label?: string;
                     /**
                      * @default bearer
@@ -10364,7 +10431,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Session revoked */
             204: {
                 headers: {
@@ -10392,8 +10458,12 @@ export interface operations {
                 "application/json": {
                     /** @description Name shown in the session list, for example the agent host */
                     label: string;
-                    scope?: components["schemas"]["TokenPreset"];
-                    /** @description A custom token's permissions, instead of a scope. */
+                    /**
+                     * Format: uuid
+                     * @description A role the caller holds; the token follows it.
+                     */
+                    role_id?: string;
+                    /** @description A fixed list of permissions, instead of a role. */
                     permissions?: components["schemas"]["TokenPermission"][];
                 };
             };
@@ -10420,7 +10490,6 @@ export interface operations {
                     "application/json": components["schemas"]["AgentToken"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -10466,7 +10535,8 @@ export interface operations {
                 "application/json": {
                     /** Format: email */
                     email: string;
-                    role_ceiling: components["schemas"]["Role"];
+                    role_ids?: components["schemas"]["RoleIDs"];
+                    roles?: components["schemas"]["RoleNames"];
                 };
             };
         };
@@ -10482,7 +10552,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description The invite, and for a person its one-time URL */
+            /** @description The invite and its one-time URL */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -10495,7 +10565,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
@@ -10523,7 +10592,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Invite revoked */
             204: {
                 headers: {
@@ -11489,7 +11557,6 @@ export interface operations {
         responses: {
             200: components["responses"]["Conversation"];
             201: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
@@ -11532,7 +11599,6 @@ export interface operations {
                     "application/json": components["schemas"]["BulkConversationUpdateResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -11580,7 +11646,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -11600,7 +11665,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -11619,7 +11683,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -11716,7 +11779,6 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
@@ -11774,7 +11836,6 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -11840,7 +11901,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -11908,7 +11968,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Removed */
             204: {
                 headers: {
@@ -11946,7 +12005,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12005,7 +12063,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12035,7 +12092,6 @@ export interface operations {
                     "application/json": components["schemas"]["HeldReplayResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12067,7 +12123,6 @@ export interface operations {
                     "application/json": components["schemas"]["HeldDiscardResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12100,7 +12155,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12126,7 +12180,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12159,7 +12212,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12191,7 +12243,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12217,7 +12268,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeSummary"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -12243,7 +12293,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeStats"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12269,7 +12318,6 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationIntake"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12302,7 +12350,6 @@ export interface operations {
                     "application/json": components["schemas"]["MessageMoveResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12339,7 +12386,6 @@ export interface operations {
                     "application/json": components["schemas"]["MessageMovePage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12368,7 +12414,6 @@ export interface operations {
                     "application/json": components["schemas"]["MessageMove"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12398,7 +12443,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12428,7 +12472,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12455,7 +12498,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelAI"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12486,7 +12528,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelAI"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12588,7 +12629,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeEvaluation"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12620,7 +12660,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatThreadPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12647,7 +12686,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatSenderList"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12677,7 +12715,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12736,7 +12773,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12770,7 +12806,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12809,7 +12844,6 @@ export interface operations {
                     "application/json": components["schemas"]["TestMessageResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12840,7 +12874,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12859,7 +12892,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Gmail disconnected */
             204: {
                 headers: {
@@ -12885,7 +12917,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12904,7 +12935,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Microsoft 365 disconnected */
             204: {
                 headers: {
@@ -12953,7 +12983,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["EmailChannelSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12970,7 +12999,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Email channel disconnected */
             204: {
                 headers: {
@@ -12994,7 +13022,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13026,7 +13053,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13063,7 +13089,6 @@ export interface operations {
                     "application/json": components["schemas"]["TestMessageResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13092,7 +13117,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -13108,7 +13132,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Gmail disconnected */
             204: {
                 headers: {
@@ -13156,7 +13179,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -13172,7 +13194,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Microsoft 365 disconnected */
             204: {
                 headers: {
@@ -13594,7 +13615,6 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13660,7 +13680,6 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13697,7 +13716,6 @@ export interface operations {
                     "application/json": components["schemas"]["ContactMerge"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13726,7 +13744,6 @@ export interface operations {
                     "application/json": components["schemas"]["ContactMerge"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13769,7 +13786,6 @@ export interface operations {
             content: {
                 "application/json": {
                     display_name?: components["schemas"]["DisplayNameInput"];
-                    role?: components["schemas"]["Role"];
                     active?: boolean;
                     /**
                      * Format: uuid
@@ -13789,7 +13805,6 @@ export interface operations {
                     "application/json": components["schemas"]["TeamMember"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
@@ -13830,7 +13845,6 @@ export interface operations {
                     "application/json": components["schemas"]["Workspace"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13860,7 +13874,6 @@ export interface operations {
                     "application/json": components["schemas"]["Workspace"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13887,7 +13900,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -13921,7 +13933,6 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationNumberSeries"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13953,7 +13964,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13977,7 +13987,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResponseTargets"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -14004,7 +14013,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResponseTargets"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14052,7 +14060,6 @@ export interface operations {
                     "application/json": components["schemas"]["RenamedWorkspace"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14084,7 +14091,6 @@ export interface operations {
                     "application/json": components["schemas"]["Agent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14114,7 +14120,6 @@ export interface operations {
                     "application/json": components["schemas"]["Agent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14181,7 +14186,6 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14200,7 +14204,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Tag deleted */
             204: {
                 headers: {
@@ -14239,7 +14242,6 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14303,7 +14305,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14354,7 +14355,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14384,7 +14384,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14412,7 +14411,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14476,7 +14474,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14527,7 +14524,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Saved reply moved to the trash */
             204: {
                 headers: {
@@ -14571,7 +14567,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14606,7 +14601,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14675,7 +14669,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14701,7 +14694,6 @@ export interface operations {
                     "application/json": components["schemas"]["Billing"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14724,7 +14716,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["BillingLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14773,7 +14764,6 @@ export interface operations {
                     "application/json": components["schemas"]["MigrationRequest"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14829,7 +14819,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["BillingLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14959,7 +14948,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15025,7 +15013,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15051,7 +15038,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15078,7 +15064,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15143,7 +15128,6 @@ export interface operations {
                     "text/markdown": string;
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15166,7 +15150,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportJob"] | components["schemas"]["AgentRequestAccepted"];
+                    "application/json": components["schemas"]["ImportJob"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -15197,7 +15181,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15233,7 +15216,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportPerson"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15263,7 +15245,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportPerson"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15288,7 +15269,6 @@ export interface operations {
                     "application/json": components["schemas"]["AISettings"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15386,7 +15366,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15416,7 +15395,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIProvider"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15481,7 +15459,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIProvider"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15512,7 +15489,6 @@ export interface operations {
                     "application/json": components["schemas"]["AISlot"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15541,7 +15517,6 @@ export interface operations {
                     "application/json": components["schemas"]["AISourceConsent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15569,7 +15544,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15614,7 +15588,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResultsShareLinkState"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15637,7 +15610,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResultsShareLinkCreated"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15660,7 +15632,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResultsShareLinkState"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15728,7 +15699,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15781,7 +15751,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15808,7 +15777,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIUsage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15835,7 +15803,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatUsage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15868,7 +15835,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatSessionPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
@@ -15893,7 +15859,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatSession"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -15909,7 +15874,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Deleted */
             204: {
                 headers: {
@@ -15951,7 +15915,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatPreview"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16007,7 +15970,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIAutomaticLimits"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16057,13 +16019,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The draft, queued; or an agent request when the token is below the draft tier */
+            /** @description The draft, queued */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AIDraft"] | components["schemas"]["AgentRequestAccepted"];
+                    "application/json": components["schemas"]["AIDraft"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -16125,7 +16087,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIDraft"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -16172,13 +16133,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The suggestion, queued; or an agent request when the token is below the draft tier */
+            /** @description The suggestion, queued */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AITriage"] | components["schemas"]["AgentRequestAccepted"];
+                    "application/json": components["schemas"]["AITriage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -16220,7 +16181,6 @@ export interface operations {
                     "application/json": components["schemas"]["AITriage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16249,7 +16209,6 @@ export interface operations {
                     "application/json": components["schemas"]["AITriage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -16283,7 +16242,6 @@ export interface operations {
                     "application/json": components["schemas"]["AITriage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16311,7 +16269,6 @@ export interface operations {
                     "application/zip": string;
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -16359,7 +16316,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["WebFormSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16578,7 +16534,6 @@ export interface operations {
                     "application/json": components["schemas"]["ExportLink"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -16637,60 +16592,6 @@ export interface operations {
             };
         };
     };
-    listAgentRequests: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["AgentRequestStatus"];
-                /** @description full adds each request's body, edited_body and result; without it they are null so a poll stays small. */
-                detail?: "full";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Agent requests */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["AgentRequest"][];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            402: components["responses"]["WorkspaceLocked"];
-        };
-    };
-    getAgentRequest: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The agent request */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRequest"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            402: components["responses"]["WorkspaceLocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     approveAgentRequest: {
         parameters: {
             query?: never;
@@ -16733,7 +16634,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        request: components["schemas"]["AgentRequest"] | components["schemas"]["OperatorRequest"];
+                        request: components["schemas"]["OperatorRequest"];
                         /** @description The JSON answer of the approved call; null when it had none or was too large. */
                         result: {
                             [key: string]: unknown;
@@ -16778,7 +16679,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentRequest"] | components["schemas"]["OperatorRequest"];
+                    "application/json": components["schemas"]["OperatorRequest"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -16789,7 +16690,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
-    cancelAgentRequest: {
+    setAgentRoles: {
         parameters: {
             query?: never;
             header?: never;
@@ -16798,22 +16699,281 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    role_ids?: components["schemas"]["RoleIDs"];
+                    roles?: components["schemas"]["RoleNames"];
+                };
+            };
+        };
         responses: {
-            /** @description The cancelled request */
+            /** @description The member after the change */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentRequest"];
+                    "application/json": components["schemas"]["TeamMember"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: {
+                deleted?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Roles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Role"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleInput"];
+            };
+        };
+        responses: {
+            /** @description The role an earlier request with the same Idempotency-Key created; nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            /** @description The new role */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleUpdate"];
+            };
+        };
+        responses: {
+            /** @description The role after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resetRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role after the reset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    createReplyDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The reply, in Markdown. */
+                    text: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                };
+            };
+        };
+        responses: {
+            /** @description The draft an earlier request with the same Idempotency-Key created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            /** @description The draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     createProblemReport: {
@@ -16954,7 +17114,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBCollection"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16998,7 +17157,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Collection moved to the trash */
             204: {
                 headers: {
@@ -17046,7 +17204,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBCollection"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17081,7 +17238,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBCollection"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17111,7 +17267,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBOrder"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17189,7 +17344,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17264,7 +17418,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Article moved to the trash */
             204: {
                 headers: {
@@ -17317,7 +17470,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17352,7 +17504,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17380,7 +17531,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17406,7 +17556,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17473,7 +17622,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17650,7 +17798,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaBatchResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17695,7 +17842,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17730,7 +17876,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17763,7 +17908,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17852,7 +17996,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaBatchResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17889,7 +18032,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMedia"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17917,7 +18059,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMedia"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17950,7 +18091,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaReplacement"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17977,7 +18117,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaReplacement"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18388,7 +18527,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenter"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18507,7 +18645,6 @@ export interface operations {
                     "application/json": components["schemas"]["FixSent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18539,7 +18676,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18570,7 +18706,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18597,7 +18732,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18632,7 +18766,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18660,7 +18793,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18726,7 +18858,6 @@ export interface operations {
                     "application/json": components["schemas"]["FixSent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18808,7 +18939,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["AutofixUnavailable"];
@@ -18834,7 +18964,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixSettings"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18926,7 +19055,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18946,7 +19074,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Disconnected */
             204: {
                 headers: {
@@ -18985,7 +19112,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19012,7 +19138,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -19038,7 +19163,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -19071,7 +19195,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19107,7 +19230,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19209,7 +19331,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -19284,7 +19405,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterTheme"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19334,7 +19454,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterSearchConsole"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19475,7 +19594,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19509,7 +19627,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -19532,7 +19649,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
