@@ -164,7 +164,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_roles_list` | Lists the roles with their permissions, who holds them and the tokens that follow them | `team:read` |
 | `colliedesk_role_create` | Makes a role from permissions you hold, or from another role | `team:manage_roles`, `team:read` |
 | `colliedesk_role_update` | Renames a role or changes its permissions; everyone holding it and the tokens following it change at once | `team:manage_roles`, `team:read` |
-| `colliedesk_role_delete` | Deletes a role nobody uses; it can be restored | `team:manage_roles` |
+| `colliedesk_role_delete` | Deletes a role nobody uses; it can be restored | `team:manage_roles`, `team:read` |
 | `colliedesk_role_reset` | Puts the Agent role back to its first permissions | `team:manage_roles` |
 | `colliedesk_role_restore` | Brings back a deleted role | `team:manage_roles` |
 | `colliedesk_member_roles_set` | Sets which roles a team member holds, by name | `team:manage_roles`, `team:read` |
