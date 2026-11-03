@@ -163,11 +163,11 @@ func (a *API) createAgentToken(response http.ResponseWriter, request *http.Reque
 		Scope       *string  `json:"scope"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a role_id (one of your roles) or a list of permissions are required.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a role_id (a role whose permissions you all hold) or a list of permissions are required.")
 		return
 	}
 	if input.Scope != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Tiers were replaced by roles: send role_id (one of your roles) or a list of permissions.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Tiers were replaced by roles: send role_id (a role whose permissions you all hold) or a list of permissions.")
 		return
 	}
 	// The raw token is in the body once; no cache may keep it, and a repeat of one press (the same

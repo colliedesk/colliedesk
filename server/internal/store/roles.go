@@ -305,8 +305,8 @@ func syncLegacyRole(ctx context.Context, tx pgx.Tx, workspaceID, agentID string)
 
 // SetAgentRoles gives a member exactly roles (one at least). The caller must outrank the member and hold
 // every permission of each role added or taken; taking Admin from the last active member who holds it
-// is domain.ErrLastAdmin. Tokens of the member that follow a removed role stop (they read the role on
-// every call); unused invites to the member's address that would give a removed role back are revoked.
+// is domain.ErrLastAdmin. Tokens of the member stop while the new roles leave out a permission of the role
+// they follow (they read it on every call); unused invites to the member's address that would give a removed role back are revoked.
 func (s *Store) SetAgentRoles(ctx context.Context, workspaceID string, caller Caller, agentID string, roleIDs, roleNames []string) (domain.TeamMember, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.TeamMember, error) {
 		// The member's unused invites go first, before any other lock: a redeem in flight holds its link and

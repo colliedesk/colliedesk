@@ -59,7 +59,7 @@ In Sessions a token shows one of:
 
 - **Follows role Agent** (or the role it follows); open it to see **What it may do**.
 - **Fixed · 5 permissions**: a token made with a list.
-- **Stopped: Long Bui no longer holds Support lead**: giving the role back starts it again.
+- **Stopped: Long Bui no longer holds all of Support lead**: giving them the role starts it again.
 - **Created before roles · was Send**: a token made with the old tiers. It keeps the permissions it
   had, except those that used to wait for a person's approval; create a new token for those
   ([which ones](roles-and-permissions.md#tokens-created-before-roles)).
