@@ -18,8 +18,8 @@ The help center's AI chat: end users ask, an AI answers from the published artic
 
 ## Decisions
 
-- **Its own money bucket.** Chat never spends the team's included AI (`ai_usage` feature `chat` is left
-  out of the allowance): a stranger asking questions must not stop drafts and triage. On the cloud's own
+- **Its own money bucket.** Chat never spends the team's AI credits (`ai_usage` feature `chat` is left
+  out of the credits): a stranger asking questions must not stop drafts and triage. On the cloud's own
   provider the limits are the plan's (`domain.ChatLimitsFor`: answers and micro-dollars a month, a tenth
   a day), in the code, not in a table an admin edits. On a workspace's own provider, or a server without
   plan limits, the only limit is the slot's `monthly_cap_micro_usd`, if set.
@@ -122,8 +122,8 @@ leaves still gets the answer stored and metered, and reads it back with `GET …
 ## Limits and money
 
 `metered` sends a chat call (`FeatureChat`) through `chatRoom`, under its own advisory lock
-(`ai-chat:<workspace>`), never the team's allowance check, and `allowanceLeft` leaves `feature='chat'`
-out of what the team spent and holds. On the cloud's own provider (plan limits) a call is refused
+(`ai-chat:<workspace>`), never the team's credit check, and `credits` leaves `feature='chat'`
+out of what the team used and holds. On the cloud's own provider (plan limits) a call is refused
 (`ErrChatLimit`: the turn is `over_limit`, the end user gets 3 related articles, nothing is sent) once
 the month's or the day's answers or spend are reached; elsewhere only the slot's own monthly limit and a
 tenth of it a day. A chat call on a workspace's key is priced at `ai.server.prices` when its model has a

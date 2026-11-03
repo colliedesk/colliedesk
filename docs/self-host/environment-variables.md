@@ -54,7 +54,7 @@ again, except `collie config export --include-secrets`. More: [operator console 
 | `AI_SERVER_MODELS` | `ai.server.models` | AI |
 | `AI_SERVER_LABEL` | `ai.server.label` | AI |
 | `AI_SERVER_PRICES` | `ai.server.prices` | AI |
-| `AI_SERVER_MONTHLY_ALLOWANCE` | `ai.server.monthly_allowance` | AI |
+| `AI_SERVER_MONTHLY_CREDITS` | `ai.server.monthly_credits` | AI |
 | `SMTP_HOST` | `smtp.host` | Email |
 | `SMTP_PORT` | `smtp.port` | Email |
 | `SMTP_USERNAME` | `smtp.username` | Email |
@@ -160,24 +160,32 @@ by `|`; the first is the default. A feature left out cannot use the server's pro
 sets some of these settings but not all that are needed is refused and says which are missing. The server's provider can reach any address, your own network included: you chose it. No
 workspace uses it until one of its admins turns a feature on.
 
-To bound what the server's provider spends, price its models and give each workspace a monthly
-allowance in US dollars:
+To bound what the server's provider does for a workspace, give each workspace credits. One credit is one
+result: a reply draft, a triage suggestion or an intake decision, whatever the model costs. The value is a
+number of credits a month, optionally with a number for the whole trial of a workspace on its trial:
 
 ```sh
 docker compose exec server /app/collie config set \
-  ai.server.prices=claude-haiku-5-5=0.1:0.5,claude-sonnet-5-5=2:10:0.2,claude-opus-5-5=4:20:0.4 \
-  ai.server.monthly_allowance=10       # per workspace, or agent=3,trial=2 (per active agent, and for a trial)
+  ai.server.monthly_credits=1000,trial=500    # or just 1000
 ```
 
-A price is `input:output[:cache_read[:cache_write]]` dollars per million tokens, as your provider bills
-them. A cache price left out is a share of the input price, as Anthropic bills it: a read a tenth, a
-write (five minutes) 1.25 times; write `0` to make one free. Each call's cost is computed with the prices of the day it ran and stored, so changing a price
-never rewrites a past month. An allowance needs a price for every model in `ai.server.models` (the server
-says which are missing); a model that answers without a price (a provider's fallback) is charged at
-the highest price you declared. Allowances reset on the first day of each UTC month. Without
-`ai.server.monthly_allowance` there is no limit. A call counts only when the provider reports its
-tokens: an OpenAI-compatible server that reports none (the server logs a warning at start) and a call
-cut off by a crash cost nothing against the allowance.
+Credits start again on the first day of each UTC month; a trial's `trial=` credits count from the start
+of the trial to its end and do not come back before. A task that is retried, or that intake runs again on
+its fallback model, uses one credit. A call that fails, the help center's AI chat and the checks of a
+provider use none. A running call holds its credit. Without `ai.server.monthly_credits` there is no
+limit. Credits count results, not dollars, so `ai.server.prices` is optional: set it to see what the
+server's provider costs in the usage records.
+
+`ai.server.monthly_allowance` (dollars) is no longer read. While the database holds it, or
+`AI_SERVER_MONTHLY_ALLOWANCE` is set during the first import, the AI settings are refused with a message
+naming `ai.server.monthly_credits`, so a dollar amount is never read as credits. Replace it with
+`collie config set ai.server.monthly_credits=…` and `collie config unset ai.server.monthly_allowance`.
+
+`ai.server.prices` is `input:output[:cache_read[:cache_write]]` dollars per million tokens, as your provider
+bills them, for example `ai.server.prices=claude-haiku-5-5=0.1:0.5,claude-sonnet-5-5=2:10:0.2`. A cache price
+left out is a share of the input price, as Anthropic bills it: a read a tenth, a write (five minutes) 1.25
+times; write `0` to make one free. Each call's cost is computed with the prices of the day it ran and
+stored, so changing a price never rewrites a past month.
 
 A provider a workspace adds can only reach public `https` addresses, so a workspace cannot make your
 server call into your network. To let workspaces use a model server on your network (an Ollama next to
