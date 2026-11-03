@@ -420,9 +420,9 @@ stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mail
   (`TestTwoWorkspacesDisconnectingTogetherStillRevoke`).
 - **Access tokens are not cached**: one refresh per send. At the 300/hour limit that is well inside Google's
   token endpoint quota; cache only if a profile says so.
-- **Agents.** Connect and disconnect are approval routes; the approver receives the consent URL as `url`
-  (withheld from the token, like an invite link). The callback is NotForPeople: no token can drive a
-  browser through Google.
+- **Agents.** Connect and disconnect need `channels:manage_credentials`. A token gets the consent URL
+  as `url`, but only the token's person can finish it, in a browser signed in to Colliedesk. The callback
+  is NotForPeople: no token can drive a browser through Google.
 
 ## Sending through Microsoft 365 (issue #95, step 1)
 

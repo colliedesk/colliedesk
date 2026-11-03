@@ -73,8 +73,8 @@ people and revoked or expired sessions, so a signed-out tab disappears before it
    or every open tab's heartbeat waits on it.
 2. **Presence is not data.** It is not exported (`docs/user/export.md`), and a workspace restore copies
    whatever rows the backup held; they expire within minutes.
-3. **The read tier.** `PUT` and `DELETE` change nothing anyone wrote, so a read token may announce
-   itself. Do not give presence a side effect that does.
+3. **No write permission.** `PUT` and `DELETE` change nothing anyone wrote, so a token that only
+   reads may announce itself. Do not give presence a side effect that does.
 
 ## Warning before sending
 
@@ -86,9 +86,8 @@ web app takes the mark when the reply box stops being empty (the newest reply on
 teammate's reply that arrived on screen while you wrote is still asked about once; **Send anyway** and
 **Edit reply** both move the mark to the latest number. The MCP tool `colliedesk_reply_send` requires
 the mark (`latest_reply_number` of `colliedesk_conversation_get`); the REST API takes it as optional so
-older clients keep working. Approving a reply draft checks the approver's mark before the draft is
-claimed, so a refusal leaves it waiting; the replay checks again under the lock, and a reply in between
-(rare) fails the draft with 409.
+older clients keep working. A reply draft an AI agent left is sent from the reply box like
+any reply, so it carries the sender's mark.
 
 Numbers, not times. `created_at` is taken when a transaction starts and the row is visible when it
 commits, so "replies after the time I started" misses a reply that committed late; an import also

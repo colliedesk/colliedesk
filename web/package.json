@@ -12,7 +12,7 @@
     "typecheck": "corepack pnpm check:api && tsc --noEmit && tsc --noEmit -p e2e",
     "test": "vitest run",
     "e2e": "playwright test",
-    "generate:api": "openapi-typescript ../contracts/openapi.yaml -o src/api/generated.ts",
+    "generate:api": "openapi-typescript ../contracts/openapi.yaml -o src/api/generated.ts && node scripts/write-route-permissions.mjs",
     "check:api": "node scripts/check-generated-api.mjs"
   },
   "dependencies": {

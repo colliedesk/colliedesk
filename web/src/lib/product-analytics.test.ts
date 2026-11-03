@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../test-roles';
 import { resetProductAnalytics, resetProductAnalyticsForTest, scrubEvent, startProductAnalytics, track } from './product-analytics';
 
 // The loader stands in for posthog-js, the external analytics service.
@@ -7,7 +8,7 @@ function fakePostHog() {
 }
 
 const me = {
-  agent: { id: '0b8f7a52-1d2c-4a8e-9b1a-5f2c1e7d9a10', email: 'ada@acme.example.com', display_name: 'Ada', role: 'admin' as const, timezone_override: null },
+  agent: { id: '0b8f7a52-1d2c-4a8e-9b1a-5f2c1e7d9a10', email: 'ada@acme.example.com', display_name: 'Ada', roles: rolesOf('admin'), timezone_override: null },
   workspace: { id: '5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', slug: 'acme', name: 'Acme Support' },
   plan: { plan: 'trial' as const },
 };

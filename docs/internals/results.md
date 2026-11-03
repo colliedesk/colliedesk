@@ -83,7 +83,7 @@ the finished run names the baseline itself (`TestAnImportStillRunningIsNotTakenA
 
 ## Reading and opening a number
 
-`GET /api/v1/results` (every role; token tier `read`; MCP `colliedesk_results_get`) returns the newest
+`GET /api/v1/results` (`results:read`; MCP `colliedesk_results_get`) returns the newest
 current snapshot and the baseline as stored, plus `baseline_state` (`none`, `computing`, `ready`) and
 hours saved, which is worked out on the read from the two snapshots (it needs both). The compute error
 is shown to admins only. `GET /conversations?result=<snapshot id>:<window>.<metric>` keeps the
@@ -102,7 +102,7 @@ session returns.
 | The public answer is `results.Shared`, built field by field: windows of numbers, no snapshot id, no ledger source (it names the account), no compute error | `TestResultsShareLinkShowsTotalsOnlyAndCanBeTurnedOff` pins every key and that no workspace id, contact, subject or text appears |
 | Off, replaced, unknown and (on the cloud) locked answer the same 404 | A guess learns nothing about a workspace |
 | `last_viewed_at` is written at most once an hour; the route shares the public web form's per-address limiter; `no-store`, `no-referrer`, `noindex` | A public page must not make the database write without limit, nor be cached or indexed |
-| Creating a link is `approvalRequired` for every token, and its answer is withheld from the token (`withheldResults`) | Data leaves sign-in: a person approves, and only that person sees the link |
+| Creating, reading and turning off a link need `results:share` (a token made before roles lost it); the link is returned once, to whoever created it | Data leaves sign-in: only someone the workspace gave that permission makes one |
 | The weekly email is claimed per workspace week (`results_state.weekly_sent_week`, the Monday 00:00 of the workspace's timezone as an instant) before sending; a failure is logged, not retried | Two servers never send it twice; comparing instants (not local dates) survives a timezone change mid-week |
 | A workspace seen for the first time starts with the next Monday | Otherwise every new workspace would get an email the moment the worker first saw it |
 | The worker looks for a due weekly email every 5 minutes, not on every 15-second look | 8:00 is met within minutes; listing every workspace's timezone four times a minute would buy nothing |

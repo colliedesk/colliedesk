@@ -46,9 +46,9 @@ func intakeListSpec() Spec {
 		Name: "colliedesk_intake_list", Title: "List the intake queue",
 		Description: `List the cards of the intake queue of chat channels: what a customer said in one go on a scope that collects messages. ` +
 			`state review (default): what waits for a person, oldest first; deciding: what waits for AI; ignored: what was set aside; decided: what was opened, joined or set aside, newest first. ` +
-			`channel_id and scope narrow it; decided_by (rules, ai, agent) keeps who decided (ignored with ai: what AI set aside). Decide a card with colliedesk_intake_decide. Email and web forms have no cards. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/intake/gatherings"},
+			`channel_id and scope narrow it; decided_by (rules, ai, agent) keeps who decided (ignored with ai: what AI set aside). Decide a card with colliedesk_intake_decide. Email and web forms have no cards. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/intake/gatherings"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"state":{"type":"string","enum":["review","deciding","ignored","decided"]},` +
 			`"channel_id":{"type":"string",` + uuid + `},"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"decided_by":{"type":"string","enum":["rules","ai","agent"]},` +
 			`"cursor":{"type":"string","maxLength":200},"limit":{"type":"integer","minimum":1,"maximum":50,"default":50}}}`,
@@ -62,12 +62,12 @@ func intakeGetSpec() Spec {
 		Name: "colliedesk_intake_get", Title: "Read an intake card",
 		Description: `Read a card of the intake queue: everything its customer said, oldest first, every decision made on it (by AI or a person), newest first, ` +
 			`and while it is to be decided the conversations it may join (candidates) and the channel's commands that open a request. ` +
-			untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/intake/gatherings/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["gathering_id"],"properties":{` + intakeIDInput + `}}`,
-		Output: intakeDetailSchema,
-		run:    intakeGet,
+			untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/intake/gatherings/{id}"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["gathering_id"],"properties":{` + intakeIDInput + `}}`,
+		Output:   intakeDetailSchema,
+		run:      intakeGet,
 	}
 }
 
@@ -78,18 +78,16 @@ func intakeDecideSpec() Spec {
 			`(optional command: one of the channel's commands that opens a request, for its tags and priority; optional subject); attach adds it to conversation_id ` +
 			`(one of the card's candidates, so the reply goes to the same customer); ignore sets it aside, with an optional ignore_reason (colliedesk_intake_requeue takes it back). ` +
 			`To decide as AI suggested, send its action and conversation with follows_decision_id. The same decision again changes nothing; another one once the card is decided ` +
-			`fails with gathering_decided and how it stands. Opening a conversation may tell the customer it was received, so create needs the send tier; ` +
-			`a token below it files a request a person approves.` + "\n\nTier: draft (create: send).",
-		Tier: "draft",
+			`fails with gathering_decided and how it stands. Opening a conversation may tell the customer it was received, so create needs messages:send.`,
+
 		REST: []string{"POST /api/v1/intake/gatherings/{id}/decide"},
 		Input: `{"type":"object","additionalProperties":false,"required":["gathering_id","action"],"properties":{` + intakeIDInput + `,` +
 			`"action":{"type":"string","enum":["create","attach","ignore"]},"conversation_id":{"type":"string",` + uuid + `,"description":"With attach."},` +
 			`"command":{"type":"string","minLength":1,"maxLength":40},"subject":{"type":"string","minLength":1,"maxLength":200},` +
 			`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."},` +
 			`"follows_decision_id":{"type":"string",` + uuid + `,"description":"The card's suggestion.decision_id when deciding as AI suggested; its reply_kind comes with it."}}}`,
-		Output: `{"type":"object","properties":{"card":` + intakeCardSchema + `,"items":{"type":"array"},"decisions":{"type":"array"},"agent_request":` + filedRequestSchema +
-			`,"next":{"type":"string"}},"anyOf":[{"required":["card"]},{"required":["agent_request","next"]}]}`,
-		run: intakeDecide,
+		Output: `{"type":"object","properties":{"card":` + intakeCardSchema + `,"items":{"type":"array"},"decisions":{"type":"array"}},"required":["card"]}`,
+		run:    intakeDecide,
 	}
 }
 
@@ -97,12 +95,12 @@ func intakeRequeueSpec() Spec {
 	return Spec{
 		Name: "colliedesk_intake_requeue", Title: "Put an intake card back",
 		Description: `Take a card that was set aside (by a person, AI or the rules) back to the queue; its decisions stay in its history. ` +
-			`A card in the queue already is left as it is; one opened or joined fails with gathering_decided.` + "\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST:   []string{"POST /api/v1/intake/gatherings/{id}/requeue"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["gathering_id"],"properties":{` + intakeIDInput + `}}`,
-		Output: intakeDetailSchema,
-		run:    intakeRequeue,
+			`A card in the queue already is left as it is; one opened or joined fails with gathering_decided.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/intake/gatherings/{id}/requeue"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["gathering_id"],"properties":{` + intakeIDInput + `}}`,
+		Output:     intakeDetailSchema,
+		run:        intakeRequeue,
 	}
 }
 
@@ -110,10 +108,10 @@ func intakeSummarySpec() Spec {
 	return Spec{
 		Name: "colliedesk_intake_summary", Title: "Summarize the intake queue",
 		Description: `Say at a glance what the intake queue holds: whether the workspace has a chat channel with intake (available), how many cards wait ` +
-			`for a person (waiting) and for AI (deciding), and every channel and scope a card can come from. Counts and names only.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:  []string{"GET /api/v1/intake/summary"},
-		Input: `{"type":"object","additionalProperties":false,"properties":{}}`,
+			`for a person (waiting) and for AI (deciding), and every channel and scope a card can come from. Counts and names only.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/intake/summary"},
+		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
 		Output: `{"type":"object","required":["available","waiting","deciding","scopes"],"properties":{"available":{"type":"boolean"},"waiting":{"type":"integer"},` +
 			`"deciding":{"type":"integer"},"scopes":{"type":"array","items":{"type":"object","properties":{"channel_id":{"type":"string"},"channel_name":{"type":"string"},"scope":{"type":"string"}}}}}}`,
 		run: intakeSummary,
@@ -124,9 +122,9 @@ func intakeStatsSpec() Spec {
 	return Spec{
 		Name: "colliedesk_intake_stats", Title: "Count the intake",
 		Description: `Count the cards that closed in the last days (one channel, or all): by state, by who decided (rules, AI, a person), ` +
-			`how many fell back on the rules, and how many of AI's decisions a person changed.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/intake/stats"},
+			`how many fell back on the rules, and how many of AI's decisions a person changed.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/intake/stats"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `},` +
 			`"days":{"type":"integer","minimum":1,"maximum":90,"default":7}}}`,
 		Output: `{"type":"object","required":["stats"],"properties":{"stats":{"type":"object"}}}`,
@@ -138,12 +136,12 @@ func conversationIntakeGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_conversation_intake_get", Title: "Why messages are in a conversation",
 		Description: `Read why each message from a channel is in a conversation: what decided it (the rules by match or by default, a person, or AI, ` +
-			`from decision_basis and decision_rule) and the chat cards it came in, with their decisions. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/conversations/{id}/intake"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
-		Output: `{"type":"object","required":["messages","gatherings"],"properties":{"messages":{"type":"array","items":{"type":"object"}},"gatherings":{"type":"array","items":` + intakeDetailSchema + `}}}`,
-		run:    conversationIntakeGet,
+			`from decision_basis and decision_rule) and the chat cards it came in, with their decisions. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/conversations/{id}/intake"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
+		Output:   `{"type":"object","required":["messages","gatherings"],"properties":{"messages":{"type":"array","items":{"type":"object"}},"gatherings":{"type":"array","items":` + intakeDetailSchema + `}}}`,
+		run:      conversationIntakeGet,
 	}
 }
 

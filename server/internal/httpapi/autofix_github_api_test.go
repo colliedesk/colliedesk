@@ -791,23 +791,20 @@ func TestTheRepositoryCheckReadsGitHubNow(t *testing.T) {
 	}
 }
 
-func TestAnAgentTokenAsksAPersonToInstallTheApp(t *testing.T) {
+func TestAnAgentTokenGetsTheInstallAddressForItsPerson(t *testing.T) {
 	d := newGitHubDesk(t)
 	w := d.workspace(t, "Token GitHub")
 	admin := issueToken(t, d.api, w.admin, "Ops agent", "admin").Token
-	asked := accepted(t, d.api, http.MethodPost, "/api/v1/autofix/github/installations", nil, admin)
-	approved := approve(t, d.api, w.admin, asked.RequestID, nil)
-	if approved.Code != http.StatusOK || !strings.Contains(approved.Body.String(), "/installations/new") {
-		t.Fatalf("approver gets the install address: %d %s", approved.Code, approved.Body.String())
-	}
-	if stored := getRequest(t, d.api, admin, asked.RequestID); strings.Contains(string(stored.Result), "installations/new") {
-		t.Fatalf("the token can read the install address: %s", stored.Result)
+	started := checked(t, d.api, http.MethodPost, "/api/v1/autofix/github/installations", nil, admin, nil)
+	if started.Code >= 300 || !strings.Contains(started.Body.String(), "/installations/new") {
+		t.Fatalf("an Admin token gets the install address for its person: %d %s", started.Code, started.Body.String())
 	}
 	read := issueToken(t, d.api, w.admin, "Reader", "read").Token
 	if response := checked(t, d.api, http.MethodGet, "/api/v1/autofix/settings", nil, read, nil); response.Code != http.StatusOK {
 		t.Fatalf("a read token reads the settings: %d", response.Code)
 	}
-	accepted(t, d.api, http.MethodPost, "/api/v1/autofix/repos", map[string]any{"installation_id": "00000000-0000-4000-8000-000000000000", "github_repo_id": 1}, read)
+	refused(t, d.api, http.MethodPost, "/api/v1/autofix/github/installations", nil, read, "autofix_settings:update")
+	refused(t, d.api, http.MethodPost, "/api/v1/autofix/repos", map[string]any{"installation_id": "00000000-0000-4000-8000-000000000000", "github_repo_id": 1}, read, "autofix_settings:update")
 }
 
 func TestAServerWithoutItsGitHubAppSaysSo(t *testing.T) {
@@ -922,11 +919,16 @@ func TestOnlyAnAdministratorOfEveryRepositoryConnectsTheInstallation(t *testing.
 	if location := d.install(t, d.startInstall(t, w.admin), "olga", 23, sessionCookieOf(w.admin)); location != "/settings/autofix?github=connected" {
 		t.Fatalf("the owner: Location = %s", location)
 	}
-	// Removing it uninstalls the App on the customer's GitHub: an agent token asks a person.
+	// Removing it uninstalls the App on the customer's GitHub: a token without autofix_settings:update is
+	// refused; an Admin token does it as its person would.
 	installation := d.settings(t, w.admin).Installations[0].ID
-	admin := issueToken(t, d.api, w.admin, "Ops agent", "admin").Token
-	accepted(t, d.api, http.MethodDelete, "/api/v1/autofix/github/installations/"+installation, nil, admin)
+	send := issueToken(t, d.api, w.admin, "Sender", "send").Token
+	refused(t, d.api, http.MethodDelete, "/api/v1/autofix/github/installations/"+installation, nil, send, "autofix_settings:update")
 	if d.fake.Uninstalled(23) {
-		t.Fatal("an agent token uninstalled the App")
+		t.Fatal("a refused token uninstalled the App")
+	}
+	admin := issueToken(t, d.api, w.admin, "Ops agent", "admin").Token
+	if response := checked(t, d.api, http.MethodDelete, "/api/v1/autofix/github/installations/"+installation, nil, admin, nil); response.Code >= 300 || !d.fake.Uninstalled(23) {
+		t.Fatalf("an Admin token removes the App: %d %s", response.Code, response.Body.String())
 	}
 }

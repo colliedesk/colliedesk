@@ -35,9 +35,7 @@ func TestHelpCenterThemeToolsCheckSaveAndPropose(t *testing.T) {
 	}
 
 	send := e.connect(w.send, "")
-	if proposed := e.ok(send, "colliedesk_help_center_theme_update", map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "custom_css": nil}); proposed["agent_request"] == nil {
-		t.Fatalf("send token update = %v, want an agent request", proposed)
-	}
+	e.refused(send, "colliedesk_help_center_theme_update", map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "custom_css": nil})
 
 	admin := e.connect(w.adminTier, "")
 	if message := e.fails(admin, "colliedesk_help_center_theme_update", low); !strings.Contains(message, "colors.text") || !strings.Contains(message, "4.5:1") {

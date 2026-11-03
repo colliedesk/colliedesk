@@ -10,7 +10,7 @@ const agent = '33333333-3333-4333-8333-333333333333';
 const article = '44444444-4444-4444-8444-444444444444';
 
 function draft(change: Partial<AIDraft> = {}): AIDraft {
-  return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', error_code: null, prompt: '', text: 'Hi Ada, open tray two.',
+  return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', source: 'ai', cc: null, written_by: null, error_code: null, prompt: '', text: 'Hi Ada, open tray two.',
     missing_info: 'Which printer model?', sources: [{ kind: 'kb_article', id: article, number: 4, title: 'Printer paper jams' }],
     warnings: [{ kind: 'email', value: 'grace@other.example' }], model: 'claude-sonnet-5-5', outcome: null, similarity: null, sent_message_id: null,
     requested_by_agent_id: agent, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-22T10:00:00Z', ready_at: '2026-10-22T10:00:05Z', decided_at: null, ...change };

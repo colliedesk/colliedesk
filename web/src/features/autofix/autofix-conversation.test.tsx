@@ -144,7 +144,7 @@ describe('targetOf', () => {
 
 function aiDraft(fields: Record<string, unknown>) {
   return {
-    id: fields.id, conversation_id: conversationId, status: 'ready', error_code: null, prompt: 'x', text: '', missing_info: null, sources: [], warnings: [], model: null,
+    id: fields.id, conversation_id: conversationId, status: 'ready', source: 'ai', cc: null, written_by: null, error_code: null, prompt: 'x', text: '', missing_info: null, sources: [], warnings: [], model: null,
     outcome: null, similarity: null, sent_message_id: null, requested_by_agent_id: null, automatic: false, answers_message_id: null, reply_needed: null,
     created_at: '2026-10-27T11:00:00Z', ready_at: '2026-10-27T11:00:00Z', decided_at: null, ...fields,
   };

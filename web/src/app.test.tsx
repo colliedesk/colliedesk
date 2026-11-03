@@ -3,11 +3,13 @@ import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/rea
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
+import { forgetPermissions } from './api/client';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { readPlanIntent, rememberPlanIntent } from './features/settings/plan-intent';
 import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 import { presenceViewPart } from './features/inbox/presence-part';
+import { permissionsOf, rolesOf } from './test-roles';
 import { autofixPart } from './features/autofix/autofix-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
@@ -29,9 +31,9 @@ afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); clerk.si
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const locked = { error: { code: 'workspace_locked', message: 'This workspace is locked because its trial or subscription ended.' } };
 const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, plan,
+  timezone: 'UTC', token: null, permissions: permissionsOf(role), plan,
 });
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
@@ -588,4 +590,45 @@ test('Review opened with a channel and no scope lists that channel\'s cards only
   const list = fetchMock.mock.calls.map(([url]) => String(url)).find((url) => url.startsWith('/api/v1/intake/gatherings?'));
   expect(list).toContain(`channel_id=${channel}`);
   expect(list).not.toContain('scope=');
+});
+
+const openTrial = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
+const narrow = (permissions: string[]) => ({ ...meBody('agent', openTrial), permissions });
+
+// A role that reads only the knowledge base sees only what it opens: the rail offers Knowledge and Settings,
+// the inbox address opens Knowledge, and no page asks the server for what the role may not read.
+test('a role that reads only the knowledge base lands in Knowledge and is offered nothing else to read', async () => {
+  // As in the browser, no session is known until /auth/me answers.
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['kb_articles:read', 'kb_media:read', 'help_center:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/collections': () => json(200, { items: [] }),
+    '/api/v1/kb/articles': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/help-center': () => json(200, { enabled: false }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge'));
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
+  expect(within(rail).queryByRole('link', { name: 'Results' })).not.toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+  await act(async () => { await router.navigate({ to: '/results' }); });
+  expect(await screen.findByText(/Your roles do not let you open Results/)).toBeInTheDocument();
+  const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
+  for (const path of ['/api/v1/conversations', '/api/v1/inbox/activity', '/api/v1/intake/summary', '/api/v1/results', '/api/v1/tags', '/api/v1/agents']) expect(asked, path).not.toContain(path);
+});
+
+test('a role that reads only media lands in the media library, and the rail takes it there', async () => {
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['kb_media:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/media': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/kb/media-uploads': () => json(200, { items: [] }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/media'));
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/media');
 });

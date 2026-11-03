@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ChannelsRoute } from './channels-route';
+import { permissionsOf, rolesOf } from '../../../test-roles';
 import type { ChannelsSearch } from './channels-route';
 
 const mocks = vi.hoisted(() => {
@@ -30,7 +31,7 @@ const { api, channelsApi, aiApi } = mocks;
 const EMAIL = '44444444-4444-4444-8444-444444444444';
 const FORM = '55555555-5555-4555-8555-555555555555';
 const me = (role: 'admin' | 'agent') => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', plan: null,
 });
 const channel = (type: 'email' | 'web_form', change: Record<string, unknown> = {}) => ({

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 )
 
@@ -19,7 +18,7 @@ func ToolTable(specs []mcpserver.Spec) string {
 func OperatorToolTable(specs []mcpserver.Spec) string {
 	var operator []mcpserver.Spec
 	for _, spec := range specs {
-		if spec.Tier == auth.ScopeOperator {
+		if spec.Operator {
 			operator = append(operator, spec)
 		}
 	}
@@ -30,7 +29,7 @@ func OperatorToolTable(specs []mcpserver.Spec) string {
 func WorkspaceTools(specs []mcpserver.Spec) []mcpserver.Spec {
 	var workspace []mcpserver.Spec
 	for _, spec := range specs {
-		if spec.Tier != auth.ScopeOperator {
+		if !spec.Operator {
 			workspace = append(workspace, spec)
 		}
 	}
@@ -39,19 +38,27 @@ func WorkspaceTools(specs []mcpserver.Spec) []mcpserver.Spec {
 
 func table(specs []mcpserver.Spec) string {
 	var b strings.Builder
-	b.WriteString("| Tool | What it does | Tier |\n|---|---|---|\n")
+	b.WriteString("| Tool | What it does | Needs |\n|---|---|---|\n")
 	for _, spec := range specs {
 		doc := spec.Doc
 		if spec.Destructive {
 			doc += ". Cannot be undone"
 		}
-		tier := "`" + spec.Tier + "`"
-		if spec.Tier == "any" {
-			tier = "any"
-		}
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", spec.Name, doc, tier)
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", spec.Name, doc, needsCell(spec))
 	}
 	return b.String()
+}
+
+// needsCell is what a caller must hold to use the tool: its permissions, "any token" when it needs
+// none, or "operator" for an operator tool.
+func needsCell(spec mcpserver.Spec) string {
+	if spec.Operator {
+		return "operator"
+	}
+	if len(spec.Needs) == 0 {
+		return "any token"
+	}
+	return "`" + strings.Join(spec.Needs, "`, `") + "`"
 }
 
 // Replace puts body between the lines <!-- generated:name --> and <!-- /generated --> of page.

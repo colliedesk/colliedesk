@@ -7,10 +7,13 @@ import (
 
 // TeamMember is an agent as the team list shows it: identity, role, state and activity.
 type TeamMember struct {
-	ID               string  `json:"id"`
-	Email            string  `json:"email"`
-	DisplayName      string  `json:"display_name"`
-	Role             string  `json:"role"`
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"display_name"`
+	Roles       []RoleRef `json:"roles"`
+	// Manageable: the caller may change this member (holds team:manage_roles and every permission
+	// the member holds); worked out per caller.
+	Manageable       bool    `json:"manageable"`
 	TimezoneOverride *string `json:"timezone_override"`
 	// DeactivatedAt is null for an active agent.
 	DeactivatedAt *time.Time `json:"deactivated_at"`
@@ -23,7 +26,7 @@ type TeamMember struct {
 // Sentinel errors of agent management; the API maps each to its own code.
 var (
 	// ErrLastAdmin means the change would leave the workspace without an active admin.
-	ErrLastAdmin = errors.New("a workspace needs at least one active admin")
+	ErrLastAdmin = errors.New("a workspace needs at least one active member with the Admin role")
 	// ErrInvalidReassignTarget means the conversations cannot move to the chosen agent: it is
 	// unknown, in another workspace, deactivated, or the agent being deactivated.
 	ErrInvalidReassignTarget = errors.New("conversations can only move to another active agent of this workspace")

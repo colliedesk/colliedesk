@@ -37,18 +37,11 @@ var Hosts = []Host{
 
 type Host struct{ ID, Name string }
 
-// Tier is one row of the tier table of a guide.
-type Tier struct {
-	Name     string
-	Callable int // tools the tier calls directly; the rest file an agent request
-}
-
 // Data is what the guide templates read.
 type Data struct {
 	Origin, MCPURL, ServerName, TokenEnv, URLEnv, TokenPrefix string
 	ProtocolVersions                                          []string
 	Tools                                                     int
-	Tiers                                                     []Tier
 	Snippets                                                  map[string]string
 	Assets                                                    map[string]string // client-assets.txt: "darwin/arm64", "bundle", "checksums" to file name
 	Releases, Marketplace, PluginID                           string
@@ -66,16 +59,6 @@ func NewData(specs []mcpserver.Spec, assetList string) (Data, error) {
 		TokenEnv: mcpbridge.TokenEnv, URLEnv: mcpbridge.URLEnv, TokenPrefix: mcpbridge.TokenPrefix,
 		ProtocolVersions: mcp.SupportedProtocolVersions(), Tools: len(specs), Assets: assets,
 		Releases: Releases, Marketplace: Marketplace, PluginID: PluginID,
-	}
-	rank := map[string]int{"any": 0, "read": 1, "draft": 2, "send": 3, "admin": 4}
-	for _, tier := range []string{"read", "draft", "send", "admin"} {
-		row := Tier{Name: tier}
-		for _, spec := range specs {
-			if rank[spec.Tier] <= rank[tier] {
-				row.Callable++
-			}
-		}
-		data.Tiers = append(data.Tiers, row)
 	}
 	data.Snippets = snippets(data)
 	return data, nil

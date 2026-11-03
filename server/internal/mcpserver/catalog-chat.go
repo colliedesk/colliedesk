@@ -30,9 +30,9 @@ func conversationChatGetSpec() Spec {
 		Description: `Read what was said in the chat places (a one-to-one chat, a group) a conversation's messages came from, newest first: the customers' messages, ` +
 			`the team's replies and the channel's notices, with which items are part of this conversation (linked) and how they came to it. ` +
 			`linked only keeps the conversation's own. Another customer of a group is marked is_other_customer. Empty for a conversation that came from no chat. ` +
-			untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/conversations/{id}/chat"},
+			untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/conversations/{id}/chat"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `},` +
 			`"linked":{"type":"string","enum":["only"]},` + chatPaging + `}}`,
 		Output: chatPageOutput,
@@ -44,9 +44,9 @@ func channelThreadsListSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_threads_list", Title: "List a chat channel's places",
 		Description: `List the places of a chat channel (one-to-one chats and groups), most recently active first, each with its newest item. ` +
-			`kind keeps direct or group ones. Read a place with colliedesk_channel_thread_items. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/channels/{id}/threads"},
+			`kind keeps direct or group ones. Read a place with colliedesk_channel_thread_items. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/{id}/threads"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,` +
 			`"kind":{"type":"string","enum":["direct","group"]},` + chatPaging + `}}`,
 		Output: `{"type":"object","required":["items","next_cursor"],"properties":{"items":{"type":"array","items":{"type":"object","required":["id","kind","untrusted_customer_content"],"properties":{` +
@@ -61,10 +61,10 @@ func channelSendersSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_senders", Title: "List who wrote in a chat channel",
 		Description: `List the people who wrote in a chat channel's places (customers and the team, never the channel itself), each once, most recent first, at most 200: ` +
-			`kind and value name them as the channel does (a Zalo user id), with the place and time they last wrote. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:  []string{"GET /api/v1/channels/{id}/senders"},
-		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+			`kind and value name them as the channel does (a Zalo user id), with the place and time they last wrote. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/{id}/senders"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
 		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["kind","value","role","last_at","thread_id","untrusted_customer_content"],"properties":{` +
 			`"kind":{"type":"string"},"value":{"type":"string"},"role":{"type":"string","enum":["customer","staff"]},"last_at":{"type":"string"},"thread_id":{"type":"string"},` +
 			`"untrusted_customer_content":{"type":"object","properties":{"name":{"type":"string"},"thread_name":{"type":"string"}}}}}}}}`,
@@ -76,9 +76,9 @@ func channelThreadItemsSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_thread_items", Title: "Read a chat place",
 		Description: `Read everything said in one place of a chat channel, newest first: what became a conversation's, what is waiting for review, and what was set aside ` +
-			`as not a request. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/channels/{id}/threads/{threadId}/items"},
+			`as not a request. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/{id}/threads/{threadId}/items"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","thread_id"],"properties":{` + channelIDInput + `,` +
 			`"thread_id":{"type":"string",` + uuid + `,"description":"From colliedesk_channel_threads_list."},` + chatPaging + `}}`,
 		Output: chatPageOutput,
@@ -90,9 +90,9 @@ func channelUnresolvedItemsSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_unresolved_items", Title: "List chat messages nobody concluded on",
 		Description: `List what customers said on chat channels, in places that open conversations, that nobody concluded on yet (it arrived while the channel was off), ` +
-			`oldest first; older_than keeps those older than so many seconds. ` + untrustedNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/channel-thread-items"},
+			`oldest first; older_than keeps those older than so many seconds. ` + untrustedNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channel-thread-items"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"older_than":{"type":"integer","minimum":0,"maximum":2592000},` +
 			`"cursor":{"type":"string","maxLength":200},"limit":{"type":"integer","minimum":1,"maximum":100,"default":100}}}`,
 		Output: chatPageOutput,

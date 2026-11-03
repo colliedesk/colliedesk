@@ -43,5 +43,5 @@ Colliedesk.
 2. [Saved replies](https://colliedesk.com/docs/saved-replies.md)
 3. [Knowledge base](https://colliedesk.com/docs/knowledge-base.md)
 4. [AI providers and features](https://colliedesk.com/docs/ai.md)
-5. [Agent requests and reply drafts](https://colliedesk.com/docs/agent-requests.md)
+5. [Roles and permissions](https://colliedesk.com/docs/roles-and-permissions.md)
 6. [Agent skills](https://colliedesk.com/docs/agent-skills.md)

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -94,21 +93,12 @@ func (a *API) setChannelAI(response http.ResponseWriter, request *http.Request) 
 		writeChannelAIError(response, err)
 		return
 	}
-	route := Route{Method: http.MethodPut, Pattern: channelAIRoute}
-	if who.IsToken() && !who.Allows(auth.PermAISettingsUpdate) {
-		a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
+	if !who.Can(auth.PermAISettingsUpdate) {
+		a.writePermissionMissing(response, request, who, auth.PermAISettingsUpdate)
 		return
 	}
-	// The route lets every role through so a token can file its request; changing the level is an admin's.
-	if !auth.HasPermission(who.Agent.Role, auth.PermissionAccessWrite) {
-		writeError(response, http.StatusForbidden, "forbidden", "Only admins change what AI does by itself on a channel.")
-		return
-	}
-	levels, err := a.ai.SetChannelLevel(request.Context(), who.Workspace.ID, aiActor(request), ref, request.PathValue("slot"), change, !who.IsToken())
-	if errors.Is(err, ai.ErrRaiseNeedsApproval) {
-		a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
-		return
-	}
+	// Raising what AI does by itself takes ai_settings:update, which this caller holds.
+	levels, err := a.ai.SetChannelLevel(request.Context(), who.Workspace.ID, aiActor(request), ref, request.PathValue("slot"), change, true)
 	if err != nil {
 		writeChannelAIError(response, err)
 		return
@@ -132,48 +122,6 @@ func writeChannelAIError(response http.ResponseWriter, err error) {
 	default:
 		writeAIError(response, err)
 	}
-}
-
-// summarizeChannelAIRequest is what a person reads before approving a channel's AI level: the
-// channel, the feature, the scope, from what to what, and whether intake's options change.
-func (a *API) summarizeChannelAIRequest(ctx context.Context, request *http.Request, who auth.Principal, body json.RawMessage) string {
-	var call struct {
-		Scope   string          `json:"scope"`
-		Level   *string         `json:"level"`
-		Options json.RawMessage `json:"options"`
-	}
-	_ = json.Unmarshal(body, &call)
-	slot := request.PathValue("slot")
-	ref, _, err := a.channelRef(ctx, who.Workspace.ID, request.PathValue("id"))
-	if err != nil {
-		return ""
-	}
-	before := "(unknown)"
-	if levels, err := a.ai.ChannelAI(ctx, who.Workspace.ID, ref); err == nil {
-		for _, scope := range levels.Scopes {
-			for _, item := range scope.Slots {
-				if scope.Scope == call.Scope && item.Slot == slot {
-					before = item.EffectiveLevel
-					if item.Level == nil {
-						before += " (following " + item.Source + ")"
-					}
-				}
-			}
-		}
-	}
-	after := "follow the channel and the workspace"
-	if call.Level != nil {
-		after = *call.Level
-	}
-	where := ref.Name
-	if call.Scope != "" {
-		where += " · " + call.Scope
-	}
-	summary := "Set AI " + slot + " on " + where + ": " + before + " → " + after
-	if trimmed := strings.TrimSpace(string(call.Options)); trimmed != "" && trimmed != "null" {
-		summary += "; intake options " + trimmed
-	}
-	return summary
 }
 
 func (a *API) setAISourceConsent(response http.ResponseWriter, request *http.Request) {

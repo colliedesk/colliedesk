@@ -9,34 +9,35 @@ import (
 )
 
 type restMember struct {
-	ID            string     `json:"id"`
-	Email         string     `json:"email"`
-	DisplayName   string     `json:"display_name"`
-	Role          string     `json:"role"`
-	DeactivatedAt *time.Time `json:"deactivated_at"`
+	ID            string        `json:"id"`
+	Email         string        `json:"email"`
+	DisplayName   string        `json:"display_name"`
+	Roles         []restRoleRef `json:"roles"`
+	DeactivatedAt *time.Time    `json:"deactivated_at"`
 }
 
 type restInvite struct {
-	ID             string     `json:"id"`
-	Email          string     `json:"email"`
-	RoleCeiling    string     `json:"role_ceiling"`
-	CreatedByEmail string     `json:"created_by_email"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ExpiresAt      time.Time  `json:"expires_at"`
-	UsedAt         *time.Time `json:"used_at"`
-	RevokedAt      *time.Time `json:"revoked_at"`
+	ID             string        `json:"id"`
+	Email          string        `json:"email"`
+	Roles          []restRoleRef `json:"roles"`
+	CreatedByEmail string        `json:"created_by_email"`
+	CreatedAt      time.Time     `json:"created_at"`
+	ExpiresAt      time.Time     `json:"expires_at"`
+	UsedAt         *time.Time    `json:"used_at"`
+	RevokedAt      *time.Time    `json:"revoked_at"`
 }
 
 type restSession struct {
-	ID          string     `json:"id"`
-	AgentEmail  string     `json:"agent_email"`
-	Label       string     `json:"label"`
-	Scope       *string    `json:"scope"`
-	Permissions []string   `json:"permissions"`
-	Current     bool       `json:"current"`
-	LastSeenAt  time.Time  `json:"last_seen_at"`
-	ExpiresAt   time.Time  `json:"expires_at"`
-	RevokedAt   *time.Time `json:"revoked_at"`
+	ID          string          `json:"id"`
+	AgentEmail  string          `json:"agent_email"`
+	AgentName   string          `json:"agent_name"`
+	Label       string          `json:"label"`
+	Token       *restTokenGrant `json:"token"`
+	Permissions []string        `json:"permissions"`
+	Current     bool            `json:"current"`
+	LastSeenAt  time.Time       `json:"last_seen_at"`
+	ExpiresAt   time.Time       `json:"expires_at"`
+	RevokedAt   *time.Time      `json:"revoked_at"`
 }
 
 type restEmailSettings struct {
@@ -131,7 +132,9 @@ func myDisplayNameSet(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"your_display_name": agent.DisplayName}, nil
 }
 
-// memberByEmailOrID finds a team member of this workspace, deactivated ones included.
+// memberByEmailOrID finds a team member of this workspace, deactivated ones included, by id, email
+// or display name. A display name two members share is refused with their emails, so a call never
+// acts on someone other than the person it named.
 func (c *call) memberByEmailOrID(value string) (restMember, error) {
 	var page struct {
 		Items []restMember `json:"items"`
@@ -140,27 +143,46 @@ func (c *call) memberByEmailOrID(value string) (restMember, error) {
 		return restMember{}, err
 	}
 	value = strings.TrimSpace(value)
+	var named []restMember
 	for _, member := range page.Items {
 		if member.ID == value || strings.EqualFold(member.Email, value) {
 			return member, nil
 		}
+		if member.DisplayName != "" && strings.EqualFold(member.DisplayName, value) {
+			named = append(named, member)
+		}
 	}
-	return restMember{}, &toolError{"No team member " + value + " in this workspace. List them with colliedesk_agents_list."}
+	switch len(named) {
+	case 1:
+		return named[0], nil
+	case 0:
+		return restMember{}, &toolError{"No team member " + value + " in this workspace. List them with colliedesk_agents_list."}
+	}
+	emails := make([]string, len(named))
+	for index, member := range named {
+		emails[index] = member.Email
+	}
+	return restMember{}, &toolError{"Several team members are named " + value + ": " + strings.Join(emails, ", ") + ". Give the email of the one you mean."}
+}
+
+// memberView is a team member as the tools show it: names, never only ids.
+func memberView(member restMember) map[string]any {
+	return map[string]any{"id": member.ID, "email": member.Email, "display_name": member.DisplayName,
+		"roles": roleNames(member.Roles), "active": member.DeactivatedAt == nil}
 }
 
 func teamMemberUpdate(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		Member      string  `json:"member"`
 		DisplayName *string `json:"display_name"`
-		Role        *string `json:"role"`
 		Active      *bool   `json:"active"`
 		ReassignTo  string  `json:"reassign_to"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	if args.DisplayName == nil && args.Role == nil && args.Active == nil {
-		return nil, &toolError{"Nothing to change. Give display_name, role, active, or several of them."}
+	if args.DisplayName == nil && args.Active == nil {
+		return nil, &toolError{"Nothing to change. Give display_name, active, or both."}
 	}
 	member, err := c.memberByEmailOrID(args.Member)
 	if err != nil {
@@ -169,9 +191,6 @@ func teamMemberUpdate(c *call, arguments map[string]any) (any, error) {
 	body := map[string]any{}
 	if args.DisplayName != nil {
 		body["display_name"] = *args.DisplayName
-	}
-	if args.Role != nil {
-		body["role"] = *args.Role
 	}
 	if args.Active != nil {
 		body["active"] = *args.Active
@@ -188,8 +207,7 @@ func teamMemberUpdate(c *call, arguments map[string]any) (any, error) {
 	if err := c.send(http.MethodPatch, "/api/v1/agents/"+url.PathEscape(member.ID), body, &updated); err != nil {
 		return nil, err
 	}
-	return map[string]any{"member": map[string]any{"id": updated.ID, "email": updated.Email, "display_name": updated.DisplayName,
-		"role": updated.Role, "active": updated.DeactivatedAt == nil}}, nil
+	return map[string]any{"member": memberView(updated)}, nil
 }
 
 func inviteView(invite restInvite) map[string]any {
@@ -202,7 +220,7 @@ func inviteView(invite restInvite) map[string]any {
 	case !invite.ExpiresAt.After(time.Now()):
 		state = "expired"
 	}
-	return map[string]any{"id": invite.ID, "email": invite.Email, "role": invite.RoleCeiling, "state": state,
+	return map[string]any{"id": invite.ID, "email": invite.Email, "roles": roleNames(invite.Roles), "state": state,
 		"invited_by": invite.CreatedByEmail, "created_at": utc(invite.CreatedAt), "expires_at": utc(invite.ExpiresAt)}
 }
 
@@ -222,16 +240,26 @@ func invitesList(c *call, _ map[string]any) (any, error) {
 
 func inviteCreate(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Email string `json:"email"`
-		Role  string `json:"role"`
+		Email string   `json:"email"`
+		Roles []string `json:"roles"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	if args.Role == "" {
-		args.Role = "agent"
+	body := map[string]any{"email": strings.TrimSpace(args.Email)}
+	if len(args.Roles) > 0 {
+		body["roles"] = args.Roles
 	}
-	return ask(c, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": strings.TrimSpace(args.Email), "role_ceiling": args.Role})
+	var created struct {
+		Invite restInvite `json:"invite"`
+		URL    string     `json:"url"`
+	}
+	if err := c.send(http.MethodPost, "/api/v1/auth/invites", body, &created); err != nil {
+		return nil, err
+	}
+	return map[string]any{"invite": inviteView(created.Invite), "url": created.URL,
+		"next": "The url is a one-time sign-in link for " + created.Invite.Email + " only, shown this once: give it to them privately, never in a conversation, note or reply. " +
+			"Revoke the invite with colliedesk_invite_revoke if it went to the wrong person."}, nil
 }
 
 func inviteRevoke(c *call, arguments map[string]any) (any, error) {
@@ -259,10 +287,31 @@ func sessionsList(c *call, _ map[string]any) (any, error) {
 		case !session.ExpiresAt.After(time.Now()):
 			state = "expired"
 		}
-		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "token_tier": session.Scope, "permissions": session.Permissions,
+		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "owner_name": session.AgentName, "token": sessionToken(session.Token), "permissions": session.Permissions,
 			"this_token": session.Current, "state": state, "last_seen_at": utc(session.LastSeenAt), "expires_at": utc(session.ExpiresAt)}
 	}
 	return map[string]any{"sessions": sessions}, nil
+}
+
+// tokenStopped says why a token that follows a role does nothing (role_held false) and how to start it.
+const tokenStopped = "Its person no longer holds every permission of this role, so the token can do nothing until they hold them again (giving them the role does it)."
+
+// sessionToken is how an agent token got its permissions, by role name; nil for a person's sign-in.
+func sessionToken(grant *restTokenGrant) map[string]any {
+	if grant == nil {
+		return nil
+	}
+	out := map[string]any{"kind": grant.Kind, "role": nil, "given": grant.Permissions}
+	if grant.Role != nil {
+		out["role"] = grant.Role.Name
+		if grant.RoleHeld != nil && !*grant.RoleHeld {
+			out["stopped"] = tokenStopped
+		}
+	}
+	if grant.LegacyTier != nil {
+		out["legacy_tier"] = *grant.LegacyTier
+	}
+	return out
 }
 
 func sessionRevoke(c *call, arguments map[string]any) (any, error) {

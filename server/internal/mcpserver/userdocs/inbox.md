@@ -74,8 +74,8 @@ In the web app:
    that removes it.
 
 `GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
-adds or changes one (admins; an agent token asks a person first). MCP: `colliedesk_number_series_list`,
-`colliedesk_number_series_set_request`.
+adds or changes one (`workspace:update`, which the Admin role holds; an agent token with it does it at once). MCP: `colliedesk_number_series_list`,
+`colliedesk_number_series_set`.
 
 Find a conversation by its code with `?ref=` on `GET /api/v1/conversations` (MCP `ref` of
 `colliedesk_inbox_search`): another case, spaces around it or more or fewer leading zeros match, a code of
@@ -91,7 +91,8 @@ conversations with any of them; each filter you add narrows the list further.
   appears; tick it to show only conversations with all of them.
 - **Needs attention**: **Waiting on us** (the newest message that is not a private note came from the
   customer) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
-  Reply drafts that wait for approval are on the [Requests](agent-requests.md) page.
+  A link with `?has_pending_draft=true` shows the conversations where an AI agent left a reply draft
+  that no one has sent or discarded yet (chip **Reply draft waiting to be sent**).
 - **Channel**: how the conversation started. **Email**, **Web form**, **Help chat** and **Zalo OA** are
   listed once the workspace has a channel of that type. **Imported** (from another helpdesk) and **Started by the team**
   (created in Colliedesk by a teammate or an agent token) are always listed.
@@ -256,9 +257,9 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
   its own time and says where it came from), and you choose **Send anyway** or **Edit reply**. Either
   way you are asked about those replies once. Private notes never trigger it.
-- Approving an AI agent's [reply draft](agent-requests.md) works the same way: when someone replied
-  after the newest reply on your screen, the draft is not sent and keeps waiting; read the new reply,
-  then send the draft again if it still fits.
+- A reply draft an AI agent left (`colliedesk_reply_draft`) shows above the reply box with the
+  token's name; you edit it, send it or discard it. Sending it is a reply like any other, so the same
+  check applies.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
 - **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.
@@ -348,7 +349,7 @@ AI agents move messages with the MCP tools `colliedesk_messages_move`, `colliede
 and `colliedesk_message_move_undo`, or the API `POST /api/v1/conversations/{id}/messages/move`
 (`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source`), `GET
 /api/v1/conversations/{id}/message-moves` (the moves out of and into a conversation) and `POST
-/api/v1/message-moves/{id}/undo`; moving and undoing need the draft tier. Through the API, send the same
+/api/v1/message-moves/{id}/undo`; moving and undoing need `conversations:update`. Through the API, send the same
 `Idempotency-Key` header on every retry of one move or undo: a repeat answers what the first one got.
 
 **Trial and locked workspaces** (hosted cloud only)
@@ -370,5 +371,6 @@ See [Plan and billing](billing.md).
 - When a status was set by something other than a person on your team (an AI agent, the customer
   writing or typing Reopen, the import, or the channel closing it by itself), a quiet line in the
   timeline says who, at the time it happened.
-- An AI agent whose token may not write to customers asks a person first when its change would tell
-  one; the request shows the words that will be sent ([Agent requests](agent-requests.md)).
+- A status change that would tell a customer needs `messages:send`. An AI agent whose token lacks it
+  is refused with the channel that would tell them, and can set the status quietly with
+  `notify: false` instead.

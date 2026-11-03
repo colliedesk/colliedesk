@@ -15,6 +15,7 @@ import { ownRef } from './conversation-ref';
 import { slaMark, slaOf } from '../../lib/sla';
 import { TimeEntriesSection } from './time-entries-section';
 import { AutofixStrip } from '../autofix/autofix-slot';
+import { useHolds } from '../../lib/permissions-context';
 
 interface TimelinePanelProps {
   conversation?: Conversation;
@@ -96,6 +97,8 @@ function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversati
 }
 
 export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
+  // A role that reads conversations but not their messages is told so instead of waiting for them.
+  const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   const event = conversation ? <StatusEvent conversation={conversation} timezone={timezone} canManageChannels={canManageChannels} /> : null;
   // The line stands at its time, before a message of the same moment (the notice it caused).
@@ -132,6 +135,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
         <div className="timeline-stack">
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
+          {conversation && !readsMessages && <p className="empty-copy">{messages.messagesClosed}</p>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
           {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}

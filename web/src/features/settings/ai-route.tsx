@@ -10,6 +10,7 @@ import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
 import { AIChatSettingsRoute } from './ai-chat-route';
 import { useBillingShown } from '../billing/billing-shown';
+import { can } from '../../lib/can';
 import { useIntakeSummary } from '../review/use-intake-summary';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
@@ -68,7 +69,7 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: Boolean(me.data) });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'ai_settings:update');
   const billingShown = useBillingShown(isAdmin);
   // Intake has a row once the workspace has a chat channel that collects messages (the rail's summary).
   const chatChannels = useIntakeSummary().data?.available ?? false;

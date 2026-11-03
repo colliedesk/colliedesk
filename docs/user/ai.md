@@ -91,7 +91,7 @@ provider (`routing` on `POST /api/v1/ai/providers` and `PATCH /api/v1/ai/provide
 tools `colliedesk_ai_provider_add` and `colliedesk_ai_provider_update`); Settings does not show it yet.
 A model that no such provider serves fails its check, so you know before a feature uses it. Tightening
 the routing takes effect at once. Loosening it (deny to allow, zero retention off) lets customers' data
-reach more providers, so from an AI agent it always becomes a [request a person approves](agent-requests.md).
+reach more providers; an AI agent does it only with `ai_settings:update`, like any other change to it.
 Other servers have no routing, and refuse it.
 
 On OpenRouter, a feature's **effort** goes to the models OpenRouter lists as reasoning at that effort;
@@ -243,15 +243,15 @@ for), and the history says why. Intake also goes back to Suggest on a channel wh
 another model, since what it was checked on was the old model's decisions. Restoring a workspace from
 a backup does the same.
 
-Admins set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
+People with `ai_settings:update` (the Admin role has it) set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
 column per scope, each set to the default it follows or to Off, Suggest or Auto; under it, what the level
 does, or "Off: Triage is off for the workspace" with **Turn on**. Raising triage to Auto or drafts to
 Suggest asks with the same dialog as Built-in AI. Under each feature, **Built-in AI** lists the
 channels that differ ("Support · Auto"), each a link to its AI tab, or says that every channel follows
 the default. The same is `PUT /api/v1/channels/{id}/ai/{slot}` and the MCP tools
 `colliedesk_channel_ai_set` and `colliedesk_channel_ai_get`. Every change is in the AI history and in
-the channel's history. An AI agent lowers a level with an admin token; raising one (or loosening intake's
-settings) always becomes a [request a person approves](agent-requests.md).
+the channel's history. An AI agent raises or lowers a level, and changes intake's settings, with
+`ai_settings:update`; it happens at once, as when a person does it.
 
 On a chat channel, the AI tab has an **Intake** row for each scope that collects messages, and under the
 table, for each scope where intake does more than the rules, its **Intake settings**: how sure AI must be
@@ -271,12 +271,12 @@ for those before a bank account or an identity document number, and `redact_patt
 an identifier no word names (a national ID number, a phone number written without its prefix): each a
 pattern in RE2 syntax with what it masks (`phone`, `id_number`, `account_number` or `hidden`), at most 20
 of 200 characters; a pattern that can match no character at all (an empty string, a word boundary alone), is too large or does not compile is refused.
-Taking a word or a pattern out masks less, so it needs the approval raising AI needs.
+Taking a word or a pattern out masks less; like any change to intake's settings, it needs `ai_settings:update`.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
 once an admin agreed to each: in **Settings → Built-in AI** under Chat intake (**Images customers sent**,
 **The customer's profile**, each a switch that gives or takes back the consent), or with
-`colliedesk_ai_source_consent_request` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+`colliedesk_ai_source_consent_set` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
 on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
 on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at
@@ -304,11 +304,11 @@ People's labels count for 30 days; an evaluation counts only for the model and p
 a newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
 never reach a person: in practice a gate opens with an evaluation, or with an admin's override.
 An admin may open an action by hand before its labels do (`gate_override` with a `gate_override_reason`,
-which needs the approval raising AI needs). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
+which needs `ai_settings:update`). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
 (each action's gate, labels, what it misses, what AI did on its own and how much people corrected, and what
 a month costs) and the MCP tool `colliedesk_channel_ai_intake_readiness_get`; evaluations are
-`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record_request`,
-which always waits for a person, and `colliedesk_channel_ai_intake_evaluations_list`).
+`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record`,
+which needs `ai_settings:update`, and `colliedesk_channel_ai_intake_evaluations_list`, which needs `channels:read`).
 
 Raising intake to **Auto** on a scope opens a dialog first: each action with whether it is ready ("ready ·
 38 of 40 right") or stays a suggestion and why ("until 30 decisions are labelled (12 of 30)", "7 wrong of 40
@@ -326,7 +326,7 @@ again") with **Turn Auto back on**, which asks with the same dialog.
 Intake can have a **fallback model**: another of its provider's models, tried once when its model
 times out, is busy, refuses for its rate, is gone, or answers what Colliedesk cannot read. A refused key
 or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
-with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set_request` (an empty string
+with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set` (an empty string
 removes it); Settings does not show it yet. The provider cannot
 drop a model intake uses this way. A new fallback model takes intake back to Suggest on every channel,
 as another model does.
@@ -368,16 +368,23 @@ Usage** sums a month per feature and provider. Both are in the [export](export.m
 
 ## Agents and external AI agents
 
-Agents see these settings but only admins change them. An AI agent with a draft token asks for a
-reply draft, reads it and discards it like a person (`colliedesk_ai_draft_create`,
-`colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`, `colliedesk_ai_draft_discard`); sending a
-reply still needs the send tier or a person's approval. A send token that replies from a draft passes
-its id (`ai_draft_id` on `colliedesk_reply_send`), so the draft records how close the reply stayed to
-it, as when a person sends it. With a draft token it reads, asks for, applies
-and dismisses triage suggestions too (`colliedesk_ai_triage_get`, `_create`, `_accept`, `_dismiss`). Through [MCP](mcp.md), an AI agent with a read
-token can read them, and one with an admin token can add, check, change and delete providers (a token
-below admin is refused outright on the two calls that carry a key, so a key never waits in a request).
-Turning a feature on or moving it always becomes a [request a person approves](agent-requests.md).
+Everyone with `ai_settings:read` sees these settings; changing them needs `ai_settings:update`, and
+adding a provider or replacing its key `ai_settings:manage_credentials` (the Admin role holds both).
+An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once:
+
+1. With `ai_assist:create` it asks for a reply draft, reads it and discards it like a person
+   (`colliedesk_ai_draft_create`, `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`,
+   `colliedesk_ai_draft_discard`), and reads, asks for, applies and dismisses triage suggestions
+   (`colliedesk_ai_triage_get`, `_create`, `_accept`, `_dismiss`). It can also leave its own written
+   reply as a draft for a person to send (`colliedesk_reply_draft`).
+2. Sending a reply needs `messages:send`. A token that replies from a draft passes its id
+   (`ai_draft_id` on `colliedesk_reply_send`), so the draft records how close the reply stayed to it,
+   as when a person sends it.
+3. Through [MCP](mcp.md), `ai_settings:read` reads the settings, `ai_settings:update` changes
+   features, levels and providers, and `ai_settings:manage_credentials` is needed on the two calls that
+   carry a key.
+
+A call without the permission is refused and says which one is missing.
 
 ## Sign in with a subscription
 

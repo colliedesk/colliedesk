@@ -34,7 +34,7 @@ func register(server *mcp.Server, spec Spec, rest *restClient) {
 		annotations.DestructiveHint = &spec.Destructive
 	}
 	tool := &mcp.Tool{Name: spec.Name, Title: spec.Title, Description: spec.Description, Annotations: annotations,
-		InputSchema: json.RawMessage(spec.Input), OutputSchema: json.RawMessage(outputSchema(spec))}
+		InputSchema: json.RawMessage(spec.Input), OutputSchema: json.RawMessage(spec.Output)}
 	server.AddTool(tool, func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return execute(ctx, request, spec, resolved, rest), nil
 	})
@@ -61,7 +61,7 @@ func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input
 	output, err := spec.run(c, arguments)
 	var filed *agentRequested
 	if errors.As(err, &filed) {
-		output, err = requestedOutput(c, filed), nil
+		output, err = requestedOutput(filed), nil
 	}
 	if err != nil {
 		return failure(failureText(c, err))

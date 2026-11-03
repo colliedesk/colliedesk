@@ -5,7 +5,7 @@ import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
 const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
-  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null };
+  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null };
 const ada = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 function avatarOf(article: HTMLElement) {
@@ -33,7 +33,7 @@ test('a reply and a note written in Colliedesk name the team member who wrote th
 
 test('a message an agent token wrote names the person once, in the token line', () => {
   const written: Message = { ...base, id: '44444444-4444-4444-8444-444444444444', kind: 'note', body: 'Checked the logs.', author_agent_id: ada, author_name: 'Ada Admin',
-    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', scope: 'draft', agent_name: 'Ada Admin' } };
+    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', agent_name: 'Ada Admin' } };
   render(<TimelinePanel items={[written]} timezone="UTC" />);
   const article = screen.getByRole('article');
   expect(within(article).getByText('by Ada Admin via Support bot')).toBeInTheDocument();
@@ -67,4 +67,20 @@ test('an incoming email from someone without a name shows the address', () => {
   const article = screen.getByRole('article');
   expect(within(article).getByText('robin@customer.example')).toBeInTheDocument();
   expect(avatarOf(article)).toBe('RE');
+});
+
+// A reply sent from a draft an agent token wrote names that token and its person, and does not claim the
+// built-in AI wrote it; a reply from an AI draft keeps its AI mark.
+test('a reply from a written draft names the token that drafted it, not AI', () => {
+  const written: Message = { ...base, id: '44444444-4444-4444-8444-444444444444', kind: 'outgoing', body: 'Fixed.', author_agent_id: ada, author_name: 'Tom Okoye',
+    ai_draft_id: '55555555-5555-4555-8555-555555555555', ai_draft_outcome: 'sent_unchanged', ai_draft_source: 'written',
+    drafted_by: { id: '66666666-6666-4666-8666-666666666666', label: 'Claude Code', agent_name: 'Tom Okoye' } };
+  const fromAI: Message = { ...written, id: '77777777-7777-4777-8777-777777777777', ai_draft_source: 'ai', drafted_by: null };
+  render(<TimelinePanel items={[written, fromAI]} timezone="UTC" />);
+  const [first, second] = screen.getAllByRole('article');
+  expect(first).toHaveTextContent('Drafted by Claude Code, agent token of Tom Okoye, sent as written');
+  expect(first).not.toHaveTextContent('AI draft');
+  expect(first.querySelector('.ai-chip')).toBeNull();
+  expect(second).toHaveTextContent('from an AI draft, sent as written');
+  expect(second.querySelector('.ai-chip')).not.toBeNull();
 });

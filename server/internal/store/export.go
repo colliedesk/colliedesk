@@ -69,6 +69,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportAgents(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportRoles(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := exportContacts(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
@@ -144,6 +147,45 @@ func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 		}
 	}
 	return rowsError("export agents", rows)
+}
+
+func exportRoles(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,name,description,system,permissions,created_at,updated_at,deleted_at
+		FROM roles WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export roles: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.Role
+		if err := rows.Scan(&record.ID, &record.Name, &record.Description, &record.System, &record.Permissions, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt); err != nil {
+			return fmt.Errorf("export roles: %w", err)
+		}
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
+		if err := sink.Role(record); err != nil {
+			return err
+		}
+	}
+	if err := rowsError("export roles", rows); err != nil {
+		return err
+	}
+	rows, err = tx.Query(ctx, `SELECT agent_id::text,role_id::text,granted_by_agent_id::text,granted_at
+		FROM agent_roles WHERE workspace_id=$1 ORDER BY granted_at,agent_id,role_id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export agent roles: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.AgentRole
+		if err := rows.Scan(&record.AgentID, &record.RoleID, &record.GrantedByAgentID, &record.GrantedAt); err != nil {
+			return fmt.Errorf("export agent roles: %w", err)
+		}
+		record.GrantedAt = domain.UTC(record.GrantedAt)
+		if err := sink.AgentRole(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export agent roles", rows)
 }
 
 func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
@@ -893,7 +935,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 	usage.Close()
-	drafts, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,requested_by_agent_id::text,requested_by_token_id::text,prompt,status,text,missing_info,
+	drafts, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,requested_by_agent_id::text,requested_by_token_id::text,prompt,status,source,cc,text,missing_info,
 			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,automatic,answers_message_id::text,reply_needed,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at
 		FROM ai_drafts WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
@@ -903,7 +945,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for drafts.Next() {
 		var r export.AIDraft
 		var sources, warnings []byte
-		if err := drafts.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Prompt, &r.Status, &r.Text, &r.MissingInfo,
+		if err := drafts.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Prompt, &r.Status, &r.Source, &r.CC, &r.Text, &r.MissingInfo,
 			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.Automatic, &r.AnswersMessageID, &r.ReplyNeeded, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt); err != nil {
 			return fmt.Errorf("export AI drafts: %w", err)
 		}

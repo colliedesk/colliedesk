@@ -13,8 +13,13 @@ func TestLookupToolsReturnNamesNotJustIDs(t *testing.T) {
 	}
 	agents := e.ok(session, "colliedesk_agents_list", nil)
 	ada := at(t, agents, "agents", 0)
-	if at(t, ada, "name") != "Ada Admin" || at(t, ada, "email") != "admin@inbox.example.com" || at(t, ada, "role") != "admin" || at(t, ada, "id") != f.adminID {
+	if at(t, ada, "name") != "Ada Admin" || at(t, ada, "email") != "admin@inbox.example.com" || at(t, ada, "roles", 0) != "Admin" || at(t, ada, "id") != f.adminID {
 		t.Errorf("agents=%v", agents)
+	}
+
+	roles := e.ok(session, "colliedesk_roles_list", nil)
+	if admin := at(t, roles, "roles", 0); at(t, admin, "name") != "Admin" || at(t, admin, "members", 0) != "Ada Admin" || at(t, admin, "id") == "" {
+		t.Errorf("roles=%v, want Admin first, held by Ada Admin by name", roles)
 	}
 
 	found := e.ok(session, "colliedesk_contacts_find", map[string]any{"query": "GRACE"})

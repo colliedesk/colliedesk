@@ -29,7 +29,8 @@ const longPoll = 20;
 
 // The newest draft of this person that is still being written or waits for a decision.
 function openDraft(drafts: AIDraft[] | undefined, agentId?: string) {
-  return drafts?.find((draft) => draft.requested_by_agent_id === agentId && (writing(draft) || (draft.status === 'ready' && draft.outcome === null)));
+  // A written draft (left by an agent token) has its own card above the reply box.
+  return drafts?.find((draft) => draft.source === 'ai' && draft.requested_by_agent_id === agentId && (writing(draft) || (draft.status === 'ready' && draft.outcome === null)));
 }
 
 // DraftStatus says on the closed panel's button that the person's draft is being written or is ready,

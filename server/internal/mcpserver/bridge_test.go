@@ -91,8 +91,8 @@ func TestBridgeCarriesEveryProtocolVersionToTheServer(t *testing.T) {
 				t.Errorf("listed %d tools through the bridge, the catalog has %d", len(names), want)
 			}
 			me := e.ok(session, "colliedesk_whoami", map[string]any{})
-			if me["token_tier"] != "draft" {
-				t.Errorf("whoami token_tier = %v", me["token_tier"])
+			if at(t, me, "token", "kind") != "custom" {
+				t.Errorf("whoami token = %v", me["token"])
 			}
 			if strings.Contains(stderr.String(), w.draft) {
 				t.Errorf("the token is in stderr: %s", stderr.String())

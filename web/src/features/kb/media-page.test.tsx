@@ -5,6 +5,7 @@ import { MediaRoute } from './media-page';
 import type { MediaSearch, MediaView } from './media-page';
 import { UploadQueue } from './media-uploads';
 import type { PartSender } from './media-api';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { json, me, refusal, serve } from './kb.test.fixture';
 
 const navigate = vi.hoisted(() => vi.fn());
@@ -221,7 +222,7 @@ test('the trash gives no purge date for an item the purge keeps, and Delete fore
 });
 
 test('an agent cannot delete forever', async () => {
-  const agent = { ...me, agent: { ...me.agent, role: 'agent' } };
+  const agent = { ...me, agent: { ...me.agent, roles: rolesOf('agent') }, permissions: permissionsOf('agent') };
   serve({ ...base, 'GET /api/v1/auth/me': () => json(200, agent), 'GET /api/v1/kb/media/trash': () => json(200, { items: [item(6, { deleted_at: '2026-10-10T00:00:00Z' })], next_cursor: null }) });
   open('trash');
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Screenshot 6' }));
@@ -345,7 +346,7 @@ test('uploads in progress that this page is not sending are listed, go on with t
 });
 
 test('an agent sees uploads in progress but cancels only their own', async () => {
-  const agent = { ...me, agent: { ...me.agent, role: 'agent' } };
+  const agent = { ...me, agent: { ...me.agent, roles: rolesOf('agent') }, permissions: permissionsOf('agent') };
   const open_ = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null,
     created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
   serve({ ...base, 'GET /api/v1/auth/me': () => json(200, agent), 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }) });

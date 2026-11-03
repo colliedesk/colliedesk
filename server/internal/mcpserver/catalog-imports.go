@@ -3,9 +3,8 @@ package mcpserver
 import "strings"
 
 // In-app imports from Freshdesk (docs/user/import-freshdesk.md): the server reads the account in the
-// background, imports the recent tickets first, then the whole account with a reconcile report. Every
-// tool needs an admin token; the two that take the Freshdesk API key refuse a lower tier outright, and
-// an undo always waits for a person.
+// background, imports the recent tickets first, then the whole account with a reconcile report. Each
+// tool says the imports permission it needs.
 
 const (
 	importIDProperty = `"import_id":{"type":"string",` + uuid + `,"description":"From colliedesk_imports_list or colliedesk_import_preview."}`
@@ -28,15 +27,14 @@ const (
 
 func importsListSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_imports_list",
-		Title: "List imports",
-		Description: `List the workspace's imports from Freshdesk and their undos, newest first, with state, progress and error code.` +
-			"\n\nTier: admin.",
-		Tier: "admin", ReadOnly: true,
-		REST:   []string{"GET /api/v1/imports"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["imports"],"properties":{"imports":{"type":"array","items":` + importJobSchema + `}}}`,
-		run:    importsList,
+		Name:        "colliedesk_imports_list",
+		Title:       "List imports",
+		Description: `List the workspace's imports from Freshdesk and their undos, newest first, with state, progress and error code.`,
+		ReadOnly:    true,
+		REST:        []string{"GET /api/v1/imports"},
+		Input:       noArguments,
+		Output:      `{"type":"object","required":["imports"],"properties":{"imports":{"type":"array","items":` + importJobSchema + `}}}`,
+		run:         importsList,
 	}
 }
 
@@ -45,13 +43,12 @@ func importGetSpec() Spec {
 		Name:  "colliedesk_import_get",
 		Title: "Show an import",
 		Description: `Show one import: its state (previewing, previewed, queued, running, retry_wait, waiting_key, finished, failed, cancelled, discarded), ` +
-			`the preview counts, the progress and why it failed or waits (error_code). Poll it while it runs; it changes every few seconds at most.` +
-			"\n\nTier: admin.",
-		Tier: "admin", ReadOnly: true,
-		REST:   []string{"GET /api/v1/imports/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
-		Output: importJobOutput,
-		run:    importGet,
+			`the preview counts, the progress and why it failed or waits (error_code). Poll it while it runs; it changes every few seconds at most.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/imports/{id}"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output:   importJobOutput,
+		run:      importGet,
 	}
 }
 
@@ -62,9 +59,8 @@ func importPreviewSpec() Spec {
 		Description: `Read a Freshdesk account before importing it: the server counts agents, companies, contacts and tickets and checks what the key can read, ` +
 			`in the background and without writing anything. Poll colliedesk_import_get until state is previewed (or failed: freshdesk_key_rejected, ` +
 			`freshdesk_needs_admin_key, freshdesk_plan_no_api when the Freshdesk plan has no API calls, as on the Free plan), then colliedesk_import_start. ` +
-			`api_key is a Freshdesk admin's key (Profile settings > API key). ` + importKeyNotice + ` A new preview replaces the workspace's earlier one.` +
-			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
-		Tier: "admin",
+			`api_key is a Freshdesk admin's key (Profile settings > API key). ` + importKeyNotice + ` A new preview replaces the workspace's earlier one.`,
+
 		REST: []string{"POST /api/v1/imports"},
 		Input: `{"type":"object","additionalProperties":false,"required":["domain","api_key"],"properties":{` +
 			`"domain":{"type":"string","minLength":1,"maxLength":255,"description":"The <account>.freshdesk.com address."},` +
@@ -83,8 +79,8 @@ func importStartSpec() Spec {
 		Title: "Start a previewed import",
 		Description: `Start importing a previewed Freshdesk account (within an hour of the preview). The recent tickets come first, then the whole account; ` +
 			`the import leaves a fifth of the account's Freshdesk API limit to its other apps. It ends with a reconcile report (colliedesk_import_report). ` +
-			`colliedesk_import_cancel stops it and colliedesk_import_undo_request removes what it brought in.` + "\n\nTier: admin.",
-		Tier:   "admin",
+			`colliedesk_import_cancel stops it and colliedesk_import_undo removes what it brought in.`,
+
 		REST:   []string{"POST /api/v1/imports/{id}/start"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
 		Output: importJobOutput,
@@ -96,13 +92,13 @@ func importCancelSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_import_cancel",
 		Title: "Stop an import",
-		Description: `Stop an import or discard a preview. A running import stops within a minute; what it imported stays, and colliedesk_import_undo_request removes it. ` +
-			`Start a new preview to import again: nothing is lost, items already imported are skipped.` + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST:   []string{"POST /api/v1/imports/{id}/cancel"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
-		Output: importJobOutput,
-		run:    importCancel,
+		Description: `Stop an import or discard a preview. A running import stops within a minute; what it imported stays, and colliedesk_import_undo removes it. ` +
+			`Start a new preview to import again: nothing is lost, items already imported are skipped.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/imports/{id}/cancel"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output:     importJobOutput,
+		run:        importCancel,
 	}
 }
 
@@ -111,9 +107,8 @@ func importKeySetSpec() Spec {
 		Name:  "colliedesk_import_key_set",
 		Title: "Give a waiting import its key again",
 		Description: `An import in state waiting_key lost its Freshdesk API key (the server restarted without a key ring, or its keys changed). ` +
-			`Give it the key again and it goes on where it stopped. ` + importKeyNotice +
-			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
-		Tier: "admin",
+			`Give it the key again and it goes on where it stopped. ` + importKeyNotice,
+
 		REST: []string{"PUT /api/v1/imports/{id}/key"},
 		Input: `{"type":"object","additionalProperties":false,"required":["import_id","api_key"],"properties":{` + importIDProperty + `,` +
 			`"api_key":{"type":"string","minLength":1,"maxLength":200}}}`,
@@ -128,9 +123,9 @@ func importReportSpec() Spec {
 		Title: "Read the report of an import",
 		Description: `Read the reconcile report of an import: status OK, FAILED (every missing item listed) or UNVERIFIED (nothing failed, but Freshdesk's totals could not confirm it), ` +
 			`with counts per entity, failures and warnings. While only the recent tickets are in, it is the interim report (status INTERIM, never OK). ` +
-			`For an undo, what it removed. format markdown gives the report a person reads.` + "\n\nTier: admin.",
-		Tier: "admin", ReadOnly: true,
-		REST: []string{"GET /api/v1/imports/{id}/report"},
+			`For an undo, what it removed. format markdown gives the report a person reads.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/imports/{id}/report"},
 		Input: `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `,` +
 			`"format":{"type":"string","enum":["json","markdown"],"default":"json"}}}`,
 		Output: `{"type":"object","properties":{"report":{"type":"object"},"markdown":{"type":"string"}}}`,
@@ -138,11 +133,18 @@ func importReportSpec() Spec {
 	}
 }
 
-func importUndoRequestSpec() Spec {
-	return approvalSpec("colliedesk_import_undo_request", "Ask to undo an import",
-		`Ask to remove what an ended import (finished, failed or cancelled) brought in from its Freshdesk account. What the team changed since stays.`,
-		[]string{"POST /api/v1/imports/{id}/undo"},
-		`{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{`+importIDProperty+`}}`, importUndoRequest)
+func importUndoSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_import_undo",
+		Title: "Undo an import",
+		Description: `Remove what an ended import (finished, failed or cancelled) brought in from its Freshdesk account; what the team changed since stays. It runs in the background: ` +
+			`follow it with colliedesk_import_get. It cannot be undone: import the account again to bring the data back.`,
+		Destructive: true,
+		REST:        []string{"POST /api/v1/imports/{id}/undo"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output:      importJobOutput,
+		run:         importUndo,
+	}
 }
 
 const importPersonSchema = `{"type":"object","required":["external_id","name","email","linked_agent_id","pending"],"properties":{"external_id":{"type":"string","description":"The Freshdesk agent id."},` +
@@ -158,12 +160,12 @@ func importPeopleListSpec() Spec {
 		Name:  "colliedesk_import_people_list",
 		Title: "List the Freshdesk agents of an import",
 		Description: `List the agents of an import's Freshdesk account and the Colliedesk agent each is linked to. A link makes that agent the author of their imported replies and the assignee of the tickets they held. ` +
-			`The preview links matching emails, and accepting an invite links the invited email; invite the others with colliedesk_invite_create.` + "\n\nTier: admin.",
-		Tier: "admin", ReadOnly: true,
-		REST:   []string{"GET /api/v1/imports/{id}/people"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
-		Output: `{"type":"object","required":["people"],"properties":{"people":{"type":"array","items":` + importPersonSchema + `}}}`,
-		run:    importPeopleList,
+			`The preview links matching emails, and accepting an invite links the invited email; invite the others with colliedesk_invite_create.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/imports/{id}/people"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output:   `{"type":"object","required":["people"],"properties":{"people":{"type":"array","items":` + importPersonSchema + `}}}`,
+		run:      importPeopleList,
 	}
 }
 
@@ -172,9 +174,9 @@ func importPersonLinkSpec() Spec {
 		Name:  "colliedesk_import_person_link",
 		Title: "Link a Freshdesk agent to a Colliedesk agent",
 		Description: `Make an active Colliedesk agent the author of a Freshdesk agent's imported replies and the assignee of the imported tickets they held (unless someone reassigned them). ` +
-			`It replaces an earlier link; timestamps do not change. colliedesk_import_person_unlink takes it back.` + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST: []string{"PUT /api/v1/imports/{id}/people/{externalId}/link"},
+			`It replaces an earlier link; timestamps do not change. colliedesk_import_person_unlink takes it back.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/imports/{id}/people/{externalId}/link"},
 		Input: strings.Replace(importPersonInput, `"required":["import_id","freshdesk_agent_id"]`, `"required":["import_id","freshdesk_agent_id","agent_id"]`, 1) +
 			`,"agent_id":{"type":"string",` + uuid + `,"description":"From colliedesk_agents_list."}}}`,
 		Output: `{"type":"object","required":["person"],"properties":{"person":` + importPersonSchema + `}}`,
@@ -186,11 +188,11 @@ func importPersonUnlinkSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_import_person_unlink",
 		Title:       "Unlink a Freshdesk agent",
-		Description: `Take a link back: the imported replies show the Freshdesk name again and the tickets the link assigned lose that assignee, unless someone reassigned them.` + "\n\nTier: admin.",
-		Tier:        "admin", Idempotent: true,
-		REST:   []string{"DELETE /api/v1/imports/{id}/people/{externalId}/link"},
-		Input:  importPersonInput + `}}`,
-		Output: `{"type":"object","required":["person"],"properties":{"person":` + importPersonSchema + `}}`,
-		run:    importPersonUnlink,
+		Description: `Take a link back: the imported replies show the Freshdesk name again and the tickets the link assigned lose that assignee, unless someone reassigned them.`,
+		Idempotent:  true,
+		REST:        []string{"DELETE /api/v1/imports/{id}/people/{externalId}/link"},
+		Input:       importPersonInput + `}}`,
+		Output:      `{"type":"object","required":["person"],"properties":{"person":` + importPersonSchema + `}}`,
+		run:         importPersonUnlink,
 	}
 }

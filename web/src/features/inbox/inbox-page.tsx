@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AgentRequest, Conversation, ConversationViewer, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { mayTellCustomers, noticesOf } from './status-tell';
@@ -14,6 +14,7 @@ import type { InboxQuery } from '../../lib/inbox-query';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { ReplyDraftCard } from './reply-draft-card';
+import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
@@ -102,7 +103,7 @@ interface InboxPageProps {
   // onBulkUpdate resolves when every listed conversation changed, and rejects when none did.
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
   // Reply drafts AI agents left on the selected conversation, and the conversations that have one.
-  replyDrafts?: AgentRequest[];
+  replyDrafts?: AIDraft[];
   draftConversationIds?: ReadonlySet<string>;
   // viewers are the others who have a conversation open now, by conversation id.
   viewers?: ReadonlyMap<string, ConversationViewer[]>;
@@ -111,8 +112,8 @@ interface InboxPageProps {
   // The composer reports a reply being written (never its text), for the others to see.
   onReplyDraft?: (writing: boolean) => void;
   onReplyEdited?: () => void;
-  onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
-  onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
+  onSendDraft?: (draft: AIDraft, edit?: DraftEdit) => Promise<unknown>;
+  onDiscardDraft?: (draft: AIDraft) => Promise<unknown>;
   // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
   contactMatches?: ReactNode;
   onNewConversation?: () => void;

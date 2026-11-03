@@ -14,7 +14,7 @@ test('two people on one conversation: who is writing, a warning before a second 
   const lan = await lanContext.newPage();
   await redeemLink(lan, createWorkspace(`Collision Desk ${suffix}`, `lan-${suffix}@example.com`));
   expect((await lan.request.patch(`${baseURL}/api/v1/agents/me/display-name`, { headers, data: { display_name: 'Lan' } })).status()).toBe(200);
-  const invite = await lan.request.post(`${baseURL}/api/v1/auth/invites`, { headers, data: { email: `bao-${suffix}@example.com`, role_ceiling: 'agent' } });
+  const invite = await lan.request.post(`${baseURL}/api/v1/auth/invites`, { headers, data: { email: `bao-${suffix}@example.com`, roles: ['Agent'] } });
   expect(invite.status()).toBe(201);
   const contact = await (await lan.request.post(`${baseURL}/api/v1/contacts`, { headers, data: { name: 'Mai', email: `mai-${suffix}@example.com` } })).json() as { id: string };
   const conversation = await (await lan.request.post(`${baseURL}/api/v1/conversations`, { headers, data: { contact_id: contact.id, subject: 'Where is my refund?' } })).json() as { id: string };

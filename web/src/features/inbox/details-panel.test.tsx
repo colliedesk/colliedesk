@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { DetailsPanel } from './details-panel';
+import { PermissionsContext } from '../../lib/permissions-context';
 
-const active = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', role: 'agent' as const, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
+const active = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
 const gone = { ...active, id: '33333333-3333-4333-8333-333333333333', email: 'cy@example.com', display_name: 'Cy', deactivated_at: '2026-10-10T00:00:00Z' };
 // The signed-in agent.
 const tom = { ...active, id: '66666666-6666-4666-8666-666666666666', email: 'tom@example.com', display_name: 'Tom' };
@@ -146,4 +148,17 @@ test('every chat conversation has the Status menu: notices unknown, none for the
 test('a chat the server says tells nothing (its channel off, or no words) asks nothing about telling', () => {
   render(<DetailsPanel conversation={{ ...conversation(null), channel_ref: { ...zaloRef, enabled: false }, may_tell_customer: false }} agents={[]} tags={[]} onUpdate={vi.fn()} />);
   expect(within(screen.getByRole('group', { name: 'Status' })).queryByRole('checkbox', { name: 'Tell the customer' })).not.toBeInTheDocument();
+});
+
+// A role that reads neither the team nor the tag list still sees the conversation's own tags and can assign
+// it to itself; it is offered no list it could not load and no tag it could not create.
+test('without the team and the tag list, the details show the conversation\'s tags and offer Me and Unassigned', () => {
+  const held = ['conversations:read', 'conversations:update', 'messages:read'];
+  const tagged = { ...conversation(active.id), tags: [{ id: '77777777-7777-4777-8777-777777777777', name: 'Billing' }] } as Conversation;
+  render(<PermissionsContext.Provider value={held}><DetailsPanel conversation={tagged} agents={[]} tags={[]} currentAgentId={tom.id} /></PermissionsContext.Provider>);
+  expect(screen.getByText('Billing')).toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'Billing' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'New tag name' })).not.toBeInTheDocument();
+  expect(screen.queryByText('No tags yet.')).not.toBeInTheDocument();
+  expect(options('Assignee')).toEqual(['Me', 'Another teammate', 'Unassigned']);
 });

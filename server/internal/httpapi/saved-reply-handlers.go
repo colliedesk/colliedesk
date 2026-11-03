@@ -12,15 +12,11 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
-// savedReplyActor is who a saved reply change is recorded for: the person, the agent token they used,
-// and, when a person approved an agent request, that person with the token that asked and the request.
-func savedReplyActor(ctx context.Context, who auth.Principal) store.Actor {
+// savedReplyActor is who a saved reply change is recorded for: the person and the agent token they used.
+func savedReplyActor(_ context.Context, who auth.Principal) store.Actor {
 	actor := store.Actor{AgentID: who.Agent.ID}
 	if who.IsToken() {
 		actor.TokenID = who.SessionID
-	}
-	if replay, ok := approvalOf(ctx); ok {
-		actor.TokenID, actor.RequestID = replay.tokenID, replay.requestID
 	}
 	return actor
 }

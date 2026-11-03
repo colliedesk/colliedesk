@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../../test-roles';
 
 // Fixtures and a fake server for the knowledge base tests: the real calls and schemas run against it.
 export const ids = {
@@ -34,8 +35,8 @@ export const article = (fields: Record<string, unknown> = {}) => ({
 });
 
 export const me = {
-  agent: { id: '77777777-7777-4777-8777-777777777777', email: 'ada@example.com', display_name: 'Ada', role: 'admin', timezone_override: null },
-  workspace: { id: '88888888-8888-4888-8888-888888888888', slug: 'acme', name: 'Acme', timezone: 'UTC' }, timezone: 'UTC', scope: null, plan: null,
+  agent: { id: '77777777-7777-4777-8777-777777777777', email: 'ada@example.com', display_name: 'Ada', role: 'admin', roles: rolesOf('admin'), timezone_override: null },
+  workspace: { id: '88888888-8888-4888-8888-888888888888', slug: 'acme', name: 'Acme', timezone: 'UTC' }, timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null,
 };
 
 export const json = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status });

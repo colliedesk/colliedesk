@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,9 +78,13 @@ func newExportFixture(t *testing.T) exportFixture {
 	if response := request(t, api, http.MethodDelete, deletePath(t, api, admin, trashed), nil, admin, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("trash saved reply status=%d", response.Code)
 	}
-	drafter := issueToken(t, api, admin, "Export drafter", "draft").Token
-	if response := request(t, api, http.MethodDelete, deletePath(t, api, admin, closing), nil, drafter, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("propose deleting a saved reply status=%d", response.Code)
+	// A request a token filed before agent requests were removed stays in the export, with the reply it
+	// acted on and its snapshot.
+	issueToken(t, api, admin, "Export drafter", "draft")
+	if _, err := pool.Exec(context.Background(), `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,kind,method,route,path,summary,status,decided_at,reason,expires_at,saved_reply_id,saved_reply_before)
+		SELECT s.workspace_id,s.id,s.label,'draft','action','DELETE','/api/v1/saved-replies/{id}','/api/v1/saved-replies/'||$1,'Delete the saved reply Closing','expired',now(),'removed',now(),
+			$1::uuid,'{"title":"Closing","body":"Thanks a lot."}'::jsonb FROM sessions s WHERE s.label='Export drafter'`, closing); err != nil {
+		t.Fatalf("seed an old request: %v", err)
 	}
 	workspace := workspaceID(t, api, admin)
 	attachmentID := seedAttachment(t, pool, storage, admin, api, firstMessage, "hello.txt", "hello")
@@ -333,8 +338,8 @@ func TestExportIsAdminOnly(t *testing.T) {
 	if got := request(t, f.api, http.MethodGet, "/api/v1/export", nil, "", nil).Code; got != http.StatusUnauthorized {
 		t.Errorf("anonymous status=%d, want 401", got)
 	}
-	if auth.HasPermission("agent", auth.PermissionWorkspaceExport) || !auth.HasPermission("admin", auth.PermissionWorkspaceExport) {
-		t.Error("workspace:export must belong to admins only")
+	if slices.Contains(auth.AgentRolePermissions(), auth.PermWorkspaceExport) || httpapi.RouteAccessTable()["GET /api/v1/export"].Permission != auth.PermWorkspaceExport {
+		t.Error("the export needs workspace:export, which the Agent role does not start with")
 	}
 }
 
@@ -413,5 +418,37 @@ func TestLockedWorkspaceAdminCanStillExport(t *testing.T) {
 	}
 	if manifest.Counts["conversations"] != 1 || manifest.Counts["messages"] != 1 {
 		t.Fatalf("counts = %v, want the one received conversation with its message", manifest.Counts)
+	}
+}
+
+// A reply draft a token wrote keeps, in the export, that it was written and not generated, and whom it
+// copies: nothing of a draft is lost.
+func TestExportKeepsWhetherADraftWasWrittenAndItsCopies(t *testing.T) {
+	f := newExportFixture(t)
+	ctx := context.Background()
+	var conversationID string
+	if err := f.pool.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 ORDER BY created_at LIMIT 1`, f.workspaceID).Scan(&conversationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,status,source,text,cc,ready_at) VALUES($1,$2,'ready','written','Written by a token',ARRAY['copy@example.com'],now())`,
+		f.workspaceID, conversationID); err != nil {
+		t.Fatal(err)
+	}
+	response := request(t, f.api, http.MethodGet, "/api/v1/export", nil, f.adminToken, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var found bool
+	for _, line := range ndjsonLines(t, unzip(t, response.Body.Bytes())["ai-drafts.ndjson"]) {
+		if line["text"] != "Written by a token" {
+			continue
+		}
+		found = true
+		if line["source"] != "written" || fmt.Sprint(line["cc"]) != "[copy@example.com]" {
+			t.Fatalf("exported draft = %v, want source written and cc [copy@example.com]", line)
+		}
+	}
+	if !found {
+		t.Fatal("the written draft is not in ai-drafts.ndjson")
 	}
 }

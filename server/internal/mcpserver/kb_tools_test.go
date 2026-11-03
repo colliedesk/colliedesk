@@ -119,27 +119,19 @@ func TestSendTokenWritesTheKnowledgeBaseWithHistoryTrashAndImages(t *testing.T) 
 	}
 }
 
-func TestLowerTiersProposeKnowledgeBaseChangesAndNeverUploadImages(t *testing.T) {
+func TestTokensWithoutKnowledgeBasePermissionsAreRefused(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("KB Proposal Desk", "admin@kb-proposal.example.com")
 	collectionID := e.created("/api/v1/kb/collections", map[string]any{"name": "Docs"}, w.admin)
 	read := e.connect(w.read, "")
 
-	proposed := e.ok(read, "colliedesk_kb_article_create", map[string]any{"collection_id": collectionID, "title": "Proposed", "body": "Text"})
-	if proposed["agent_request"] == nil {
-		t.Fatalf("read token create = %v, want an agent request", proposed)
-	}
+	e.refused(read, "colliedesk_kb_article_create", map[string]any{"collection_id": collectionID, "title": "Proposed", "body": "Text"})
 	if found := e.ok(read, "colliedesk_kb_articles_search", nil)["articles"].([]any); len(found) != 0 {
-		t.Fatalf("a proposal wrote %v", found)
+		t.Fatalf("a refused call wrote %v", found)
 	}
-	if message := e.fails(read, "colliedesk_kb_image_upload", map[string]any{"data_base64": base64.StdEncoding.EncodeToString(kbPNG)}); !strings.Contains(strings.ToLower(message), "file") {
-		t.Errorf("read token upload: %q", message)
-	}
+	e.refused(read, "colliedesk_kb_image_upload", map[string]any{"data_base64": base64.StdEncoding.EncodeToString(kbPNG)})
 	send := e.connect(w.send, "")
-	turnedOn := e.ok(send, "colliedesk_help_center_update", map[string]any{"enabled": true, "title": "Help", "locale": "en"})
-	if turnedOn["agent_request"] == nil {
-		t.Fatalf("send token help center = %v, want an agent request", turnedOn)
-	}
+	e.refused(send, "colliedesk_help_center_update", map[string]any{"enabled": true, "title": "Help", "locale": "en"})
 	admin := e.connect(w.adminTier, "")
 	if center := e.ok(admin, "colliedesk_help_center_update", map[string]any{"enabled": true, "title": "Help", "locale": "en"}); at(t, center, "help_center", "enabled") != true {
 		t.Fatalf("admin token help center = %v", center)

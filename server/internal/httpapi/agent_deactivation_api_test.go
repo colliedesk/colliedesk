@@ -12,12 +12,12 @@ import (
 )
 
 type teamMemberView struct {
-	ID                string  `json:"id"`
-	Email             string  `json:"email"`
-	Role              string  `json:"role"`
-	DeactivatedAt     *string `json:"deactivated_at"`
-	LastActiveAt      *string `json:"last_active_at"`
-	OpenConversations int     `json:"open_conversations"`
+	ID                string   `json:"id"`
+	Email             string   `json:"email"`
+	Role              roleList `json:"roles"`
+	DeactivatedAt     *string  `json:"deactivated_at"`
+	LastActiveAt      *string  `json:"last_active_at"`
+	OpenConversations int      `json:"open_conversations"`
 }
 
 // teamFixture is one workspace with an admin and two agents (Ann and Bob), each signed in.
@@ -72,10 +72,32 @@ func (f teamFixture) member(t *testing.T, email string) teamMemberView {
 	return teamMemberView{}
 }
 
+// patch changes a member as the team list does: the name and the active state with PATCH, and a
+// "role" (admin or agent, the built-in role it names) with PUT /agents/{id}/roles, after the rest.
 func (f teamFixture) patch(t *testing.T, token, id string, body map[string]any) (int, apiError) {
 	t.Helper()
-	response := request(t, f.api, http.MethodPatch, "/api/v1/agents/"+id, body, token, nil)
+	rest := map[string]any{}
+	role, hasRole := body["role"].(string)
+	for key, value := range body {
+		if key != "role" {
+			rest[key] = value
+		}
+	}
 	var failure apiError
+	if len(rest) > 0 || !hasRole {
+		response := request(t, f.api, http.MethodPatch, "/api/v1/agents/"+id, rest, token, nil)
+		if response.Code >= 400 || !hasRole {
+			if response.Code >= 400 {
+				decode(t, response, &failure)
+			}
+			return response.Code, failure
+		}
+	}
+	name := map[string]string{"admin": "Admin", "agent": "Agent"}[role]
+	if name == "" {
+		name = role
+	}
+	response := request(t, f.api, http.MethodPut, "/api/v1/agents/"+id+"/roles", map[string]any{"roles": []string{name}}, token, nil)
 	if response.Code >= 400 {
 		decode(t, response, &failure)
 	}
@@ -109,7 +131,7 @@ func TestTeamListShowsRoleStateActivityAndAssignedOpenWork(t *testing.T) {
 	f.conversation(t, "Resolved one", "resolved", f.annID)
 
 	ann := f.member(t, "ann@team.example.com")
-	if ann.Role != "agent" || ann.DeactivatedAt != nil {
+	if ann.Role.main() != "agent" || ann.DeactivatedAt != nil {
 		t.Fatalf("ann=%+v, want an active agent", ann)
 	}
 	if ann.OpenConversations != 2 {
@@ -212,7 +234,7 @@ func TestInviteRedeemedAfterDeactivationIsRefusedAndNewInviteIsNotCreated(t *tes
 	if got := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, staleURL)}, "", nil).Code; got != http.StatusUnauthorized {
 		t.Errorf("stale invite status=%d, want 401", got)
 	}
-	response := request(t, f.api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "ann@team.example.com", "role_ceiling": "agent"}, f.admin, nil)
+	response := request(t, f.api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "ann@team.example.com", "roles": []string{"Agent"}}, f.admin, nil)
 	var failure apiError
 	decode(t, response, &failure)
 	if response.Code != http.StatusConflict || failure.Error.Code != "agent_deactivated" {
@@ -244,15 +266,15 @@ func TestRoleChangeAndLastAdminRule(t *testing.T) {
 	if code, failure := f.patch(t, f.admin, f.annID, map[string]any{"role": "admin"}); code != http.StatusOK {
 		t.Fatalf("promote status=%d error=%+v", code, failure)
 	}
-	if got := f.member(t, "ann@team.example.com").Role; got != "admin" {
+	if got := f.member(t, "ann@team.example.com").Role.main(); got != "admin" {
 		t.Fatalf("ann role=%q, want admin", got)
 	}
 	// Two admins now: the first may demote herself.
 	if code, failure := f.patch(t, f.admin, f.adminID, map[string]any{"role": "agent"}); code != http.StatusOK {
 		t.Fatalf("self demote with a second admin status=%d error=%+v", code, failure)
 	}
-	// Ann is the last admin: she can neither demote nor deactivate herself. Her old session is
-	// capped at the agent role of her invite, so she signs in again with a pairing link.
+	// Ann is the last admin: she can neither demote nor deactivate herself. She signs in again with a
+	// pairing link, as she would.
 	link, err := f.service.Pair(context.Background(), "team-desk", "ann@team.example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +303,7 @@ func TestAgentRoleCannotManageTheTeam(t *testing.T) {
 			t.Errorf("agent patch %v status=%d, want 403", body, code)
 		}
 	}
-	if got := f.member(t, "bob@team.example.com"); got.Role != "agent" || got.DeactivatedAt != nil {
+	if got := f.member(t, "bob@team.example.com"); got.Role.main() != "agent" || got.DeactivatedAt != nil {
 		t.Fatalf("bob=%+v, want unchanged", got)
 	}
 }
@@ -295,7 +317,7 @@ func TestAgentOfAnotherWorkspaceIsNotFoundAndUnchanged(t *testing.T) {
 		}
 	}
 	ann := f.member(t, "ann@team.example.com")
-	if ann.Role != "agent" || ann.DeactivatedAt != nil || ann.OpenConversations != 1 {
+	if ann.Role.main() != "agent" || ann.DeactivatedAt != nil || ann.OpenConversations != 1 {
 		t.Fatalf("ann=%+v, want untouched", ann)
 	}
 	if got := request(t, f.api, http.MethodGet, "/api/v1/auth/me", nil, f.ann, nil).Code; got != http.StatusOK {
@@ -326,7 +348,7 @@ func TestInvalidReassignTargetChangesNothing(t *testing.T) {
 		}
 	}
 	ann := f.member(t, "ann@team.example.com")
-	if ann.Role != "agent" || ann.DeactivatedAt != nil || ann.OpenConversations != 1 {
+	if ann.Role.main() != "agent" || ann.DeactivatedAt != nil || ann.OpenConversations != 1 {
 		t.Fatalf("ann=%+v, want role, state and assignments unchanged", ann)
 	}
 	if got := f.assignee(t, open); got == nil || *got != f.annID {

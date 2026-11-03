@@ -207,9 +207,8 @@ func TestIntakeToolsReturnWhatCustomersWroteAsUntrusted(t *testing.T) {
 	if stats := e.ok(reader, "colliedesk_intake_stats", map[string]any{"channel_id": channel}); at(t, stats, "stats", "gatherings") != float64(1) {
 		t.Fatalf("stats = %v", stats)
 	}
-	// A read token's decision waits for a person; what it reads back names the card, not the customer's words.
-	filed := e.ok(reader, "colliedesk_intake_decide", map[string]any{"gathering_id": card, "action": "ignore"})
-	if at(t, filed, "agent_request", "status") != "pending" || strings.Contains(stringify(filed), "MALLORY") {
-		t.Fatalf("a read token decides: %v", filed)
+	// A read token may not decide, and the refusal never carries the customer's words.
+	if refused := e.refused(reader, "colliedesk_intake_decide", map[string]any{"gathering_id": card, "action": "ignore"}); strings.Contains(refused, "MALLORY") {
+		t.Fatalf("a read token decides: %q", refused)
 	}
 }

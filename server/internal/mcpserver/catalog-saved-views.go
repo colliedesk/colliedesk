@@ -42,12 +42,12 @@ func savedViewsListSpec() Spec {
 		Name:  "colliedesk_saved_views_list",
 		Title: "List saved inbox views",
 		Description: `List the saved inbox views this token's person can use: the views shared with the team, then their own personal views, by name. ` +
-			`trash true lists instead the views deleted in the last 30 days, which colliedesk_saved_view_restore brings back. ` + savedViewNotice + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/saved-views", "GET /api/v1/saved-views/trash", "GET /api/v1/auth/me"},
-		Input:  `{"type":"object","additionalProperties":false,"properties":{"trash":{"type":"boolean","default":false}}}`,
-		Output: `{"type":"object","required":["saved_views"],"properties":{"saved_views":{"type":"array","items":` + savedViewSchema + `}}}`,
-		run:    savedViewsList,
+			`trash true lists instead the views deleted in the last 30 days, which colliedesk_saved_view_restore brings back. ` + savedViewNotice,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/saved-views", "GET /api/v1/saved-views/trash", "GET /api/v1/auth/me"},
+		Input:    `{"type":"object","additionalProperties":false,"properties":{"trash":{"type":"boolean","default":false}}}`,
+		Output:   `{"type":"object","required":["saved_views"],"properties":{"saved_views":{"type":"array","items":` + savedViewSchema + `}}}`,
+		run:      savedViewsList,
 	}
 }
 
@@ -57,8 +57,8 @@ func savedViewCreateSpec() Spec {
 		Title: "Save an inbox view",
 		Description: `Save inbox filters under a name. scope personal: only the person this token acts as sees it; shared: the whole team sees it and anyone may change it. ` +
 			`Names are unique ignoring case among one person's views and among the shared ones; each holds at most 50. ` +
-			`Delete it with colliedesk_saved_view_delete to undo. ` + savedViewNotice + "\n\nTier: draft.",
-		Tier: "draft",
+			`Delete it with colliedesk_saved_view_delete to undo. ` + savedViewNotice,
+
 		REST: []string{"POST /api/v1/saved-views", "GET /api/v1/auth/me"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name","scope","filters"],"properties":{` +
 			`"name":{"type":"string","minLength":1,"maxLength":80},"scope":{"type":"string","enum":["personal","shared"]},"filters":` + conversationFiltersSchema + `}}`,
@@ -73,9 +73,9 @@ func savedViewUpdateSpec() Spec {
 		Title: "Change a saved inbox view",
 		Description: `Rename a saved view, replace its filters (the whole object), or change who sees it. Pass the updated_at you last read (colliedesk_saved_views_list): if someone saved the view since, nothing changes and you are told to read it again. ` +
 			`Only its owner may share a personal view; making a shared view personal gives it to the person this token acts as. ` +
-			`Change it back to undo. ` + savedViewNotice + "\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST: []string{"PATCH /api/v1/saved-views/{id}", "GET /api/v1/auth/me"},
+			`Change it back to undo. ` + savedViewNotice,
+		Idempotent: true,
+		REST:       []string{"PATCH /api/v1/saved-views/{id}", "GET /api/v1/auth/me"},
 		Input: `{"type":"object","additionalProperties":false,"required":["saved_view_id","updated_at"],"minProperties":3,"properties":{` + savedViewIDProperty + `,` +
 			`"updated_at":{"type":"string","format":"date-time","maxLength":40,"description":"The updated_at of the view as you last read it."},` +
 			`"name":{"type":"string","minLength":1,"maxLength":80},"scope":{"type":"string","enum":["personal","shared"]},"filters":` + conversationFiltersSchema + `}}`,
@@ -89,12 +89,12 @@ func savedViewDeleteSpec() Spec {
 		Name:  "colliedesk_saved_view_delete",
 		Title: "Delete a saved inbox view",
 		Description: `Move a saved view to the trash. colliedesk_saved_view_restore brings it back within 30 days; after that it is gone for good. ` +
-			`A shared view disappears from the whole team's sidebar. ` + savedViewNotice + "\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST:   []string{"DELETE /api/v1/saved-views/{id}", "GET /api/v1/auth/me"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["saved_view_id"],"properties":{` + savedViewIDProperty + `}}`,
-		Output: savedViewOutput,
-		run:    savedViewDelete,
+			`A shared view disappears from the whole team's sidebar. ` + savedViewNotice,
+		Idempotent: true,
+		REST:       []string{"DELETE /api/v1/saved-views/{id}", "GET /api/v1/auth/me"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["saved_view_id"],"properties":{` + savedViewIDProperty + `}}`,
+		Output:     savedViewOutput,
+		run:        savedViewDelete,
 	}
 }
 
@@ -103,11 +103,11 @@ func savedViewRestoreSpec() Spec {
 		Name:  "colliedesk_saved_view_restore",
 		Title: "Restore a deleted inbox view",
 		Description: `Bring back a saved view from the trash (colliedesk_saved_views_list with trash true). ` +
-			`If a live view of the same group took its name meanwhile, rename that one first. ` + savedViewNotice + "\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST:   []string{"POST /api/v1/saved-views/{id}/restore", "GET /api/v1/auth/me"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["saved_view_id"],"properties":{` + savedViewIDProperty + `}}`,
-		Output: savedViewOutput,
-		run:    savedViewRestore,
+			`If a live view of the same group took its name meanwhile, rename that one first. ` + savedViewNotice,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/saved-views/{id}/restore", "GET /api/v1/auth/me"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["saved_view_id"],"properties":{` + savedViewIDProperty + `}}`,
+		Output:     savedViewOutput,
+		run:        savedViewRestore,
 	}
 }

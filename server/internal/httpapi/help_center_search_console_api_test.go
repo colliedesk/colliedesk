@@ -189,27 +189,18 @@ func TestSearchConsoleNeedsPublishPermission(t *testing.T) {
 	}
 	kbCall(t, api, http.MethodGet, searchConsolePath, nil, agent, http.StatusOK, nil)
 	kbCall(t, api, http.MethodGet, searchConsolePath, nil, reader, http.StatusOK, nil)
-	if response := request(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken}, reader, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("a read token's save: status=%d, want 202 and a request for a person", response.Code)
-	}
-	filed := accepted(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken}, writer)
+	refused(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken}, reader, auth.PermHelpCenterUpdate)
+	// Saving changes what the public help center tells search engines: it also needs kb_articles:publish.
+	refused(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken}, writer, auth.PermKBArticlesPublish)
 	var unchanged searchConsoleView
 	kbCall(t, api, http.MethodGet, searchConsolePath, nil, admin, http.StatusOK, &unchanged)
 	if unchanged.Google != nil {
-		t.Fatalf("token set before approval: %+v", unchanged)
+		t.Fatalf("a refused token set the code: %+v", unchanged)
 	}
-	// A request carries only the fields the route takes.
-	if response := request(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken, "api_key": "sk-hidden"}, writer, nil); response.Code != http.StatusBadRequest {
-		t.Fatalf("an extra field was filed: status=%d", response.Code)
+	if response := request(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken, "api_key": "sk-hidden"}, publisher, nil); response.Code != http.StatusBadRequest {
+		t.Fatalf("an extra field was taken: status=%d", response.Code)
 	}
-	if response := approve(t, api, admin, filed.RequestID, nil); response.Code != http.StatusOK {
-		t.Fatalf("approve status=%d body=%s", response.Code, response.Body.String())
-	}
-	var approved searchConsoleView
-	kbCall(t, api, http.MethodGet, searchConsolePath, nil, admin, http.StatusOK, &approved)
-	if approved.Google == nil || *approved.Google != googleToken {
-		t.Fatalf("after approval: %+v", approved)
-	}
+	kbCall(t, api, http.MethodPut, searchConsolePath, map[string]any{"google_site_verification": googleToken}, publisher, http.StatusOK, nil)
 	var published searchConsoleView
 	kbCall(t, api, http.MethodPut, searchConsolePath, map[string]any{"bing_site_verification": bingToken}, publisher, http.StatusOK, &published)
 	if published.Bing == nil || *published.Bing != bingToken || published.Google == nil {

@@ -269,8 +269,8 @@ text are used. Line breaks and repeated spaces become one space. Both are part o
 history and of the [export](export.md), and are set through the API (`seo_title`,
 `seo_description` on `POST` and `PATCH /api/v1/kb/articles`) and by AI agents
 (`colliedesk_kb_article_create`, `colliedesk_kb_article_update`). Changing them on a published
-article changes the help center, so a token that may edit but not publish files a request a person
-approves.
+article changes the help center, so it needs `kb_articles:publish` as well as `kb_articles:update`;
+without it the save is refused and names the permission.
 
 If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
 nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs
@@ -281,7 +281,7 @@ Leaving the page with unsaved changes asks first.
 ## History
 
 **⋯ → Version history** on an article lists every version, newest first: who made it (and through which AI
-agent token or approved request), when, and what changed (title, address name, text, status,
+agent token, or an agent request approved before requests were removed), when, and what changed (title, address name, text, status,
 collection). **Restore version N** makes that version's title, address name and text current again,
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
 an article by surprise. Save or undo your own changes first.
@@ -297,8 +297,8 @@ To keep one published article away from AI, open it and select **Exclude from AI
 AI**. From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
 it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
-token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`, tier
-`send`).
+token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
+`kb_articles:update`).
 
 ## Trash
 
@@ -309,7 +309,7 @@ it. Articles in the trash count toward the 2,000 articles a workspace can hold.
 
 ## Help center settings
 
-Open **Settings → Help center**. Every agent sees whether the help center is on. An admin can turn
+Open **Settings → Help center**. Everyone with `help_center:read` (Agent and Admin hold it) sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
@@ -380,9 +380,9 @@ letter outside ASCII takes 2 to 4 bytes; the field counts them as you type). An 
 spaces) removes it. A save through the API must send `custom_css` (null or `""` for none): a save
 without it is refused with 422 and changes nothing, so a page or an agent that does not know the field
 cannot remove your CSS by accident. Pages keep the same security policy: the CSS comes from the help
-center's own address, in the brand's style sheet, never inline in a page. A custom agent token needs
-both `help_center:update` and `kb_articles:publish` to save the theme; without either it files a
-request for a person to approve, and the public pages stay unchanged.
+center's own address, in the brand's style sheet, never inline in a page. Saving the theme needs
+both `help_center:update` and `kb_articles:publish`, for a person and an agent token alike; without
+either it is refused and the public pages stay unchanged.
 
 **The contrast checks do not cover custom CSS.** A color or a hidden element it sets can make a page
 hard to read. Check the preview before you save, and clear the field to go back.
@@ -438,7 +438,7 @@ address name** (Settings → Email) changes every help center address, and old l
 ### Custom domain
 
 The help center can answer on an address of your own domain, such as `help.example.com`. Open
-**Settings → Help center → Custom domain**. Every agent sees the domain and its state; an admin sets,
+**Settings → Help center → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
 checks and removes it.
 
 1. Type the host name in **Host name** and press **Set domain**. The card then shows the DNS records
@@ -608,9 +608,8 @@ Then press **Verify** in Search Console or Bing.
 - Paste the value, not the whole tag. A value that is not 16 to 100 letters, digits, `-` or `_`
   is refused and nothing is saved.
 - To remove a token, clear its field and save. A token you do not touch stays as it is.
-- Saving changes the public help center, so it needs the same permission as publishing: an admin
-  saves it at once, and an AI agent token needs `help_center:update` and `kb_articles:publish`
-  (without them, it files a request a person approves). The API is `GET` and `PUT
+- Saving changes the public help center, so it needs `help_center:update` and
+  `kb_articles:publish`, for a person and an AI agent token alike; without either it is refused. The API is `GET` and `PUT
   /api/v1/help-center/search-console`; AI agents use `colliedesk_help_center_search_console_get` and
   `colliedesk_help_center_search_console_update`.
 - The tokens are in the [export](export.md) (`help-center.ndjson`), so a move away keeps them.
@@ -660,10 +659,9 @@ articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, 
 restore them, manage collections, put collections and articles in [order](#order)
 (`colliedesk_kb_order_set`, `PUT /api/v1/kb/order`), upload and read images, and read the help center settings and
 brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one) and
-its custom domain (`colliedesk_help_center_domain_get`). An admin token also sets, checks and removes
-the custom domain (`colliedesk_help_center_domain_set`, `_check`, `_remove`). A custom token needs
-both `help_center:update` and `kb_articles:publish` for these changes; without either it files an
-[agent request](agent-requests.md) for a person to approve.
+its custom domain (`colliedesk_help_center_domain_get`). A token with `help_center:update` and
+`kb_articles:publish` also sets, checks and removes the custom domain
+(`colliedesk_help_center_domain_set`, `_check`, `_remove`); without either it is refused.
 Every article an agent reads or finds carries its public address in `url` (also in the API), so an
 agent links an article in a reply the same way a person does: the title and the address on two
 lines, from a search with `status` published while the help center is on. In
@@ -671,16 +669,22 @@ the media library (`colliedesk_kb_media_list`, `colliedesk_kb_media_get`) an age
 no article uses and which have no alt text, and can name, describe or keep them
 (`colliedesk_kb_media_update`), move them to the trash or back (`colliedesk_kb_media_trash`,
 `colliedesk_kb_media_undelete`) and replace one in every article (`colliedesk_kb_media_replace`), with
-the same tiers as writing an article. A request from a lower tier always names the images it would
-move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's. An agent with a `send` token uploads
-a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets its poster
-(`colliedesk_kb_video_poster_set`); a lower tier cannot upload files.
+the `kb_media:*` permissions below. Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
+An agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets
+its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
 
-| Token tier | Read, search, history, trash | Write, publish, delete, restore, order, upload images | Turn the help center on or off, set its brand and custom domain |
-|---|---|---|---|
-| `admin` | Yes | Yes, at once | Yes |
-| `send` | Yes | Yes, at once. The version names the token | Proposed for an admin to approve |
-| `draft`, `read` | Yes | Proposed: an [agent request](agent-requests.md) a person approves; an image upload is refused | Proposed for an admin to approve |
+Each action needs its permission, and happens at once; the version names the token. Without it the
+call is refused and names what is missing ([Roles and permissions](roles-and-permissions.md)).
+
+| To | Needs |
+|---|---|
+| Read, search, history, trash | `kb_articles:read`, `kb_media:read`, `help_center:read` |
+| Write a draft, order, restore a version | `kb_articles:create`, `kb_articles:update` |
+| Delete and restore from the trash | `kb_articles:delete` |
+| Anything that changes the public help center (publish, edit or trash a published article, a published collection) | `kb_articles:publish` as well |
+| Upload, name, replace, trash images and videos | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
+| Turn the help center on or off | `help_center:update` |
+| Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
 
 ## Limits
 

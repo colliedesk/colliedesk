@@ -15,13 +15,14 @@ load the same files. They work through the Colliedesk MCP server: connect your h
 | `colliedesk-setup-channel` | Adds or fixes a channel (support email, web form, help chat, Zalo OA) and says which steps only you can do. Never asks for a secret in the chat. |
 
 A skill names no tool beyond `colliedesk_whoami` and `colliedesk_docs_search`, and holds no steps
-or token tiers, so a change in Colliedesk never leaves it wrong.
+or permissions, so a change in Colliedesk never leaves it wrong.
 The agent learns them when it runs: it asks Colliedesk which tools your token may use
 (`colliedesk_whoami`), reads each tool's description, and reads the linked pages on colliedesk.com.
 An agent without web access gets the same pages from your server with `colliedesk_docs_search`. When
 a page describes something your server does not have yet, the agent trusts your server and says so.
-A step above your token's tier becomes an [agent request](agent-requests.md) a person approves; the
-agent tells you and waits.
+A step your token has no permission for is refused with the permission it needs; the agent tells
+you which one, and you give it a token that holds it
+([Roles and permissions](roles-and-permissions.md#when-a-permission-is-missing)).
 
 The Colliedesk plugin for Claude Code also adds `/colliedesk-token`, a command you run yourself to
 replace the plugin's token; see [Connect Claude Code](connect-claude-code.md).

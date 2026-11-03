@@ -73,11 +73,14 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
           {plainAuthor && <span className="message-author">{item.author_name}</span>}
           {noticeAuthor && <span className="message-author">{noticeAuthor}</span>}
           {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
-          {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
+          {item.agent_token && <span className="message-author">{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item)}</span>
-          {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
+          {/* A draft an agent token wrote is named by that token; only a draft the built-in AI wrote carries the AI mark. */}
+          {item.ai_draft_id && item.ai_draft_source === 'written' && item.drafted_by
+            && <span className="message-kind">{messages.draftedByToken(item.drafted_by.label, item.drafted_by.agent_name, item.ai_draft_outcome)}</span>}
+          {item.ai_draft_id && item.ai_draft_source !== 'written' && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
             {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
           {label}
         </div>

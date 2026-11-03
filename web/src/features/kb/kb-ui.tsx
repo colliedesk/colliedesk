@@ -5,6 +5,7 @@ import { Icon } from './editor/icons';
 import type { IconName } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { mediaMessages } from './media-messages';
+import { useHolds } from '../../lib/permissions-context';
 
 // The pieces the knowledge base pages share: dialogs that are bottom sheets on a phone, menus, toasts.
 // Rule of these pages: no action sits outside the window or inside an area that has to be scrolled to
@@ -174,13 +175,15 @@ interface HeadProps {
 
 // KBHead is the one row at the top of the knowledge base pages: the page title, Articles | Media, and the page's actions.
 export function KBHead({ current, heading, articles, actions }: HeadProps) {
+  // A tab opens only for a role that may read what it lists.
+  const holds = useHolds();
   return (
     <header className="kb-head">
       <h1 id="kb-heading" className="kb-page-title">{heading}</h1>
       <nav className="kb-sections" aria-label={mediaMessages.sections}>
-        <a href="/knowledge" aria-current={current === 'articles' ? 'page' : undefined}>
-          {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>
-        <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>
+        {holds('kb_articles:read') && <a href="/knowledge" aria-current={current === 'articles' ? 'page' : undefined}>
+          {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>}
+        {holds('kb_media:read') && <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>}
       </nav>
       {actions && <div className="kb-head-actions">{actions}</div>}
     </header>

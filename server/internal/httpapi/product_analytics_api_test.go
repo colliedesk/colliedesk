@@ -22,7 +22,7 @@ func TestWorkspaceActivationEventsAreRecorded(t *testing.T) {
 	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer jam"})
 	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "note", "body": "Internal note."})
 	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Try turning it off and on."})
-	if response := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "teammate@activation-acme.example.com", "role_ceiling": "agent"}, admin, nil); response.Code != http.StatusCreated {
+	if response := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "teammate@activation-acme.example.com", "roles": []string{"Agent"}}, admin, nil); response.Code != http.StatusCreated {
 		t.Fatalf("POST invite status=%d body=%s", response.Code, response.Body.String())
 	}
 

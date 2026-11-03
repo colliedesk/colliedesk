@@ -19,10 +19,7 @@ func TestAnAgentMovesAMessageAndUndoesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := map[string]any{"conversation_id": from, "message_ids": []string{message}, "to": map[string]any{"conversation_id": to}}
-	filed := e.ok(e.connect(w.read, ""), "colliedesk_messages_move", args)
-	if _, waits := filed["agent_request"]; !waits {
-		t.Fatalf("a read token moved: %v", filed)
-	}
+	refusedWithoutPermission(t, e, w.read, "colliedesk_messages_move", args)
 	draft := e.connect(w.draft, "")
 	moved := e.ok(draft, "colliedesk_messages_move", args)
 	id, _ := at(t, moved, "move", "id").(string)

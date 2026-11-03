@@ -27,7 +27,7 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 			WHERE i.workspace_id=m.workspace_id AND i.message_id=m.id AND i.role='customer' ORDER BY i.occurred_at,i.id LIMIT 1) END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
-	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind,m.notice_kind,
+	m.ai_draft_id::text,ad.outcome,ad.source,dt.id::text,dt.label,COALESCE(NULLIF(da.display_name,''),da.email),m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind,m.notice_kind,
 	COALESCE(o.final,false)
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
@@ -35,7 +35,9 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 	LEFT JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
 	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id
-	LEFT JOIN ai_drafts ad ON ad.workspace_id=m.workspace_id AND ad.id=m.ai_draft_id`
+	LEFT JOIN ai_drafts ad ON ad.workspace_id=m.workspace_id AND ad.id=m.ai_draft_id
+	LEFT JOIN sessions dt ON dt.workspace_id=ad.workspace_id AND dt.id=ad.requested_by_token_id AND ad.source='written'
+	LEFT JOIN agents da ON da.workspace_id=dt.workspace_id AND da.id=dt.agent_id`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -45,19 +47,23 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var message domain.Message
 	var meta []byte
 	var status, lastError, tokenID, tokenLabel, tokenScope, tokenAgent, reasonCode *string
+	var drafterID, drafterLabel, drafterAgent *string
 	var channelMeta []byte
 	var attempts *int32
 	var sentAt *time.Time
 	var final bool
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
-		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome,
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome, &message.AIDraftSource, &drafterID, &drafterLabel, &drafterAgent,
 		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID, &message.IntakeReplyKind, &message.NoticeKind, &final); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
+	if drafterID != nil && drafterLabel != nil && drafterAgent != nil {
+		message.DraftedBy = &domain.MessageToken{ID: *drafterID, Label: *drafterLabel, AgentName: *drafterAgent}
+	}
 	if tokenID != nil && tokenLabel != nil && tokenScope != nil && tokenAgent != nil {
-		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, Scope: *tokenScope, AgentName: *tokenAgent}
+		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, AgentName: *tokenAgent}
 	}
 	if channelMeta != nil {
 		message.ChannelMeta = channelMeta

@@ -4,12 +4,13 @@ import type { Me } from '../../api/schemas';
 import { ExportAllData } from '../settings/export-all-data';
 import { readPlanIntent } from '../settings/plan-intent';
 import { useCheckout } from '../settings/use-checkout';
+import { can } from '../../lib/can';
 import { LockedScreen } from './locked-screen';
 
 // LockedRoute is the whole view of a locked workspace. Only admins read billing and may pay or export.
 export function LockedRoute({ me }: { me: Me }) {
   const client = useQueryClient();
-  const isAdmin = me.agent.role === 'admin';
+  const isAdmin = can(me, 'billing:read');
   const billing = useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin });
   const founding = useQuery({ queryKey: ['founding'], queryFn: api.foundingSlots, enabled: isAdmin, staleTime: 60_000 });
   const placesLeft = founding.data?.open && founding.data.taken !== null ? Math.max(0, founding.data.slots - founding.data.taken) : undefined;

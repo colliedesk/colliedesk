@@ -1,3 +1,4 @@
+import { routePermissions } from './route-permissions';
 import type { z } from 'zod';
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
@@ -11,7 +12,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -61,6 +62,12 @@ export class InvalidRequestError extends Error {
     this.name = 'InvalidRequestError';
     this.detail = detail;
   }
+}
+
+// PermissionError is a 403 that says which permission the caller lacks (permission_missing), or a role or
+// a member beyond theirs; its message says how to get it. It is an InvalidRequestError so forms show it.
+export class PermissionError extends InvalidRequestError {
+  override name = 'PermissionError';
 }
 
 // ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
@@ -132,11 +139,13 @@ async function outboundRefusal(response: Response): Promise<Error> {
   try {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown; reason?: unknown } };
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo, reason } = body.error ?? {};
+    // A permission the caller lacks, a role beyond theirs, a member who outranks them: the message says
+    // what is missing and how to get it, and detail keeps missing_permissions and ask.
+    if (['permission_missing', 'role_exceeds_yours', 'member_outranks_you', 'person_only'].includes(String(code)) && typeof message === 'string' && message)
+      return new PermissionError(message, body.error as { code?: unknown; [field: string]: unknown });
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
-    // An agent asking for an admin token: the reason is shown next to the form.
-    if (code === 'admin_token_needs_admin' && typeof message === 'string' && message) return new InvalidRequestError(message);
-    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited', 'ai_drafts_rate_limited', 'rate_limited'].includes(String(code)) && typeof message === 'string' && message)
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'ai_checks_rate_limited', 'ai_drafts_rate_limited', 'rate_limited'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
@@ -165,11 +174,91 @@ function noteFailure(path: string, init: RequestInit | undefined, response: Resp
 }
 
 // request is exported for the API calls that live in a lazy part of the app (features/contacts/contact-api.ts, saved-views.ts).
+// The session's permissions, from GET /api/v1/auth/me: a read they do not allow is not sent, so the server
+// never answers it with a 403. undefined until the session is known; null when there is none to go by.
+let held: ReadonlySet<string> | null | undefined;
+let waiting: Array<() => void> = [];
+// The permissions the session had when it was last known, kept across page loads: until the session
+// answers, a read they allowed goes out at once, with the session request, instead of a round trip later.
+// Only a read they did not allow (or none known) waits; a stale list costs at most one refused read.
+const rememberedKey = 'colliedesk:permissions';
+let remembered: ReadonlySet<string> | null = readRemembered();
+
+function readRemembered(): ReadonlySet<string> | null {
+  try {
+    const stored = globalThis.localStorage?.getItem(rememberedKey);
+    const list: unknown = stored ? JSON.parse(stored) : null;
+    return Array.isArray(list) ? new Set(list.filter((name): name is string => typeof name === 'string')) : null;
+  } catch {
+    return null;
+  }
+}
+
+function remember(list: readonly string[] | null) {
+  remembered = list ? new Set(list) : null;
+  try {
+    if (list) globalThis.localStorage?.setItem(rememberedKey, JSON.stringify(list));
+    else globalThis.localStorage?.removeItem(rememberedKey);
+  } catch { /* storage refused (private mode, quota): the reads wait for the session instead */ }
+}
+const routeMatchers = routePermissions.map(([route, permission]) => [new RegExp(`^${route.replace(/\{[^}]+\}/g, '[^/]+')}$`), permission] as const);
+
+// knowPermissions records the session's permissions; null means there is no session to go by.
+export function knowPermissions(list: readonly string[] | null) {
+  held = list ? new Set(list) : null;
+  remember(list);
+  for (const go of waiting.splice(0)) go();
+}
+
+// forgetPermissionsKeepingMemory drops the known session but keeps the remembered permissions, as a new
+// page load starts (tests).
+export function forgetPermissionsKeepingMemory() {
+  held = undefined;
+  for (const go of waiting.splice(0)) go();
+}
+
+// forgetPermissions drops what is known of the session, as when it signs out (and between tests).
+export function forgetPermissions() {
+  held = undefined;
+  remember(null);
+  for (const go of waiting.splice(0)) go();
+}
+
+// sessionPermissions waits, briefly, for the session to be known: a page asks for its data while the app
+// asks who is signed in.
+async function sessionPermissions(): Promise<ReadonlySet<string> | null> {
+  if (held === undefined) await new Promise<void>((go) => { waiting.push(go); setTimeout(go, 3000); });
+  return held ?? null;
+}
+
+function permissionOf(path: string): string | undefined {
+  const route = path.split('?', 1)[0];
+  return routeMatchers.find(([matcher]) => matcher.test(route))?.[1];
+}
+
+function refuseUnheld(mine: ReadonlySet<string> | null, permission: string) {
+  if (mine && !mine.has(permission)) {
+    throw new PermissionError(`Your roles do not include ${permission}.`, { code: 'permission_missing', missing_permissions: [permission], missing_from: 'person' });
+  }
+}
+
 export async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+  // Only a read is skipped: a change goes to the server, which decides it and says why. A known session is
+  // checked at once, so a read goes out in the same tick as before.
+  const permission = (init?.method ?? 'GET').toUpperCase() === 'GET' ? permissionOf(path) : undefined;
+  if (permission && !(held === undefined && remembered?.has(permission))) refuseUnheld(held === undefined ? await sessionPermissions() : held, permission);
+  const parsed = await send(path, schema, init);
+  if (path === '/api/v1/auth/me') knowPermissions((parsed as { permissions?: string[] }).permissions ?? null);
+  return parsed;
+}
+
+async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
   if (!response.ok) noteFailure(path, init, response);
+  // Signed out: there is no session to go by, so nothing waits for one.
+  if (response.status === 401 && path === '/api/v1/auth/me') knowPermissions(null);
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
@@ -294,12 +383,21 @@ export const api = {
   updateAgentTimezone: (timezone: RequestBody<'updateAgentTimezone'>['timezone']) => request('/api/v1/agents/me/timezone', agentSchema, { method: 'PATCH', body: json<'updateAgentTimezone'>({ timezone }) }),
   updateAgentDisplayName: (display_name: RequestBody<'updateAgentDisplayName'>['display_name']) => request('/api/v1/agents/me/display-name', agentSchema, { method: 'PATCH', body: json<'updateAgentDisplayName'>({ display_name }) }),
   updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
+  // The whole list of a member's roles.
+  setAgentRoles: (id: string, roleIds: string[]) => request(`/api/v1/agents/${id}/roles`, teamMemberSchema, { method: 'PUT', body: json<'setAgentRoles'>({ role_ids: roleIds }) }),
+  roles: (deleted = false) => request(`/api/v1/roles${deleted ? '?deleted=true' : ''}`, roleListSchema),
+  role: (id: string) => request(`/api/v1/roles/${encodeURIComponent(id)}`, roleSchema),
+  createRole: (value: RequestBody<'createRole'>, key: string) => request('/api/v1/roles', roleSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createRole'>(value) }),
+  updateRole: (id: string, value: RequestBody<'updateRole'>) => request(`/api/v1/roles/${encodeURIComponent(id)}`, roleSchema, { method: 'PATCH', body: json<'updateRole'>(value) }),
+  deleteRole: (id: string) => requestNoContent(`/api/v1/roles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // A press of Restore or Undo is named by its key, so a repeat of it restores once.
+  restoreRole: (id: string, key: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/restore`, roleSchema, { method: 'POST', headers: { 'Idempotency-Key': key } }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
-  // A token holds a tier (scope) or its own permissions, never both.
+  // A token follows a role whose permissions the person all holds (role_id) or holds a fixed list of permissions, never both.
   createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>, key: string) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createAgentToken'>({ label, ...choice }) }),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
-  createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling'], key: string) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createInvite'>({ email, role_ceiling }) }),
+  createInvite: (email: string, roleIds: string[], key: string) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createInvite'>({ email, ...(roleIds.length > 0 ? { role_ids: roleIds } : {}) }) }),
   revokeInvite: (id: string) => requestNoContent(`/api/v1/auth/invites/${id}`, { method: 'DELETE' }),
   // signal lets a newer search cancel the request of the one it replaced.
   conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
@@ -341,20 +439,4 @@ export const api = {
   savedReplyVersions: (id: string, beforeVersion?: number) => request(`/api/v1/saved-replies/${id}/versions${beforeVersion ? `?before_version=${beforeVersion}` : ''}`, savedReplyVersionListSchema),
   restoreSavedReplyVersion: (id: string, version: number, updatedAt: string) => request(`/api/v1/saved-replies/${id}/versions/${version}/restore`, savedReplySchema,
     { method: 'POST', body: json<'restoreSavedReplyVersion'>({ updated_at: updatedAt }) }),
-  // Without full a request carries no body: the poll every tab runs stays small.
-  agentRequests: (status?: NonNullable<operations['listAgentRequests']['parameters']['query']>['status'], full = false) => {
-    const query = new URLSearchParams();
-    if (status) query.set('status', status);
-    if (full) query.set('detail', 'full');
-    const search = query.toString();
-    return request(`/api/v1/agent-requests${search ? `?${search}` : ''}`, agentRequestListSchema);
-  },
-  agentRequest: (id: string) => request(`/api/v1/agent-requests/${id}`, agentRequestSchema),
-  // Approving runs the agent's call as the signed-in person. A reply draft may come with its edited
-  // text and the copies to keep (never new ones).
-  approveAgentRequest: (id: string, edit: OptionalBody<'approveAgentRequest'> = {}) => request(`/api/v1/agent-requests/${id}/approve`, approvedAgentRequestSchema,
-    { method: 'POST', body: optionalJson<'approveAgentRequest'>(edit) }),
-  rejectAgentRequest: (id: string, reason?: string) => request(`/api/v1/agent-requests/${id}/reject`, agentRequestSchema,
-    { method: 'POST', body: optionalJson<'rejectAgentRequest'>(reason ? { reason } : {}) }),
-  cancelAgentRequest: (id: string) => request(`/api/v1/agent-requests/${id}/cancel`, agentRequestSchema, { method: 'POST' }),
 };

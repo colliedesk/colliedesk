@@ -18,9 +18,7 @@ func TestHelpCenterSearchConsoleToolsReadSaveAndPropose(t *testing.T) {
 	if empty := e.ok(read, "colliedesk_help_center_search_console_get", nil); at(t, empty, "search_console", "google_site_verification") != nil {
 		t.Fatalf("a new workspace has a token: %v", empty)
 	}
-	if proposed := e.ok(send, "colliedesk_help_center_search_console_update", map[string]any{"google_site_verification": consoleGoogle}); proposed["agent_request"] == nil {
-		t.Fatalf("a send token's save was not filed as a request: %v", proposed)
-	}
+	e.refused(send, "colliedesk_help_center_search_console_update", map[string]any{"google_site_verification": consoleGoogle})
 	if message := e.fails(admin, "colliedesk_help_center_search_console_update", map[string]any{"google_site_verification": `"><script>`}); !strings.Contains(message, "google_site_verification") {
 		t.Fatalf("a bad token was not refused by field: %q", message)
 	}

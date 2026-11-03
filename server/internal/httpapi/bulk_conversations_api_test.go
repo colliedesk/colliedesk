@@ -254,10 +254,9 @@ func TestBulkUpdateNeedsASessionAndTheWritePermission(t *testing.T) {
 	}
 	f.assertUnchanged(t, before)
 
-	for _, route := range httpapi.Routes() {
-		if route.Method == http.MethodPatch && route.Pattern == bulkPath && route.Permission != auth.PermissionConversationsWrite {
-			t.Errorf("bulk update permission=%s, want %s like the single update", route.Permission, auth.PermissionConversationsWrite)
-		}
+	table := httpapi.RouteAccessTable()
+	if bulk, one := table["PATCH "+bulkPath], table["PATCH /api/v1/conversations/{id}"]; bulk.Permission != one.Permission {
+		t.Errorf("bulk update needs %s, want %s like the single update", bulk.Permission, one.Permission)
 	}
 }
 

@@ -420,7 +420,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent, with a tier (`scope`) or its own list of `permissions` (resource:action), never both. A tier is a preset: its permissions are worked out on every call. A token that holds nothing admin-only has the agent role whatever the creator's role is. An `admin` token, and a custom token with an admin-only permission (`TokenPermission`, preset admin), act with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in person, needing `team:create_tokens`. Send `role_id` (any role of the workspace whose permissions the caller all holds, so an admin may pick every role; 403 `role_exceeds_yours` names what the caller lacks, 404 when there is no such role) for a token that follows that role: it changes when the role changes and stops while the person does not hold every permission of it. Or send `permissions` (resource:action, each one the caller holds; 403 `role_exceeds_yours` names the others) for a fixed list. Never both. Whichever it is, a call never gets more than the person holds at that moment. People only: an agent token gets 403 `person_only` (a token that made tokens would leave them behind after it was revoked). A `scope` (the old tiers) is refused with 400. It appears in `GET /api/v1/auth/sessions` with its label and what it was given, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -437,7 +437,7 @@ export interface paths {
         };
         get: operations["listInvites"];
         put?: never;
-        /** @description Creates an invite and returns its one-time URL once. An agent token's call, whatever its tier and role ceiling, is filed as an agent request (202): the link is a credential, so only the person who approves sees it, once, and the stored request does not keep it. */
+        /** @description Creates an invite and returns its one-time URL once, to a person or an agent token alike. Needs `team:invite`, and every permission of the roles it gives (403 `role_exceeds_yours`). The invited person gets these roles on joining, added to any they hold. A `role_ceiling` (the old field) is refused with 400. */
         post: operations["createInvite"];
         delete?: never;
         options?: never;
@@ -895,7 +895,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A token that may not write to customers (below the send tier) asks a person first (202) when the change would tell one, with a summary that quotes the notice; a quiet change does not ask. The conversation's `status_notices` says beforehand which statuses would tell. */
+        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A caller without `messages:send` is refused (403 `permission_missing`) when the change would tell a customer; `notify: false` changes it without telling them. The conversation's `status_notices` says beforehand which statuses would tell. */
         patch: operations["updateConversation"];
         trace?: never;
     };
@@ -937,7 +937,7 @@ export interface paths {
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
          *
-         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft or a call filed as an agent request (202) does not use it.
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. A reply draft (`POST /api/v1/conversations/{id}/reply-drafts`) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -973,7 +973,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Lists the workspace's channels, oldest first, with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it the workspace has and which is its default (`default_channel_id`). A workspace may have several channels of every type (two support mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a channel id act on, a conversation started without choosing a channel leaves from, and the next oldest becomes when it is removed. Removed channels are left out unless `include_removed=true` (they come last, with `deleted_at` and state `removed`, for naming the channel of older conversations). Every member of the team may read it; changing a channel needs an admin. */
+        /** @description Lists the workspace's channels, oldest first, with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it the workspace has and which is its default (`default_channel_id`). A workspace may have several channels of every type (two support mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a channel id act on, a conversation started without choosing a channel leaves from, and the next oldest becomes when it is removed. Removed channels are left out unless `include_removed=true` (they come last, with `deleted_at` and state `removed`, for naming the channel of older conversations). `channels:read` reads it; changing a channel needs `channels:update`. */
         get: operations["listChannels"];
         put?: never;
         /** @description Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput). The type validates it and the channel is stored only when it passes (400 with `fields`). A workspace may add several channels of a type; give each a `name` that tells them apart. An outside account another channel already is answers 409 `channel_account_taken`. A name another live channel of the type has (whatever its case) answers 409 `channel_name_taken`, a support address whose mailbox another email channel of the workspace has (support+vip@ is support@) 409 `support_address_taken`; both with `fields` and `conflict` naming that channel. Without a name the first channel of a type is called as its type, a later one by its address (email) or with a number. The first channel of a type is its default; `is_default: true` makes a later one the default. The first email channel is what `PUT /api/v1/channels/email` connects. */
@@ -1014,11 +1014,11 @@ export interface paths {
         get: operations["getChannel"];
         put?: never;
         post?: never;
-        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. An agent token's call is an agent request a person approves. */
+        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. */
         delete: operations["removeChannel"];
         options?: never;
         head?: never;
-        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
+        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for someone with `channels:update` to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
         patch: operations["updateChannel"];
         trace?: never;
     };
@@ -1032,7 +1032,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never waits in an agent request. */
+        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. It needs `channels:manage_credentials`. */
         put: operations["setChannelCredential"];
         post?: never;
         delete?: never;
@@ -1090,7 +1090,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. An agent token's call is an agent request a person approves. */
+        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. */
         post: operations["discardHeldChannelMessages"];
         delete?: never;
         options?: never;
@@ -1348,7 +1348,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Sets what one AI feature does by itself on a scope of the channel (`level`: off, suggest, auto, or null to follow the channel and the workspace). Drafts go up to suggest (AI never sends); intake exists only on a chat type's intake scopes (422 `intake_not_supported` with `available_slots` otherwise) and takes `options`. A level decides only the AI's own work; people can ask by hand while the workspace has the feature on. An agent token lowers a level with `ai_settings:update`; a change that lets AI do more by itself (a higher level of any scope it reaches, a lower threshold, a source turned on, other instructions) is an agent request a person approves, whatever the token holds. Only admins change a level (403 for another role). Every change is in the AI history and in the channel's. */
+        /** @description Sets what one AI feature does by itself on a scope of the channel (`level`: off, suggest, auto, or null to follow the channel and the workspace). Drafts go up to suggest (AI never sends); intake exists only on a chat type's intake scopes (422 `intake_not_supported` with `available_slots` otherwise) and takes `options`. A level decides only the AI's own work; people can ask by hand while the workspace has the feature on. Any change needs `ai_settings:update`, raising a level as well as lowering it. Every change is in the AI history and in the channel's. */
         put: operations["setChannelAI"];
         post?: never;
         delete?: never;
@@ -1366,7 +1366,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; an admin may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
+        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; someone with `ai_settings:update` may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
         get: operations["getIntakeReadiness"];
         put?: never;
         post?: never;
@@ -1388,7 +1388,7 @@ export interface paths {
         /** @description The offline evaluations recorded for a chat channel's intake, newest first (at most 100); scope narrows them. */
         get: operations["listIntakeEvaluations"];
         put?: never;
-        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. Only admins; an agent token's record is an agent request a person approves, since it can open a gate. */
+        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it can open a gate. */
         post: operations["recordIntakeEvaluation"];
         delete?: never;
         options?: never;
@@ -1668,7 +1668,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an agent request; the person who approves receives the consent address. */
+        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). The consent address goes to whoever calls, a person or an agent token with `channels:manage_credentials`. */
         post: operations["connectGmail"];
         /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
         delete: operations["disconnectGmail"];
@@ -1686,7 +1686,7 @@ export interface paths {
         };
         /**
          * Google's redirect after the consent screen
-         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `address_mismatch` (the account is not the channel's support address mailbox), `account_in_use` (another email channel of the workspace sends through it, named by `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked unless a channel holds the account. Google's own error text is never echoed.
+         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (without `channels:manage_credentials`, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `address_mismatch` (the account is not the channel's support address mailbox), `account_in_use` (another email channel of the workspace sends through it, named by `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked unless a channel holds the account. Google's own error text is never echoed.
          */
         get: operations["finishGmailConnect"];
         put?: never;
@@ -1706,7 +1706,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). An agent token gets an agent request; the person who approves receives the sign-in address. */
+        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). The sign-in address goes to whoever calls, a person or an agent token with `channels:manage_credentials`. */
         post: operations["connectMicrosoft"];
         /** @description Disconnect Microsoft 365: the grant is deleted here. Microsoft has no API that revokes one app's grant, so Colliedesk stays listed in the account's apps until the person removes it there (My Apps for a work or school account, account.live.com/consent/Manage for a personal one); the deleted token is useless without this server's client secret. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Microsoft 365 fails with the reason and can be retried. A locked workspace may disconnect. 404 when the channel has no Microsoft 365 connection. */
         delete: operations["disconnectMicrosoft"];
@@ -1724,7 +1724,7 @@ export interface paths {
         };
         /**
          * Microsoft's redirect after the sign-in and consent pages
-         * @description Opened by the browser Microsoft redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start, started for Microsoft 365; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&microsoft=connected`, or `?tab=replies&microsoft_error=<reason>` with `signed_out`, `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or provider, or older than 10 minutes), `wrong_person`, `denied` (cancelled at Microsoft, or the organization needs an admin's approval), `send_not_granted`, `no_refresh_token`, `mailbox_unavailable` (the account has no Exchange Online mailbox), `address_mismatch` (the mailbox is not the channel's support address; aliases and shared mailboxes are not supported yet), `account_in_use` (named by `&microsoft_channel=<id>`), `email_channel_missing`, `server_misconfigured` (Microsoft refused this server's client secret) and `microsoft_unavailable`. Microsoft's own error text is never echoed.
+         * @description Opened by the browser Microsoft redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start, started for Microsoft 365; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&microsoft=connected`, or `?tab=replies&microsoft_error=<reason>` with `signed_out`, `forbidden` (without `channels:manage_credentials`, or the workspace is locked), `expired` (state unknown, used, from another workspace or provider, or older than 10 minutes), `wrong_person`, `denied` (cancelled at Microsoft, or the organization needs an admin's approval), `send_not_granted`, `no_refresh_token`, `mailbox_unavailable` (the account has no Exchange Online mailbox), `address_mismatch` (the mailbox is not the channel's support address; aliases and shared mailboxes are not supported yet), `account_in_use` (named by `&microsoft_channel=<id>`), `email_channel_missing`, `server_misconfigured` (Microsoft refused this server's client secret) and `microsoft_unavailable`. Microsoft's own error text is never echoed.
          */
         get: operations["finishMicrosoftConnect"];
         put?: never;
@@ -1818,7 +1818,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. One tab announces one conversation at most every 2 seconds, and a call that starts or ends a reply (`writing` changes) at most every half second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes nothing. Changes nothing a customer or a teammate wrote, so the read tier is enough for an agent token. */
+        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. One tab announces one conversation at most every 2 seconds, and a call that starts or ends a reply (`writing` changes) at most every half second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes nothing. Changes nothing a customer or a teammate wrote. */
         put: operations["putConversationPresence"];
         post?: never;
         delete?: never;
@@ -2013,7 +2013,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Change an agent's display name, role or active state; send at least one of `display_name`, `role` and `active`. Renaming is not a change to the admin role, so an `admin` agent token renames anyone directly; a rename sent with a role or active change follows the rules of that change. Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
+        /** @description Change a member's display name or active state; send at least one of `display_name` and `active`. Roles change with `PUT /api/v1/agents/{id}/roles` (a `role` here is refused with 400). The caller needs `team:manage_roles` and every permission the member holds (403 `member_outranks_you`), and the workspace keeps at least one active member with the Admin role (409 `last_admin`). Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
         patch: operations["updateAgent"];
         trace?: never;
     };
@@ -2286,10 +2286,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. A reply in the trash is not listed here (see `GET /api/v1/saved-replies/trash`). `last_change` says who made the latest version, and through which agent token or approved agent request. */
+        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. A reply in the trash is not listed here (see `GET /api/v1/saved-replies/trash`). `last_change` says who made the latest version, and through which agent token. */
         get: operations["listSavedReplies"];
         put?: never;
-        /** @description Any agent may create one, and a `send` agent token. A lower tier files an agent request a person approves. The title is unique among the replies not in the trash, ignoring case (409 `duplicate_title`). A workspace holds at most 500, counting the ones in the trash (409 `saved_reply_limit`). The new reply has version 1 in its history. */
+        /** @description Needs `saved_replies:create`. The title is unique among the replies not in the trash, ignoring case (409 `duplicate_title`). A workspace holds at most 500, counting the ones in the trash (409 `saved_reply_limit`). The new reply has version 1 in its history. */
         post: operations["createSavedReply"];
         delete?: never;
         options?: never;
@@ -2326,11 +2326,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Move the reply to the trash. It disappears from the list and the reply box, and can be restored for 30 days with `POST /api/v1/saved-replies/{id}/restore`. Send the `updated_at` you read: when the reply was saved since, nothing is deleted and the answer is 409 `changed_elsewhere` (an agent request approved after someone edited the reply fails the same way). A `send` agent token may delete; a lower tier files an agent request. */
+        /** @description Move the reply to the trash. It disappears from the list and the reply box, and can be restored for 30 days with `POST /api/v1/saved-replies/{id}/restore`. Send the `updated_at` you read: when the reply was saved since, nothing is deleted and the answer is 409 `changed_elsewhere`. */
         delete: operations["deleteSavedReply"];
         options?: never;
         head?: never;
-        /** @description Change the title, the body or both. Any agent may edit a shared reply, and a `send` agent token; a lower tier files an agent request whose detail shows the reply before and after. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. Every edit adds a version to the history. A reply in the trash is 404. */
+        /** @description Change the title, the body or both. Needs `saved_replies:update`. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. Every edit adds a version to the history. A reply in the trash is 404. */
         patch: operations["updateSavedReply"];
         trace?: never;
     };
@@ -2345,7 +2345,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Take a reply out of the trash, as it was when deleted. Send the `updated_at` of the trashed reply as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in the trash. 409 `duplicate_title` when another reply took its title meanwhile (rename that one first). A `send` agent token may restore; a lower tier files an agent request. */
+        /** @description Take a reply out of the trash, as it was when deleted. Send the `updated_at` of the trashed reply as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in the trash. 409 `duplicate_title` when another reply took its title meanwhile (rename that one first). */
         post: operations["restoreSavedReply"];
         delete?: never;
         options?: never;
@@ -2362,7 +2362,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The versions of a saved reply, newest first, in pages: who made each, through which agent token or approved agent request, and the title and text it had. A reply in the trash keeps its history. Versions are never changed or removed while the reply exists; restoring one adds a new version. */
+        /** @description The versions of a saved reply, newest first, in pages: who made each, through which agent token, and the title and text it had. A reply in the trash keeps its history. Versions are never changed or removed while the reply exists; restoring one adds a new version. */
         get: operations["listSavedReplyVersions"];
         put?: never;
         post?: never;
@@ -2384,7 +2384,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Make an earlier version the current one. The title and text of that version become a new version; nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere` when the reply was saved since). 409 `duplicate_title` when another reply has that title now. A reply in the trash is 404: restore it from the trash first. A `send` agent token may restore; a lower tier files an agent request. */
+        /** @description Make an earlier version the current one. The title and text of that version become a new version; nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere` when the reply was saved since). 409 `duplicate_title` when another reply has that title now. A reply in the trash is 404: restore it from the trash first. */
         post: operations["restoreSavedReplyVersion"];
         delete?: never;
         options?: never;
@@ -2435,7 +2435,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. Only an admin may ask (an agent token's call waits for a person's approval). `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. 502 `mail_failed` when the mail relay refuses it; nothing is stored then either. A repeat with the same Idempotency-Key answers the first request's answer and sends nothing. */
+        /** @description Ask Colliedesk to move the workspace's Freshdesk data (Founding: done for you; Team 25: done with you on a call). Hosted cloud only, where billing is configured. The server emails the request to the Colliedesk support address, with the workspace, its plan, the Freshdesk address, the times and the admin's email as Reply-To, and stores it with its time: `migration_requested_at` of `GET /api/v1/billing` then holds the latest one. The workspace is taken from the session. It needs `billing:manage`. `freshdesk_address` is a `<name>.freshdesk.com` host name, with or without `https://` and a trailing path; the answer carries the host name as stored. 422 `validation_failed` names `fields.freshdesk_address` or `fields.times`. A workspace may ask 5 times an hour (429 `rate_limited`). 503 `mail_unavailable` when this server cannot send mail; nothing is stored then. 502 `mail_failed` when the mail relay refuses it; nothing is stored then either. A repeat with the same Idempotency-Key answers the first request's answer and sends nothing. */
         post: operations["createMigrationRequest"];
         delete?: never;
         options?: never;
@@ -2535,10 +2535,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's in-app imports and undos, newest first (at most 100). Admins only. A job never shows its Freshdesk API key; `has_key` says whether the server still holds it. */
+        /** @description The workspace's in-app imports and undos, newest first (at most 100). Needs `imports:read`. A job never shows its Freshdesk API key; `has_key` says whether the server still holds it. */
         get: operations["listImports"];
         put?: never;
-        /** @description Starts an import from Freshdesk by reading the account in the background, before anything is written (`state` previewing, then previewed with `preview`, or failed with `error_code`). Poll `GET /api/v1/imports/{id}`. The key must be a Freshdesk admin's; it is sealed on the server, never returned, and erased when the job ends or when the preview is not started within an hour. A new preview discards the workspace's earlier preview. An agent token below the admin tier is refused with 403 `credentials_need_admin_token` and nothing is stored: an agent request would keep the key. */
+        /** @description Starts an import from Freshdesk by reading the account in the background, before anything is written (`state` previewing, then previewed with `preview`, or failed with `error_code`). Poll `GET /api/v1/imports/{id}`. The key must be a Freshdesk admin's; it is sealed on the server, never returned, and erased when the job ends or when the preview is not started within an hour. A new preview discards the workspace's earlier preview. It needs `imports:manage_credentials`. */
         post: operations["previewImport"];
         delete?: never;
         options?: never;
@@ -2613,7 +2613,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Gives a job in `waiting_key` (the server restarted without a key ring, or its keys changed) the Freshdesk API key again; it goes on where it stopped. Refused to agent tokens below the admin tier like `POST /api/v1/imports`. */
+        /** @description Gives a job in `waiting_key` (the server restarted without a key ring, or its keys changed) the Freshdesk API key again; it goes on where it stopped. It needs `imports:manage_credentials`. */
         put: operations["setImportKey"];
         post?: never;
         delete?: never;
@@ -2654,7 +2654,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Queues an undo of an import that ended (finished, failed or cancelled): it removes what that Freshdesk account brought into the workspace, as `collie import undo` does, and keeps what the team changed since. Every agent token's call waits for a person's approval. */
+        /** @description Queues an undo of an import that ended (finished, failed or cancelled): it removes what that Freshdesk account brought into the workspace, as `collie import undo` does, and keeps what the team changed since. It needs `imports:undo`. */
         post: operations["undoImport"];
         delete?: never;
         options?: never;
@@ -2710,7 +2710,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's AI settings: the server's provider (set by the operator; null when the server has none), the providers the workspace added (never a key, only its last four characters), each feature ("slot": `triage`, `draft`, `intake`) with its provider, model, whether it is on and can run and what it does by itself by default (`default_level`), the levels channels set apart from it (`channels`), the kinds of extra context intake may send (`source_consents`), and the newest 50 changes. Every feature starts off; turning one on is an admin's consent to send that feature's ticket data to its provider. Agents can read this; only admins change it. */
+        /** @description The workspace's AI settings: the server's provider (set by the operator; null when the server has none), the providers the workspace added (never a key, only its last four characters), each feature ("slot": `triage`, `draft`, `intake`) with its provider, model, whether it is on and can run and what it does by itself by default (`default_level`), the levels channels set apart from it (`channels`), the kinds of extra context intake may send (`source_consents`), and the newest 50 changes. Every feature starts off; turning one on is the caller's consent to send that feature's ticket data to its provider. `ai_settings:read` reads this; `ai_settings:update` changes it. */
         get: operations["getAISettings"];
         put?: never;
         post?: never;
@@ -2729,7 +2729,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). It needs `ai_settings:manage_credentials`. */
         post: operations["addAIProvider"];
         delete?: never;
         options?: never;
@@ -2746,7 +2746,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Lists the models a provider's key may use, before the provider is added, so a person picks them instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission, model_not_found when the server keeps no list, blocked_address…); type the model names then. Same input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        /** @description Lists the models a provider's key may use, before the provider is added, so a person picks them instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission, model_not_found when the server keeps no list, blocked_address…); type the model names then. Same input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429 `ai_checks_rate_limited`). */
         post: operations["listAIModels"];
         delete?: never;
         options?: never;
@@ -2784,7 +2784,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Replaces a provider's key. The new key is checked first; when the check fails nothing changes and the old key keeps working (422 `ai_check_failed`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`. */
+        /** @description Replaces a provider's key. The new key is checked first; when the check fails nothing changes and the old key keeps working (422 `ai_check_failed`). It needs `ai_settings:manage_credentials`. */
         put: operations["setAIProviderKey"];
         post?: never;
         delete?: never;
@@ -2822,7 +2822,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model (the provider's first when left out), effort, on or off, and what it does by itself where no channel sets a level (`default_level`). Turning a feature on, or moving it to another provider while it is on, records the person's consent: that feature's ticket data goes to that provider from now on, and what channels let it do by itself goes down a level (auto to suggest; a draft written by itself to one asked for). Every agent token's call becomes an agent request a person approves. */
+        /** @description Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model (the provider's first when left out), effort, on or off, and what it does by itself where no channel sets a level (`default_level`). Turning a feature on, or moving it to another provider while it is on, records the person's consent: that feature's ticket data goes to that provider from now on, and what channels let it do by itself goes down a level (auto to suggest; a draft written by itself to one asked for). It needs `ai_settings:update`. */
         put: operations["setAISlot"];
         post?: never;
         delete?: never;
@@ -2841,7 +2841,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Records an admin's consent that AI intake may send this kind of context to its provider besides the conversation's text (which the feature's own consent covers): `images` customers sent, the `contact_profile`, or an integration's data (`external:<name>`). Giving it again changes nothing. Every agent token's call becomes an agent request a person approves. */
+        /** @description Records an admin's consent that AI intake may send this kind of context to its provider besides the conversation's text (which the feature's own consent covers): `images` customers sent, the `contact_profile`, or an integration's data (`external:<name>`). Giving it again changes nothing. It needs `ai_settings:update`. */
         put: operations["setAISourceConsent"];
         post?: never;
         /** @description Takes the consent back: intake leaves that kind of context out from its next decision. `removed` is false when there was none. */
@@ -2858,7 +2858,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). Every role reads it; the compute error is shown to admins only. */
+        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). `results:read` reads it; the compute error is shown only to callers with `results:share`. */
         get: operations["getResults"];
         put?: never;
         post?: never;
@@ -2875,12 +2875,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Admins only. */
+        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Needs `results:share`. */
         get: operations["getResultsShareLink"];
         put?: never;
-        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Admins only. */
+        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Needs `results:share`. */
         post: operations["createResultsShareLink"];
-        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only. */
+        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Needs `results:share`. */
         delete: operations["revokeResultsShareLink"];
         options?: never;
         head?: never;
@@ -2917,7 +2917,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
+        /** @description Turns the weekly results email on or off for the caller. It goes only to people with `results:share`, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
         patch: operations["setResultsEmail"];
         trace?: never;
     };
@@ -2962,7 +2962,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Admins only. */
+        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Needs `billing:read`. */
         get: operations["getAIUsage"];
         put?: never;
         post?: never;
@@ -2979,7 +2979,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month) against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any. Admins only. */
+        /** @description One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month) against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any. Needs `billing:read`. */
         get: operations["getAIChatUsage"];
         put?: never;
         post?: never;
@@ -3019,7 +3019,7 @@ export interface paths {
         get: operations["getAIChatSession"];
         put?: never;
         post?: never;
-        /** @description Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI settings records it, without its texts. Every agent token's call becomes an agent request a person approves. */
+        /** @description Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI settings records it, without its texts. */
         delete: operations["deleteAIChatSession"];
         options?: never;
         head?: never;
@@ -3207,7 +3207,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids, time entries and status changes), and the attachment files. Admins only. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
+        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids, time entries and status changes), and the attachment files. Needs `workspace:export`. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
         get: operations["exportWorkspace"];
         put?: never;
         post?: never;
@@ -3286,7 +3286,7 @@ export interface paths {
         put?: never;
         /**
          * Get a one-time download URL for the workspace export
-         * @description Admins only; works in every plan state, including a locked workspace. Runs the checks of `GET /api/v1/export` that can be answered before streaming (another export of this workspace is running: 409; the server is at its export limit: 429 with `Retry-After`) and returns a URL that starts the same ZIP download without a session or token. The URL works once, for the workspace that asked, and expires after `expires_in_seconds`; a new link replaces the previous one. A browser that navigates to it streams the file to disk, so a large archive is never held in memory. Links live in the memory of one server process: a restart invalidates them.
+         * @description Needs `workspace:export`; works in every plan state, including a locked workspace. Runs the checks of `GET /api/v1/export` that can be answered before streaming (another export of this workspace is running: 409; the server is at its export limit: 429 with `Retry-After`) and returns a URL that starts the same ZIP download without a session or token. The URL works once, for the workspace that asked, and expires after `expires_in_seconds`; a new link replaces the previous one. A browser that navigates to it streams the file to disk, so a large archive is never held in memory. Links live in the memory of one server process: a restart invalidates them.
          */
         post: operations["createExportLink"];
         delete?: never;
@@ -3315,42 +3315,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agent-requests": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Calls of agent tokens that wait for a person, and what became of them: pending first, then newest first, at most 200. An agent token sees only the requests it made; a person sees the whole workspace's. A pending request past its `expires_at` (seven days) is answered as `expired`. */
-        get: operations["listAgentRequests"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agent-requests/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        /** @description One agent request. An agent token finds only the requests it made (404 otherwise). */
-        get: operations["getAgentRequest"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/agent-requests/{id}/approve": {
         parameters: {
             query?: never;
@@ -3364,7 +3328,7 @@ export interface paths {
         put?: never;
         /**
          * @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. `seen_reply_number` is the newest reply the approving person had on screen: when someone replied since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so it can be read again and approved with the new number.
-         *     With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call and never stored, and `confirm` carries the phrases a configuration change asks to type (400 `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An agent request's id answers 404 there, and an operator request's id answers 404 without the header.
+         *     With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call and never stored, and `confirm` carries the phrases a configuration change asks to type (400 `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An operator request's id answers 404 without the header; a workspace call answers 410 `agent_requests_removed`.
          */
         post: operations["approveAgentRequest"];
         delete?: never;
@@ -3392,7 +3356,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agent-requests/{id}/cancel": {
+    "/api/v1/agents/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets the whole list of a member's roles (sending the list they have changes nothing). Send `role_ids` or `roles` (names), not both, with at least one role. Needs `team:manage_roles`, every permission the member holds (403 `member_outranks_you`) and every permission of each role added or removed (403 `role_exceeds_yours`). Taking the Admin role from the last active member who holds it is 409 `last_admin`. Agent tokens of the member that follow a removed role stop at once and start again when the role is given back; pending invites to the member's address that give a removed role are revoked. */
+        put: operations["setAgentRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's roles, Admin and Agent first, then by name; with `deleted=true` only the deleted ones, to restore. */
+        get: operations["listRoles"];
+        put?: never;
+        /** @description Creates a role. Its permissions may be empty, and must all be ones the caller holds (403 `role_exceeds_yours` names the others). Names are unique without regard to case among roles that are not deleted (409 `role_name_taken`). */
+        post: operations["createRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        get: operations["getRole"];
+        put?: never;
+        post?: never;
+        /** @description Deletes a role no one uses: 409 `role_in_use` with `in_use` naming the members, pending invites and live agent tokens that still use it; 409 `system_role_locked` for Admin and Agent. A deleted role can be restored (`POST /api/v1/roles/{id}/restore`). */
+        delete: operations["deleteRole"];
+        options?: never;
+        head?: never;
+        /** @description Renames a role, changes its description or its permissions. Admin cannot be changed (409 `system_role_locked`). The caller must hold every permission the role has now and every one it would have (403 `role_exceeds_yours`). With `expected_updated_at` a role changed since answers 409 `role_changed` with `updated_by`. Its members and the agent tokens that follow it get the new permissions at once. */
+        patch: operations["updateRole"];
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Puts the built-in Agent role back to the permissions it starts with (409 for any other role). Same rules as a change of permissions. */
+        post: operations["resetRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Brings a deleted role back; 409 `role_name_taken` when another role has its name now. Restoring a role that is not deleted changes nothing. */
+        post: operations["restoreRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/reply-drafts": {
         parameters: {
             query?: never;
             header?: never;
@@ -3403,8 +3465,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Withdraws a pending request. The token that made it, or the person who owns that token, may cancel it (another token gets 404, another person 403: they reject instead). */
-        post: operations["cancelAgentRequest"];
+        /** @description Leaves the words of a reply for a person to send: a ready draft (`source: written`) above the reply box, which a person sends, edits or discards like an AI draft. Calls no AI provider and works while AI drafts are off. A new one replaces the earlier draft of the same person and token. Without `messages:send` the copies may name only addresses already in the conversation (400 otherwise). It expires like an AI draft and goes when the conversation is resolved or closed. */
+        post: operations["createReplyDraft"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3420,7 +3482,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Send a problem report ("Report a problem" in the web app) to the support desk of this server. Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a conversation in that workspace, tagged `problem-report`, from the reporter's verified email, with the description, the diagnostics, facts the server knows (agent, role, workspace, plan, version, realm, the request id of this call) and the screenshots as attachments. No text from the reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the web app offers a GitHub issue instead. Any agent token tier may report. One agent may send 5 reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total). */
+        /** @description Send a problem report ("Report a problem" in the web app) to the support desk of this server. Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a conversation in that workspace, tagged `problem-report`, from the reporter's verified email, with the description, the diagnostics, facts the server knows (agent, role, workspace, plan, version, realm, the request id of this call) and the screenshots as attachments. No text from the reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the web app offers a GitHub issue instead. Any agent token may report. One agent may send 5 reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total). */
         post: operations["createProblemReport"];
         delete?: never;
         options?: never;
@@ -3438,7 +3500,7 @@ export interface paths {
         /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
         get: operations["listKBCollections"];
         put?: never;
-        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
+        /** @description Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
         post: operations["createKBCollection"];
         delete?: never;
         options?: never;
@@ -3510,7 +3572,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change, and an order that moves nothing leaves `content_version` as it is. After an order by hand, a new, moved, imported or restored item goes last. Any agent may set it, and a `send` agent token; a lower tier files an agent request. */
+        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change, and an order that moves nothing leaves `content_version` as it is. After an order by hand, a new, moved, imported or restored item goes last. Needs `kb_articles:update`. */
         put: operations["setKBOrder"];
         post?: never;
         delete?: never;
@@ -3529,7 +3591,7 @@ export interface paths {
         /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
-        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. At most 64 KiB of JSON. */
         post: operations["createKBArticle"];
         delete?: never;
         options?: never;
@@ -3567,11 +3629,11 @@ export interface paths {
         get: operations["getKBArticle"];
         put?: never;
         post?: never;
-        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days. Send the `updated_at` you read (409 `changed_elsewhere`). A `send` agent token may delete; a lower tier files an agent request. */
+        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days. Send the `updated_at` you read (409 `changed_elsewhere`). */
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -3623,7 +3685,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The versions of an article, newest first, in pages: who made each, through which agent token or approved agent request, and the title, slug, text, collection and status it had. An article in the trash keeps its history. Versions are never changed or removed while the article exists. */
+        /** @description The versions of an article, newest first, in pages: who made each, through which agent token, and the title, slug, text, collection and status it had. An article in the trash keeps its history. Versions are never changed or removed while the article exists. */
         get: operations["listKBArticleVersions"];
         put?: never;
         post?: never;
@@ -3662,7 +3724,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Store an image in the knowledge base's media library. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type, at most 8,192 pixels on a side and 40 megapixels (400 otherwise). Location, camera data, XMP and comments are removed without touching the pixels (a JPEG keeps its orientation), and the server makes a thumbnail. The same bytes uploaded twice give the same item (and take an item in the library's trash out of it). Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. An image no article ever saved is deleted 30 days after its last upload unless it is kept: `keep=true` is for an upload made in the library. A workspace holds at most 10,000 items, its trash included (409 `kb_limit`). A `send` agent token may upload; a lower tier gets 403 `files_need_approval`. */
+        /** @description Store an image in the knowledge base's media library. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type, at most 8,192 pixels on a side and 40 megapixels (400 otherwise). Location, camera data, XMP and comments are removed without touching the pixels (a JPEG keeps its orientation), and the server makes a thumbnail. The same bytes uploaded twice give the same item (and take an item in the library's trash out of it). Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. An image no article ever saved is deleted 30 days after its last upload unless it is kept: `keep=true` is for an upload made in the library. A workspace holds at most 10,000 items, its trash included (409 `kb_limit`). */
         post: operations["uploadKBImage"];
         delete?: never;
         options?: never;
@@ -3733,7 +3795,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Move to the trash up to 500 items no live article uses, added before `before` (when the person opened the page, so nothing uploaded since is swept along), leaving kept items unless `include_kept`. Call again with the answer's `batch_id` while `more` is true; one Undo (`POST /api/v1/kb/media/restore` with that `batch_id`) restores everything moved. A token below `send` gets an agent request naming the ids (at most 100 a request), so a person approves exactly what will move. */
+        /** @description Move to the trash up to 500 items no live article uses, added before `before` (when the person opened the page, so nothing uploaded since is swept along), leaving kept items unless `include_kept`. Call again with the answer's `batch_id` while `more` is true; one Undo (`POST /api/v1/kb/media/restore` with that `batch_id`) restores everything moved. */
         post: operations["trashUnusedKBMedia"];
         delete?: never;
         options?: never;
@@ -3767,7 +3829,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`. */
         post: operations["purgeKBMedia"];
         delete?: never;
         options?: never;
@@ -3860,10 +3922,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's video uploads in progress, the oldest first: who started each, the bytes received and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth); the person who started one, or an admin, cancels it to make room. */
+        /** @description The workspace's video uploads in progress, the oldest first: who started each, the bytes received and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth); the person who started one, or someone with `kb_media:purge`, cancels it to make room. */
         get: operations["listKBMediaUploads"];
         put?: never;
-        /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. A token below `send` gets 403 `files_need_approval`. */
+        /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. */
         post: operations["createKBMediaUpload"];
         delete?: never;
         options?: never;
@@ -3885,7 +3947,7 @@ export interface paths {
         /** @description Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`. A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`, the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at a time; a part must arrive within 120 seconds. */
         put: operations["putKBMediaUploadPart"];
         post?: never;
-        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). Only the person who started it, or an admin, can (403 `not_your_upload`). A token below `send` gets 403 `files_need_approval`. */
+        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). Only the person who started it, or someone with `kb_media:purge`, can (403 `not_your_upload`). */
         delete: operations["cancelKBMediaUpload"];
         options?: never;
         head?: never;
@@ -3997,7 +4059,7 @@ export interface paths {
         };
         /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Admins only, and an `admin` agent token. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -4070,7 +4132,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in progress. Every agent token's call becomes an agent request; the person who approves it sends. */
+        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in progress. */
         post: operations["retryFix"];
         delete?: never;
         options?: never;
@@ -4149,7 +4211,7 @@ export interface paths {
         /** @description Every fix of the conversation, the latest attempt first. */
         get: operations["listConversationFixes"];
         put?: never;
-        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
+        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). */
         post: operations["sendFix"];
         delete?: never;
         options?: never;
@@ -4202,7 +4264,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Starts installing the Colliedesk GitHub App: answers the address the admin's browser opens (choose "Only select repositories"). GitHub sends the browser back to `/api/v1/autofix/github/callback`, which checks with the admin's own authorization that the installation is theirs before it joins the workspace. An installation that reaches every repository is stored but blocked until narrowed. 503 `autofix_unavailable` while the server's GitHub App is not set up. Every agent token's call becomes an agent request; the person who approves it gets the address. */
+        /** @description Starts installing the Colliedesk GitHub App: answers the address the admin's browser opens (choose "Only select repositories"). GitHub sends the browser back to `/api/v1/autofix/github/callback`, which checks with the admin's own authorization that the installation is theirs before it joins the workspace. An installation that reaches every repository is stored but blocked until narrowed. 503 `autofix_unavailable` while the server's GitHub App is not set up. */
         post: operations["connectGitHub"];
         delete?: never;
         options?: never;
@@ -4222,7 +4284,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub, so every agent token's call becomes an agent request. */
+        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub. */
         delete: operations["disconnectGitHub"];
         options?: never;
         head?: never;
@@ -4257,7 +4319,7 @@ export interface paths {
         };
         /**
          * GitHub's redirect after installing the App or authorizing a fix
-         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization, and they must administer every repository the installation reaches (an organization owner does; a member does not), else `installation_not_yours`. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: only an admin connects GitHub), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub). The reasons: `signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is never echoed.
+         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization, and they must administer every repository the installation reaches (an organization owner does; a member does not), else `installation_not_yours`. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: connecting GitHub needs `autofix_settings:update`), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub). The reasons: `signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is never echoed.
          */
         get: operations["finishGitHubAuthorization"];
         put?: never;
@@ -4315,7 +4377,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Lets a fix on this repository carry internal notes the sender picks (never one an agent token wrote). Notes then leave the workspace for the coding agent, so every agent token's call becomes an agent request. */
+        /** @description Lets a fix on this repository carry internal notes the sender picks (never one an agent token wrote). Notes then leave the workspace for the coding agent. */
         put: operations["includeNotesInFixes"];
         post?: never;
         /** @description Stops internal notes from going with fixes on this repository (the default). */
@@ -4335,7 +4397,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. An approved request records the consent in the approver's name: the approver agrees to the text the request names. */
+        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. The consent is recorded in the caller's name: a person, or the person whose agent token made the call. */
         put: operations["enableFixConnector"];
         post?: never;
         /** @description Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes already sent go on. The consent on record and Cursor's key stay until removed. */
@@ -4372,7 +4434,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). A token without `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed as an agent request, because a request keeps its body. Cursor tries the key first (`GET /v1/me`): 400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer, with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS. */
+        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). It needs `autofix_settings:manage_credentials`. Cursor tries the key first (`GET /v1/me`): 400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer, with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS. */
         put: operations["setCursorKey"];
         post?: never;
         /** @description Removes the Cursor key; Cursor cannot take new fixes until a key is set again. */
@@ -4408,7 +4470,7 @@ export interface paths {
         };
         /** @description The brand of the public help center: logo, favicon, website and contact links, colors and fonts, with the contrast `checks` of the colors it shows. A null color or font is the default. */
         get: operations["getHelpCenterTheme"];
-        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
+        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. It needs `help_center:update` and `kb_articles:publish`; without either nothing changes (403 `permission_missing`). Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
         put: operations["putHelpCenterTheme"];
         post?: never;
         delete?: never;
@@ -4426,7 +4488,7 @@ export interface paths {
         };
         /** @description The verification tokens of the help center: the content of the `google-site-verification` (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is null until set. Each is served as a `<meta>` tag in the head of every page of this workspace's help center, on its own host or custom domain, and never on the app or another workspace. */
         get: operations["getHelpCenterSearchConsole"];
-        /** @description Set or remove the verification tokens. A field left out stays as it is; null or an empty string removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to 100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422 `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so a save changes `content_version`. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. */
+        /** @description Set or remove the verification tokens. A field left out stays as it is; null or an empty string removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to 100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422 `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so a save changes `content_version`. It needs `help_center:update` and `kb_articles:publish`; without either nothing changes (403 `permission_missing`). */
         put: operations["putHelpCenterSearchConsole"];
         post?: never;
         delete?: never;
@@ -4493,12 +4555,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so every tier may read it, and it is never exported. On a server with billing, a workspace on its trial may set and verify a domain, but the help center serves on it only once the workspace is paid (`awaiting_payment`). */
+        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so `help_center:read` reads it, and it is never exported. On a server with billing, a workspace on its trial may set and verify a domain, but the help center serves on it only once the workspace is paid (`awaiting_payment`). */
         get: operations["getHelpCenterDomain"];
-        /** @description Set or replace the help center's custom domain. Admins only, and an `admin` agent token. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
+        /** @description Set or replace the help center's custom domain. Needs `help_center:update` and `kb_articles:publish`. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
         put: operations["putHelpCenterDomain"];
         post?: never;
-        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Admins only, and an `admin` agent token; removing when there is none changes nothing. */
+        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Needs `help_center:update` and `kb_articles:publish`; removing when there is none changes nothing. */
         delete: operations["deleteHelpCenterDomain"];
         options?: never;
         head?: never;
@@ -4514,7 +4576,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent token. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Needs `help_center:update` and `kb_articles:publish`. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
         post: operations["checkHelpCenterDomain"];
         delete?: never;
         options?: never;
@@ -4664,117 +4726,6 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        /** @enum {string} */
-        AgentRequestStatus: "pending" | "approved" | "failed" | "rejected" | "cancelled" | "expired";
-        AgentRequestAccepted: {
-            /** Format: uuid */
-            request_id: string;
-            /** @enum {string} */
-            kind: "reply_draft" | "action";
-            status: components["schemas"]["AgentRequestStatus"];
-            /** @description What the call does, for the person deciding */
-            summary: string;
-            /** Format: date-time */
-            expires_at: string;
-            message: string;
-        };
-        AgentRequest: {
-            /** Format: uuid */
-            id: string;
-            /**
-             * @description reply_draft: an outgoing reply a token may not send; action: any other call
-             * @enum {string}
-             */
-            kind: "reply_draft" | "action";
-            status: components["schemas"]["AgentRequestStatus"];
-            /** @enum {string} */
-            method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-            /** @description The route pattern, for example /api/v1/conversations/{id} */
-            route: string;
-            /** @description The concrete path that runs on approval */
-            path: string;
-            /** @description The JSON body of the call as the token sent it; null when it had none, in a list without detail=full, and 90 days after the decision. */
-            body: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            /** @description A reply draft as the approver edited it (text changed, copies removed); this is what ran. Null when not edited. */
-            edited_body: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            /**
-             * @description The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting. owner: the call changes the settings of the person who owns the token (a /me route), so only that person can approve it (403 owner_only for anyone else).
-             * @enum {string}
-             */
-            approvable_by: "agent" | "admin" | "owner";
-            summary: string;
-            /** Format: uuid */
-            conversation_id: string | null;
-            /** @description What a status change tells customers, one per chat channel, always through that chat's channel: while it waits, what approving it would tell now; once approved, what it was to tell as it ran, read just before (an empty list when it told nobody: each conversation had that status already, or its approval failed; a change of several tells a few seconds later, and not one whose status changes again before then); once rejected or expired, what it would have told when the token asked. Kept with the call and cleared with it after the retention. Null for other calls and a quiet change, and in a list without detail=full. */
-            notices?: {
-                /** Format: uuid */
-                channel_id: string;
-                channel_name: string;
-                /** @description The display_ref of one of its conversations, whose notice text is */
-                example_ref: string;
-                /** @description The notice as that conversation's customer would read it, its placeholders filled */
-                text: string;
-                /** @description How many of the conversations it tells on this channel */
-                told: number;
-            }[] | null;
-            /** @description For a request that edits, deletes or restores a saved reply: the reply as it was when the token asked (before) and as it is now (current, null once it is deleted for good), so the change can be shown as a difference. Only with detail=full and on a single request; null otherwise. */
-            saved_reply: null | {
-                /** Format: uuid */
-                id: string;
-                before: null | components["schemas"]["SavedReplyText"];
-                /** @description For a request that restores a version, that version's number, title and text as they were when the token asked; null otherwise. */
-                restores: null | {
-                    version: number;
-                    title: string;
-                    body: string;
-                };
-                current: null | {
-                    title: string;
-                    body: string;
-                    /** Format: date-time */
-                    updated_at: string;
-                    /** Format: date-time */
-                    deleted_at: string | null;
-                };
-            };
-            requested_by: {
-                /** Format: uuid */
-                token_id: string | null;
-                token_label: string;
-                token_scope: components["schemas"]["TokenScope"];
-                /** @description What the token held when it asked (resource:action); empty for a request older than permissions. */
-                token_permissions: string[];
-                /** @description A request of a revoked token can only be rejected. */
-                token_revoked: boolean;
-                /** Format: uuid */
-                agent_id: string | null;
-                /** @description The person who owns the token */
-                agent_name: string | null;
-            };
-            decided_by: null | {
-                /** Format: uuid */
-                agent_id: string | null;
-                name: string;
-            };
-            /** Format: date-time */
-            decided_at: string | null;
-            reason: string | null;
-            /** @description HTTP status the approved call answered */
-            result_status: number | null;
-            /** @description The JSON answer of the approved call, at most 64 KiB; null when withheld (see result_note) or none. */
-            result: {
-                [key: string]: unknown;
-            } | unknown[] | string | number | boolean | null;
-            result_note: string | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            expires_at: string;
-        };
         PublicConfig: {
             /** @description Which features of the server run here: their settings are complete and the operator has not switched them off (operator console → Features, `features.<name>`). The web app shows only those. A route of a feature switched off answers 409 `feature_off`; what the feature holds (connections, fixes, subscriptions, queued replies) stays and is used again once it is on. */
             features: {
@@ -4892,18 +4843,18 @@ export interface components {
             instructions?: string;
             /** @description Words that mark a secret in the channel's language (a password, a code). */
             redact_keywords?: string[];
-            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Removing one needs the approval raising AI needs. */
+            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Adding or removing one needs ai_settings:update. */
             contact_labels?: {
                 account?: string[];
                 id?: string[];
             };
-            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs. */
+            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Adding or removing one needs ai_settings:update. */
             redact_patterns?: {
                 pattern: string;
                 /** @enum {string} */
                 mask: "phone" | "id_number" | "account_number" | "hidden";
             }[];
-            /** @description Actions AI may take on its own before readiness shows it is ready (an admin's call); needs gate_override_reason. Adding one needs the approval raising AI needs. */
+            /** @description Actions AI may take on its own before readiness shows it is ready needs gate_override_reason. Adding one needs ai_settings:update, like raising a level. */
             gate_override?: ("create" | "attach" | "ignore")[];
             /** @description Why the gates in gate_override were opened by hand. */
             gate_override_reason?: string;
@@ -5841,7 +5792,7 @@ export interface components {
             resets_at: string;
         };
         Results: {
-            /** @description The caller's weekly email (admins only; null for agents). */
+            /** @description The caller's weekly email (people with results:share; null for others). */
             weekly_email: null | {
                 subscribed: boolean;
                 /** @description False when the server has no outgoing mail settings. */
@@ -5868,7 +5819,7 @@ export interface components {
                 "30d"?: components["schemas"]["ResultsHoursSaved"];
                 "7d"?: components["schemas"]["ResultsHoursSaved"];
             };
-            /** @description Why the last compute failed (admins only; null for agents and when it worked). */
+            /** @description Why the last compute failed (callers with results:share; null for others and when it worked). */
             error: null | {
                 message: string;
                 /** Format: date-time */
@@ -6055,6 +6006,20 @@ export interface components {
             conversation_id: string;
             /** @enum {string} */
             status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /**
+             * @description ai: written by the AI provider; written: words an agent token (or a person) left for a person to send (POST /api/v1/conversations/{id}/reply-drafts), shown even while AI drafts are off. Results and similarity count only ai.
+             * @enum {string}
+             */
+            source: "ai" | "written";
+            /** @description Only on a written draft: the copies to send it with. */
+            cc: string[] | null;
+            /** @description Only on a written draft: who left it. */
+            written_by: null | {
+                /** @description The agent token that wrote it; null when a person did. */
+                token_label: string | null;
+                /** @description The person, or the person behind the token. */
+                agent_name: string;
+            };
             /** @description Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled… */
             error_code: string | null;
             /** @description What the person asked for; erased 90 days after the draft ended. */
@@ -6393,8 +6358,108 @@ export interface components {
         CloudWorkspaceChoices: {
             workspaces: components["schemas"]["WorkspaceChoice"][];
         };
-        /** @enum {string} */
-        Role: "admin" | "agent";
+        /**
+         * @description Kept for older clients that redeem a pairing link: `agent` limits the new session to the Agent role; `admin` is refused unless the link's person may sign in unrestricted.
+         * @enum {string}
+         */
+        SignInRole: "admin" | "agent";
+        /** @description A role, by name. `system` marks the two built-in roles; null for a role the workspace made. */
+        RoleRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string|null} */
+            system: "admin" | "agent" | null;
+        };
+        /** @description A set of permissions people hold. A person holds every permission of each of their roles. Admin always holds every permission (including ones a later release adds) and cannot be changed or deleted; Agent can be changed and renamed but not deleted. */
+        Role: {
+            /** Format: uuid */
+            id: string;
+            /** @description For the built-in Agent role, the permissions it holds until changed (what POST /roles/{id}/reset restores); null for every other role. */
+            default_permissions: components["schemas"]["TokenPermission"][] | null;
+            name: string;
+            description: string;
+            /** @enum {string|null} */
+            system: "admin" | "agent" | null;
+            /** @description Admin lists every permission. */
+            permissions: components["schemas"]["TokenPermission"][];
+            /** @description False for Admin, and for a role holding a permission the caller lacks. */
+            editable: boolean;
+            /** @description False for the two built-in roles, while the role is in use (members, pending invites, live tokens), or when the caller may not edit it. */
+            deletable: boolean;
+            /** @description The caller may give this role to someone: holds team:manage_roles and every permission of the role. */
+            assignable: boolean;
+            /** @description Members holding it, active and deactivated, by display name or email. */
+            members: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                active: boolean;
+            }[];
+            /** @description Pending invites that would give it. */
+            invites: number;
+            /** @description Live agent tokens that follow it, by label and owner (name and id). */
+            tokens: {
+                /** Format: uuid */
+                id: string;
+                /**
+                 * Format: uuid
+                 * @description The person whose token it is.
+                 */
+                owner_id: string;
+                label: string;
+                owner: string;
+            }[];
+            /** @description Name of the last person to change it; null for a built-in role nobody changed. */
+            updated_by: string | null;
+            /**
+             * Format: date-time
+             * @description Set on a deleted role (listed only with ?deleted=true); restore brings it back.
+             */
+            deleted_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RoleInput: {
+            name: string;
+            description?: string;
+            /** @description May be empty; every one must be a permission the caller holds (403 role_exceeds_yours). */
+            permissions: components["schemas"]["TokenPermission"][];
+        };
+        /** @description Send at least one of name, description and permissions. */
+        RoleUpdate: {
+            name?: string;
+            description?: string;
+            permissions?: components["schemas"]["TokenPermission"][];
+            /**
+             * Format: date-time
+             * @description The updated_at the editor started from; 409 role_changed when the role changed since.
+             */
+            expected_updated_at?: string;
+        };
+        /** @description Role names, matched without regard to case; an unknown name is 400 and the message lists the valid names. */
+        RoleNames: string[];
+        RoleIDs: string[];
+        /** @description What an agent token was given. Its effective permissions are these, limited to what its person holds now. */
+        TokenGrant: {
+            /**
+             * @description role: follows one of its person's roles; custom: a fixed list chosen at creation; legacy: created before roles.
+             * @enum {string}
+             */
+            kind: "role" | "custom" | "legacy";
+            role: null | components["schemas"]["RoleRef"];
+            /** @description For kind role: false while its person does not hold every permission of the role (the token is stopped until they do; giving them the role does it). A token may follow a role its person does not hold, such as an admin's token that follows Agent. True otherwise. */
+            role_held: boolean;
+            /** @description What the token was given (a role token: the role's permissions now). */
+            permissions: components["schemas"]["TokenPermission"][];
+            /**
+             * @description Only for kind legacy: what it was created as.
+             * @enum {string|null}
+             */
+            legacy_tier: "read" | "draft" | "send" | "admin" | "custom" | null;
+        };
         /** @enum {string} */
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
@@ -6514,7 +6579,8 @@ export interface components {
             /** Format: email */
             email: string;
             display_name: string;
-            role: components["schemas"]["Role"];
+            /** @description The roles the person holds: Admin first, then Agent, then by name. */
+            roles: components["schemas"]["RoleRef"][];
             timezone_override: string | null;
         };
         /** @description Leading and trailing spaces are removed; the rest may be at most 80 characters and may not hold control characters or text-direction overrides. An empty string clears the name. */
@@ -6525,7 +6591,9 @@ export interface components {
             /** Format: email */
             email: string;
             display_name: string;
-            role: components["schemas"]["Role"];
+            roles: components["schemas"]["RoleRef"][];
+            /** @description The caller may change this member (roles, name, active): holds team:manage_roles and every permission the member holds. */
+            manageable: boolean;
             timezone_override: string | null;
             /**
              * Format: date-time
@@ -6606,10 +6674,10 @@ export interface components {
             timezone: string;
             /** @description The goal given at cloud sign-up; the empty inbox starts with the matching step. Null when none was given and on self-hosted instances. */
             onboarding_goal: null | components["schemas"]["OnboardingGoal"];
-            /** @description The tier of the agent token making the call, custom for one with its own permissions; null for a person's own session. */
-            scope: null | components["schemas"]["TokenScope"];
-            /** @description What the agent token making the call holds (resource:action); empty for a person's own session. */
-            permissions: string[];
+            /** @description What the agent token making the call was given; null for a person's own session. */
+            token: null | components["schemas"]["TokenGrant"];
+            /** @description What this call may do (resource:action), sorted: the person's roles, and for an agent token what it was given limited to that. */
+            permissions: components["schemas"]["TokenPermission"][];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
@@ -6623,25 +6691,15 @@ export interface components {
                 locked: boolean;
                 /** @description True when a Freshdesk import already extended the trial. */
                 trial_extended: boolean;
-                /** @description The display names of the workspace's admins, so a person who is not an admin knows whom to ask for a plan. Sent only to a non-admin, only while the plan is trial or none; left out otherwise. */
+                /** @description The display names of the members who can change the plan (billing:manage), so a person who cannot knows whom to ask. Sent only to a person without billing:manage, only while the plan is trial or none; left out otherwise. */
                 admins?: string[];
             };
         };
         /**
-         * @description A tier to create a token with; each holds every permission of its own preset and below (TokenPermission).
+         * @description A permission a role or an agent token can hold, resource:action. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPreset: "read" | "draft" | "send" | "admin";
-        /**
-         * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
-         * @enum {string}
-         */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
-        /**
-         * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
-         * @enum {string}
-         */
-        TokenScope: "read" | "draft" | "send" | "admin" | "custom";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
         AgentToken: {
             /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
@@ -6654,10 +6712,14 @@ export interface components {
             agent_id: string;
             /** Format: email */
             agent_email: string;
+            /** @description Display name of the person, or the email when there is none. */
+            agent_name: string;
             label: string;
-            /** @description The tier of an agent token, custom for one with its own permissions; null for a person's session, which has no tier. */
-            scope: null | components["schemas"]["TokenScope"];
-            /** @description What an agent token holds (resource:action), its tier's permissions or its own list; empty for a person's session. */
+            /** @description What an agent token was given; null for a person's session. */
+            token: null | components["schemas"]["TokenGrant"];
+            /** @description A person's session limited to one role (a pairing link that asked for the Agent role); null otherwise and for a token. */
+            role: null | components["schemas"]["RoleRef"];
+            /** @description What an agent token was given (resource:action), the same as token.permissions; empty for a person's session. */
             permissions: string[];
             /** @description True for the session that made this request, so a client can mark "this device". */
             current: boolean;
@@ -6675,7 +6737,8 @@ export interface components {
             id: string;
             /** Format: email */
             email: string;
-            role_ceiling: components["schemas"]["Role"];
+            /** @description The roles the invited person gets on joining, added to any they already hold. */
+            roles: components["schemas"]["RoleRef"][];
             /** Format: email */
             created_by_email: string;
             /** Format: date-time */
@@ -6795,7 +6858,7 @@ export interface components {
             kind: "baseline" | "create" | "edit" | "delete" | "restore" | "undelete";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
-            /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
+            /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             /** @description The agent token that made or asked for the change; null when a person made it in the web app. */
             token: null | {
@@ -6805,7 +6868,7 @@ export interface components {
             };
             /**
              * Format: uuid
-             * @description The approved agent request that made the change.
+             * @description The approved agent request that made the change, before agent requests were removed; null for every new change.
              */
             agent_request_id: string | null;
             /** Format: date-time */
@@ -6912,7 +6975,7 @@ export interface components {
             kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
-            /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
+            /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             /** @description The agent token that made or asked for the change; null when a person made it in the web app. */
             token: null | {
@@ -6922,7 +6985,7 @@ export interface components {
             };
             /**
              * Format: uuid
-             * @description The approved agent request that made the change.
+             * @description The approved agent request that made the change, before agent requests were removed; null for every new change.
              */
             agent_request_id: string | null;
             /** Format: date-time */
@@ -7689,7 +7752,7 @@ export interface components {
                 assignee_id?: string | null;
                 add_tag_ids?: string[];
                 remove_tag_ids?: string[];
-                /** @description false sets the status without telling the customers (the channels' status notices); a token below the send tier asks a person first when one would be told. true by default. */
+                /** @description false sets the status without telling the customers (the channels' status notices); a caller without messages:send is refused when one would be told. true by default. */
                 notify?: boolean;
             };
         };
@@ -7835,6 +7898,13 @@ export interface components {
              * @enum {string|null}
              */
             ai_draft_outcome: "sent_unchanged" | "sent_edited" | null;
+            /**
+             * @description Who wrote the draft the reply came from: ai (built-in AI) or written (an agent token, through POST /conversations/{id}/reply-drafts); null without a draft.
+             * @enum {string|null}
+             */
+            ai_draft_source: "ai" | "written" | null;
+            /** @description For a reply sent from a written draft, the agent token that wrote it; null otherwise. author_* is the person who sent it. */
+            drafted_by: null | components["schemas"]["MessageAgentToken"];
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
             /** Format: uuid */
@@ -7849,7 +7919,7 @@ export interface components {
             agent_token: null | components["schemas"]["MessageAgentToken"];
             /**
              * Format: uuid
-             * @description The agent request whose approval sent this message (a reply draft): `agent_token` drafted it, `author_agent_id` approved and sent it. Null otherwise.
+             * @description The agent request whose approval sent this message, before agent requests were removed: `agent_token` drafted it, `author_agent_id` approved and sent it. Null otherwise and for every new message.
              */
             agent_request_id: string | null;
             /** @enum {string} */
@@ -7874,7 +7944,6 @@ export interface components {
             id: string;
             /** @description Name the token was given when it was created, for example Claude Code */
             label: string;
-            scope: components["schemas"]["TokenScope"];
             /** @description Display name, or the email when there is none, of the agent the token acts as */
             agent_name: string;
         };
@@ -8835,6 +8904,25 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks. */
+                missing_permissions?: components["schemas"]["TokenPermission"][];
+                /**
+                 * @description Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.
+                 * @enum {string}
+                 */
+                missing_from?: "token" | "person";
+                /** @description Only on permission_missing from the person: names of active members who can change roles (team:manage_roles). */
+                ask?: string[];
+                /** @description Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading. */
+                where?: string;
+                /** @description Only on role_in_use: what still uses the role. */
+                in_use?: {
+                    members: string[];
+                    invites: string[];
+                    tokens: string[];
+                };
+                /** @description Only on role_changed: who changed the role last. */
+                updated_by?: string | null;
                 /** @description Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…). */
                 check_error_code?: string;
                 /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
@@ -9189,15 +9277,6 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
-        AgentRequestAccepted: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["AgentRequestAccepted"];
-            };
-        };
         /** @description Session created from a one-time link */
         Redeemed: {
             headers: {
@@ -9538,7 +9617,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
+        /** @description Permission or CSRF check failed. A caller without the operation's permission gets error code `permission_missing` with `missing_permissions`, `missing_from` (`token` or `person`) and `ask` (who in the workspace holds them); an agent token on an action only a person makes gets `person_only` with `where`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -9558,12 +9637,14 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+        RoleKey: string;
         ID: string;
         /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
         WebFormPressKey: string;
         /** @description `operator`: the request is an operator request, decided with an operator's session (the operator console sends it). */
         OperatorRealm: "operator";
-        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
         CreateIdempotencyKey: string;
     };
     requestBodies: never;
@@ -10270,7 +10351,7 @@ export interface operations {
             content: {
                 "application/json": {
                     token: string;
-                    requested_role?: components["schemas"]["Role"];
+                    requested_role?: components["schemas"]["SignInRole"];
                     label?: string;
                     /**
                      * @default bearer
@@ -10364,7 +10445,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Session revoked */
             204: {
                 headers: {
@@ -10381,7 +10461,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10392,8 +10472,12 @@ export interface operations {
                 "application/json": {
                     /** @description Name shown in the session list, for example the agent host */
                     label: string;
-                    scope?: components["schemas"]["TokenPreset"];
-                    /** @description A custom token's permissions, instead of a scope. */
+                    /**
+                     * Format: uuid
+                     * @description A role the caller holds; the token follows it.
+                     */
+                    role_id?: string;
+                    /** @description A fixed list of permissions, instead of a role. */
                     permissions?: components["schemas"]["TokenPermission"][];
                 };
             };
@@ -10420,7 +10504,6 @@ export interface operations {
                     "application/json": components["schemas"]["AgentToken"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -10455,7 +10538,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10466,7 +10549,8 @@ export interface operations {
                 "application/json": {
                     /** Format: email */
                     email: string;
-                    role_ceiling: components["schemas"]["Role"];
+                    role_ids?: components["schemas"]["RoleIDs"];
+                    roles?: components["schemas"]["RoleNames"];
                 };
             };
         };
@@ -10482,7 +10566,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description The invite, and for a person its one-time URL */
+            /** @description The invite and its one-time URL */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -10495,7 +10579,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
@@ -10523,7 +10606,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Invite revoked */
             204: {
                 headers: {
@@ -10540,7 +10622,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10576,7 +10658,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10613,7 +10695,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10664,7 +10746,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10687,7 +10769,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10802,7 +10884,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10868,7 +10950,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -10922,7 +11004,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10967,7 +11049,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11036,7 +11118,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11202,7 +11284,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -11255,7 +11337,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11442,7 +11524,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11489,7 +11571,6 @@ export interface operations {
         responses: {
             200: components["responses"]["Conversation"];
             201: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
@@ -11532,7 +11613,6 @@ export interface operations {
                     "application/json": components["schemas"]["BulkConversationUpdateResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -11580,7 +11660,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -11600,7 +11679,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -11619,7 +11697,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Conversation"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -11682,7 +11759,7 @@ export interface operations {
                      * @description The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation's ready, undecided draft.
                      */
                     ai_draft_id?: string;
-                    /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
+                    /** @description Removed: answers 400. To leave a reply for a person to edit, send or discard, post it to `POST /api/v1/conversations/{id}/reply-drafts`. */
                     draft?: boolean;
                 };
                 "multipart/form-data": {
@@ -11716,7 +11793,6 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
@@ -11774,7 +11850,6 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -11810,7 +11885,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -11840,7 +11915,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -11908,7 +11982,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Removed */
             204: {
                 headers: {
@@ -11946,7 +12019,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12005,7 +12077,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12035,7 +12106,6 @@ export interface operations {
                     "application/json": components["schemas"]["HeldReplayResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12067,7 +12137,6 @@ export interface operations {
                     "application/json": components["schemas"]["HeldDiscardResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12100,7 +12169,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12126,7 +12194,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12136,7 +12203,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12159,7 +12226,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12172,7 +12238,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12191,7 +12257,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeGatheringDetail"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12217,7 +12282,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeSummary"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -12243,7 +12307,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeStats"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12269,7 +12332,6 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationIntake"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12279,7 +12341,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12302,7 +12364,6 @@ export interface operations {
                     "application/json": components["schemas"]["MessageMoveResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12339,7 +12400,6 @@ export interface operations {
                     "application/json": components["schemas"]["MessageMovePage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12349,7 +12409,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12368,7 +12428,6 @@ export interface operations {
                     "application/json": components["schemas"]["MessageMove"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12398,7 +12457,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12428,7 +12486,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12455,7 +12512,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelAI"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12486,7 +12542,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelAI"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12556,7 +12611,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12588,7 +12643,6 @@ export interface operations {
                     "application/json": components["schemas"]["IntakeEvaluation"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12620,7 +12674,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatThreadPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12647,7 +12700,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatSenderList"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12677,7 +12729,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChatPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12736,7 +12787,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12770,7 +12820,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12781,7 +12830,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -12809,7 +12858,6 @@ export interface operations {
                     "application/json": components["schemas"]["TestMessageResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12840,7 +12888,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12859,7 +12906,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Gmail disconnected */
             204: {
                 headers: {
@@ -12885,7 +12931,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -12904,7 +12949,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Microsoft 365 disconnected */
             204: {
                 headers: {
@@ -12953,7 +12997,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["EmailChannelSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -12970,7 +13013,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Email channel disconnected */
             204: {
                 headers: {
@@ -12994,7 +13036,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13026,7 +13067,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13037,7 +13077,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -13063,7 +13103,6 @@ export interface operations {
                     "application/json": components["schemas"]["TestMessageResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13092,7 +13131,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -13108,7 +13146,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Gmail disconnected */
             204: {
                 headers: {
@@ -13156,7 +13193,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ConsentLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -13172,7 +13208,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Microsoft 365 disconnected */
             204: {
                 headers: {
@@ -13560,7 +13595,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -13594,7 +13629,6 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13660,7 +13694,6 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13697,7 +13730,6 @@ export interface operations {
                     "application/json": components["schemas"]["ContactMerge"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13726,7 +13758,6 @@ export interface operations {
                     "application/json": components["schemas"]["ContactMerge"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -13769,7 +13800,6 @@ export interface operations {
             content: {
                 "application/json": {
                     display_name?: components["schemas"]["DisplayNameInput"];
-                    role?: components["schemas"]["Role"];
                     active?: boolean;
                     /**
                      * Format: uuid
@@ -13789,13 +13819,12 @@ export interface operations {
                     "application/json": components["schemas"]["TeamMember"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The change would leave the workspace without an active admin (error code `last_admin`). Make another agent an admin first. */
+            /** @description The change would leave the workspace without an active member holding the Admin role (error code `last_admin`). Give the Admin role to another member first. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13830,7 +13859,6 @@ export interface operations {
                     "application/json": components["schemas"]["Workspace"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13860,7 +13888,6 @@ export interface operations {
                     "application/json": components["schemas"]["Workspace"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13887,7 +13914,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -13921,7 +13947,6 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationNumberSeries"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13953,7 +13978,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -13977,7 +14001,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResponseTargets"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -14004,7 +14027,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResponseTargets"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14052,7 +14074,6 @@ export interface operations {
                     "application/json": components["schemas"]["RenamedWorkspace"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14084,7 +14105,6 @@ export interface operations {
                     "application/json": components["schemas"]["Agent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14114,7 +14134,6 @@ export interface operations {
                     "application/json": components["schemas"]["Agent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14147,7 +14166,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14181,7 +14200,6 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14200,7 +14218,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Tag deleted */
             204: {
                 headers: {
@@ -14239,7 +14256,6 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14273,7 +14289,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14303,7 +14319,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14354,7 +14369,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14384,7 +14398,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14412,7 +14425,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedView"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14446,7 +14458,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14476,7 +14488,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14527,7 +14538,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Saved reply moved to the trash */
             204: {
                 headers: {
@@ -14571,7 +14581,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14606,7 +14615,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14675,7 +14683,6 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14701,7 +14708,6 @@ export interface operations {
                     "application/json": components["schemas"]["Billing"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14724,7 +14730,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["BillingLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14747,7 +14752,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -14773,7 +14778,6 @@ export interface operations {
                     "application/json": components["schemas"]["MigrationRequest"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -14829,7 +14833,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["BillingLink"];
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -14959,7 +14962,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -14968,7 +14970,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -15025,7 +15027,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15051,7 +15052,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15078,7 +15078,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15143,7 +15142,6 @@ export interface operations {
                     "text/markdown": string;
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15166,7 +15164,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportJob"] | components["schemas"]["AgentRequestAccepted"];
+                    "application/json": components["schemas"]["ImportJob"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -15197,7 +15195,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15233,7 +15230,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportPerson"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15263,7 +15259,6 @@ export interface operations {
                     "application/json": components["schemas"]["ImportPerson"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15288,7 +15283,6 @@ export interface operations {
                     "application/json": components["schemas"]["AISettings"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15297,7 +15291,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -15386,7 +15380,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15416,7 +15409,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIProvider"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15481,7 +15473,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIProvider"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15512,7 +15503,6 @@ export interface operations {
                     "application/json": components["schemas"]["AISlot"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15541,7 +15531,6 @@ export interface operations {
                     "application/json": components["schemas"]["AISourceConsent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15569,7 +15558,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15614,7 +15602,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResultsShareLinkState"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15637,7 +15624,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResultsShareLinkCreated"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15660,7 +15646,6 @@ export interface operations {
                     "application/json": components["schemas"]["ResultsShareLinkState"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15728,7 +15713,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15781,7 +15765,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15808,7 +15791,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIUsage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15835,7 +15817,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatUsage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15868,7 +15849,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatSessionPage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
@@ -15893,7 +15873,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatSession"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -15909,7 +15888,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Deleted */
             204: {
                 headers: {
@@ -15926,7 +15904,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -15951,7 +15929,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatPreview"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16007,7 +15984,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIAutomaticLimits"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16057,13 +16033,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The draft, queued; or an agent request when the token is below the draft tier */
+            /** @description The draft, queued */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AIDraft"] | components["schemas"]["AgentRequestAccepted"];
+                    "application/json": components["schemas"]["AIDraft"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -16125,7 +16101,6 @@ export interface operations {
                     "application/json": components["schemas"]["AIDraft"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -16172,13 +16147,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The suggestion, queued; or an agent request when the token is below the draft tier */
+            /** @description The suggestion, queued */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AITriage"] | components["schemas"]["AgentRequestAccepted"];
+                    "application/json": components["schemas"]["AITriage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -16220,7 +16195,6 @@ export interface operations {
                     "application/json": components["schemas"]["AITriage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16249,7 +16223,6 @@ export interface operations {
                     "application/json": components["schemas"]["AITriage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -16283,7 +16256,6 @@ export interface operations {
                     "application/json": components["schemas"]["AITriage"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16311,7 +16283,6 @@ export interface operations {
                     "application/zip": string;
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -16359,7 +16330,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["WebFormSettings"];
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16578,7 +16548,6 @@ export interface operations {
                     "application/json": components["schemas"]["ExportLink"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -16637,60 +16606,6 @@ export interface operations {
             };
         };
     };
-    listAgentRequests: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["AgentRequestStatus"];
-                /** @description full adds each request's body, edited_body and result; without it they are null so a poll stays small. */
-                detail?: "full";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Agent requests */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["AgentRequest"][];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            402: components["responses"]["WorkspaceLocked"];
-        };
-    };
-    getAgentRequest: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["ID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The agent request */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRequest"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            402: components["responses"]["WorkspaceLocked"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     approveAgentRequest: {
         parameters: {
             query?: never;
@@ -16733,7 +16648,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        request: components["schemas"]["AgentRequest"] | components["schemas"]["OperatorRequest"];
+                        request: components["schemas"]["OperatorRequest"];
                         /** @description The JSON answer of the approved call; null when it had none or was too large. */
                         result: {
                             [key: string]: unknown;
@@ -16747,6 +16662,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description A workspace session or token (no operator realm header). Agent requests were removed (`agent_requests_removed`). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     rejectAgentRequest: {
@@ -16778,7 +16702,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentRequest"] | components["schemas"]["OperatorRequest"];
+                    "application/json": components["schemas"]["OperatorRequest"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -16787,9 +16711,18 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description A workspace session or token (no operator realm header). Agent requests were removed (`agent_requests_removed`). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
-    cancelAgentRequest: {
+    setAgentRoles: {
         parameters: {
             query?: never;
             header?: never;
@@ -16798,29 +16731,296 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    role_ids?: components["schemas"]["RoleIDs"];
+                    roles?: components["schemas"]["RoleNames"];
+                };
+            };
+        };
         responses: {
-            /** @description The cancelled request */
+            /** @description The member after the change */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentRequest"];
+                    "application/json": components["schemas"]["TeamMember"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: {
+                deleted?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Roles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Role"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleInput"];
+            };
+        };
+        responses: {
+            /** @description The role an earlier request with the same Idempotency-Key created; nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            /** @description The new role */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleUpdate"];
+            };
+        };
+        responses: {
+            /** @description The role after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    resetRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role after the reset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    restoreRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
+                id: components["parameters"]["RoleKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    createReplyDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The reply, in Markdown. */
+                    text: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                };
+            };
+        };
+        responses: {
+            /** @description The draft an earlier request with the same Idempotency-Key created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            /** @description The draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     createProblemReport: {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -16924,7 +17124,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -16954,7 +17154,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBCollection"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -16998,7 +17197,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Collection moved to the trash */
             204: {
                 headers: {
@@ -17046,7 +17244,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBCollection"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17081,7 +17278,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBCollection"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17111,7 +17307,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBOrder"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17159,7 +17354,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -17189,7 +17384,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17264,7 +17458,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Article moved to the trash */
             204: {
                 headers: {
@@ -17317,7 +17510,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17352,7 +17544,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17380,7 +17571,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17406,7 +17596,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17473,7 +17662,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBArticle"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17650,7 +17838,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaBatchResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17695,7 +17882,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17730,7 +17916,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17763,7 +17948,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17852,7 +18036,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaBatchResult"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17889,7 +18072,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMedia"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17917,7 +18099,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMedia"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -17950,7 +18131,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaReplacement"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -17977,7 +18157,6 @@ export interface operations {
                     "application/json": components["schemas"]["KBMediaReplacement"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18388,7 +18567,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenter"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18507,7 +18685,6 @@ export interface operations {
                     "application/json": components["schemas"]["FixSent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18539,7 +18716,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18570,7 +18746,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18597,7 +18772,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18632,7 +18806,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18660,7 +18833,6 @@ export interface operations {
                     "application/json": components["schemas"]["Fix"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18726,7 +18898,6 @@ export interface operations {
                     "application/json": components["schemas"]["FixSent"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18808,7 +18979,6 @@ export interface operations {
                     };
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["AutofixUnavailable"];
@@ -18834,7 +19004,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixSettings"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -18926,7 +19095,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -18946,7 +19114,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["AgentRequestAccepted"];
             /** @description Disconnected */
             204: {
                 headers: {
@@ -18985,7 +19152,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19012,7 +19178,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -19038,7 +19203,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRepo"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -19071,12 +19235,11 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
-            /** @description Error code `consent_required`. consent_version is missing or empty, also in an approved agent request; nothing changed. */
+            /** @description Error code `consent_required`. consent_version is missing or empty; nothing changed. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -19107,7 +19270,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19209,7 +19371,6 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -19284,7 +19445,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterTheme"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19334,7 +19494,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterSearchConsole"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19475,7 +19634,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -19509,7 +19667,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -19532,7 +19689,6 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

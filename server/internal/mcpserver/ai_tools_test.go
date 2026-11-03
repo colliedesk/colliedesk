@@ -43,19 +43,18 @@ func TestAnAdminTokenManagesAIProvidersThroughTheTools(t *testing.T) {
 		t.Fatalf("refused key: %q", message)
 	}
 
-	// Turning a feature on always waits for a person, whatever the tier.
-	filed := e.ok(admin, "colliedesk_ai_slot_set_request", map[string]any{"slot": "draft", "source": "provider", "provider_id": id, "enabled": true})
-	if at(t, filed, "agent_request", "status") != "pending" {
-		t.Fatalf("slot request = %v", filed)
-	}
+	// A token that holds ai_settings:update turns a feature on at once; one without it is refused.
 	reader := e.connect(w.read, "")
+	e.refused(reader, "colliedesk_ai_slot_set", map[string]any{"slot": "draft", "source": "provider", "provider_id": id, "enabled": true})
+	slot := e.ok(admin, "colliedesk_ai_slot_set", map[string]any{"slot": "draft", "source": "provider", "provider_id": id, "enabled": true})
+	if slot["enabled"] != true || slot["slot"] != "draft" {
+		t.Fatalf("slot = %v", slot)
+	}
 	settings := e.ok(reader, "colliedesk_ai_settings_get", nil)
-	if strings.Contains(stringify(settings), aiToolKey) || !strings.Contains(stringify(settings), "Renamed") || strings.Contains(stringify(settings), `"enabled":true`) {
+	if strings.Contains(stringify(settings), aiToolKey) || !strings.Contains(stringify(settings), "Renamed") || !strings.Contains(stringify(settings), `"enabled":true`) {
 		t.Fatalf("settings = %v", settings)
 	}
-	if message := e.fails(reader, "colliedesk_ai_provider_add", map[string]any{"kind": "anthropic", "label": "X", "api_key": aiToolKey, "models": []string{"m"}}); !strings.Contains(message, "admin") {
-		t.Fatalf("read token adding a provider: %q", message)
-	}
+	e.refused(reader, "colliedesk_ai_provider_add", map[string]any{"kind": "anthropic", "label": "X", "api_key": aiToolKey, "models": []string{"m"}})
 
 	removed := e.ok(admin, "colliedesk_ai_provider_remove", map[string]any{"provider_id": id})
 	if _, ok := removed["turned_off"]; !ok {
@@ -66,8 +65,8 @@ func TestAnAdminTokenManagesAIProvidersThroughTheTools(t *testing.T) {
 	}
 }
 
-// An agent reads a channel's AI levels, lowers one at once, and a raise waits for a person; email and
-// web forms have no intake, and the tool says so as the route does.
+// An agent reads a channel's AI levels and lowers or raises one at once; email and web forms have no
+// intake, and the tool says so as the route does.
 func TestAnAgentSetsAChannelsAILevelsThroughTheTools(t *testing.T) {
 	fake := &aiprovider.Fake{}
 	e := newEnvWith(t, func(config *httpapi.Config) {
@@ -89,23 +88,22 @@ func TestAnAgentSetsAChannelsAILevelsThroughTheTools(t *testing.T) {
 		t.Fatalf("lowered = %v", lowered)
 	}
 	raised := e.ok(admin, "colliedesk_channel_ai_set", map[string]any{"channel_id": channel, "slot": "triage", "scope": "", "level": "auto"})
-	if at(t, raised, "agent_request", "status") != "pending" {
+	if !strings.Contains(stringify(raised), `"level":"auto"`) {
 		t.Fatalf("raise = %v", raised)
 	}
 	if message := e.fails(admin, "colliedesk_channel_ai_set", map[string]any{"channel_id": channel, "slot": "intake", "scope": "", "level": "suggest"}); !strings.Contains(message, "Intake runs only on chat channels") {
 		t.Fatalf("intake on a web form: %q", message)
 	}
-	if filed := e.ok(admin, "colliedesk_ai_source_consent_request", map[string]any{"source_class": "images"}); at(t, filed, "agent_request", "status") != "pending" {
-		t.Fatalf("consent request = %v", filed)
+	if consent := e.ok(admin, "colliedesk_ai_source_consent_set", map[string]any{"source_class": "images"}); consent["source_class"] != "images" || consent["consented_at"] == nil {
+		t.Fatalf("consent = %v", consent)
 	}
-	if removed := e.ok(admin, "colliedesk_ai_source_consent_remove", map[string]any{"source_class": "images"}); removed["removed"] != false {
+	if removed := e.ok(admin, "colliedesk_ai_source_consent_remove", map[string]any{"source_class": "images"}); removed["removed"] != true {
 		t.Fatalf("removed = %v", removed)
 	}
 }
 
-// An agent keeps an OpenRouter provider on providers that do not store data, and tightens it at once;
-// loosening it, which lets customers' data reach providers that store or train on it, waits for a
-// person.
+// An agent keeps an OpenRouter provider on providers that do not store data, and tightens or loosens
+// it at once with ai_settings:update.
 func TestAnAgentSetsOpenRouterRoutingThroughTheTools(t *testing.T) {
 	fake := &aiprovider.Fake{}
 	e := newEnvWith(t, func(config *httpapi.Config) {
@@ -123,7 +121,7 @@ func TestAnAgentSetsOpenRouterRoutingThroughTheTools(t *testing.T) {
 		t.Fatalf("tighten = %v", tight)
 	}
 	loose := e.ok(admin, "colliedesk_ai_provider_update", map[string]any{"provider_id": id, "routing": map[string]any{"data_collection": "allow", "zdr": true}})
-	if at(t, loose, "agent_request", "status") != "pending" {
+	if at(t, loose, "provider", "routing", "data_collection") != "allow" {
 		t.Fatalf("loosen = %v", loose)
 	}
 }

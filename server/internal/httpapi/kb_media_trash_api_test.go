@@ -111,25 +111,7 @@ func TestKBMediaTrashAllUnused(t *testing.T) {
 	later := uploadKBMedia(t, api, admin, pngImage(53), nil)
 
 	reader := issueToken(t, api, admin, "reader", "read").Token
-	proposed := request(t, api, http.MethodPost, "/api/v1/kb/media/trash-unused", map[string]any{"before": before}, reader, nil)
-	if proposed.Code != http.StatusAccepted {
-		t.Fatalf("read token status=%d body=%s", proposed.Code, proposed.Body.String())
-	}
-	var filed struct {
-		RequestID string `json:"request_id"`
-	}
-	decode(t, proposed, &filed)
-	var requestView struct {
-		Route string          `json:"route"`
-		Body  json.RawMessage `json:"body"`
-	}
-	kbCall(t, api, http.MethodGet, "/api/v1/agent-requests/"+filed.RequestID, nil, admin, http.StatusOK, &requestView)
-	var ids struct {
-		IDs []string `json:"ids"`
-	}
-	if err := json.Unmarshal(requestView.Body, &ids); err != nil || requestView.Route != "/api/v1/kb/media/trash" || len(ids.IDs) != 2 {
-		t.Fatalf("filed request = %s %s", requestView.Route, requestView.Body)
-	}
+	refused(t, api, http.MethodPost, "/api/v1/kb/media/trash-unused", map[string]any{"before": before}, reader, "kb_media:delete")
 
 	var run struct {
 		Trashed int     `json:"trashed"`
@@ -178,9 +160,7 @@ func TestKBMediaPurgeNowDeletesOnlyTrashedItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := issueToken(t, api, admin, "sender", "send").Token
-	if response := request(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{media.ID}}, agent, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("send token purge status=%d, want an agent request", response.Code)
-	}
+	refused(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{media.ID}}, agent, "kb_media:purge")
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{media.ID}}, admin, http.StatusOK, &result)
 	if result.status(media.ID) != "purged" {
 		t.Fatalf("purge = %+v", result)

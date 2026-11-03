@@ -10,6 +10,7 @@ import { AITriageSlot } from './ai-triage-slot';
 import { StatusLabel } from './conversation-labels';
 import { mayTell, noticesOf } from './status-tell';
 import { AutofixDetails } from '../autofix/autofix-slot';
+import { useHolds } from '../../lib/permissions-context';
 
 interface DetailsPanelProps {
   conversation?: Conversation;
@@ -71,6 +72,9 @@ function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; o
 }
 
 export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, onShowOrganizationConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting, autofix = false }: DetailsPanelProps) {
+  const holds = useHolds();
+  const readsTeam = holds('team:read');
+  const readsTags = holds('tags:read');
   const [tagName, setTagName] = useState('');
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
@@ -97,23 +101,26 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
           {agents.filter((agent) => agent.id !== currentAgentId && (!agent.deactivated_at || agent.id === conversation?.assignee_id)).map((agent) =>
             <option key={agent.id} value={agent.id}>{agent.display_name || agent.email}{agent.deactivated_at ? ` ${messages.deactivatedSuffix}` : ''}</option>)}
+          {/* Without the team list (team:read) a teammate's name is unknown here; the choice still shows who holds it. */}
+          {!readsTeam && conversation?.assignee_id && conversation.assignee_id !== currentAgentId && <option value={conversation.assignee_id}>{messages.anotherTeammate}</option>}
           <option value="">{messages.unassigned}</option>
         </select></label>
       </section>
       {conversation && slaOf(conversation) && <Targets sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
       <fieldset className="details-section" disabled={!conversation}><legend>{messages.tags}</legend>
-        <div className="tag-choices">
+        {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
+        {!readsTags ? <p className="tag-names">{conversation?.tags.map((tag) => tag.name).join(', ') || messages.noTagsYet}</p> : <div className="tag-choices">
           {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
           {tags.map((tag) => {
             const checked = conversation?.tags.some((item) => item.id === tag.id) ?? false;
             return <label className="tag-check" key={tag.id}><input type="checkbox" checked={checked}
               onChange={() => conversation && (checked ? onRemoveTag?.(conversation.id, tag.id) : onAddTag?.(conversation.id, tag.id))} />{tag.name}</label>;
           })}
-        </div>
-        <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
+        </div>}
+        {readsTags && holds('tags:create') && <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
           <input aria-label={messages.newTagName} placeholder={messages.newTagName} value={tagName} onChange={(event) => setTagName(event.target.value)} />
           <button type="submit" disabled={!conversation || !tagName.trim()}>{messages.createTag}</button>
-        </form>
+        </form>}
       </fieldset>
       {conversation && (
         <section className="details-section conversation-source">

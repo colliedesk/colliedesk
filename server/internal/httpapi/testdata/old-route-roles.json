@@ -1,0 +1,1732 @@
+{
+  "DELETE /api/v1/ai/chat/sessions/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "always_asked": true
+  },
+  "DELETE /api/v1/ai/providers/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/ai/source-consents/{class}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/auth/invites/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "team:revoke",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/auth/sessions/{id}": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "team:revoke",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/autofix/connectors/cursor_api/key": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:manage_credentials",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/autofix/connectors/{kind}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/autofix/fixes/{id}/deployed": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:update",
+    "token_tier": "draft"
+  },
+  "DELETE /api/v1/autofix/fixes/{id}/pull-request": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:update",
+    "token_tier": "draft"
+  },
+  "DELETE /api/v1/autofix/github/installations/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "always_asked": true
+  },
+  "DELETE /api/v1/autofix/repos/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/autofix/repos/{id}/include-notes": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/channels/email": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "DELETE /api/v1/channels/email/gmail": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "DELETE /api/v1/channels/email/microsoft": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "DELETE /api/v1/channels/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "DELETE /api/v1/channels/{id}/email/gmail": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "DELETE /api/v1/channels/{id}/email/microsoft": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "DELETE /api/v1/contacts/{id}/merges/{mergeId}": {
+    "role_permission": "contacts:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "contacts:update",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/conversations/{id}/presence/{clientId}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "DELETE /api/v1/conversations/{id}/tags/{tagId}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "DELETE /api/v1/help-center/domain": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "help_center:update",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/imports/{id}/people/{externalId}/link": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:run",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/kb/articles/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:delete",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/kb/articles/{id}/ai-exclusion": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:update",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/kb/collections/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:delete",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/kb/media-uploads/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:create",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/kb/media/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:delete",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/results/share-link": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "results:share",
+    "token_tier": "admin"
+  },
+  "DELETE /api/v1/saved-replies/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:delete",
+    "token_tier": "send"
+  },
+  "DELETE /api/v1/saved-views/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_views:delete",
+    "token_tier": "draft"
+  },
+  "DELETE /api/v1/tags/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "tags:delete",
+    "token_tier": "send"
+  },
+  "GET /api/v1/agent-requests": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "agent_requests:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/agent-requests/{id}": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "agent_requests:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/agents": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "team:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/ai": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_settings:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/ai/chat/sessions": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/ai/chat/sessions/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/ai/chat/usage": {
+    "role_permission": "billing:manage",
+    "agent": false,
+    "admin": true,
+    "token_permission": "billing:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/ai/usage": {
+    "role_permission": "billing:manage",
+    "agent": false,
+    "admin": true,
+    "token_permission": "billing:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/attachments/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/auth/invites": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "team:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/auth/me": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_tier": "read"
+  },
+  "GET /api/v1/auth/sessions": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "team:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/autofix/fixes": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/autofix/fixes/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/autofix/github/installations/{id}/repositories": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix_settings:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/autofix/settings": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix_settings:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/autofix/status": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/billing": {
+    "role_permission": "billing:manage",
+    "agent": false,
+    "admin": true,
+    "token_permission": "billing:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/channel-thread-items": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/email": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/events": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/web-form": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/ai": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/ai/intake/evaluations": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/ai/intake/readiness": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/email": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/email/forwarding-confirmation": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "channels:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/senders": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/threads": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/channels/{id}/threads/{threadId}/items": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/contacts": {
+    "role_permission": "contacts:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "contacts:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/contacts/{id}": {
+    "role_permission": "contacts:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "contacts:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversation-number-series": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/ai-drafts": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/ai-drafts/{draftId}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/ai-triage": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/chat": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/fixes": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/intake": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/message-moves": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/messages": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/conversations/{id}/time-entries": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/export": {
+    "role_permission": "workspace:export",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:export",
+    "always_asked": true
+  },
+  "GET /api/v1/help-center": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/help-center/domain": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/help-center/freshdesk-redirect": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/help-center/search-console": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/help-center/theme": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/imports": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/imports/{id}": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/imports/{id}/people": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/imports/{id}/report": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:read",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/inbox/activity": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/intake/gatherings": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/intake/gatherings/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/intake/stats": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/intake/summary": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/articles": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/articles/trash": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/articles/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/articles/{id}/versions": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/collections": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/collections/trash": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/images/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media-uploads": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media-uploads/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media/trash": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media/{id}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media/{id}/details": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media/{id}/poster/{version}": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/kb/media/{id}/thumbnail": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/mail-image": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "closed": "person_only"
+  },
+  "GET /api/v1/response-targets": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/results": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "results:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/results/share-link": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "results:share",
+    "token_tier": "admin"
+  },
+  "GET /api/v1/saved-replies": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/saved-replies/trash": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/saved-replies/{id}/versions": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/saved-views": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_views:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/saved-views/trash": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_views:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/tags": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "tags:read",
+    "token_tier": "read"
+  },
+  "GET /api/v1/workspace/setup": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "PATCH /api/v1/agents/me/display-name": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "profile:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/agents/me/results-email": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "profile:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/agents/me/sla-alerts": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "profile:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/agents/me/timezone": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "profile:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/agents/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "team:manage_roles",
+    "token_tier": "admin"
+  },
+  "PATCH /api/v1/ai/providers/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "token_tier": "admin"
+  },
+  "PATCH /api/v1/autofix/repos/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "token_tier": "admin"
+  },
+  "PATCH /api/v1/channels/{id}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "PATCH /api/v1/contacts/{id}": {
+    "role_permission": "contacts:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "contacts:update",
+    "token_tier": "send"
+  },
+  "PATCH /api/v1/conversations": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/conversations/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/kb/articles/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:update",
+    "token_tier": "send"
+  },
+  "PATCH /api/v1/kb/collections/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:update",
+    "token_tier": "send"
+  },
+  "PATCH /api/v1/kb/media/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:update",
+    "token_tier": "send"
+  },
+  "PATCH /api/v1/saved-replies/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:update",
+    "token_tier": "send"
+  },
+  "PATCH /api/v1/saved-views/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_views:update",
+    "token_tier": "draft"
+  },
+  "PATCH /api/v1/tags/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "tags:update",
+    "token_tier": "send"
+  },
+  "PATCH /api/v1/workspace/name": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:update",
+    "token_tier": "admin"
+  },
+  "PATCH /api/v1/workspace/slug": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:update",
+    "always_asked": true
+  },
+  "PATCH /api/v1/workspace/timezone": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/agent-requests/{id}/approve": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "closed": "person_only"
+  },
+  "POST /api/v1/agent-requests/{id}/cancel": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "agent_requests:cancel",
+    "token_tier": "read"
+  },
+  "POST /api/v1/agent-requests/{id}/reject": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "closed": "person_only"
+  },
+  "POST /api/v1/ai/chat/preview": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/ai/models": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:manage_credentials",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/ai/providers": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:manage_credentials",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/ai/providers/{id}/check": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/auth/invites": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "team:invite",
+    "always_asked": true
+  },
+  "POST /api/v1/auth/logout": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_tier": "read"
+  },
+  "POST /api/v1/auth/tokens": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "team:create_tokens",
+    "always_asked": true
+  },
+  "POST /api/v1/autofix/connectors/{kind}/check": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix_settings:read",
+    "token_tier": "read"
+  },
+  "POST /api/v1/autofix/fixes/{id}/cancel": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:update",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/autofix/fixes/{id}/retry": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:send",
+    "always_asked": true
+  },
+  "POST /api/v1/autofix/github/installations": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "always_asked": true
+  },
+  "POST /api/v1/autofix/repos": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/billing/checkout": {
+    "role_permission": "billing:manage",
+    "agent": false,
+    "admin": true,
+    "token_permission": "billing:manage",
+    "always_asked": true
+  },
+  "POST /api/v1/billing/migration-request": {
+    "role_permission": "billing:manage",
+    "agent": false,
+    "admin": true,
+    "token_permission": "billing:manage",
+    "always_asked": true
+  },
+  "POST /api/v1/billing/portal": {
+    "role_permission": "billing:manage",
+    "agent": false,
+    "admin": true,
+    "token_permission": "billing:manage",
+    "always_asked": true
+  },
+  "POST /api/v1/channels": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/channels/email/domain-verification": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/channels/email/gmail": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/email/microsoft": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/email/secret": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/email/test-message": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/channels/{id}/ai/intake/evaluations": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/{id}/check": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/channels/{id}/email/domain-verification": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/channels/{id}/email/gmail": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/{id}/email/microsoft": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/{id}/email/secret": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/{id}/email/test-message": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/channels/{id}/held/discard": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "always_asked": true
+  },
+  "POST /api/v1/channels/{id}/held/replay": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/contacts": {
+    "role_permission": "contacts:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "contacts:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/contacts/{id}/merges": {
+    "role_permission": "contacts:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "contacts:update",
+    "token_tier": "send"
+  },
+  "POST /api/v1/conversations": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:send",
+    "token_tier": "send"
+  },
+  "POST /api/v1/conversations/{id}/ai-drafts": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/ai-triage": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_assist:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/fixes": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:send",
+    "always_asked": true
+  },
+  "POST /api/v1/conversations/{id}/fixes/preview": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:read",
+    "token_tier": "read"
+  },
+  "POST /api/v1/conversations/{id}/messages": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:note",
+    "token_tier": "handler"
+  },
+  "POST /api/v1/conversations/{id}/messages/move": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/conversations/{id}/messages/{messageId}/retry": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "messages:send",
+    "token_tier": "send"
+  },
+  "POST /api/v1/export/link": {
+    "role_permission": "workspace:export",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:export",
+    "always_asked": true
+  },
+  "POST /api/v1/help-center/domain/check": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "help_center:update",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/help-center/theme/check": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "POST /api/v1/help-center/theme/preview": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "help_center:read",
+    "token_tier": "read"
+  },
+  "POST /api/v1/imports": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:manage_credentials",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/imports/{id}/cancel": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:run",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/imports/{id}/start": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:run",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/imports/{id}/undo": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:undo",
+    "always_asked": true
+  },
+  "POST /api/v1/intake/gatherings/{id}/decide": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "handler"
+  },
+  "POST /api/v1/intake/gatherings/{id}/requeue": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/kb/articles": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/articles/{id}/ai-exclusion": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:update",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/articles/{id}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:delete",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/articles/{id}/versions/{version}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:update",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/collections": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/collections/{id}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:delete",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/images": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media-replacements/{id}/undo": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:update",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media-uploads": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media-uploads/{id}/complete": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media/purge": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "kb_media:purge",
+    "token_tier": "admin"
+  },
+  "POST /api/v1/kb/media/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:delete",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media/trash": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:delete",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media/trash-unused": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:delete",
+    "token_tier": "handler"
+  },
+  "POST /api/v1/kb/media/{id}/replace": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:update",
+    "token_tier": "send"
+  },
+  "POST /api/v1/kb/media/{id}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:delete",
+    "token_tier": "send"
+  },
+  "POST /api/v1/message-moves/{id}/undo": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/results/share-link": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "results:share",
+    "always_asked": true
+  },
+  "POST /api/v1/saved-replies": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:create",
+    "token_tier": "send"
+  },
+  "POST /api/v1/saved-replies/{id}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:delete",
+    "token_tier": "send"
+  },
+  "POST /api/v1/saved-replies/{id}/versions/{version}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_replies:update",
+    "token_tier": "send"
+  },
+  "POST /api/v1/saved-views": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_views:create",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/saved-views/{id}/restore": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "saved_views:delete",
+    "token_tier": "draft"
+  },
+  "POST /api/v1/support/problem-reports": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_tier": "read"
+  },
+  "POST /api/v1/tags": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "tags:create",
+    "token_tier": "draft"
+  },
+  "PUT /api/v1/agents/me/setup-guide": {
+    "role_permission": "authenticated",
+    "agent": true,
+    "admin": true,
+    "token_permission": "profile:update",
+    "token_tier": "draft"
+  },
+  "PUT /api/v1/ai/automatic-limits": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/ai/providers/{id}/key": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:manage_credentials",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/ai/slots/{slot}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "always_asked": true
+  },
+  "PUT /api/v1/ai/source-consents/{class}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "always_asked": true
+  },
+  "PUT /api/v1/autofix/connectors/cursor_api/key": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:manage_credentials",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/autofix/connectors/{kind}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "always_asked": true
+  },
+  "PUT /api/v1/autofix/fixes/{id}/deployed": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:update",
+    "token_tier": "draft"
+  },
+  "PUT /api/v1/autofix/fixes/{id}/pull-request": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "autofix:update",
+    "token_tier": "draft"
+  },
+  "PUT /api/v1/autofix/repos/{id}/include-notes": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "autofix_settings:update",
+    "always_asked": true
+  },
+  "PUT /api/v1/channels/email": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/channels/web-form": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/channels/{id}/ai/{slot}": {
+    "role_permission": "access:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "ai_settings:update",
+    "token_tier": "handler"
+  },
+  "PUT /api/v1/channels/{id}/credentials": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "channels:manage_credentials",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/conversation-number-series/{series}": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:update",
+    "always_asked": true
+  },
+  "PUT /api/v1/conversations/{id}/presence": {
+    "role_permission": "conversations:read",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:read",
+    "token_tier": "read"
+  },
+  "PUT /api/v1/conversations/{id}/tags/{tagId}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "conversations:update",
+    "token_tier": "draft"
+  },
+  "PUT /api/v1/help-center": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "help_center:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/help-center/domain": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "help_center:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/help-center/search-console": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "help_center:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/help-center/theme": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "help_center:update",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/imports/{id}/key": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:manage_credentials",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/imports/{id}/people/{externalId}/link": {
+    "role_permission": "workspace:import",
+    "agent": false,
+    "admin": true,
+    "token_permission": "imports:run",
+    "token_tier": "admin"
+  },
+  "PUT /api/v1/kb/media-uploads/{id}": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:create",
+    "token_tier": "send"
+  },
+  "PUT /api/v1/kb/media/{id}/poster": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_media:update",
+    "token_tier": "send"
+  },
+  "PUT /api/v1/kb/order": {
+    "role_permission": "conversations:write",
+    "agent": true,
+    "admin": true,
+    "token_permission": "kb_articles:update",
+    "token_tier": "send"
+  },
+  "PUT /api/v1/response-targets": {
+    "role_permission": "access:write",
+    "agent": false,
+    "admin": true,
+    "token_permission": "workspace:update",
+    "always_asked": true
+  }
+}

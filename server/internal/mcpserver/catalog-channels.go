@@ -28,24 +28,24 @@ func channelsListSpec() Spec {
 		Name:  "colliedesk_channels_list",
 		Title: "List the channels",
 		Description: `List the workspace's channels (its support email, its web form...) with their state (working, waiting for its first message, off, needs_attention with a reason code), ` +
-			`how many messages each holds because it was off, how many replies were not sent while it was off, and the channel types this server runs with how many of each the workspace has. A workspace may have several channels of a type (two support mailboxes, two web forms); one of each type is its default (is_default), which an admin can move.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/channels"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["channels","types"],"properties":{"channels":{"type":"array","items":{"type":"object"}},"types":{"type":"array","items":{"type":"object"}}}}`,
-		run:    channelsList,
+			`how many messages each holds because it was off, how many replies were not sent while it was off, and the channel types this server runs with how many of each the workspace has. A workspace may have several channels of a type (two support mailboxes, two web forms); one of each type is its default (is_default), which an admin can move.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels"},
+		Input:    noArguments,
+		Output:   `{"type":"object","required":["channels","types"],"properties":{"channels":{"type":"array","items":{"type":"object"}},"types":{"type":"array","items":{"type":"object"}}}}`,
+		run:      channelsList,
 	}
 }
 
 func channelsGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_get", Title: "Show a channel",
-		Description: `Show one channel with its configuration as its type shows it (never a secret). A Zalo channel's config has the absolute verification_prefix_url and webhook_url to give the person for the Zalo app.` + "\n\nTier: read.",
-		Tier:        "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/channels/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
-		Output: channelOutput,
-		run:    channelsGet,
+		Description: `Show one channel with its configuration as its type shows it (never a secret). A Zalo channel's config has the absolute verification_prefix_url and webhook_url to give the person for the Zalo app.`,
+		ReadOnly:    true,
+		REST:        []string{"GET /api/v1/channels/{id}"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output:      channelOutput,
+		run:         channelsGet,
 	}
 }
 
@@ -53,9 +53,9 @@ func channelsEventsSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_events", Title: "Show the history of the channels",
 		Description: `Show who added, renamed, turned on or off, changed or removed a channel, changed a secret (only its last four characters), and opened or discarded held messages, newest first. ` +
-			`Give channel_id for one channel; give the next_cursor of a page for the page after it.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/channels/events"},
+			`Give channel_id for one channel; give the next_cursor of a page for the page after it.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/events"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `},` +
 			`"cursor":{"type":"string","maxLength":200}}}`,
 		Output: `{"type":"object","required":["events","next_cursor"],"properties":{"events":{"type":"array","items":{"type":"object"}},"next_cursor":{"type":["string","null"]}}}`,
@@ -68,8 +68,8 @@ func channelsCreateSpec() Spec {
 		Name: "colliedesk_channels_create", Title: "Add a channel",
 		Description: `Add a channel of a type with its configuration. A workspace may have several of a type (two support mailboxes, two web forms): give each a name that tells them apart; ` +
 			`a name or a support address another channel has is refused, and the error names that channel. The first channel of a type is its default; is_default true makes a later one the default. ` +
-			`Adding the first email channel connects the support address, like colliedesk_email_channel_update. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin",
+			`Adding the first email channel connects the support address, like colliedesk_email_channel_update.`,
+
 		REST: []string{"POST /api/v1/channels"},
 		Input: `{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":` + channelTypeEnum + `},` +
 			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `}}`,
@@ -84,9 +84,9 @@ func channelsUpdateSpec() Spec {
 		Description: `Rename a channel, make it its type's default (is_default true: what names no channel goes to it), turn it on or off, or change its configuration or its rules (settings). While a channel is off it receives nothing: ` +
 			`what arrives is held for a person to open or discard (the web form instead answers as if it did not exist), and replies are saved but not sent until it is on again. ` +
 			`processing_paused true pauses a Zalo channel's processing (what arrives waits in its journal as it came, nothing is decided, opened or sent), false resumes it: what arrived is then processed in order by its rules. ` +
-			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST: []string{"PATCH /api/v1/channels/{id}"},
+			`It is safe to repeat.`,
+		Idempotent: true,
+		REST:       []string{"PATCH /api/v1/channels/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"minProperties":2,"properties":{` + channelIDInput + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `,` +
 			`"processing_paused":{"type":"boolean","description":"true pauses the channel's processing, false resumes it (Zalo channels only)."}}}`,
@@ -98,12 +98,12 @@ func channelsUpdateSpec() Spec {
 func channelsCheckSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_check", Title: "Check a channel",
-		Description: `Read a channel's state again: working, or what needs attention and why. It changes nothing. ` + belowAdmin + "\n\nTier: admin.",
-		Tier:        "admin", Idempotent: true,
-		REST:   []string{"POST /api/v1/channels/{id}/check"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
-		Output: channelOutput,
-		run:    channelsCheck,
+		Description: `Read a channel's state again: working, or what needs attention and why. It changes nothing.`,
+		Idempotent:  true,
+		REST:        []string{"POST /api/v1/channels/{id}/check"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output:      channelOutput,
+		run:         channelsCheck,
 	}
 }
 
@@ -111,8 +111,8 @@ func channelsHeldReplaySpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_held_replay", Title: "Open the messages a channel held",
 		Description: `Open as conversations the messages a channel held while it was off (all, or those of event_ids), as they would have been had it been on; ` +
-			`or add them to conversation_id, a conversation of this workspace. Works while the channel is still off. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin",
+			`or add them to conversation_id, a conversation of this workspace. Works while the channel is still off.`,
+
 		REST: []string{"POST /api/v1/channels/{id}/held/replay"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,` + heldEventIDs + `,` +
 			`"conversation_id":{"type":"string",` + uuid + `}}}`,
@@ -126,9 +126,8 @@ func channelsCredentialsSetSpec() Spec {
 		Name:  "colliedesk_channels_credentials_set",
 		Title: "Set a channel's secret",
 		Description: `Store a secret a channel's type needs (an access token of its account). It is sealed and only its last four characters are shown again. ` +
-			`The names by type: zalo: app_secret, oa_secret_key, access_token, refresh_token (email, web_form and help_chat keep none here).` +
-			"\n\nTier: admin (a lower tier is refused, so the secret never waits in a request).",
-		Tier: "admin",
+			`The names by type: zalo: app_secret, oa_secret_key, access_token, refresh_token (email, web_form and help_chat keep none here).`,
+
 		REST: []string{"PUT /api/v1/channels/{id}/credentials"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","name","value"],"properties":{` + channelIDInput + `,` +
 			`"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,40}$"},"value":{"type":"string","minLength":1,"maxLength":4096}}}`,
@@ -137,18 +136,30 @@ func channelsCredentialsSetSpec() Spec {
 	}
 }
 
-func channelsDeleteRequestSpec() Spec {
-	return approvalSpec("colliedesk_channels_delete_request", "Ask to remove a channel",
-		`Ask to remove a channel: its configuration and secrets are deleted, its conversations stay with its name. Removing email disconnects it.`,
-		[]string{"DELETE /api/v1/channels/{id}"},
-		`{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{`+channelIDInput+`}}`, channelsDeleteRequest)
+func channelsDeleteSpec() Spec {
+	return Spec{
+		Name:        "colliedesk_channels_delete",
+		Title:       "Remove a channel",
+		Description: `Remove a channel: its configuration and secrets are deleted, its conversations stay with its name. Removing email disconnects it. It cannot be undone: add the channel again to get it back.`,
+		Destructive: true,
+		REST:        []string{"DELETE /api/v1/channels/{id}"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output:      `{"type":"object","required":["deleted"],"properties":{"deleted":{"type":"boolean"}}}`,
+		run:         channelsDelete,
+	}
 }
 
-func channelsHeldDiscardRequestSpec() Spec {
-	return approvalSpec("colliedesk_channels_held_discard_request", "Ask to discard the messages a channel held",
-		`Ask to throw away messages a channel held while it was off (all, or those of event_ids). It cannot be undone; the history keeps how many.`,
-		[]string{"POST /api/v1/channels/{id}/held/discard"},
-		`{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{`+channelIDInput+`,`+heldEventIDs+`}}`, channelsHeldDiscardRequest)
+func channelsHeldDiscardSpec() Spec {
+	return Spec{
+		Name:        "colliedesk_channels_held_discard",
+		Title:       "Discard the messages a channel held",
+		Description: `Throw away messages a channel held while it was off (all, or those of event_ids). It cannot be undone; the history keeps how many. To keep them, use colliedesk_channels_held_replay.`,
+		Destructive: true,
+		REST:        []string{"POST /api/v1/channels/{id}/held/discard"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,` + heldEventIDs + `}}`,
+		Output:      `{"type":"object","required":["discarded"],"properties":{"discarded":{"type":"integer"}}}`,
+		run:         channelsHeldDiscard,
+	}
 }
 
 func channelPath(c *call, arguments map[string]any, suffix string) string {
@@ -249,10 +260,13 @@ func channelsCredentialsSet(c *call, arguments map[string]any) (any, error) {
 	return stored, nil
 }
 
-func channelsDeleteRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodDelete, channelPath(c, arguments, ""), nil)
+func channelsDelete(c *call, arguments map[string]any) (any, error) {
+	if _, err := passOn(c, http.MethodDelete, channelPath(c, arguments, ""), nil); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": true}, nil
 }
 
-func channelsHeldDiscardRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPost, channelPath(c, arguments, "/held/discard"), channelBody(arguments))
+func channelsHeldDiscard(c *call, arguments map[string]any) (any, error) {
+	return passOn(c, http.MethodPost, channelPath(c, arguments, "/held/discard"), channelBody(arguments))
 }

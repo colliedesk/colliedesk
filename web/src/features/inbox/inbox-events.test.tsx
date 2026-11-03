@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
 
 // The two boundaries: the API and the analytics service.
@@ -36,7 +37,7 @@ const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conver
 beforeEach(() => {
   testRouter.reset();
   vi.clearAllMocks();
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: meId, email: 'a@example.com', display_name: 'Ada', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: meId, email: 'a@example.com', display_name: 'Ada', roles: rolesOf('agent') } });
   api.conversations.mockResolvedValue({ items: [alpha, gamma], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });

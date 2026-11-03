@@ -235,7 +235,7 @@ never accepts it as a command-line argument and never prints it.
 
 ## Import in the app
 
-1. Open **Settings > Import from Freshdesk** (admins only; an empty inbox links to it).
+1. Open **Settings > Import from Freshdesk** (it needs the `imports:` permissions, which admins hold; an empty inbox links to it).
 2. Enter your `<account>.freshdesk.com` address and the API key of a Freshdesk **admin** (see
    "Before you start"). If your Freshdesk help center had a domain of its own, enter it under **Old
    help center address** (optional; see "Old help center links"). Then select **Read account**. Colliedesk reads the account and shows what it
@@ -276,7 +276,9 @@ undo it. Only one import or undo runs in a workspace at a time.
 
 ## Import through the API or an AI agent
 
-Everything the page does, an admin's API session or an AI agent with an admin token can do. The server reads the account, imports the tickets updated in the last 90 days first
+Everything the page does, a person's API session or an AI agent's token can do with the same
+permissions: `imports:read` to see imports and reports, `imports:manage_credentials` to send the API
+key, `imports:run` to start or cancel, `imports:undo` to undo (the Admin role holds them all). The server reads the account, imports the tickets updated in the last 90 days first
 (newest first, so your team can work on them), then the whole account, and ends with the same
 reconcile report. It leaves a fifth of your Freshdesk API limit to your other Freshdesk apps.
 
@@ -288,11 +290,10 @@ reconcile report. It leaves a fifth of your Freshdesk API limit to your other Fr
    `progress` shows the step, the counts and an estimate; `cancel` stops it.
 3. `GET /api/v1/imports/{id}/report` (`colliedesk_import_report`) is the report; add
    `?format=markdown` to download it. `POST /api/v1/imports/{id}/undo` removes what the import
-   brought in (an agent token's undo waits for a person's approval).
+   brought in (`colliedesk_import_undo`), at once.
 
-The key is encrypted on the server and erased when the import ends. An agent token below the admin
-tier cannot send it: the call is refused instead of waiting for approval, so the key is never stored
-in a request. If the server restarted without `MAILBOX_TOKEN_KEYS` (see
+The key is encrypted on the server and erased when the import ends. A token without
+`imports:manage_credentials` cannot send it, and a token created before roles cannot undo. If the server restarted without `MAILBOX_TOKEN_KEYS` (see
 [environment variables](../self-host/environment-variables.md)), the import waits in `waiting_key`
 until you give it the key again (`PUT /api/v1/imports/{id}/key`).
 

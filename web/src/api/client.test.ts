@@ -3,6 +3,7 @@ import { api, ConflictError, InvalidRequestError, PlanLimitError, SeatPausedErro
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
+import { permissionsOf, rolesOf } from '../test-roles';
 import { OutboundRefusedError } from './outbound-error';
 
 const reply = (status: number, body: unknown = {}, headers: Record<string, string> = {}) =>
@@ -62,7 +63,7 @@ test.each([
 
 test('sign-up sends the onboarding answers with the workspace name', async () => {
   fetchMock.mockResolvedValue(reply(201, {
-    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', role: 'admin', timezone_override: null },
+    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', roles: rolesOf('admin'), timezone_override: null },
     workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'acme', name: 'Acme', timezone: 'UTC' },
   }));
   await api.signUpCloud('jwt', 'Acme', { goal: 'shared_inbox', role: 'support_lead', source: 'github' });
@@ -72,7 +73,7 @@ test('sign-up sends the onboarding answers with the workspace name', async () =>
 
 test('sign-up sends the bearer token and the workspace name and returns the session', async () => {
   fetchMock.mockResolvedValue(reply(201, {
-    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', role: 'admin', timezone_override: null },
+    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', roles: rolesOf('admin'), timezone_override: null },
     workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'acme', name: 'Acme', timezone: 'UTC' },
   }));
   const redeemed = await api.signUpCloud('jwt', 'Acme');
@@ -108,7 +109,7 @@ test('a network failure or an unreadable answer is a failed export, never a navi
 });
 
 test('updateAgent sends only the given change and parses the team member', async () => {
-  const member = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: '', role: 'agent', timezone_override: null, deactivated_at: '2026-10-15T10:00:00Z', last_active_at: null, open_conversations: 0 };
+  const member = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: '', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: '2026-10-15T10:00:00Z', last_active_at: null, open_conversations: 0 };
   fetchMock.mockResolvedValue(reply(200, member));
   const result = await api.updateAgent(member.id, { active: false, reassign_to: '33333333-3333-4333-8333-333333333333' });
   expect(result.deactivated_at).toBe('2026-10-15T10:00:00Z');
@@ -233,16 +234,16 @@ test('402 seat_paused becomes a SeatPausedError with the server\'s explanation',
   expect((error as Error).message).toBe('Your access is paused.');
 });
 
-test('an agent token is created with its label and tier; an agent refused an admin token gets the reason', async () => {
+test('an agent token is created with its label and permissions; a refusal says what the person lacks', async () => {
   const session = { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Claude Code',
-    scope: 'draft', permissions: [], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null };
+    agent_name: 'Sam', token: { kind: 'custom', role: null, role_held: true, permissions: ['tags:read'], legacy_tier: null }, role: null, permissions: ['tags:read'], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null };
   fetchMock.mockResolvedValueOnce(reply(201, { token: 'cdk_agent_secret', session }));
-  expect(await api.createAgentToken('Claude Code', { scope: 'draft' }, 'press-1')).toEqual({ token: 'cdk_agent_secret', session });
+  expect(await api.createAgentToken('Claude Code', { permissions: ['tags:read'] }, 'press-1')).toEqual({ token: 'cdk_agent_secret', session });
   const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect([path, init.method, JSON.parse(String(init.body))]).toEqual(['/api/v1/auth/tokens', 'POST', { label: 'Claude Code', scope: 'draft' }]);
+  expect([path, init.method, JSON.parse(String(init.body))]).toEqual(['/api/v1/auth/tokens', 'POST', { label: 'Claude Code', permissions: ['tags:read'] }]);
 
-  fetchMock.mockResolvedValueOnce(reply(403, apiError('admin_token_needs_admin', 'Only a workspace admin can create an admin token. Choose read, draft or send.')));
-  const error = await api.createAgentToken('Ops', { scope: 'admin' }, 'press-1').catch((caught: unknown) => caught);
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('role_exceeds_yours', 'You can only give permissions you hold yourself; you do not hold kb_media:purge.')));
+  const error = await api.createAgentToken('Ops', { permissions: ['kb_media:purge'] }, 'press-1').catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(InvalidRequestError);
-  expect((error as Error).message).toMatch(/Only a workspace admin/);
+  expect((error as Error).message).toMatch(/permissions you hold/);
 });

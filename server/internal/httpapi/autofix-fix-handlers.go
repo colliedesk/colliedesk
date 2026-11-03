@@ -262,10 +262,6 @@ func (a *API) sendFixOf(response http.ResponseWriter, request *http.Request, con
 	if who.IsToken() {
 		created.TokenID = who.SessionID
 	}
-	if replay, ok := approvalOf(ctx); ok {
-		// The person who approved sends it as themselves; the fix names the request and its token.
-		created.RequestID, created.TokenID = replay.requestID, replay.tokenID
-	}
 	fix, made, err := a.store.CreateFix(ctx, who.Workspace.ID, created)
 	if err != nil {
 		writeAutofixError(response, err)
@@ -324,7 +320,7 @@ func (a *API) finishFixAuthorization(request *http.Request, who auth.Principal, 
 	if started.AgentID != who.Agent.ID {
 		return failed("wrong_person")
 	}
-	if !auth.HasPermission(who.Agent.Role, auth.PermissionConversationsWrite) || (a.limits && who.Access.Locked) {
+	if !who.Can(auth.PermAutofixSend) || (a.limits && who.Access.Locked) {
 		return failed("forbidden")
 	}
 	query := request.URL.Query()

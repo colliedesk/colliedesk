@@ -5,7 +5,10 @@ import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
-import { usePendingRequests } from './features/requests/use-pending-requests';
+import { can } from './lib/can';
+import { closedScreen, firstOpenArea, railAreasFor } from './lib/areas';
+import { PermissionsContext } from './lib/permissions-context';
+import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
@@ -20,7 +23,7 @@ import { AppShell } from './features/shell/app-shell';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { BookIcon, ChartIcon, ChatIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon } from './ui/icons';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
@@ -39,12 +42,11 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const numbersRoutePart = lazyPart(() => import('./features/settings/numbers/numbers-route'));
+const rolesRoutePart = lazyPart(() => import('./features/settings/roles/roles-route'));
 const targetsRoutePart = lazyPart(() => import('./features/settings/targets/targets-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
-// Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
-const requestsRoutePart = lazyPart(() => import('./features/requests/requests-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
 // Review (the intake queue of chat channels) is its own chunk; only workspaces with a chat channel open it.
 const reviewRoutePart = lazyPart(() => import('./features/review/review-route'));
@@ -71,18 +73,17 @@ function AppLayout() {
   // A locked workspace chooses its plan on the locked screen, so a remembered plan must not fire later.
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
   // An admin's locked screen shows the plans: billing is asked for while its chunk loads, not after.
-  useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: locked && !paused && me.data?.agent.role === 'admin' });
+  useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: locked && !paused && can(me.data, 'billing:read') });
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
-  useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
+  const readsInbox = can(me.data, 'conversations:read');
+  useInboxActivity(!onSignIn && readsInbox && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
   // On a sign-in page the analytics library waits for the sign-in form, so a slow connection loads the form first.
   useProductAnalytics(config.data?.product_analytics, me.data, onSignIn ? signInFormReady : undefined);
-  // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
-  const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // Fixes is in the Autofix chunk, loaded only where the server runs Autofix and this browser turned its preview on.
   const fixes = autofixPreviewOn() && config.data?.autofix?.available === true && Boolean(me.data) && !signedOut && !locked;
   // Cards of chat channels waiting in Review; the link shows only where a chat channel collects messages.
-  const intake = useIntakeSummary(!onSignIn && Boolean(me.data) && !signedOut && !locked).data;
+  const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -99,35 +100,36 @@ function AppLayout() {
   if (signedOut && config.isPending) return <div className="app-main" />;
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
-  const inRequests = path.startsWith('/requests');
   const inReview = path.startsWith('/review');
   const inKnowledge = path.startsWith('/knowledge');
   const inResults = path.startsWith('/results');
   const inFixes = path.startsWith('/fixes');
+  // A screen the session's roles may not read says so; the inbox address takes it to the first area it may open.
+  const closed = me.data ? closedScreen(path, me.data) : undefined;
+  if (closed && path === '/') return <Navigate to={firstOpenArea(me.data)} replace />;
+  const shows = (permission: TokenPermission) => !me.data || can(me.data, permission);
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
-      {config.data?.product_analytics.realm === 'cloud' && me.data.agent.role === 'admin' && me.data.plan?.plan === 'trial'
-        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={me.data.agent.role === 'admin'} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
+      {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
+        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
-      <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
-        aria-current={inRequests ? 'page' : undefined} onPointerEnter={requestsRoutePart.preload} onFocus={requestsRoutePart.preload}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
-        {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
+      {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>}
       {fixes && <Part part={autofixPart} render={({ FixesRailLink }) => <FixesRailLink current={inFixes} />} />}
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
         {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
-      <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
-        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
-      <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
-        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>
+      {(shows('kb_articles:read') || shows('kb_media:read')) && <Link to={me.data && !can(me.data, 'kb_articles:read') ? '/knowledge/media' : '/knowledge'} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
+      {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
+        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
         onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
-    <Outlet />
+    {closed && me.data ? <ClosedScreen label={closed.label} permission={closed.permission} me={me.data} />
+      : <PermissionsContext.Provider value={me.data?.permissions}><Outlet /></PermissionsContext.Provider>}
   </AppShell></SettingsNavLinkContext.Provider>;
 }
 
@@ -227,11 +229,8 @@ function SettingsPage() {
   </main>;
 }
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
-const requestsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/requests',
-  component: () => <Part part={requestsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ RequestsRoute }) => <RequestsRoute />} />,
-});
+// Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
+const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
 // The tab and the channel filter of Review are in the address, so a link opens the same list.
 type ReviewSearch = { tab?: 'dismissed' | 'decided'; channel?: string; scope?: string };
 const reviewRoute = createRoute({
@@ -276,7 +275,7 @@ const billingRoute = createRoute({
     // Billing is asked for while the page's chunk loads, not after it (billing-route.tsx asks the same).
     const me = useQuery({ queryKey: ['me'], queryFn: api.me });
     const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: me.data?.agent.role === 'admin' && (config.data?.billing.enabled === true || config.data?.billing.switched_off === true) });
+    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: can(me.data, 'billing:read') && (config.data?.billing.enabled === true || config.data?.billing.switched_off === true) });
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
@@ -287,6 +286,21 @@ const importRoute = createRoute({
     return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
+// Settings → Roles: the list, a new role (optionally from another) and one role.
+const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
+const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
+  component: () => <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'list' }} />} /> });
+const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new',
+  validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
+  component: function NewRole() {
+    const { from } = newRoleRoute.useSearch();
+    return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'new', from }} />} />;
+  } });
+const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/$roleId',
+  component: function OneRole() {
+    const { roleId } = roleRoute.useParams();
+    return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
+  } });
 // Settings → Conversation numbers: the workspace's number series.
 const numbersRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -392,9 +406,19 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
+}
+
+// ClosedScreen stands for a page the session's roles may not read: what it needs, who to ask, and where it can go.
+function ClosedScreen({ label, permission, me }: { label: string; permission: TokenPermission; me: NonNullable<Parameters<typeof can>[0]> }) {
+  const open = railAreasFor(me);
+  return <main className="settings-page closed-screen">
+    <header><h1>{label}</h1><p role="status">{messages.closedScreen(label)} {messages.closedScreenAsk(permission)}</p></header>
+    <p className="muted-copy">{messages.closedScreenOpen}</p>
+    <span className="button-row">{open.map((area) => <Link key={area.to} to={area.to} className="button">{area.label}</Link>)}</span>
+  </main>;
 }

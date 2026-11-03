@@ -15,20 +15,38 @@ type restMe struct {
 		Name     string `json:"name"`
 		Timezone string `json:"timezone"`
 	} `json:"workspace"`
-	Scope       *string  `json:"scope"`
+	// Permissions are what this call may do: a token's given permissions limited to its person's.
 	Permissions []string `json:"permissions"`
-	Plan        *struct {
+	// Token is nil for a person's own sign-in.
+	Token *restTokenGrant `json:"token"`
+	Plan  *struct {
 		Locked bool `json:"locked"`
 	} `json:"plan"`
 }
 
 type restAgent struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role"`
+	ID          string        `json:"id"`
+	Email       string        `json:"email"`
+	DisplayName string        `json:"display_name"`
+	Roles       []restRoleRef `json:"roles"`
 	// TimezoneOverride is set only in the answer of /auth/me.
 	TimezoneOverride *string `json:"timezone_override"`
+}
+
+type restRoleRef struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	System *string `json:"system"`
+}
+
+// restTokenGrant is how an agent token got its permissions: from a role it follows, a list picked
+// when it was made, or (legacy) a tier from before roles.
+type restTokenGrant struct {
+	Kind        string       `json:"kind"`
+	Role        *restRoleRef `json:"role"`
+	RoleHeld    *bool        `json:"role_held"`
+	Permissions []string     `json:"permissions"`
+	LegacyTier  *string      `json:"legacy_tier"`
 }
 
 type restTag struct {
@@ -83,8 +101,8 @@ type restMessage struct {
 	// NoticeKind names a message the channel sent by itself (a received or status notice).
 	NoticeKind *string `json:"notice_kind"`
 	AgentToken *struct {
-		Label string `json:"label"`
-		Scope string `json:"scope"`
+		Label     string `json:"label"`
+		AgentName string `json:"agent_name"`
 	} `json:"agent_token"`
 	// Origin is set on a message imported from another helpdesk; Kind is how that system classified it.
 	Origin *struct {

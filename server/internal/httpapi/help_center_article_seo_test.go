@@ -99,8 +99,8 @@ func TestArticleSearchFieldsOfAPublishedArticleNeedASendToken(t *testing.T) {
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Draft", "body_md": "x"}, admin, http.StatusCreated, &draft)
 
 	change := map[string]any{"updated_at": published.UpdatedAt, "seo_title": "Proposed title"}
-	if response := request(t, api, http.MethodPatch, "/api/v1/kb/articles/"+published.ID, change, draftToken, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("editor token on a published article status=%d body=%s, want 202", response.Code, response.Body.String())
+	if response := request(t, api, http.MethodPatch, "/api/v1/kb/articles/"+published.ID, change, draftToken, nil); response.Code != http.StatusForbidden {
+		t.Fatalf("editor token on a published article status=%d body=%s, want 403", response.Code, response.Body.String())
 	}
 	var unchanged seoArticleView
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+published.ID, nil, admin, http.StatusOK, &unchanged)

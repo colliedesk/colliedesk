@@ -116,7 +116,7 @@ func TestReadinessOpensAGateOnlyOnExplicitLabels(t *testing.T) {
 		t.Fatalf("a dataset run twice counts %d labels", labels)
 	}
 	token := issueCustomToken(t, d.api, d.adminA, "scorer", "ai_settings:update").Token
-	if got := record(token, prompt.Version); got.Code != http.StatusAccepted {
+	if got := record(token, prompt.Version); got.Code != http.StatusCreated {
 		t.Fatalf("a token records an evaluation: %+v", got)
 	}
 	// A repeated press under one Idempotency-Key records the run once; the key with other counts is refused.
@@ -136,7 +136,7 @@ func TestReadinessOpensAGateOnlyOnExplicitLabels(t *testing.T) {
 	}
 	agentToken := issueCustomToken(t, d.api, d.adminA, "settings", "ai_settings:update").Token
 	override := map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"gate_override": []string{"attach"}, "gate_override_reason": "the old desk's labels"}}
-	if response := d.setLevel(t, agentToken, d.chatA, "intake", override); response.Code != http.StatusAccepted {
+	if response := d.setLevel(t, agentToken, d.chatA, "intake", override); response.Code != http.StatusOK {
 		t.Fatalf("a token opens a gate by hand: %+v", response)
 	}
 	if response := d.setLevel(t, d.adminA, d.chatA, "intake", override); response.Code != http.StatusOK {
@@ -147,7 +147,7 @@ func TestReadinessOpensAGateOnlyOnExplicitLabels(t *testing.T) {
 	}
 
 	list := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA+"/ai/intake/evaluations?scope=group", nil, d.adminA, nil)
-	if list.Code != http.StatusOK || strings.Count(list.Body.String(), `"dataset_sha256"`) != 4 {
+	if list.Code != http.StatusOK || strings.Count(list.Body.String(), `"dataset_sha256"`) != 5 {
 		t.Fatalf("evaluations: %d %s", list.Code, list.Body.String())
 	}
 }

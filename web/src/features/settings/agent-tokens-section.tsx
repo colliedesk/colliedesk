@@ -1,22 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { InvalidRequestError, PlanLimitError, UnauthorizedError } from '../../api/client';
-import type { AgentToken, TokenPermission, TokenPreset, TokenScope } from '../../api/schemas';
+import type { AgentToken, Role, RoleRef, TokenPermission } from '../../api/schemas';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { CopyButton } from './copy-button';
 import { connectHosts, connectSnippets, exampleOrigin, mcpServerName } from './connect-snippets.generated';
 import type { ConnectHostID } from './connect-snippets.generated';
-import { actionLabel, presetPermissions, tokenResources } from './token-permissions';
+import { outsidePermissions, permissionSummary } from './token-permissions';
+import { PermissionMatrix } from './permission-matrix';
+import { roleMessages } from './roles-messages';
 import './agent-tokens.css';
 
-const scopes: TokenScope[] = ['read', 'draft', 'send', 'admin', 'custom'];
+// The roles a token may follow: any of the workspace whose permissions the person all holds (every role
+// for an admin), or only their own roles while the workspace's roles cannot be read.
+export function followableRoles(own: RoleRef[], workspace: Role[] | undefined, held: readonly string[]): RoleRef[] {
+  if (!workspace) return own;
+  const holds = new Set(held);
+  return workspace.filter((role) => role.deleted_at === null && role.permissions.every((name) => holds.has(name)))
+    .map(({ id, name, system }) => ({ id, name, system }));
+}
 
-// What a token is created with: a tier, or its own permissions.
-export type TokenChoice = { scope: TokenPreset } | { permissions: TokenPermission[] };
+// What a token is created with: a role it follows, or a fixed list.
+export type TokenChoice = { role_id: string } | { permissions: TokenPermission[] };
 
 interface AgentTokensSectionProps {
-  // canCreateAdmin is the signed-in person's admin role: the server refuses an admin token to anyone else.
-  canCreateAdmin: boolean;
+  // The roles a token may follow (followableRoles), and what each holds when the person may read roles;
+  // held is what they may do now.
+  roles: RoleRef[];
+  rolePermissions?: ReadonlyMap<string, readonly string[]>;
+  held: readonly string[];
   onCreate: (label: string, choice: TokenChoice) => Promise<AgentToken>;
   // origin is the address this app is open at; the steps use it in place of the guides' example.
   origin?: string;
@@ -39,23 +51,31 @@ function refusal(error: unknown): string {
 
 // AgentTokensSection creates an agent token and shows it once, then how each AI host uses it. The token
 // lives in this component's state only: no query cache, no storage, gone once hidden or the page is left.
-export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.location.origin }: AgentTokensSectionProps) {
+export function AgentTokensSection({ roles, rolePermissions, held, onCreate, origin = window.location.origin }: AgentTokensSectionProps) {
   const [label, setLabel] = useState('');
-  const [scope, setScope] = useState<TokenScope>('draft');
-  // The permissions the form shows ticked: the tier's while a tier is chosen, the person's own once custom.
-  const [picked, setPicked] = useState<TokenPermission[]>(() => presetPermissions('draft'));
-  const [showPermissions, setShowPermissions] = useState(false);
-  const choose = (value: TokenScope) => {
-    setScope(value);
-    if (value === 'custom') setShowPermissions(true);
-    else setPicked(presetPermissions(value));
+  const permissionsOf = (id: string | undefined): readonly string[] => (id === undefined ? [] : rolePermissions?.get(id) ?? []);
+  // The role with the fewest permissions comes first, and is the one a new token follows by default.
+  const ordered = [...roles].sort((a, b) => (rolePermissions ? permissionsOf(a.id).length - permissionsOf(b.id).length : 0));
+  const [mode, setMode] = useState<'role' | 'pick'>('role');
+  // Only a role the person picked is kept; until then, and when it may no longer be followed, the default
+  // is the role with the fewest permissions among those it may follow now.
+  const [roleId, setRoleId] = useState<string>();
+  const role = roleId !== undefined && ordered.some((item) => item.id === roleId) ? roleId : ordered[0]?.id;
+  // A fixed list starts from the permissions of the role chosen above.
+  const [picked, setPicked] = useState<TokenPermission[]>([]);
+  const [showRole, setShowRole] = useState(false);
+  const pick = () => {
+    setMode('pick');
+    setPicked(permissionsOf(role).filter((name) => held.includes(name)) as TokenPermission[]);
     if (error && !error.field) setError(null);
   };
-  // Changing a permission makes the token custom, starting from what the tier held.
-  const toggle = (permission: TokenPermission) => {
-    setScope('custom');
+  const toggle = (permission: TokenPermission) =>
     setPicked((current) => (current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]));
-  };
+  const setMany = (permissions: TokenPermission[], on: boolean) =>
+    setPicked((current) => (on ? [...new Set([...current, ...permissions])] : current.filter((item) => !permissions.includes(item))));
+  const allowed = new Set(held);
+  const rolePermissionsNow = permissionsOf(role);
+  const wide = rolePermissionsNow.some((name) => outsidePermissions.has(name as TokenPermission) || name.startsWith('team:'));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<{ message: string; field: boolean } | null>(null);
   const [created, setCreated] = useState<{ token: string; label: string } | null>(null);
@@ -81,14 +101,18 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
       nameInput.current?.focus();
       return;
     }
-    if (scope === 'custom' && picked.length === 0) {
+    if (mode === 'pick' && picked.length === 0) {
       setError({ message: text.permissionsMissing, field: false });
+      return;
+    }
+    if (mode === 'role' && !role) {
+      setError({ message: text.noRole, field: false });
       return;
     }
     setPending(true);
     setError(null);
     try {
-      const answer = await onCreate(name, scope === 'custom' ? { permissions: picked } : { scope });
+      const answer = await onCreate(name, mode === 'pick' ? { permissions: picked } : { role_id: role! });
       setCreated({ token: answer.token, label: name });
       setFocus('token');
     } catch (caught) {
@@ -120,16 +144,31 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
               <input ref={nameInput} value={label} maxLength={80} placeholder={text.namePlaceholder} autoComplete="off"
                 aria-invalid={error?.field ? true : undefined} aria-describedby={error?.field ? 'agent-token-error' : undefined}
                 onChange={(event) => { setLabel(event.target.value); if (error?.field) setError(null); }} /></label>
-            <fieldset className="tier-field"><legend className="field-label">{text.tier}</legend>
-              <div className="segmented tier-picker">
-                {scopes.map((value) => <label key={value}><input type="radio" name="agent-token-tier" value={value} checked={scope === value}
-                  disabled={value === 'admin' && !canCreateAdmin} onChange={() => choose(value)} />{text.tiers[value]}</label>)}
+            <fieldset className="access-field"><legend className="field-label">{text.access}</legend>
+              <div className="access-option">
+                <label><input type="radio" name="agent-token-access" checked={mode === 'role'} onChange={() => setMode('role')} />{text.followRole}</label>
+                <p className="muted-copy">{text.followRoleHelp}</p>
+                {mode === 'role' && <>
+                  {ordered.length > 1
+                    ? <label className="field"><span className="sr-only">{text.role}</span>
+                      <select value={role ?? ''} onChange={(event) => setRoleId(event.target.value)}>
+                        {ordered.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select></label>
+                    : ordered[0] && <p className="muted-copy">{text.role}: <strong>{ordered[0].name}</strong></p>}
+                  {rolePermissions && <p className="muted-copy">{permissionSummary(rolePermissionsNow)}{' '}
+                    <button type="button" className="link-button" aria-expanded={showRole} aria-controls="agent-token-role-matrix"
+                      onClick={() => setShowRole((shown) => !shown)}>{showRole ? text.hidePermissions : text.showThem}</button></p>}
+                  {wide && <p className="warning-note">{text.wideRole}</p>}
+                  {showRole && <div id="agent-token-role-matrix"><PermissionMatrix idPrefix="token-role" picked={rolePermissionsNow as TokenPermission[]} allowed={allowed} readOnly /></div>}
+                </>}
               </div>
-              <p className="muted-copy">{text.tierHelp[scope]}</p>
-              {!canCreateAdmin && <p className="muted-copy">{text.adminOnly}</p>}
-              <button type="button" className="link-button permissions-toggle" aria-expanded={showPermissions} aria-controls="agent-token-permissions"
-                onClick={() => setShowPermissions((shown) => !shown)}>{showPermissions ? text.hidePermissions : text.showPermissions(picked.length)}</button>
-              {showPermissions && <PermissionMatrix picked={picked} canCreateAdmin={canCreateAdmin} onToggle={toggle} />}
+              <div className="access-option">
+                <label><input type="radio" name="agent-token-access" checked={mode === 'pick'} aria-controls="token-pick-matrix" onChange={pick} />{text.pickPermissions}</label>
+                {mode === 'pick' && <>
+                  <p className="muted-copy">{permissionSummary(picked)}</p>
+                  <PermissionMatrix idPrefix="token-pick" picked={picked} allowed={allowed} onToggle={toggle} onSetMany={setMany} />
+                </>}
+              </div>
             </fieldset>
             <p className="muted-copy">{text.lifetime}</p>
             {error && <p role="alert" id="agent-token-error" className="error-copy">{error.message}</p>}
@@ -231,41 +270,6 @@ function Snippet({ label, code }: { label: string; code: string }) {
       <div className="snippet-head"><span className="field-label">{label}</span>
         <span className="button-row"><CopyButton value={code} label={text.copySnippet(label)}>{text.copy}</CopyButton></span></div>
       <pre tabIndex={0} role="group" aria-label={label}><code>{code}</code></pre>
-    </div>
-  );
-}
-
-// PermissionMatrix lists every resource with a chip for each action the token may take on it. Ticking
-// or unticking one makes the token custom. An admin-only one is locked for a person who is not an admin.
-function PermissionMatrix({ picked, canCreateAdmin, onToggle }: { picked: TokenPermission[]; canCreateAdmin: boolean; onToggle: (permission: TokenPermission) => void }) {
-  return (
-    <div id="agent-token-permissions" className="permission-matrix">
-      <p className="permission-legend">
-        <span><span className="permission-mark outside" aria-hidden="true" />{text.outsideLegend}</span>
-        <span><span className="permission-mark asks" aria-hidden="true" />{text.asksLegend}</span>
-        {!canCreateAdmin && <span><span className="permission-mark locked" aria-hidden="true" />{text.lockedLegend}</span>}</p>
-      <ul>
-        {tokenResources.map((resource) => (
-          <li key={resource.resource}>
-            <span className="permission-resource" id={`perm-${resource.resource}`}>{resource.label}</span>
-            <span className="permission-chips" role="group" aria-labelledby={`perm-${resource.resource}`}>
-              {resource.permissions.map((item) => {
-                const locked = item.preset === 'admin' && !canCreateAdmin;
-                const notes = [item.outside && text.outside, item.asks && text.asks, locked && text.adminOnlyPermission].filter(Boolean).join(' · ');
-                return (
-                  <label key={item.name} className="permission-chip" title={notes || undefined}>
-                    <input type="checkbox" checked={picked.includes(item.name)} disabled={locked} onChange={() => onToggle(item.name)}
-                      aria-description={notes || undefined} />
-                    {actionLabel(item.name)}
-                    {item.outside && <span className="permission-mark outside" aria-hidden="true" />}
-                    {item.asks && <span className="permission-mark asks" aria-hidden="true" />}
-                  </label>
-                );
-              })}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

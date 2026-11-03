@@ -15,7 +15,8 @@ The public help center is in `help-center.md`.
   has no column for in `source_meta`; only an import writes them, the API never does, the export carries
   them, and the help center never renders `source_html`.
 - **Copied from saved replies.** Versions, the 30-day trash, optimistic writes with `updated_at`, the
-  version columns (person, token, approved request) and the `send` tier follow saved replies; the
+  version columns (person, token, and the approved request of a change from before requests were
+  removed) follow saved replies; the
   change schema is shared (`domain.KBArticleChange` is `SavedReplyChange`). A version stores title,
   slug, text, status and collection; restoring one brings back title, slug and text only, so a restore
   never publishes or moves an article by surprise.
@@ -120,10 +121,8 @@ The public help center is in `help-center.md`.
   on the links, so a save that committed a link while the DELETE waited would lose its item. Uploading
   in the library (`keep=true`) or naming an item or writing its alt text keeps it. A Freshdesk undo
   leaves kept images.
-- **The library's trash goes by batch.** Trash, restore and purge take at most 100 ids (an agent
-  request names them all, so a person approves exactly what moves); "all unused" moves 500 a call
-  under one `kb_media_batches` row, so one Undo restores everything. A token below `send` calling
-  `trash-unused` files a request for `POST /kb/media/trash` with the ids it would move, never "all".
+- **The library's trash goes by batch.** Trash, restore and purge take at most 100 ids; "all unused"
+  moves 500 a call under one `kb_media_batches` row, so one Undo restores everything.
   `before` (when the page was read) keeps an item uploaded since out of it. Batches go after 30 days.
 - **A replacement is a new version, not new bytes.** An id always names the same bytes (cache
   `immutable`), so replacing writes the other item's id into every live article's current text and
@@ -178,10 +177,10 @@ The public help center is in `help-center.md`.
   is 404; it counts toward the plan, and its thumbnail is the video's in the library.
 - **Limits:** 10,000 library items per workspace, the trash included (`domain.MaxKBMedia`, counted
   under `lockKB`); 5 MiB, 8,192 px on a side and 40 megapixels per image.
-- **Tiers.** Reads are `read`; writes, publishing and image uploads are `send` like saved replies (a
-  publish reaches customers, but it is a version and can be undone); `PUT /help-center` is `admin`.
-  A lower tier's write becomes an agent request, except an image: its bytes are refused with
-  `files_need_approval`, like a multipart upload.
+- **Permissions.** Reads need `kb_articles:read`/`kb_media:read`; writes `kb_articles:create`,
+  `:update`, `:delete` and `kb_media:*`; anything the help center shows also `kb_articles:publish`
+  (a publish reaches customers, but it is a version and can be undone); `PUT /help-center` needs
+  `help_center:update`. A call without the permission is 403 `permission_missing`.
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
 ## Editor (web app)
@@ -283,8 +282,6 @@ The public help center is in `help-center.md`.
   and 25 ms on CI against the 25 ms budget; the copy takes it to 7–8 ms locally. The alt text cannot go
   into the library index instead: with the name, 500 characters of 4 bytes pass the 2,704 bytes a
   btree entry holds (measured: 2,880).
-- **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
-  413; a send token writes it directly.
 - **Row-level security turns GIN off for `@@`.** Postgres uses a condition as an index condition on a
   table with row-level security only when its function is leakproof, so the policy is checked first;
   `ts_match_vq` (`@@`) is not (`pg_proc.proleakproof`), and marking it needs a superuser. Every
@@ -309,7 +306,7 @@ The public help center is in `help-center.md`.
   inferred from the measurements, not read in its source). Measured on Postgres 17.11 on 2026-10-20,
   `to_tsvector('simple', repeat('_a', n))`: 0.34 s at 10,000 characters, 1.4 s at 20,000, 5.6 s at
   40,000, 34 s at 100,000 (the longest text), each holding one database core on every create, edit,
-  import or approved request. Runs of 200 characters separated by spaces cost the same per character
+  or import. Runs of 200 characters separated by spaces cost the same per character
   whatever the total, so the cost is the square of one run, not of the text. Fuzzing every pair of ASCII
   punctuation, letters, digits, non-ASCII letters, combining marks and spaces, triples and quintuples
   found these triggers: `_` next to a letter or digit, `/` with `.` or `~`, `@` after a word with

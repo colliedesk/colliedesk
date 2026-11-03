@@ -115,7 +115,3 @@ func attachmentRows(message restMessage) []attachmentRowOut {
 	}
 	return rows
 }
-
-// filesNeedApproval words REST's refusal of files from a token that would only file a request.
-const filesNeedApproval = "A token below this action's tier gets its call filed for a person's approval, and a call with files cannot wait for one, so nothing was sent or stored. " +
-	"Call again without files: the text is filed for a person to approve. Then a person attaches the files in the web app after approval, or a token with the tier attaches them in a new message."

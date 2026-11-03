@@ -17,7 +17,7 @@ const plugin = "../../../plugins/colliedesk"
 
 // The skills in plugins/colliedesk follow the Agent Skills format (agentskills.io), so Codex,
 // Cursor, VS Code and claude.ai load them as they are. A skill says what it is for and links the
-// colliedesk.com guides; it never copies a feature's details, tools or tiers, which change with
+// colliedesk.com guides; it never copies a feature's details, tools or permissions, which change with
 // Colliedesk. The agent learns them at run time from colliedesk_whoami, the tool descriptions and
 // the linked pages (colliedesk_docs_search returns the same guides from the person's server).
 func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
@@ -37,8 +37,8 @@ func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
 	sections := []string{"## What it is for", "## When to use", "## Boundaries", "## Before you start", "## Reference"}
 	mayName := []string{"colliedesk_whoami", "colliedesk_docs_search"}
 	for _, spec := range mcpserver.Catalog() {
-		if slices.Contains(mayName, spec.Name) && spec.Tier != "any" {
-			t.Errorf("%s has tier %s; a skill tells every agent to call it first, so it must work with any token", spec.Name, spec.Tier)
+		if slices.Contains(mayName, spec.Name) && len(spec.Needs) > 0 {
+			t.Errorf("%s needs %v; a skill tells every agent to call it first, so it must work with any token", spec.Name, spec.Needs)
 		}
 	}
 	for _, want := range mayName {
@@ -86,7 +86,7 @@ func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
 		for _, used := range tool.FindAllString(body+fields["description"], -1) {
 			if !seen[used] && !slices.Contains(mayName, used) {
 				seen[used] = true
-				t.Errorf("%s names %s: a skill names no tool but %v; tools, arguments and tiers come from colliedesk_whoami and the tool descriptions, so a change in Colliedesk never leaves a skill wrong", skill, used, mayName)
+				t.Errorf("%s names %s: a skill names no tool but %v; tools, arguments and permissions come from colliedesk_whoami and the tool descriptions, so a change in Colliedesk never leaves a skill wrong", skill, used, mayName)
 			}
 		}
 		_, boundaries, _ := strings.Cut(body, "## Boundaries")

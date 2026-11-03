@@ -180,8 +180,8 @@ func TestHelpCenterThemeTokenTiers(t *testing.T) {
 	adminToken := issueToken(t, api, admin, "Admin", "admin").Token
 	body := map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "custom_css": ""}
 
-	if response := request(t, api, http.MethodPut, themePath, body, send, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("send token put status=%d body=%s, want 202", response.Code, response.Body.String())
+	if response := request(t, api, http.MethodPut, themePath, body, send, nil); response.Code != http.StatusForbidden {
+		t.Fatalf("send token put status=%d body=%s, want 403", response.Code, response.Body.String())
 	}
 	kbCall(t, api, http.MethodPost, themePath+"/check", body, read, http.StatusOK, nil)
 	var theme themeView

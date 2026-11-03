@@ -9,7 +9,7 @@ import { createWorkspaceWithSlug } from './support/workspace';
 // workspace, then with a conversation and a collection, on a wide and a phone screen.
 // Not visited yet: the Built-in AI page (/settings/ai), whose provider and model selects are being
 // reworked on their own; add it here when they show only real choices.
-const pages = ['/', '/requests', '/knowledge', '/knowledge/media', '/results', '/fixes', '/settings', '/settings/channels/type/email', '/settings/autofix'];
+const pages = ['/', '/settings/roles', '/knowledge', '/knowledge/media', '/results', '/fixes', '/settings', '/settings/channels/type/email', '/settings/autofix'];
 
 interface Scan { selects: number; problems: string[] }
 

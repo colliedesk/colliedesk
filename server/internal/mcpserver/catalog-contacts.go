@@ -1,6 +1,6 @@
 package mcpserver
 
-// The tools below change customers (contacts) and start conversations by email; all need the send tier.
+// The tools below change customers (contacts) and start conversations by email.
 
 const contactMergeSchema = `{"type":"object","required":["merge_id","contact_id","merged_contact","conversations_moved","merged_at"],"properties":{` +
 	`"merge_id":{"type":"string"},"contact_id":{"type":"string","description":"The contact that was kept."},` +
@@ -13,8 +13,8 @@ func contactUpdateSpec() Spec {
 		Title: "Rename a customer",
 		Description: `Change the name of a customer (contact). The team sees the new name, and later emails address the customer by it; the email address stays. ` +
 			`Rename again to undo.` +
-			"\n\n" + untrustedNotice + "\n\nTier: send.",
-		Tier: "send",
+			"\n\n" + untrustedNotice,
+
 		REST: []string{"PATCH /api/v1/contacts/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["contact_id","name"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `},"name":{"type":"string","minLength":1,"maxLength":200}}}`,
@@ -30,8 +30,8 @@ func contactMergeSpec() Spec {
 		Description: `Merge a duplicate customer into the one to keep (contact_id): every conversation of the duplicate moves to it, mail from the duplicate's address joins it, ` +
 			`and replies on the moved conversations go to the kept customer's email. Nothing is deleted. ` + confirmFirst +
 			`Undo it with colliedesk_contact_unmerge and the merge_id. A customer merged already, or one others are merged into, cannot be merged; the error says which.` +
-			"\n\n" + untrustedNotice + "\n\nTier: send.",
-		Tier: "send",
+			"\n\n" + untrustedNotice,
+
 		REST: []string{"POST /api/v1/contacts/{id}/merges"},
 		Input: `{"type":"object","additionalProperties":false,"required":["contact_id","duplicate_contact_id"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"The customer to keep."},` +
@@ -47,8 +47,8 @@ func contactUnmergeSpec() Spec {
 		Title: "Undo a merge of customers",
 		Description: `Undo a merge: the conversations it moved go back to the duplicate, which is a customer of its own again. ` +
 			`Conversations that arrived after the merge stay with the kept customer. Find merge_id in colliedesk_contact_get (merges).` +
-			"\n\n" + untrustedNotice + "\n\nTier: send.",
-		Tier: "send",
+			"\n\n" + untrustedNotice,
+
 		REST: []string{"DELETE /api/v1/contacts/{id}/merges/{mergeId}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["contact_id","merge_id"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"The customer that was kept."},"merge_id":{"type":"string",` + uuid + `}}}`,
@@ -69,11 +69,9 @@ func conversationStartSpec() Spec {
 			`Each call opens one more conversation and sends one more email, so never repeat a call that succeeded; after a dropped connection, look for it with colliedesk_contact_get first. ` +
 			`Give contact_id for a customer found with colliedesk_contacts_find, or new_contact to add the customer in the same step (an address that is already a customer is refused and the error names that customer). ` +
 			`To open a conversation without emailing, use colliedesk_conversation_create. ` +
-			`files attaches up to 10 files to the first message, ` + inlineFilesLimitWords + ` in total per call (base64). ` +
-			`With a token below send the call is filed for a person to approve, and a call with files cannot wait for one: it is refused and nothing is filed, so send the text alone.` +
-			"\n\nTier: send.",
-		Tier: "send", Destructive: true,
-		REST: []string{"POST /api/v1/conversations", "GET /api/v1/conversations/{id}/messages"},
+			`files attaches up to 10 files to the first message, ` + inlineFilesLimitWords + ` in total per call (base64). `,
+		Destructive: true,
+		REST:        []string{"POST /api/v1/conversations", "GET /api/v1/conversations/{id}/messages"},
 		Input: `{"type":"object","additionalProperties":false,"required":["subject","body"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"The customer; give this or new_contact."},` +
 			`"new_contact":{"type":"object","additionalProperties":false,"required":["name","email"],"description":"A customer to add with the conversation; give this or contact_id.",` +

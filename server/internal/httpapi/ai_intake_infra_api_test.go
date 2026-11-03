@@ -23,26 +23,17 @@ func TestLooseningOpenRouterRoutingFromATokenWaitsForAPerson(t *testing.T) {
 	}
 	admin := issueToken(t, d.api, d.adminA, "routing admin", "admin").Token
 	loosen := map[string]any{"routing": map[string]any{"data_collection": "allow", "zdr": true}}
-	response := request(t, d.api, http.MethodPatch, "/api/v1/ai/providers/"+router, loosen, admin, nil)
-	if response.Code != http.StatusAccepted {
+	// A token holding ai_settings:update loosens at once, as its person would; one without it is refused.
+	send := issueToken(t, d.api, d.adminA, "routing send", "send").Token
+	refused(t, d.api, http.MethodPatch, "/api/v1/ai/providers/"+router, loosen, send, "ai_settings:update")
+	if got := routing(); !strings.Contains(got, "deny") {
+		t.Fatalf("a refused loosening changed the routing: %s", got)
+	}
+	if response := request(t, d.api, http.MethodPatch, "/api/v1/ai/providers/"+router, loosen, admin, nil); response.Code != http.StatusOK {
 		t.Fatalf("token loosens: %d %s", response.Code, response.Body.String())
 	}
-	var filed struct {
-		RequestID string `json:"request_id"`
-		Summary   string `json:"summary"`
-	}
-	decode(t, response, &filed)
-	if !strings.Contains(filed.Summary, "OpenRouter") || !strings.Contains(filed.Summary, "store or train") {
-		t.Fatalf("summary = %q", filed.Summary)
-	}
-	if got := routing(); !strings.Contains(got, "deny") {
-		t.Fatalf("a filed loosening changed the routing: %s", got)
-	}
-	if approved := approve(t, d.api, d.adminA, filed.RequestID, nil); approved.Code != http.StatusOK {
-		t.Fatalf("approve: %d %s", approved.Code, approved.Body.String())
-	}
 	if got := routing(); got != `{"zdr": true}` {
-		t.Fatalf("after approval = %s", got)
+		t.Fatalf("after the loosening = %s", got)
 	}
 	tighten := map[string]any{"routing": map[string]any{"data_collection": "deny", "zdr": true}}
 	if response := request(t, d.api, http.MethodPatch, "/api/v1/ai/providers/"+router, tighten, admin, nil); response.Code != http.StatusOK {

@@ -36,6 +36,15 @@ func writeError(response http.ResponseWriter, status int, code, message string) 
 	writeJSON(response, status, map[string]any{"error": errorBody(response, map[string]any{"code": code, "message": message})})
 }
 
+// writeErrorWith is writeError with more top-level fields of the error object.
+func writeErrorWith(response http.ResponseWriter, status int, code, message string, fields map[string]any) {
+	body := map[string]any{"code": code, "message": message}
+	for key, value := range fields {
+		body[key] = value
+	}
+	writeJSON(response, status, map[string]any{"error": errorBody(response, body)})
+}
+
 // errorBody adds the request id (the X-Request-Id header withRequestID set) to an error object, so a person
 // reporting a failure can quote the id that finds it in the server log.
 func errorBody(response http.ResponseWriter, body map[string]any) map[string]any {
@@ -61,7 +70,9 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_draft_not_ready", "That AI draft is not ready to send from this conversation: it is still being written, or it was already sent, discarded or replaced. Send the reply without ai_draft_id, or ask for a new draft.")
 		return
 	case errors.Is(err, domain.ErrLastAdmin):
-		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Make another agent an admin first.")
+		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Give the Admin role to another active member first.")
+		return
+	case writeRoleError(response, err):
 		return
 	case errors.Is(err, domain.ErrAgentDeactivated):
 		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")

@@ -53,9 +53,9 @@ func keyedAnswer(t *testing.T, response *httptest.ResponseRecorder) map[string]a
 func TestARepeatedKeyCreatesEachKindOfRowOnce(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	cases := map[string]keyedCreate{
-		"invite": {path: "/api/v1/auth/invites", body: map[string]any{"email": "teammate@keys.example.com", "role_ceiling": "agent"}, id: nestedID("invite"),
+		"invite": {path: "/api/v1/auth/invites", body: map[string]any{"email": "teammate@keys.example.com", "roles": []string{"Agent"}}, id: nestedID("invite"),
 			rows: `SELECT count(*) FROM pairing_links WHERE workspace_id=$1 AND kind='invite' AND email=$2`, arg: "teammate@keys.example.com"},
-		"agent token": {path: "/api/v1/auth/tokens", body: map[string]any{"label": "Claude keys", "scope": "draft"}, id: nestedID("session"),
+		"agent token": {path: "/api/v1/auth/tokens", body: map[string]any{"label": "Claude keys", "permissions": []string{"messages:read", "messages:note", "conversations:read", "conversations:update", "messages:send"}}, id: nestedID("session"),
 			rows: `SELECT count(*) FROM sessions WHERE workspace_id=$1 AND label=$2`, arg: "Claude keys"},
 		"contact": {path: "/api/v1/contacts", body: map[string]any{"name": "Kim Keys", "email": "kim@customer-keys.example.com"}, id: topID,
 			rows: `SELECT count(*) FROM contacts WHERE workspace_id=$1 AND email=$2`, arg: "kim@customer-keys.example.com"},
@@ -107,7 +107,7 @@ func TestARepeatedKeyCreatesEachKindOfRowOnce(t *testing.T) {
 func TestInvitesSentAtOnceWithOneKeyMakeOneInviteAndKeepNoLink(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "Invite Keys", "admin@invite-keys.example.com")
-	body := map[string]any{"email": "double@invite-keys.example.com", "role_ceiling": "agent"}
+	body := map[string]any{"email": "double@invite-keys.example.com", "roles": []string{"Agent"}}
 	responses := threeAtOnce(t, func() *httptest.ResponseRecorder {
 		return postWithKey(t, api, admin, "/api/v1/auth/invites", "double-click", body)
 	})

@@ -54,7 +54,9 @@ type contractFixture struct {
 	failedReplyID                 string
 	deleteChannelToken            string
 	portalToken, webhookBody      string
-	// requestToken filed three pending agent requests, one for each decision.
+	// requestToken is a read token that has the conversation open.
+	// roleID is a role the cases read, change and give; spareRoleID one they delete; deletedRoleID one they restore.
+	roleID, spareRoleID, deletedRoleID                 string
 	requestToken                                       string
 	approveRequestID, rejectRequestID, cancelRequestID string
 	kb                                                 contractKB
@@ -225,18 +227,15 @@ func newContractFixture(t *testing.T) contractFixture {
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
-	fileRequest := func() string {
-		response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversationID, map[string]any{"priority": "high"}, requestToken, nil)
-		var accepted struct {
-			RequestID string `json:"request_id"`
-		}
-		decode(t, response, &accepted)
-		if accepted.RequestID == "" {
-			t.Fatalf("file agent request status=%d body=%s", response.Code, response.Body.String())
-		}
-		return accepted.RequestID
+	// Agent requests are gone; the two decision routes answer 410 to a workspace session.
+	approveRequestID, rejectRequestID, cancelRequestID := "00000000-0000-4000-8000-0000000000a1", "00000000-0000-4000-8000-0000000000a2", ""
+	// Roles: one to read, change and give, one nothing uses (deleted by the cases), one deleted (restored).
+	roleID := create(t, api, adminToken, "/api/v1/roles", map[string]any{"name": "Contract editors", "description": "Edits articles", "permissions": []string{"kb_articles:read", "kb_articles:update"}})
+	spareRoleID := create(t, api, adminToken, "/api/v1/roles", map[string]any{"name": "Contract spare", "permissions": []string{}})
+	deletedRoleID := create(t, api, adminToken, "/api/v1/roles", map[string]any{"name": "Contract old", "permissions": []string{"tags:read"}})
+	if response := request(t, api, http.MethodDelete, "/api/v1/roles/"+deletedRoleID, nil, adminToken, nil); response.Code != http.StatusNoContent {
+		t.Fatalf("delete a role: %d %s", response.Code, response.Body.String())
 	}
-	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
 	// A teammate writing and an agent token have the conversation open, so the presence answers and the
 	// activity poll carry viewers of both kinds.
 	for _, viewer := range []string{agentSession.Token, requestToken} {
@@ -293,7 +292,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		channelIDs["web_form"]).Scan(&intakeCardID); err != nil {
 		t.Fatal(err)
 	}
-	return contractFixture{intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -318,7 +317,8 @@ func seedMailImage(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin, co
 
 func createContractInvite(t *testing.T, api http.Handler, token, email, role string) (string, string) {
 	t.Helper()
-	response := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": email, "role_ceiling": role}, token, nil)
+	name := map[string]string{"agent": "Agent", "admin": "Admin"}[role]
+	response := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": email, "roles": []string{name}}, token, nil)
 	var created struct {
 		Invite struct {
 			ID string `json:"id"`

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { permissionsOf, rolesOf } from '../../../test-roles';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 // Settings → Conversation numbers (docs/user/inbox.md#conversation-numbers).
@@ -18,7 +19,7 @@ const { api, numberSeriesApi, InvalidRequestError } = mocks;
 const { NumbersRoute } = await import('./numbers-route');
 
 const me = (role: 'admin' | 'agent') => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta', name: 'Beta', timezone: 'Asia/Ho_Chi_Minh' }, timezone: 'Asia/Ho_Chi_Minh', plan: null,
 });
 const series = (name: string, format: string, next: number, change: Record<string, unknown> = {}) => ({ series: name, format, next, start: 1, start_year: null, updated_at: '2026-10-31T00:00:00Z', ...change });

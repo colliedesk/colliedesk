@@ -40,5 +40,5 @@ that way.
 2. [Tags](https://colliedesk.com/docs/tags.md)
 3. [Manage your team](https://colliedesk.com/docs/team.md)
 4. [AI providers and features](https://colliedesk.com/docs/ai.md)
-5. [Agent requests and reply drafts](https://colliedesk.com/docs/agent-requests.md)
+5. [Roles and permissions](https://colliedesk.com/docs/roles-and-permissions.md)
 6. [Agent skills](https://colliedesk.com/docs/agent-skills.md)

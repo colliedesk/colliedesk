@@ -12,6 +12,7 @@ import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
+import { can } from '../../../lib/can';
 import './targets.css';
 
 // Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
@@ -68,11 +69,12 @@ function Card({ id, title, lead, children }: { id: string; title: string; lead?:
 
 export function TargetsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'workspace:update');
   const billingShown = useBillingShown(isAdmin);
   const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: billingShown, importData: isAdmin, ai: true };
   const doc = useQuery({ queryKey: ['response-targets'], queryFn: responseTargetsApi.get });
-  const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list });
+  // Targets per channel need the channel list, which only a role that reads channels may ask for.
+  const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
   return <main className="settings-page panel">

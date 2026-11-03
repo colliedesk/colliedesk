@@ -27,12 +27,12 @@ func autofixSettingsGetSpec() Spec {
 		Title: "Show the Autofix settings",
 		Description: `Show Autofix's settings: whether the server's GitHub App is set up (available), the GitHub installations (status blocked_all_repositories: it reaches every ` +
 			`repository of its account and must be narrowed to selected ones on GitHub before a repository can be connected), the connected repositories (a paused one ` +
-			`takes no new fix and says why) and the coding agents (Claude, Copilot, Cursor; never a key, only who set Cursor's and when).` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/autofix/settings"},
-		Input:  noArguments,
-		Output: autofixSettingsSchema,
-		run:    autofixSettingsGet,
+			`takes no new fix and says why) and the coding agents (Claude, Copilot, Cursor; never a key, only who set Cursor's and when).`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/autofix/settings"},
+		Input:    noArguments,
+		Output:   autofixSettingsSchema,
+		run:      autofixSettingsGet,
 	}
 }
 
@@ -41,30 +41,42 @@ func githubRepositoriesListSpec() Spec {
 		Name:  "colliedesk_github_repositories_list",
 		Title: "List the repositories a GitHub installation reaches",
 		Description: `List, read from GitHub now, the repositories an installation of the Colliedesk GitHub App can reach, each with its visibility and the connected ` +
-			`repository it is (connected_repo_id, null when not connected). Only private ones can be connected with colliedesk_autofix_repo_connect.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:  []string{"GET /api/v1/autofix/github/installations/{id}/repositories"},
-		Input: `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
+			`repository it is (connected_repo_id, null when not connected). Only private ones can be connected with colliedesk_autofix_repo_connect.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/autofix/github/installations/{id}/repositories"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
 		Output: `{"type":"object","required":["repositories"],"properties":{"repositories":{"type":"array","items":{"type":"object","required":["github_repo_id","full_name","visibility","connected_repo_id"],"properties":{` +
 			`"github_repo_id":{"type":"integer"},"full_name":{"type":"string"},"visibility":{"type":"string","enum":["private","internal","public"]},"connected_repo_id":{"type":["string","null"]}}}}}}`,
 		run: githubRepositoriesList,
 	}
 }
 
-func githubConnectRequestSpec() Spec {
-	return approvalSpec("colliedesk_github_connect_request", "Ask a person to connect GitHub for Autofix",
-		`Ask an admin to install the Colliedesk GitHub App, so fixes can go to the workspace's private repositories. The person who approves gets GitHub's install page `+
-			`(they choose Only select repositories there) and installs it as themselves; you never see the address. Needs the server's GitHub App (available in colliedesk_autofix_settings_get).`,
-		[]string{"POST /api/v1/autofix/github/installations"}, noArguments, githubConnectRequest)
+func githubConnectSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_github_connect",
+		Title: "Connect GitHub for Autofix",
+		Description: `Start installing the Colliedesk GitHub App, so fixes can go to the workspace's private repositories. It answers GitHub's install address: only the person this token acts as ` +
+			`can finish it, in a browser signed in to Colliedesk, choosing Only select repositories and installing it as themselves. Needs the server's GitHub App (available in colliedesk_autofix_settings_get).`,
+		REST:   []string{"POST /api/v1/autofix/github/installations"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["url","next"],"properties":{"url":{"type":"string"},"next":{"type":"string"}}}`,
+		run:    githubConnect,
+	}
 }
 
-func githubDisconnectRequestSpec() Spec {
-	return approvalSpec("colliedesk_github_disconnect_request", "Ask a person to disconnect GitHub from Autofix",
-		`Ask an admin to uninstall the Colliedesk GitHub App from an account on GitHub and remove the installation (installation_id from colliedesk_autofix_settings_get). `+
-			`Its repositories stay, paused (removed_from_app), so their fixes still show where they went; fixes in progress on them are cancelled (repo_disconnected) and are sent again by hand. `+
-			`Connecting GitHub again brings the repositories back.`,
-		[]string{"DELETE /api/v1/autofix/github/installations/{id}"},
-		`{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{`+installationIDProperty+`}}`, githubDisconnectRequest)
+func githubDisconnectSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_github_disconnect",
+		Title: "Disconnect GitHub from Autofix",
+		Description: `Uninstall the Colliedesk GitHub App from an account on GitHub and remove the installation (installation_id from colliedesk_autofix_settings_get). ` +
+			`Its repositories stay, paused (removed_from_app), so their fixes still show where they went; fixes in progress on them are cancelled (repo_disconnected), which cannot be undone: send them again by hand. ` +
+			`Connecting GitHub again with colliedesk_github_connect brings the repositories back.`,
+		Destructive: true,
+		REST:        []string{"DELETE /api/v1/autofix/github/installations/{id}"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
+		Output:      autofixSettingsSchema,
+		run:         githubDisconnect,
+	}
 }
 
 func autofixRepoConnectSpec() Spec {
@@ -73,9 +85,9 @@ func autofixRepoConnectSpec() Spec {
 		Title: "Connect a repository for Autofix",
 		Description: `Connect a private repository of an active installation (github_repo_id from colliedesk_github_repositories_list), after Colliedesk reads its visibility from ` +
 			`GitHub now: a public or internal one is refused (repo_not_private), and so is any while the installation reaches every repository (installation_blocked). ` +
-			`default_connector is the coding agent a new fix on it suggests. Connecting one already connected resumes it. Undo with colliedesk_autofix_repo_disconnect.` + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST: []string{"POST /api/v1/autofix/repos"},
+			`default_connector is the coding agent a new fix on it suggests. Connecting one already connected resumes it. Undo with colliedesk_autofix_repo_disconnect.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/autofix/repos"},
 		Input: `{"type":"object","additionalProperties":false,"required":["installation_id","github_repo_id"],"properties":{` + installationIDProperty + `,` +
 			`"github_repo_id":{"type":"integer","minimum":1},"default_connector":{"type":"string",` + connectorEnum + `}}}`,
 		Output: `{"type":"object","required":["repo"],"properties":{"repo":` + autofixRepoSchema + `}}`,
@@ -87,9 +99,9 @@ func autofixRepoUpdateSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_autofix_repo_update",
 		Title:       "Change the coding agent a repository suggests",
-		Description: `Set the coding agent a new fix on a connected repository suggests (default_connector), or null for none.` + "\n\nTier: admin.",
-		Tier:        "admin", Idempotent: true,
-		REST: []string{"PATCH /api/v1/autofix/repos/{id}"},
+		Description: `Set the coding agent a new fix on a connected repository suggests (default_connector), or null for none.`,
+		Idempotent:  true,
+		REST:        []string{"PATCH /api/v1/autofix/repos/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["repo_id","default_connector"],"properties":{` + autofixRepoIDProperty + `,` +
 			`"default_connector":{"type":["string","null"],"enum":["claude_issue","copilot_issue","cursor_api",null]}}}`,
 		Output: `{"type":"object","required":["repo"],"properties":{"repo":` + autofixRepoSchema + `}}`,
@@ -102,31 +114,38 @@ func autofixRepoDisconnectSpec() Spec {
 		Name:  "colliedesk_autofix_repo_disconnect",
 		Title: "Disconnect a repository from Autofix",
 		Description: `Disconnect a repository: no new fix goes to it, and its fixes in progress are cancelled (repo_disconnected); its fixes keep the repository's name. ` +
-			`Connect it again with colliedesk_autofix_repo_connect; the cancelled fixes cannot be undone (send them again).` + "\n\nTier: admin.",
-		Tier: "admin", Destructive: true,
-		REST:   []string{"DELETE /api/v1/autofix/repos/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
-		Output: `{"type":"object","required":["disconnected"],"properties":{"disconnected":{"type":"boolean"}}}`,
-		run:    autofixRepoDisconnect,
+			`Connect it again with colliedesk_autofix_repo_connect; the cancelled fixes cannot be undone (send them again).`,
+		Destructive: true,
+		REST:        []string{"DELETE /api/v1/autofix/repos/{id}"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
+		Output:      `{"type":"object","required":["disconnected"],"properties":{"disconnected":{"type":"boolean"}}}`,
+		run:         autofixRepoDisconnect,
 	}
 }
 
-func autofixRepoNotesIncludeRequestSpec() Spec {
-	return approvalSpec("colliedesk_autofix_repo_notes_include_request", "Ask to let fixes on a repository carry internal notes",
-		`Ask an admin to let a fix on this repository carry the internal notes its sender picks (never a note an agent token wrote). Notes then leave the workspace for the coding agent, so a person always decides. Undo with colliedesk_autofix_repo_notes_exclude.`,
-		[]string{"PUT /api/v1/autofix/repos/{id}/include-notes"},
-		`{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{`+autofixRepoIDProperty+`}}`, autofixRepoNotesIncludeRequest)
+func autofixRepoNotesIncludeSetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_autofix_repo_notes_include_set",
+		Title: "Let fixes on a repository carry internal notes",
+		Description: `Let a fix on this repository carry the internal notes its sender picks (never a note an agent token wrote). Notes then leave the workspace for the coding agent: ` +
+			`say so to the person you work for first. Undo with colliedesk_autofix_repo_notes_exclude.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/autofix/repos/{id}/include-notes"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
+		Output:     `{"type":"object","required":["repo"],"properties":{"repo":` + autofixRepoSchema + `}}`,
+		run:        autofixRepoNotesIncludeSet,
+	}
 }
 
 func autofixRepoNotesExcludeSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_autofix_repo_notes_exclude",
 		Title:       "Stop internal notes going with fixes on a repository",
-		Description: `Stop internal notes going with fixes on a connected repository (the default). Fixes already sent keep what they carried.` + "\n\nTier: admin.",
-		Tier:        "admin", Idempotent: true,
-		REST:   []string{"DELETE /api/v1/autofix/repos/{id}/include-notes"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
-		Output: `{"type":"object","required":["repo"],"properties":{"repo":` + autofixRepoSchema + `}}`,
-		run:    autofixRepoNotesExclude,
+		Description: `Stop internal notes going with fixes on a connected repository (the default). Fixes already sent keep what they carried.`,
+		Idempotent:  true,
+		REST:        []string{"DELETE /api/v1/autofix/repos/{id}/include-notes"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
+		Output:      `{"type":"object","required":["repo"],"properties":{"repo":` + autofixRepoSchema + `}}`,
+		run:         autofixRepoNotesExclude,
 	}
 }

@@ -11,6 +11,28 @@ import (
 )
 
 // Agent is a person who signs in. Credentials, sessions and pairing links are never exported.
+// Role is a set of permissions people hold. Permissions is null for the built-in Admin role, which holds
+// every permission (also ones a later release adds); System is admin or agent for the two built-in roles.
+// A deleted role stays, with deleted_at, because tokens and invites of the past name it.
+type Role struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	System      *string    `json:"system"`
+	Permissions []string   `json:"permissions"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at"`
+}
+
+// AgentRole is one role a person holds.
+type AgentRole struct {
+	AgentID          string    `json:"agent_id"`
+	RoleID           string    `json:"role_id"`
+	GrantedByAgentID *string   `json:"granted_by_agent_id"`
+	GrantedAt        time.Time `json:"granted_at"`
+}
+
 type Agent struct {
 	ID               string    `json:"id"`
 	Email            string    `json:"email"`
@@ -794,29 +816,33 @@ type AIUsage struct {
 
 // AIDraft is one AI reply draft and how it ended. Its text and prompt are empty 90 days after it ended.
 type AIDraft struct {
-	ID                 string          `json:"id"`
-	ConversationID     string          `json:"conversation_id"`
-	TaskID             *string         `json:"task_id"`
-	RequestedByAgentID *string         `json:"requested_by_agent_id"`
-	RequestedByTokenID *string         `json:"requested_by_token_id"`
-	Prompt             string          `json:"prompt"`
-	Status             string          `json:"status"`
-	Text               *string         `json:"text"`
-	MissingInfo        *string         `json:"missing_info"`
-	Sources            json.RawMessage `json:"sources"`
-	Warnings           json.RawMessage `json:"warnings"`
-	Model              *string         `json:"model"`
-	Outcome            *string         `json:"outcome"`
-	Similarity         *float64        `json:"similarity"`
-	SentMessageID      *string         `json:"sent_message_id"`
-	Automatic          bool            `json:"automatic"`
-	AnswersMessageID   *string         `json:"answers_message_id"`
-	ReplyNeeded        *bool           `json:"reply_needed"`
-	CreatedAt          time.Time       `json:"created_at"`
-	ReadyAt            *time.Time      `json:"ready_at"`
-	DecidedAt          *time.Time      `json:"decided_at"`
-	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
-	TextClearedAt      *time.Time      `json:"text_cleared_at"`
+	ID                 string  `json:"id"`
+	ConversationID     string  `json:"conversation_id"`
+	TaskID             *string `json:"task_id"`
+	RequestedByAgentID *string `json:"requested_by_agent_id"`
+	RequestedByTokenID *string `json:"requested_by_token_id"`
+	Prompt             string  `json:"prompt"`
+	Status             string  `json:"status"`
+	// Source is ai for a draft AI generated, written for a reply an agent token wrote for a person to send.
+	Source string `json:"source"`
+	// CC is the list a written draft copies; null when it copies no one.
+	CC               []string        `json:"cc"`
+	Text             *string         `json:"text"`
+	MissingInfo      *string         `json:"missing_info"`
+	Sources          json.RawMessage `json:"sources"`
+	Warnings         json.RawMessage `json:"warnings"`
+	Model            *string         `json:"model"`
+	Outcome          *string         `json:"outcome"`
+	Similarity       *float64        `json:"similarity"`
+	SentMessageID    *string         `json:"sent_message_id"`
+	Automatic        bool            `json:"automatic"`
+	AnswersMessageID *string         `json:"answers_message_id"`
+	ReplyNeeded      *bool           `json:"reply_needed"`
+	CreatedAt        time.Time       `json:"created_at"`
+	ReadyAt          *time.Time      `json:"ready_at"`
+	DecidedAt        *time.Time      `json:"decided_at"`
+	DecidedByAgentID *string         `json:"decided_by_agent_id"`
+	TextClearedAt    *time.Time      `json:"text_cleared_at"`
 }
 
 // ResultsBaseline is the baseline the results page measures against (docs/user/results.md): the import
@@ -1149,6 +1175,8 @@ type Conversation struct {
 type Sink interface {
 	Workspace(Workspace) error
 	Agent(Agent) error
+	Role(Role) error
+	AgentRole(AgentRole) error
 	Contact(Contact) error
 	ContactMerge(ContactMerge) error
 	Tag(Tag) error

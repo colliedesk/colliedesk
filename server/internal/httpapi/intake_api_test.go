@@ -117,30 +117,23 @@ func TestAPersonDecidesAnIntakeCard(t *testing.T) {
 
 // A token below the tier of a decision files it for a person, with what the customer said; opening a
 // conversation needs the send tier, setting a card aside the draft tier.
-func TestATokenBelowTheTierFilesAnIntakeDecision(t *testing.T) {
+func TestATokenWithoutThePermissionCannotDecideAnIntakeCard(t *testing.T) {
 	d := newLevelDesk(t)
 	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
 	draft := issueToken(t, d.api, d.adminA, "intake draft", "draft").Token
 	read := issueToken(t, d.api, d.adminA, "intake read", "read").Token
-	if response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "ignore"}, read, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("read token ignores: %d %s", response.Code, response.Body.String())
-	}
-	filed := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "create"}, draft, nil)
-	var request202 struct {
-		RequestID string `json:"request_id"`
-		Summary   string `json:"summary"`
-	}
-	if filed.Code != http.StatusAccepted || json.Unmarshal(filed.Body.Bytes(), &request202) != nil || !strings.Contains(request202.Summary, card) || strings.Contains(request202.Summary, "stock") {
-		t.Fatalf("draft token creates: %d %s", filed.Code, filed.Body.String())
-	}
+	send := issueToken(t, d.api, d.adminA, "intake send", "send").Token
+	refused(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "ignore"}, read, "conversations:update")
+	// Opening a conversation may tell the customer: it needs messages:send.
+	refused(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "create"}, draft, "messages:send")
 	if got := queryString(t, d.pool, `SELECT state FROM intake_gatherings WHERE id=$1`, card); got != "review" {
-		t.Fatalf("a filed decision changed the card: %s", got)
+		t.Fatalf("a refused decision changed the card: %s", got)
 	}
-	if approved := approve(t, d.api, d.adminA, request202.RequestID, nil); approved.Code != http.StatusOK {
-		t.Fatalf("approve: %d %s", approved.Code, approved.Body.String())
+	if response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "create"}, send, nil); response.Code != http.StatusOK {
+		t.Fatalf("send token creates: %d %s", response.Code, response.Body.String())
 	}
 	if got := queryString(t, d.pool, `SELECT state||'/'||decided_by FROM intake_gatherings WHERE id=$1`, card); got != "created/agent" {
-		t.Fatalf("after approval: %s", got)
+		t.Fatalf("after the token's decision: %s", got)
 	}
 	second := d.heldCard(t, d.workspaceA, d.chatA, "u2", "meeting tomorrow")
 	if response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+second+"/decide", map[string]any{"action": "ignore"}, draft, nil); response.Code != http.StatusOK {

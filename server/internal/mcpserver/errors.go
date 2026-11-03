@@ -2,11 +2,10 @@ package mcpserver
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"maps"
-	"regexp"
 	"slices"
+	"strings"
 )
 
 // toolError is a failure the model should read and act on. It becomes an isError result, never a
@@ -14,8 +13,6 @@ import (
 type toolError struct{ message string }
 
 func (e *toolError) Error() string { return e.message }
-
-var scopeMessage = regexp.MustCompile("has the (read|draft|send|admin) scope; this action needs the (read|draft|send|admin) scope")
 
 // refuse turns a failure of a REST call into the message a model sees. notFound is the text for a
 // 404, which only the tool knows how to word.
@@ -28,14 +25,14 @@ func (c *call) refuse(err error, notFound string) error {
 		return err // nil, a *toolError or an unplanned failure: nothing to translate
 	}
 	switch {
-	case failure.Status == 403 && failure.Code == "files_need_approval":
-		return &toolError{filesNeedApproval}
-	case failure.Status == 403 && failure.Code == "scope_insufficient":
-		return &toolError{c.scopeText(failure)}
+	case failure.Status == 403 && (failure.Code == "permission_missing" || failure.Code == "role_exceeds_yours" || failure.Code == "member_outranks_you"):
+		return &toolError{permissionText(c, failure)}
+	case failure.Status == 403 && failure.Code == "person_only":
+		return &toolError{personOnlyText(failure)}
 	case failure.Status == 401:
-		return &toolError{"This Colliedesk token is no longer valid: it was revoked or it expired. Ask a workspace admin for a new agent token."}
+		return &toolError{"This Colliedesk token is no longer valid: it was revoked or it expired. Ask the person you work for to create a new one in Settings → External AI agents."}
 	case failure.Status == 402 && failure.Code == "workspace_locked":
-		return &toolError{"This workspace is locked: its trial ended and no plan is active. Only exporting the data works until an admin chooses a plan, so no inbox tool can read or change anything now."}
+		return &toolError{"This workspace is locked: its trial ended and no plan is active. Only exporting the data works until someone with billing:manage chooses a plan, so no inbox tool can read or change anything now."}
 	case failure.Status == 402:
 		return &toolError{"Colliedesk refused because of the plan: " + failure.Message}
 	case failure.Status == 403:
@@ -53,6 +50,8 @@ func (c *call) refuse(err error, notFound string) error {
 			text += " " + field + ": " + failure.Fields[field]
 		}
 		return &toolError{text}
+	case failure.Status == 503 && failure.Message != "":
+		return &toolError{"Colliedesk cannot do this right now: " + failure.Message}
 	case failure.Status == 429:
 		wait := ""
 		if failure.RetryAfter != "" {
@@ -63,13 +62,33 @@ func (c *call) refuse(err error, notFound string) error {
 	return failure
 }
 
-func (c *call) scopeText(failure *restError) string {
-	have, need := "your", c.spec.Tier
-	if found := scopeMessage.FindStringSubmatch(failure.Message); found != nil {
-		have, need = "`"+found[1]+"`", found[2]
+// permissionText keeps Colliedesk's own sentence (it names the permission and how to get it) and adds
+// what a model needs to act on it: the permissions by name, and whether the token or its person lacks them.
+func permissionText(c *call, failure *restError) string {
+	text := "Colliedesk refused this: " + failure.Message
+	if len(failure.MissingPermissions) > 0 {
+		text += " Missing: " + strings.Join(failure.MissingPermissions, ", ") + "."
 	}
-	return fmt.Sprintf("This token has the %s tier, but %s needs the `%s` tier or the permissions of its routes. Ask a workspace admin to create an agent token with the `%s` tier, "+
-		"or a custom token with those permissions (Settings, External AI agents), and connect again with it.", have, c.spec.Name, need, need)
+	switch failure.MissingFrom {
+	case "token":
+		text += " Your person holds it but this token was not given it: tell them, so they can make a token that includes it (Settings → External AI agents). Do not try the call again with this token."
+	case "person":
+		text += " The person you act for does not hold it either"
+		if len(failure.Ask) > 0 {
+			text += "; " + strings.Join(failure.Ask, ", ") + " can give them a role that includes it"
+		}
+		text += ". Tell them; do not try the call again until they have it."
+	}
+	return text
+}
+
+// personOnlyText says that only a person does this, and where in the web app.
+func personOnlyText(failure *restError) string {
+	text := "Colliedesk refused this: " + failure.Message
+	if failure.Where != "" {
+		text += " A person does it in the web app at " + failure.Where + "."
+	}
+	return text + " No agent token can do it; tell the person you work for."
 }
 
 // failureText is what the model reads when a tool failed. A tool that changed data before it failed

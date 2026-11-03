@@ -68,8 +68,9 @@ var seatPausedAllowed = map[string]bool{
 	"POST /api/v1/support/problem-reports": true,
 }
 
-// seatPausedAdminAllowed are the billing routes a paused admin keeps: the admin who holds the billing
-// account may be the one paused, and upgrading is a way out of the pause.
+// seatPausedAdminAllowed are the billing routes a paused person keeps when they hold the route's
+// permission: the person who holds the billing account may be the one paused, and upgrading is a way
+// out of the pause.
 var seatPausedAdminAllowed = map[string]bool{
 	"GET /api/v1/billing":           true,
 	"POST /api/v1/billing/portal":   true,
@@ -80,7 +81,7 @@ var seatPausedAdminAllowed = map[string]bool{
 // workspace's agent cap and the route is not on seatPausedAllowed.
 func (a *API) refuseIfSeatPaused(response http.ResponseWriter, route Route, who auth.Principal) bool {
 	key := route.Method + " " + route.Pattern
-	if !a.limits || !who.Access.SeatPaused || seatPausedAllowed[key] || (who.Agent.Role == "admin" && seatPausedAdminAllowed[key]) {
+	if !a.limits || !who.Access.SeatPaused || seatPausedAllowed[key] || (seatPausedAdminAllowed[key] && who.Can(routeAccess[key].Permission)) {
 		return false
 	}
 	paused := &domain.SeatPausedError{Plan: who.Access.Plan, Agents: domain.LimitsFor(who.Access.Plan).Agents}

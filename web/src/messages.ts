@@ -6,6 +6,10 @@ const listWords = (words: string[]) => (words.length < 2 ? words.join('') : `${w
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
+  contactArea: 'this contact',
+  closedScreen: (area: string) => `Your roles do not let you open ${area}.`,
+  closedScreenAsk: (permission: string) => `It needs the permission ${permission}. Ask someone who can change roles to give you a role that holds it.`,
+  closedScreenOpen: 'You can open:',
   // The count beside Inbox is of this page; with more pages it is the range shown, never a total.
   inboxShown: (first: number, last: number) => `Conversations ${first} to ${last} on this page`,
   // Contacts and starting a conversation: the strings the inbox shows; the rest is in contact-messages.ts.
@@ -105,6 +109,8 @@ export const messages = {
   setStatus: 'Set status',
   assignTo: 'Assign to',
   assignToMe: 'Me',
+  anotherTeammate: 'Another teammate',
+  messagesClosed: 'Your roles do not let you read the messages of a conversation (messages:read).',
   resolve: 'Resolve',
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
@@ -335,7 +341,7 @@ export const messages = {
   planAndBilling: 'Plan and billing',
   manageBilling: 'Manage billing',
   billingActionFailed: 'The billing action failed. Try again.',
-  roles: { admin: 'Admin', agent: 'Agent' },
+  roles: 'Roles',
   statuses: { open: 'Open', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
   // Most urgent first, the order of every list of priorities.
   priorities: { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' },
@@ -355,7 +361,8 @@ export const messages = {
   review: 'Review',
   reviewWaiting: (count: number) => `Review, ${count} waiting`,
   someone: 'someone',
-  replyDraftBy: (person: string, token: string) => `Reply draft by ${person} via ${token}`,
+  replyDraftBy: (person: string, token: string) => `Draft from ${token}, agent token of ${person}`,
+  replyDraftOf: (person: string) => `Draft from ${person}`,
   draftText: 'Draft text',
   sendDraft: 'Send',
   discardDraft: 'Discard',
@@ -365,6 +372,8 @@ export const messages = {
   fromAIDraft: 'from an AI draft',
   fromAIDraftEdited: 'from an AI draft, edited',
   fromAIDraftUnchanged: 'from an AI draft, sent as written',
+  draftedByToken: (token: string, person: string, outcome: 'sent_unchanged' | 'sent_edited' | null) =>
+    `Drafted by ${token}, agent token of ${person}${outcome === 'sent_unchanged' ? ', sent as written' : outcome === 'sent_edited' ? ', edited' : ''}`,
   aiDraftsOff: 'Off',
   aiDraftsOffName: 'Draft with AI (off)',
   aiDraftsOffAdmin: 'Reply drafts are off. Turn them on in Settings → Built-in AI.',

@@ -127,13 +127,12 @@ func importReport(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"report": report}, nil
 }
 
-func importUndoRequest(c *call, arguments map[string]any) (any, error) {
+func importUndo(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[importIDArgument](arguments)
 	if err != nil {
 		return nil, err
 	}
-	c.notFound = importNotFound
-	return ask(c, http.MethodPost, importPath(args.ID, "/undo"), nil)
+	return importAnswer(c, http.MethodPost, importPath(args.ID, "/undo"), nil)
 }
 
 func importPeopleList(c *call, arguments map[string]any) (any, error) {

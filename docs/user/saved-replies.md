@@ -54,7 +54,8 @@ Open **Settings → Saved replies**.
 
 Under each reply, a line says who made the latest change and when, for example
 `Edited by Ada via Claude triage`. "via" names the [agent token](sessions.md) an AI agent used;
-"(approved request)" means a person approved the change an agent asked for.
+"(approved request)" marks a change a person approved for an agent, from before agent requests were
+removed.
 
 ### History and restore
 
@@ -93,18 +94,15 @@ Rules:
 ## AI agents
 
 An AI agent connected through [MCP](mcp.md) or the API with an agent token can read, write and
-restore saved replies. What happens depends on the tier of its token:
+restore saved replies with the permissions its token holds. Each change happens at once and the
+version names the token; without the permission the call is refused and names it.
 
-| Token tier | Read, history, trash | Create, edit, delete, restore |
-|---|---|---|
-| `send` | Yes | Yes, at once. The version names the token |
-| `draft`, `read` | Yes | Proposed: Colliedesk files an [agent request](agent-requests.md) and nothing changes until a person approves it |
-
-On **Requests**, a proposed change shows the reply before and after: removed text marked `−`, added
-text marked `+`. Colliedesk keeps the reply as the agent saw it when it asked. If someone changed the
-reply since, the request says so and shows the reply as it is now; approving such an edit or delete
-fails without changing anything, and the agent must ask again. A proposed delete shows what would go
-to the trash. A proposed restore shows the version it brings back against the current text.
+| To | Needs |
+|---|---|
+| Read, history, trash | `saved_replies:read` |
+| Create | `saved_replies:create` |
+| Edit, restore a version | `saved_replies:update` |
+| Delete, restore from the trash | `saved_replies:delete` |
 
 ## API
 

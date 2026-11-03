@@ -48,6 +48,5 @@ func (a *API) updateAgentDisplayName(response http.ResponseWriter, request *http
 		writeStoreError(response, err)
 		return
 	}
-	agent.Role = identity.Agent.Role
 	writeJSON(response, http.StatusOK, agent)
 }

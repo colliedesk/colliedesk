@@ -180,12 +180,9 @@ func TestOperatorAndWorkspaceRequestsNeverCross(t *testing.T) {
 		RequestID string `json:"request_id"`
 	}
 	decode(t, request(t, e.api, http.MethodPatch, "/api/v1/operator/config", map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@example.com"}}, token, nil), &operatorRequestID)
-	// A read token of the workspace asks for a change: an agent request.
-	readToken := issueToken(t, e.api, e.workspace, "reader", "read").Token
-	var agentRequest struct {
-		RequestID string `json:"request_id"`
-	}
-	decode(t, request(t, e.api, http.MethodPost, "/api/v1/tags", map[string]any{"name": "crossing"}, readToken, nil), &agentRequest)
+	// Agent requests of a workspace are gone; an id of one (or anything that is not an operator request)
+	// is not found in the operator realm.
+	agentRequest := struct{ RequestID string }{RequestID: "00000000-0000-4000-8000-0000000000b1"}
 	decision := func(id, action string, realm bool, bearer string, credential *http.Cookie) int {
 		req := newRequest(t, http.MethodPost, "/api/v1/agent-requests/"+id+"/"+action, map[string]any{}, bearer, credential)
 		req.Header.Set("Origin", testOrigin)
@@ -198,7 +195,7 @@ func TestOperatorAndWorkspaceRequestsNeverCross(t *testing.T) {
 		for name, c := range map[string]struct {
 			got, want int
 		}{
-			"workspace admin on an operator request":   {decision(operatorRequestID.RequestID, action, false, e.workspace, nil), http.StatusNotFound},
+			"workspace admin on an operator request":   {decision(operatorRequestID.RequestID, action, false, e.workspace, nil), http.StatusGone},
 			"realm header with a workspace credential": {decision(operatorRequestID.RequestID, action, true, e.workspace, nil), http.StatusUnauthorized},
 			"operator token":                                    {decision(operatorRequestID.RequestID, action, true, token, nil), http.StatusForbidden},
 			"operator session on an agent request":              {decision(agentRequest.RequestID, action, true, "", cookie), http.StatusNotFound},
@@ -208,10 +205,6 @@ func TestOperatorAndWorkspaceRequestsNeverCross(t *testing.T) {
 				t.Errorf("%s %s: %d, want %d", action, name, c.got, c.want)
 			}
 		}
-	}
-	listed := request(t, e.api, http.MethodGet, "/api/v1/agent-requests", nil, e.workspace, nil)
-	if strings.Contains(listed.Body.String(), operatorRequestID.RequestID) {
-		t.Fatal("a workspace lists an operator request")
 	}
 	if operators := operatorRequest(t, e.api, http.MethodGet, "/api/v1/operator/requests", nil, cookie); strings.Contains(operators.Body.String(), agentRequest.RequestID) {
 		t.Fatal("the console lists an agent request")

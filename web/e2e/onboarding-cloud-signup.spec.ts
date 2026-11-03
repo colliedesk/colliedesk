@@ -42,8 +42,8 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
     data: { workspace_name: name, goal: 'leave_helpdesk', role: 'support_lead', source: 'ai_claude', attribution },
   });
   expect(created.status()).toBe(201);
-  const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; role: string } };
-  expect(body.agent).toMatchObject({ email, role: 'admin' });
+  const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; roles: { name: string; system: string | null }[] } };
+  expect(body.agent).toMatchObject({ email, roles: [{ name: 'Admin', system: 'admin' }] });
   expect(psql(`SELECT concat_ws('/', source, utm_source, utm_content) FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`, database).trim()).toBe('ai_claude/tiktok/post-07');
 
   // The session cookie from the sign-up opens the new workspace with its trial banner.

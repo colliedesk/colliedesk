@@ -40,18 +40,6 @@ func (e *env) storedFiles(w workspace) (rows int, objects int) {
 	return rows, objects
 }
 
-// wantNoRequests requires that no agent request was filed in the workspace.
-func (e *env) wantNoRequests(w workspace, label string) {
-	e.t.Helper()
-	var count int
-	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM agent_requests WHERE workspace_id=$1`, w.id).Scan(&count); err != nil {
-		e.t.Fatal(err)
-	}
-	if count != 0 {
-		e.t.Errorf("%s: %d agent requests filed, want none", label, count)
-	}
-}
-
 func (e *env) wantNoFilesStored(w workspace, label string) {
 	e.t.Helper()
 	if rows, objects := e.storedFiles(w); rows != 0 || objects != 0 {
@@ -75,14 +63,10 @@ func TestNoteAddAttachesFilesUnderTheDraftTier(t *testing.T) {
 	f := seedInbox(t, e)
 	steps := []byte("1. Open the tray\n2. Pull the paper")
 
-	// A read token's note is filed for approval, and files cannot wait for one: nothing is stored.
-	refused := e.fails(e.connect(f.w.read, ""), "colliedesk_note_add", map[string]any{"conversation_id": f.c1, "body": "See the file",
+	// A read token may not add a note: it is refused, and nothing is stored.
+	refusedWithoutPermission(t, e, f.w.read, "colliedesk_note_add", map[string]any{"conversation_id": f.c1, "body": "See the file",
 		"files": []any{inlineFile("steps.txt", steps)}})
-	if !strings.Contains(refused, "without files") {
-		t.Errorf("a read token's note with files: %q, want the way forward without files", refused)
-	}
 	e.wantNoFilesStored(f.w, "a read token's note")
-	e.wantNoRequests(f.w, "a read token's note with files")
 
 	draft := e.connect(f.w.draft, "")
 	if message := e.fails(draft, "colliedesk_note_add", map[string]any{"conversation_id": f.otherConvID, "body": "See the file",
@@ -132,7 +116,7 @@ func TestNoteAddAttachesFilesUnderTheDraftTier(t *testing.T) {
 	if names := attachedNames(t, out); strings.Join(names, ",") != "steps.txtX-Evil: 1,shot.png" {
 		t.Fatalf("note attachments = %v, want steps.txt and shot.png: %v", names, out)
 	}
-	if at(t, out, "message", "kind") != "note" || at(t, out, "message", "written_by_agent_token", "scope") != "draft" {
+	if at(t, out, "message", "kind") != "note" || at(t, out, "message", "written_by_agent_token", "label") != "test draft" {
 		t.Errorf("note = %v", out)
 	}
 	read := e.ok(e.connect(f.w.read, ""), "colliedesk_attachment_get", map[string]any{"attachment_id": at(t, out, "message", "attachments", 0, "id")})
@@ -164,18 +148,12 @@ func TestReplySendAttachesFilesAndNamesTheAIDraft(t *testing.T) {
 	ours := readyDraft(f.w, f.c2, text)
 	theirs := readyDraft(f.other, f.otherConvID, text)
 
-	// Below send a reply is filed for a person, and files cannot wait for one.
-	refused := e.fails(e.connect(f.w.draft, ""), "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": text, "seen_reply_number": 0,
+	// A token without messages:send is refused, with files or ai_draft_id alike, and nothing is stored.
+	refusedWithoutPermission(t, e, f.w.draft, "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": text, "seen_reply_number": 0,
 		"files": []any{inlineFile("invoice.pdf", invoice)}})
-	if !strings.Contains(refused, "without files") {
-		t.Errorf("a draft token's reply with files: %q", refused)
-	}
-	if message := e.fails(e.connect(f.w.draft, ""), "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": text, "seen_reply_number": 0,
-		"ai_draft_id": ours}); !strings.Contains(message, "without ai_draft_id") {
-		t.Errorf("a draft token's reply with ai_draft_id: %q", message)
-	}
+	refusedWithoutPermission(t, e, f.w.draft, "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": text, "seen_reply_number": 0,
+		"ai_draft_id": ours})
 	e.wantNoFilesStored(f.w, "a draft token's reply")
-	e.wantNoRequests(f.w, "a draft token's reply with files or ai_draft_id")
 	if kinds := messageKinds(t, e, f.w, f.c2); len(kinds) != 0 {
 		t.Fatalf("refused replies left messages: %v", kinds)
 	}
@@ -258,12 +236,9 @@ func TestConversationStartAttachesFiles(t *testing.T) {
 	files := []any{inlineFile("quote.pdf", quote)}
 	before := e.conversationCount(f.w)
 
-	// Below send the start is filed for a person, and files cannot wait for one.
-	if message := e.fails(e.connect(f.w.draft, ""), "colliedesk_conversation_start", map[string]any{"contact_id": grace, "subject": "Your quote",
-		"body": "Here it is.", "files": files}); !strings.Contains(message, "without files") {
-		t.Errorf("a draft token's start with files: %q", message)
-	}
-	e.wantNoRequests(f.w, "a draft token's start with files")
+	// A token without messages:send may not start one, with files or without.
+	refusedWithoutPermission(t, e, f.w.draft, "colliedesk_conversation_start", map[string]any{"contact_id": grace, "subject": "Your quote",
+		"body": "Here it is.", "files": files})
 	send := e.connect(f.w.send, "")
 	for label, args := range map[string]map[string]any{
 		"another workspace's customer": {"contact_id": other["contact_id"], "subject": "Your quote", "body": "Here it is.", "files": files},

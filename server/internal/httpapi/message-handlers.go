@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"mime"
 	"net/http"
@@ -58,9 +56,6 @@ func (a *API) messagesSentUnderKey(response http.ResponseWriter, request *http.R
 	return []domain.Message{message}, nil
 }
 
-// messageRoute is the route a message is posted on; a call that waits for approval names it.
-var messageRoute = Route{http.MethodPost, conversationRoutePrefix + "/messages", auth.PermissionConversationsWrite}
-
 func (a *API) createMessage(response http.ResponseWriter, request *http.Request) {
 	if mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err == nil && mediaType == "multipart/form-data" {
 		a.createMessageWithFiles(response, request)
@@ -70,7 +65,7 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		Kind string   `json:"kind"`
 		Body string   `json:"body"`
 		CC   []string `json:"cc"`
-		// Draft asks for a reply draft a person reviews, whatever the token's tier.
+		// Draft was a reply draft filed for approval; POST /reply-drafts writes one now.
 		Draft bool `json:"draft"`
 		// SeenReplyNumber is the latest reply the sender had seen when they started writing; a newer one
 		// refuses the reply (409 reply_conflict). Without it nothing is checked.
@@ -89,21 +84,24 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	identity := principal(request)
-	if input.Draft && (!identity.IsToken() || input.Kind != "outgoing") {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Only an agent token drafts a reply for a person to review; a note or a person's reply is written directly.")
+	if input.Draft {
+		writeError(response, http.StatusBadRequest, "invalid_request", "To leave a reply for a person to send, post it to /api/v1/conversations/{id}/reply-drafts.")
 		return
 	}
-	actor, allowed := messageActor(request.Context(), identity, input.Kind)
-	if input.AIDraftID != "" && (!allowed || input.Draft || input.Kind != "outgoing") {
-		// A reply that waits for approval is written by whoever approves it; it is not this AI draft sent.
-		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_id goes only with a reply sent directly, not with a note or a reply that waits for approval.")
+	actor, need := messageActor(identity, input.Kind)
+	if !identity.Can(need) {
+		hint := ""
+		if input.Kind == "outgoing" {
+			hint = "To leave the words for a person to send, post them to /api/v1/conversations/{id}/reply-drafts (colliedesk_reply_draft)."
+		}
+		a.writePermissionMissingHint(response, request, identity, hint, need)
+		return
+	}
+	if input.AIDraftID != "" && input.Kind != "outgoing" {
+		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_id goes only with a reply, not with a note.")
 		return
 	}
 	actor.AIDraftID = input.AIDraftID
-	if !allowed || input.Draft {
-		a.fileMessageRequest(response, request, identity, input.Kind, input.Body, input.CC)
-		return
-	}
 	// A conversation of another workspace is refused before anything about the Cc list is said.
 	if _, err := a.store.GetConversation(request.Context(), identity.Workspace.ID, request.PathValue("id")); err != nil {
 		writeStoreError(response, err)
@@ -170,83 +168,19 @@ func writeKeyReused(response http.ResponseWriter, err error) bool {
 	return true
 }
 
-// fileMessageRequest turns a message the token may not write into an agent request: a reply becomes a
-// reply draft a person edits, sends or discards; a note from a read token waits like any other action.
-// A reply draft names every recipient in its summary, and a token below send may copy only people who
-// are already on the conversation, so a draft cannot slip a new address past the person who sends it.
-func (a *API) fileMessageRequest(response http.ResponseWriter, request *http.Request, identity auth.Principal, kind, body string, cc []string) {
-	conversationID := request.PathValue("id")
-	call := map[string]any{"kind": kind, "body": body}
-	requestKind, summary := domain.AgentRequestAction, ""
-	if kind == "outgoing" {
-		requestKind = domain.AgentRequestReplyDraft
-		clean, refusal := a.cleanCC(request.Context(), identity.Workspace.ID, kind, cc)
-		if refusal != nil {
-			a.writeUploadError(response, refusal)
-			return
-		}
-		contact, known, err := a.store.ConversationParticipants(request.Context(), identity.Workspace.ID, conversationID)
-		if err != nil {
-			writeStoreError(response, err)
-			return
-		}
-		if !identity.Allows(auth.PermMessagesSend) {
-			for _, address := range clean {
-				if !known[address] {
-					writeError(response, http.StatusBadRequest, "invalid_request", address+" is not on this conversation. "+
-						"A draft from a token without messages:send may copy only the customer and people already copied; a person can add others when sending.")
-					return
-				}
-			}
-		}
-		if len(clean) > 0 {
-			call["cc"] = clean
-		}
-		summary = replySummary(contact, clean, body)
-	} else if len(cc) > 0 {
-		call["cc"] = cc
-	}
-	encoded, err := json.Marshal(call)
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	a.fileAgentRequest(response, request, messageRoute, identity, requestKind, encoded, summary)
-}
-
-// replySummary names every recipient before the text, so a copy is never hidden behind a long reply.
-func replySummary(contact string, cc []string, body string) string {
-	recipients := "to " + contact
-	if len(cc) > 0 {
-		recipients += ", cc " + strings.Join(cc, ", ")
-	}
-	return "Reply to the customer (" + recipients + "): " + strings.Join(strings.Fields(body), " ")
-}
-
-// messageActor returns who writes the message and whether the caller may write this kind now: a note
-// needs messages:note, an outgoing reply messages:send. What an agent token writes is marked with the token so
-// the timeline shows it as the token's work; a reply sent by approving a token's draft is marked with
-// that token and the request, and written by the approving person.
-func messageActor(ctx context.Context, identity auth.Principal, kind string) (store.Actor, bool) {
+// messageActor returns who writes the message and the permission this kind needs: a note needs
+// messages:note, an outgoing reply messages:send. What an agent token writes is marked with the token so
+// the timeline shows it as the token's work.
+func messageActor(identity auth.Principal, kind string) (store.Actor, string) {
 	need := auth.PermMessagesNote
 	if kind == "outgoing" {
 		need = auth.PermMessagesSend
-	}
-	if !identity.Allows(need) {
-		return store.Actor{}, false
 	}
 	actor := store.Actor{AgentID: identity.Agent.ID}
 	if identity.IsToken() {
 		actor.TokenID = identity.SessionID
 	}
-	if replay, ok := approvalOf(ctx); ok {
-		// A reply whose text the approver changed is theirs; it still names the request it came from.
-		actor.RequestID = replay.requestID
-		if !replay.textEdited {
-			actor.TokenID = replay.tokenID
-		}
-	}
-	return actor, true
+	return actor, need
 }
 
 // writeReplyConflict answers 409 reply_conflict, with the replies the sender had not seen and the

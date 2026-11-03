@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/media"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -259,7 +260,7 @@ func (a *API) cancelKBMediaUpload(response http.ResponseWriter, request *http.Re
 	// No wait for a part being written (a page that goes away cannot retry): that part finds the upload
 	// gone when it records itself and removes the file it wrote (dropCancelledParts).
 	// Someone else's upload is theirs to cancel, or an admin's.
-	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, who.Agent.ID, who.Agent.Role == "admin"); err != nil {
+	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, who.Agent.ID, who.Can(auth.PermKBMediaPurge)); err != nil {
 		writeKBUploadError(response, err)
 		return
 	}

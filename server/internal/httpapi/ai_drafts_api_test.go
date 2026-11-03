@@ -413,8 +413,8 @@ func TestAnAgentTokensDraftNeverReplacesItsPersonsDraft(t *testing.T) {
 	d.run(t)
 	token := issueToken(t, d.api, d.adminA, "Claude drafts", "draft").Token
 	read := issueToken(t, d.api, d.adminA, "Claude reader", "read").Token
-	// A read token asking for a draft files a request a person approves; nothing is queued.
-	accepted(t, d.api, http.MethodPost, "/api/v1/conversations/"+d.conversationA+"/ai-drafts", map[string]any{}, read)
+	// A read token asking for a draft is refused; nothing is queued.
+	refused(t, d.api, http.MethodPost, "/api/v1/conversations/"+d.conversationA+"/ai-drafts", map[string]any{}, read, "ai_assist:create")
 	theirs := d.ask(t, token, d.conversationA, "")
 	d.run(t)
 	if got := d.get(t, d.adminA, d.conversationA, mine.ID); got.Status != ai.DraftReady || got.Outcome != nil {

@@ -9,6 +9,7 @@ import { useBillingShown } from '../../billing/billing-shown';
 import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { numbersMessages as m } from './numbers-messages';
+import { can } from '../../../lib/can';
 import './numbers.css';
 
 // Settings → Conversation numbers: the workspace's number series, each with its code format and next
@@ -27,7 +28,7 @@ function fieldErrors(error: unknown): Record<string, string> {
 
 export function NumbersRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'workspace:update');
   const billingShown = useBillingShown(isAdmin);
   // A code's {yyyy} is the year where the workspace is, whatever the agent's own time zone.
   const timezone = me.data?.workspace.timezone ?? 'UTC';

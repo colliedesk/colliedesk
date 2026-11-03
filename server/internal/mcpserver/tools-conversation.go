@@ -19,9 +19,10 @@ type untrustedMessage struct {
 }
 
 // tokenOut names the agent token that wrote a message. The label is what an admin typed when creating it.
+// tokenOut is the agent token that wrote a message, and the team member it acts as.
 type tokenOut struct {
-	Label string `json:"label"`
-	Scope string `json:"scope"`
+	Label  string `json:"label"`
+	ActsAs string `json:"acts_as"`
 }
 
 type messageOut struct {
@@ -162,7 +163,7 @@ func tokenOf(message restMessage) *tokenOut {
 	if message.AgentToken == nil {
 		return nil
 	}
-	return &tokenOut{Label: message.AgentToken.Label, Scope: message.AgentToken.Scope}
+	return &tokenOut{Label: message.AgentToken.Label, ActsAs: message.AgentToken.AgentName}
 }
 
 // messageView renders one message; text from outside the team goes under untrusted_customer_content only.

@@ -36,7 +36,7 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
         <Avatar name={name} />
       </button>
       {open && <div className="account-popover" role="group" aria-label={messages.account}>
-        <p><strong>{name}</strong><span>{messages.roles[me.agent.role]}</span></p>
+        <p><strong>{name}</strong><span>{me.agent.roles.map((role) => role.name).join(", ")}</span></p>
         {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
         <button type="button" onClick={() => { setOpen(false); setReporting(true); }}>{messages.reportProblem}</button>
         <button type="button" disabled={signingOut} onClick={onSignOut}>{messages.signOut}</button>

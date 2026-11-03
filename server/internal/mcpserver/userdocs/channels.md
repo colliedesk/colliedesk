@@ -141,7 +141,7 @@ a page a customer sees. Email and web forms have no places. For AI agents and th
 The people who wrote in a channel's places (customers and the team, never the channel itself) are listed
 once each, with the place and time they last wrote and the name the channel last gave them, most recent
 first, at most 200: every member of a group, not only its last writer (to pick a team member, for one).
-`GET /api/v1/channels/{id}/senders`, MCP `colliedesk_channel_senders`; the read tier is enough.
+`GET /api/v1/channels/{id}/senders`, MCP `colliedesk_channel_senders`; `channels:read` is enough.
 
 ## Chat rules
 
@@ -235,8 +235,9 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   email; a channel whose processing is paused
   sends it once it resumes. A change of several conversations at once tells
   each customer a few seconds after it is saved; a conversation whose status changes again before then is
-  told only that later change. An AI agent's token below the send tier asks a person first when its change
-  would tell a customer: the request says what each channel would send. A conversation shows its last status
+  told only that later change. A change that would tell a customer needs `messages:send`, from a person or an AI
+  agent's token alike; without it the change is refused with what each channel would send, and
+  `notify: false` makes it quietly instead. A conversation shows its last status
   change and who made it (a team member, an AI agent's token, the customer, their reopen command, the
   channel closing it, an import), and which statuses would tell its customer.
 - `settings.auto_close_hours` (0 to 720, none by default) closes a conversation resolved after it was turned
@@ -305,16 +306,16 @@ and for AI, and the channels and scopes they come from), `GET /api/v1/intake/sta
 `colliedesk_intake_list`, `colliedesk_intake_get`, `colliedesk_intake_decide`, `colliedesk_intake_requeue`,
 `colliedesk_intake_summary`, `colliedesk_intake_stats` and `colliedesk_conversation_intake_get`. Reading
 cards needs `messages:read`, the summary and counts `conversations:read`;
-opening a conversation from one needs the send tier (the channel may tell the customer it was received),
-the other decisions the draft tier; below it, a decision becomes a [request a person
-approves](agent-requests.md). Through the API, send the same `Idempotency-Key` header on every retry of one
+opening a conversation from one needs `messages:send` (the channel may tell the customer it was received),
+the other decisions and requeue `conversations:update`; without it, the decision is refused and names
+the permission. Through the API, send the same `Idempotency-Key` header on every retry of one
 decision or requeue: a repeat answers what the first one got and decides nothing more.
 
 ## AI on a channel
 
 Each channel's **AI** tab sets what each AI feature does by itself on it (triage and drafts; intake
 comes on chat channels), apart from the workspace's default; see [AI per channel](ai.md#what-ai-does-by-itself-per-channel).
-Agents see the tab; only admins change it.
+Everyone with `ai_settings:read` sees the tab; changing it needs `ai_settings:update`.
 A change shows in the channel's history as "changed what AI triage does by itself".
 
 ## For AI agents and the API
@@ -325,9 +326,9 @@ removed channels too; each type says its `default_channel_id`), `GET/PATCH/DELET
 has is a 409 with `conflict` naming that channel), `/api/v1/channels/{id}/held/replay` and `/held/discard`, and
 `/api/v1/channels/events`, and through the MCP tools `colliedesk_channels_*` ([MCP](mcp.md)). A channel's
 rules (`settings`: how messages join conversations, default tags and priority, rate limits) can be
-changed there only, not in Settings yet. Removing a channel and discarding held messages are, for an
-agent token, requests a person approves. Storing a channel's secret needs an admin token; a lower
-token is refused, so a secret never waits in a request. A channel's AI levels are `GET /api/v1/channels/{id}/ai` and
+changed there only, not in Settings yet. Changing a channel and discarding held messages need `channels:update`; storing
+a channel's secret and removing a channel need `channels:manage_credentials`. An AI agent's token with
+the permission does it at once; a token created before roles cannot, and needs a new token. A channel's AI levels are `GET /api/v1/channels/{id}/ai` and
 `PUT /api/v1/channels/{id}/ai/{slot}` (`colliedesk_channel_ai_get`, `colliedesk_channel_ai_set`).
 
 ## Pause processing

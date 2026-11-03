@@ -29,8 +29,8 @@ func messagesMoveSpec() Spec {
 			`and web forms have none). Replies and notes of the team stay. A resolved or closed conversation that gets them reopens. close_source with ` +
 			`to.conversation_id moves every customer message and closes the conversation as no new request, refused once someone replied, wrote a note or ` +
 			`assigned it. Nothing is sent to the customer. warnings: other_contact (replies go to the target's customer, not the writer), other_channel. ` +
-			`Undo with colliedesk_message_move_undo.` + "\n\nTier: draft.",
-		Tier: "draft",
+			`Undo with colliedesk_message_move_undo.`,
+
 		REST: []string{"POST /api/v1/conversations/{id}/messages/move"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","message_ids","to"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `,"description":"The conversation the messages are in."},` +
@@ -39,22 +39,20 @@ func messagesMoveSpec() Spec {
 			`"conversation_id":{"type":"string",` + uuid + `},"new":{"type":"object","additionalProperties":false,"required":["subject"],` +
 			`"properties":{"subject":{"type":"string","minLength":1,"maxLength":200}}},"queue":{"type":"boolean","enum":[true]}}},` +
 			`"close_source":{"type":"boolean"}}}`,
-		Output: `{"type":"object","properties":{"move":` + messageMoveSchema + `,"warnings":{"type":"array","items":{"type":"string","enum":["other_contact","other_channel"]}},` +
-			`"agent_request":` + filedRequestSchema + `,"next":{"type":"string"}},"anyOf":[{"required":["move","warnings"]},{"required":["agent_request","next"]}]}`,
-		run: messagesMove,
+		Output: `{"type":"object","properties":{"move":` + messageMoveSchema + `,"warnings":{"type":"array","items":{"type":"string","enum":["other_contact","other_channel"]}}},"required":["move","warnings"]}`,
+		run:    messagesMove,
 	}
 }
 
 func messageMovesListSpec() Spec {
 	return Spec{
 		Name: "colliedesk_message_moves_list", Title: "List moves of messages",
-		Description: `List the newest 100 moves of customer messages out of or into a conversation, newest first, each with whether it can still be undone.` +
-			"\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/conversations/{id}/message-moves"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
-		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":` + messageMoveSchema + `}}}`,
-		run:    messageMovesList,
+		Description: `List the newest 100 moves of customer messages out of or into a conversation, newest first, each with whether it can still be undone.`,
+		ReadOnly:    true,
+		REST:        []string{"GET /api/v1/conversations/{id}/message-moves"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
+		Output:      `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":` + messageMoveSchema + `}}}`,
+		run:         messageMovesList,
 	}
 }
 
@@ -62,13 +60,12 @@ func messageMoveUndoSpec() Spec {
 	return Spec{
 		Name: "colliedesk_message_move_undo", Title: "Undo a move of messages",
 		Description: `Put the messages of a move back where they were, with the statuses it changed while nobody changed them since. Undoing it again changes ` +
-			`nothing. Only the newest move of a message is undone (move_superseded); a move to the intake queue whose card was decided since is not (move_decided).` +
-			"\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST:   []string{"POST /api/v1/message-moves/{id}/undo"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["move_id"],"properties":{"move_id":{"type":"string",` + uuid + `,"description":"From colliedesk_message_moves_list."}}}`,
-		Output: messageMoveSchema,
-		run:    messageMoveUndo,
+			`nothing. Only the newest move of a message is undone (move_superseded); a move to the intake queue whose card was decided since is not (move_decided).`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/message-moves/{id}/undo"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["move_id"],"properties":{"move_id":{"type":"string",` + uuid + `,"description":"From colliedesk_message_moves_list."}}}`,
+		Output:     messageMoveSchema,
+		run:        messageMoveUndo,
 	}
 }
 

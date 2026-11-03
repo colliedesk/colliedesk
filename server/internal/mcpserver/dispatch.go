@@ -32,6 +32,14 @@ type restError struct {
 	RetryAfter string
 	// Fields names what is wrong with each bad input of a 422, keyed by field.
 	Fields map[string]string
+	// MissingPermissions is what the caller lacks (permission_missing, role_exceeds_yours,
+	// member_outranks_you); MissingFrom says whether the token or its person lacks it, and Ask names
+	// who can change roles when the person lacks it.
+	MissingPermissions []string
+	MissingFrom        string
+	Ask                []string
+	// Where is the place in the web app where a person does what a token may not (person_only).
+	Where string
 }
 
 func (e *restError) Error() string {
@@ -39,8 +47,8 @@ func (e *restError) Error() string {
 }
 
 // do calls the REST API with the caller's bearer token and decodes a 2xx JSON answer into into
-// (which may be nil). A call Colliedesk filed as an agent request (202) comes back as an
-// *agentRequested; any other status as a *restError.
+// (which may be nil). An operator call Colliedesk filed as an operator request (202 with a
+// request_id) comes back as an *agentRequested; any other failure as a *restError.
 func (r *restClient) do(ctx context.Context, token, method, path string, query url.Values, body, into any) error {
 	target := path
 	if len(query) > 0 {
@@ -131,8 +139,8 @@ func (r *restClient) download(ctx context.Context, token, path string, limit int
 	return recorder.header, recorder.body.Bytes(), nil
 }
 
-// agentRequested is a call Colliedesk did not run: above the token's tier, or one that needs a
-// person's approval for every tier, it was filed as an agent request. Nothing changed yet.
+// agentRequested is an operator call Colliedesk did not run: it was filed as an operator request an
+// operator approves in the operator console. Nothing changed yet. Workspace calls are never filed.
 type agentRequested struct {
 	RequestID string `json:"request_id"`
 	Kind      string `json:"kind"`
@@ -147,13 +155,19 @@ func parseRESTError(r *recorder) *restError {
 	failure := &restError{Status: r.status, RetryAfter: r.header.Get("Retry-After")}
 	var envelope struct {
 		Error struct {
-			Code    string            `json:"code"`
-			Message string            `json:"message"`
-			Fields  map[string]string `json:"fields"`
+			Code               string            `json:"code"`
+			Message            string            `json:"message"`
+			Fields             map[string]string `json:"fields"`
+			MissingPermissions []string          `json:"missing_permissions"`
+			MissingFrom        string            `json:"missing_from"`
+			Ask                []string          `json:"ask"`
+			Where              string            `json:"where"`
 		} `json:"error"`
 	}
 	if json.Unmarshal(r.body.Bytes(), &envelope) == nil {
-		failure.Code, failure.Message, failure.Fields = envelope.Error.Code, strings.TrimSpace(envelope.Error.Message), envelope.Error.Fields
+		e := envelope.Error
+		failure.Code, failure.Message, failure.Fields = e.Code, strings.TrimSpace(e.Message), e.Fields
+		failure.MissingPermissions, failure.MissingFrom, failure.Ask, failure.Where = e.MissingPermissions, e.MissingFrom, e.Ask, e.Where
 	}
 	return failure
 }

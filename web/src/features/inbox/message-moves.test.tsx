@@ -30,7 +30,7 @@ const conversation = (overrides: Partial<Conversation> = {}): Conversation => ({
 });
 const message = (id: string, body: string, kind: Message['kind'] = 'incoming'): Message => ({
   id, conversation_id: HERE, author_agent_id: null, author_name: 'Mai Linh', agent_token: null, agent_request_id: null, ai_draft_id: null,
-  ai_draft_outcome: null, kind, body, body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-25T08:00:00Z', delivery: null,
+  ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, kind, body, body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-25T08:00:00Z', delivery: null,
   email: null, reply_number: null,
 });
 const timeline = [message(FIRST, 'The printer jams\non every page'), message(SECOND, 'Also the invoice is wrong'), message(REPLY, 'On it', 'outgoing')];

@@ -283,7 +283,7 @@ func TestSavedReplyHistoryAndTrashStayInTheirWorkspace(t *testing.T) {
 	owner := createSession(t, api, service, "Owner Desk", "admin@owner-replies.example.com")
 	rival := createSession(t, api, service, "Rival Desk", "admin@rival-replies.example.com")
 	rivalToken := issueToken(t, api, rival, "Rival writer", "send").Token
-	rivalDraft := issueToken(t, api, rival, "Rival drafter", "draft").Token
+	rivalDraft := issueToken(t, api, rival, "Rival drafter", "admin").Token
 	live := create(t, api, owner, "/api/v1/saved-replies", map[string]any{"title": "Owner live", "body": "Private"})
 	trashed := create(t, api, owner, "/api/v1/saved-replies", map[string]any{"title": "Owner trashed", "body": "Private too"})
 	request(t, api, http.MethodDelete, deletePath(t, api, owner, trashed), nil, owner, nil)

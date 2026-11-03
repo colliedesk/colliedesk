@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeAll, expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
 
 const row = (id: string, subject: string): Conversation => ({ latest_reply_number: 0,
@@ -12,7 +13,7 @@ const alpha = row('11111111-1111-4111-8111-111111111111', 'Alpha request');
 const beta = row('33333333-3333-4333-8333-333333333333', 'Beta request');
 const gamma = row('55555555-5555-4555-8555-555555555555', 'Gamma request');
 const me = '66666666-6666-4666-8666-666666666666';
-const colleague = { id: '77777777-7777-4777-8777-777777777777', email: 'sam@example.com', display_name: 'Sam Teammate', role: 'agent' as const, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
+const colleague = { id: '77777777-7777-4777-8777-777777777777', email: 'sam@example.com', display_name: 'Sam Teammate', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
 const departed = { ...colleague, id: '99999999-9999-4999-8999-999999999990', email: 'gone@example.com', display_name: 'Gone Teammate', deactivated_at: '2026-10-10T00:00:00Z' };
 const billing = { id: '88888888-8888-4888-8888-888888888888', name: 'Billing', color: '#64748b' };
 

@@ -14,7 +14,6 @@ type attributedMessage struct {
 	AgentToken *struct {
 		ID        string `json:"id"`
 		Label     string `json:"label"`
-		Scope     string `json:"scope"`
 		AgentName string `json:"agent_name"`
 	} `json:"agent_token"`
 }
@@ -57,10 +56,10 @@ func TestMessageNamesTheTokenThatWroteItAndNobodyElse(t *testing.T) {
 	got := listAttributed(t, api, admin, conversation)
 	note, reply, person := got["note by the draft token"], got["reply by the send token"], got["note by the person"]
 	if note.AgentToken == nil || note.AgentToken.ID != drafter.Session.ID || note.AgentToken.Label != "Claude Code" ||
-		note.AgentToken.Scope != "draft" || note.AgentToken.AgentName != "Ada Admin" {
+		note.AgentToken.AgentName != "Ada Admin" {
 		t.Fatalf("note by a draft token: agent_token=%+v, want id %s, label Claude Code, scope draft, agent Ada Admin", note.AgentToken, drafter.Session.ID)
 	}
-	if reply.AgentToken == nil || reply.AgentToken.ID != sender.Session.ID || reply.AgentToken.Label != "Support bot" || reply.AgentToken.Scope != "send" {
+	if reply.AgentToken == nil || reply.AgentToken.ID != sender.Session.ID || reply.AgentToken.Label != "Support bot" {
 		t.Fatalf("reply by a send token: agent_token=%+v, want id %s, label Support bot, scope send", reply.AgentToken, sender.Session.ID)
 	}
 	if person.AgentToken != nil {

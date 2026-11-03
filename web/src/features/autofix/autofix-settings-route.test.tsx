@@ -3,14 +3,15 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, expect, it, vi } from 'vitest';
 import { json, serve } from '../kb/kb.test.fixture';
 import { AutofixSettingsRoute } from './autofix-settings';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { settingsOf } from './autofix.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
 const me = {
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'admin', timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('admin'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, permissions: [], plan: null,
+  timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null,
 };
 
 // The repositories of an installation are read only while it exists: disconnecting GitHub must not ask GitHub's list

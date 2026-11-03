@@ -8,6 +8,9 @@ import type { Generated, JsonResponse } from '../../api/schemas';
 const nullableDate = z.string().datetime().nullable();
 export const aiDraftSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), status: z.enum(['queued', 'running', 'ready', 'failed', 'cancelled']),
+  // written: words someone (usually an agent token) left for a person to send, shown even while AI drafts are off.
+  source: z.enum(['ai', 'written']), cc: z.array(z.string()).nullable(),
+  written_by: z.object({ token_label: z.string().nullable(), agent_name: z.string() }).nullable(),
   error_code: z.string().nullable(), prompt: z.string(), text: z.string().nullable(), missing_info: z.string().nullable(),
   sources: z.array(aiSourceSchema),
   warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name', 'script', 'placeholder']), value: z.string() })),
@@ -29,5 +32,8 @@ export const aiDraftApi = {
   create: (conversation: string, prompt: string) => request(base(conversation), aiDraftSchema, { method: 'POST', body: JSON.stringify({ prompt }) }),
   discard: (conversation: string, id: string) => request(`${base(conversation)}/${id}/discard`, aiDraftSchema, { method: 'POST' }),
 };
+
+// The written drafts that wait on a conversation for a person to send.
+export const waitingWritten = (drafts: AIDraft[] | undefined) => (drafts ?? []).filter((draft) => draft.source === 'written' && draft.status === 'ready' && draft.outcome === null);
 
 export const writing = (draft: AIDraft | undefined) => draft?.status === 'queued' || draft?.status === 'running';

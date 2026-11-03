@@ -1,26 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AgentRequest } from '../../api/schemas';
+import type { AIDraft } from './ai-draft-api';
 import { messages } from '../../messages';
-import { replyCall } from '../requests/request-call';
 
 export interface DraftEdit { body?: string; cc?: string[] }
 
 interface ReplyDraftCardProps {
-  draft: AgentRequest;
+  // A written draft (source written): words an agent token, or a person, left for a person to send.
+  draft: AIDraft;
   // customer names who the reply goes to.
   customer?: string;
-  // onSend approves the draft: undefined sends it as the agent wrote it, an edit sends the changed
-  // text and only the copies the person kept.
+  // onSend sends the draft as a reply: undefined as it was written, an edit with the changed text and
+  // only the copies the person kept.
   onSend: (edit?: DraftEdit) => Promise<unknown>;
   onDiscard: () => Promise<unknown>;
 }
 
-// ReplyDraftCard is a reply an AI agent drafted on this conversation. Nothing reaches the customer
-// until a person presses Send; they may edit it first or discard it.
+// ReplyDraftCard is a reply an AI agent (or a person) left on this conversation. Nothing reaches the
+// customer until a person presses Send; they may edit it first or discard it.
 export function ReplyDraftCard({ draft, customer, onSend, onDiscard }: ReplyDraftCardProps) {
-  const call = replyCall(draft.body);
-  const original = call?.text ?? '';
-  const copies = call?.cc ?? [];
+  const original = draft.text ?? '';
+  const copies = draft.cc ?? [];
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(original);
   // The copies the person keeps; the draft's own list is the most it can be.
@@ -40,7 +39,9 @@ export function ReplyDraftCard({ draft, customer, onSend, onDiscard }: ReplyDraf
       setBusy(false);
     }
   };
-  const label = messages.replyDraftBy(draft.requested_by.agent_name ?? messages.someone, draft.requested_by.token_label);
+  const label = draft.written_by?.token_label
+    ? messages.replyDraftBy(draft.written_by.agent_name || messages.someone, draft.written_by.token_label)
+    : messages.replyDraftOf(draft.written_by?.agent_name || messages.someone);
   const edit: DraftEdit = {};
   if (editing && text !== original) edit.body = text;
   if (kept.length !== copies.length) edit.cc = kept;

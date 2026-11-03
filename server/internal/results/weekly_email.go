@@ -136,7 +136,11 @@ func (w *Worker) sendWorkspaceWeekly(ctx context.Context, candidate weeklyCandid
 		if err := tx.QueryRow(ctx, `SELECT name, slug FROM workspaces WHERE id=$1`, candidate.workspaceID).Scan(&content.workspace, &content.slug); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT lower(email) FROM agents WHERE workspace_id=$1 AND role='admin' AND deactivated_at IS NULL AND results_email ORDER BY 1`, candidate.workspaceID)
+		// The email goes to those who see every number (results:share) and asked for it.
+		rows, err := tx.Query(ctx, `SELECT lower(a.email) FROM agents a WHERE a.workspace_id=$1 AND a.deactivated_at IS NULL AND a.results_email
+			AND EXISTS (SELECT 1 FROM agent_roles hr JOIN roles hp ON hp.workspace_id=hr.workspace_id AND hp.id=hr.role_id
+				WHERE hr.workspace_id=a.workspace_id AND hr.agent_id=a.id AND hp.deleted_at IS NULL AND (hp.system='admin' OR 'results:share'=ANY(hp.permissions)))
+			ORDER BY 1`, candidate.workspaceID)
 		if err != nil {
 			return err
 		}

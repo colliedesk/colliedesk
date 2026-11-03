@@ -129,7 +129,6 @@ func (a *API) getHelpCenterTheme(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
-	raw := keepBody(request)
 	input, ok := decodeTheme(response, request)
 	if !ok {
 		return
@@ -144,7 +143,7 @@ func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Req
 		return
 	}
 	// The theme changes every public page, so settings access alone cannot publish it.
-	if a.askUnlessHeld(response, request, Route{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, raw, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
 	view, err := a.store.PutHelpCenterTheme(request.Context(), principal(request).Workspace.ID, cleaned)

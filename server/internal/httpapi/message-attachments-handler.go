@@ -99,11 +99,10 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		writeInvalidIdempotencyKey(response)
 		return
 	}
-	// A token that may not write any message is refused before a byte is stored; the kind, and so
-	// whether a reply needs messages:send, is known only once the fields are read. Files cannot wait
-	// days for a person's approval, so such a call is refused with the way forward.
-	if !identity.Allows(auth.PermMessagesNote) && !identity.Allows(auth.PermMessagesSend) {
-		writeFilesNeedApproval(response)
+	// A caller that may not write any message is refused before a byte is stored; the kind, and so
+	// whether a reply needs messages:send, is known only once the fields are read.
+	if !identity.Can(auth.PermMessagesNote) && !identity.Can(auth.PermMessagesSend) {
+		a.writePermissionMissing(response, request, identity, auth.PermMessagesNote)
 		return
 	}
 	// A conversation of another workspace is refused before a byte is stored.
@@ -137,9 +136,9 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writeUploadError(response, err)
 		return
 	}
-	actor, ok := messageActor(request.Context(), identity, fields.kind)
-	if !ok {
-		writeFilesNeedApproval(response)
+	actor, need := messageActor(identity, fields.kind)
+	if !identity.Can(need) {
+		a.writePermissionMissing(response, request, identity, need)
 		return
 	}
 	actor.AIDraftID = fields.aiDraft
@@ -204,7 +203,7 @@ func (a *API) startConversationWithFiles(response http.ResponseWriter, request *
 		a.writeUploadError(response, err)
 		return
 	}
-	actor, _ := messageActor(request.Context(), identity, "outgoing")
+	actor, _ := messageActor(identity, "outgoing")
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, "outgoing", fields.cc)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)

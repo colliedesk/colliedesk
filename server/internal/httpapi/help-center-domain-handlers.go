@@ -117,7 +117,6 @@ func (a *API) getHelpCenterDomain(response http.ResponseWriter, request *http.Re
 }
 
 func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
-	raw := keepBody(request)
 	var input struct {
 		Hostname *string `json:"hostname"`
 	}
@@ -132,7 +131,7 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 			"code": "validation_failed", "message": reason + " Nothing was saved.", "fields": map[string]string{"hostname": reason}})})
 		return
 	}
-	if a.askUnlessHeld(response, request, Route{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, raw, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
 	// Another workspace active on host does not refuse the claim: it waits, pending, and takes the host
@@ -156,7 +155,7 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 }
 
 func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
-	if a.askUnlessHeld(response, request, Route{http.MethodDelete, "/api/v1/help-center/domain", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
@@ -175,7 +174,7 @@ func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http
 // (checkAddress) and records the results. Every check makes the server ask DNS, so one workspace's
 // checks share the hourly bound of the email domain check, whether a person or an agent token asks.
 func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
-	if a.askUnlessHeld(response, request, Route{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
 	who := principal(request)

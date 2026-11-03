@@ -17,7 +17,9 @@ import { MediaDetail } from './media-detail';
 import { MediaCard, SelectCard, mediaName, usageLabel } from './media-grid';
 import { mediaMessages } from './media-messages';
 import { baseName, useUploadQueue } from './media-uploads';
+import { can } from '../../lib/can';
 import type { UploadQueue, UploadRow } from './media-uploads';
+import { useHolds } from '../../lib/permissions-context';
 
 export interface MediaSearch {
   q?: string;
@@ -60,14 +62,16 @@ export function MediaRoute({ view, search }: { view: MediaView; search: MediaSea
   };
   const file = useRef<HTMLInputElement>(null);
   const choose = () => file.current?.click();
-  const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections });
+  // The Articles tab's count needs the collections, which only a role that reads articles may ask for.
+  const holds = useHolds();
+  const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections, enabled: holds('kb_articles:read') });
   const articles = collections.data?.items.reduce((sum, item) => sum + item.article_count, 0);
   const heading = view === 'unused' ? mediaMessages.unusedHeading : view === 'trash' ? mediaMessages.trashHeading : mediaMessages.heading;
   return (
     <main className="kb-frame media-page" aria-labelledby="kb-heading" {...drop} data-dragging={dragging ? 'true' : undefined} data-view={view}>
       <KBHead current="media" heading={heading} articles={articles} actions={<>
         {view !== 'trash' && <a className="button-link" href={viewPath.trash} aria-label={mediaMessages.trash}><Icon name="trash" /><span className="kb-label">{mediaMessages.trash}</span></a>}
-        {view === 'library' && <button type="button" className="primary-action" title={mediaMessages.uploadHint} aria-describedby="media-upload-hint" onClick={choose}><Icon name="upload" />{mediaMessages.upload}</button>}
+        {view === 'library' && holds('kb_media:create') && <button type="button" className="primary-action" title={mediaMessages.uploadHint} aria-describedby="media-upload-hint" onClick={choose}><Icon name="upload" />{mediaMessages.upload}</button>}
         <span id="media-upload-hint" className="sr-only">{mediaMessages.uploadHint}</span>
         <input ref={file} type="file" hidden multiple accept={accept} onChange={(event) => { add(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
       </>} />
@@ -174,7 +178,7 @@ function InProgress({ queue, items, onChanged }: { queue: UploadQueue; items: KB
   const file = useRef<HTMLInputElement>(null);
   const resuming = useRef<KBMediaUpload | undefined>(undefined);
   const timezone = me.data?.timezone ?? 'UTC';
-  const admin = me.data?.agent.role === 'admin';
+  const admin = can(me.data, 'kb_media:purge');
   const cancel = async (upload: KBMediaUpload) => {
     setProblem(undefined);
     try {
@@ -588,7 +592,7 @@ function Trash({ onChanged }: { onChanged: () => void }) {
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const selection = useSelection(items);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const admin = me.data?.agent.role === 'admin';
+  const admin = can(me.data, 'kb_media:purge');
   const timezone = me.data?.timezone ?? 'UTC';
   const [now] = useState(() => new Date());
   const [deleting, setDeleting] = useState(false);

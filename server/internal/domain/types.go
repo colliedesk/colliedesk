@@ -14,25 +14,26 @@ type Workspace struct {
 }
 
 type Agent struct {
-	ID               string  `json:"id"`
-	Email            string  `json:"email"`
-	DisplayName      string  `json:"display_name"`
-	Role             string  `json:"role"`
-	TimezoneOverride *string `json:"timezone_override"`
+	ID               string    `json:"id"`
+	Email            string    `json:"email"`
+	DisplayName      string    `json:"display_name"`
+	Roles            []RoleRef `json:"roles"`
+	TimezoneOverride *string   `json:"timezone_override"`
 	// SetupGuideHidden is read with the session; GET /auth/me returns it beside the agent.
 	SetupGuideHidden bool `json:"-"`
 }
 
-// Session is a sign-in. Scope is the tier of an agent token (read, draft or send); nil for a
-// person's full session.
+// Session is a sign-in. Token is what an agent token was given, nil for a person's session; Role is
+// the one role a person's session is limited to, if any.
 type Session struct {
-	ID         string  `json:"id"`
-	AgentID    string  `json:"agent_id"`
-	AgentEmail string  `json:"agent_email"`
-	Label      string  `json:"label"`
-	Scope      *string `json:"scope"`
-	// Permissions is what an agent token holds: its tier's permissions, or a custom token's own list.
-	// Empty for a person's session.
+	ID         string      `json:"id"`
+	AgentID    string      `json:"agent_id"`
+	AgentEmail string      `json:"agent_email"`
+	AgentName  string      `json:"agent_name"`
+	Label      string      `json:"label"`
+	Token      *TokenGrant `json:"token"`
+	Role       *RoleRef    `json:"role"`
+	// Permissions is what an agent token was given (Token.Permissions); empty for a person's session.
 	Permissions []string `json:"permissions"`
 	// Current marks the session that made the request; it is not stored.
 	Current    bool       `json:"current"`
@@ -45,7 +46,7 @@ type Session struct {
 type Invite struct {
 	ID             string     `json:"id"`
 	Email          string     `json:"email"`
-	RoleCeiling    string     `json:"role_ceiling"`
+	Roles          []RoleRef  `json:"roles"`
 	CreatedByEmail string     `json:"created_by_email"`
 	CreatedAt      time.Time  `json:"created_at"`
 	ExpiresAt      time.Time  `json:"expires_at"`
@@ -313,7 +314,6 @@ type TimeEntry struct {
 type MessageToken struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
-	Scope     string `json:"scope"`
 	AgentName string `json:"agent_name"`
 }
 
@@ -328,12 +328,15 @@ type Message struct {
 	// AIDraftID names the AI draft a reply was written from.
 	AIDraftID *string `json:"ai_draft_id"`
 	// AIDraftOutcome says whether the reply was sent as the draft was written or edited.
-	AIDraftOutcome *string        `json:"ai_draft_outcome"`
-	Kind           string         `json:"kind"`
-	Body           string         `json:"body"`
-	BodyHTML       *string        `json:"body_html"`
-	Origin         *MessageOrigin `json:"origin"`
-	Attachments    []Attachment   `json:"attachments"`
+	AIDraftOutcome *string `json:"ai_draft_outcome"`
+	// AIDraftSource says who wrote that draft: ai, or written by an agent token (DraftedBy).
+	AIDraftSource *string        `json:"ai_draft_source"`
+	DraftedBy     *MessageToken  `json:"drafted_by"`
+	Kind          string         `json:"kind"`
+	Body          string         `json:"body"`
+	BodyHTML      *string        `json:"body_html"`
+	Origin        *MessageOrigin `json:"origin"`
+	Attachments   []Attachment   `json:"attachments"`
 	// CC lists the addresses an outgoing reply was copied to; empty for every other message.
 	CC        []string         `json:"cc"`
 	CreatedAt time.Time        `json:"created_at"`

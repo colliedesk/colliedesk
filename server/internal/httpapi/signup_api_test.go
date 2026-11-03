@@ -83,12 +83,12 @@ func TestSignupCreatesTrialWorkspaceWithAdmin(t *testing.T) {
 			Name string `json:"name"`
 		} `json:"workspace"`
 		Agent struct {
-			Email string `json:"email"`
-			Role  string `json:"role"`
+			Email string   `json:"email"`
+			Role  roleList `json:"roles"`
 		} `json:"agent"`
 	}
 	decode(t, response, &created)
-	if created.Workspace.Slug != "acme-support" || created.Workspace.Name != "Acme Support" || created.Agent.Email != "ada+x@example.com" || created.Agent.Role != "admin" {
+	if created.Workspace.Slug != "acme-support" || created.Workspace.Name != "Acme Support" || created.Agent.Email != "ada+x@example.com" || created.Agent.Role.main() != "admin" {
 		t.Fatalf("created=%+v, want workspace acme-support / Acme Support with admin ada+x@example.com", created)
 	}
 	cookie := sessionCookie(t, response)

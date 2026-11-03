@@ -5,6 +5,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -67,6 +68,9 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 }
 
 // sessionRoute reports whether a route is authenticated by an agent session (not public, not a channel secret).
+// replyDraftsPath is the route of a written draft.
+const replyDraftsPath = "/api/v1/conversations/{id}/reply-drafts"
+
 func sessionRoute(route httpapi.Route) bool {
 	return route.Permission != auth.PermissionPublic && route.Permission != auth.PermissionChannelInbound
 }
@@ -117,7 +121,9 @@ func TestAgentGetsContractValidForbiddenOnEveryAdminRoute(t *testing.T) {
 	fixture := newContractFixture(t)
 	cases := successfulContractCases(fixture)
 	for _, route := range httpapi.Routes() {
-		if !sessionRoute(route) || auth.HasPermission("agent", route.Permission) {
+		access := httpapi.RouteAccessTable()[route.Method+" "+route.Pattern]
+		if !sessionRoute(route) || (route.Permission != auth.PermissionOperator && (access.Anyone || access.Closed != "" || access.ByHandler ||
+			slices.Contains(auth.AgentRolePermissions(), access.Permission))) {
 			continue
 		}
 		item := cases[route.Method+" "+route.Pattern]
@@ -198,8 +204,8 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/auth/me":                                        {"/api/v1/auth/me", nil, admin, 200, ""},
 		"GET /api/v1/auth/sessions":                                  {"/api/v1/auth/sessions", nil, admin, 200, ""},
 		"DELETE /api/v1/auth/sessions/{id}":                          {"/api/v1/auth/sessions/" + f.sessionID, nil, admin, 204, ""},
-		"POST /api/v1/auth/tokens":                                   {"/api/v1/auth/tokens", map[string]any{"label": "Contract agent", "scope": "draft"}, admin, 201, ""},
-		"POST /api/v1/auth/invites":                                  {"/api/v1/auth/invites", map[string]any{"email": "new@contract.example.com", "role_ceiling": "agent"}, admin, 201, ""},
+		"POST /api/v1/auth/tokens":                                   {"/api/v1/auth/tokens", map[string]any{"label": "Contract agent", "permissions": []string{"messages:read", "messages:note", "conversations:read", "conversations:update", "messages:send"}}, admin, 201, ""},
+		"POST /api/v1/auth/invites":                                  {"/api/v1/auth/invites", map[string]any{"email": "new@contract.example.com", "roles": []string{"Agent"}}, admin, 201, ""},
 		"GET /api/v1/auth/invites":                                   {"/api/v1/auth/invites", nil, admin, 200, ""},
 		"DELETE /api/v1/auth/invites/{id}":                           {"/api/v1/auth/invites/" + f.inviteID, nil, admin, 204, ""},
 		"GET /api/v1/conversations":                                  {"/api/v1/conversations", nil, admin, 200, ""},
@@ -228,7 +234,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/agents/me/timezone":                           {"/api/v1/agents/me/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/sla-alerts":                         {"/api/v1/agents/me/sla-alerts", map[string]any{"email": true}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/display-name":                       {"/api/v1/agents/me/display-name", map[string]any{"display_name": "Contract Admin"}, admin, 200, ""},
-		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"role": "agent"}, admin, 200, ""},
+		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"display_name": "Contract Agent"}, admin, 200, ""},
 		"GET /api/v1/tags":                                           {"/api/v1/tags", nil, admin, 200, ""},
 		"GET /api/v1/results":                                        {"/api/v1/results", nil, admin, 200, ""},
 		"GET /api/v1/autofix/status":                                 {"/api/v1/autofix/status", nil, admin, 200, ""},
@@ -371,11 +377,17 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/{id}/email/test-message":           {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/test-message", token: admin, status: 201},
 		"POST /api/v1/channels/email/test-message":                {path: "/api/v1/channels/email/test-message", token: admin, status: 201},
 		"POST /api/v1/public/web-forms/{channel_id}":              {path: "/api/v1/public/web-forms/" + f.webFormChannelID, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:careers"}, status: 202},
-		"GET /api/v1/agent-requests":                              {path: "/api/v1/agent-requests?status=pending", token: admin, status: 200},
-		"GET /api/v1/agent-requests/{id}":                         {path: "/api/v1/agent-requests/" + f.approveRequestID, token: f.requestToken, status: 200},
-		"POST /api/v1/agent-requests/{id}/approve":                {path: "/api/v1/agent-requests/" + f.approveRequestID + "/approve", token: admin, status: 200},
-		"POST /api/v1/agent-requests/{id}/reject":                 {path: "/api/v1/agent-requests/" + f.rejectRequestID + "/reject", body: map[string]any{"reason": "Not now"}, token: admin, status: 200},
-		"POST /api/v1/agent-requests/{id}/cancel":                 {path: "/api/v1/agent-requests/" + f.cancelRequestID + "/cancel", token: f.requestToken, status: 200},
+		"POST /api/v1/agent-requests/{id}/approve":                {path: "/api/v1/agent-requests/" + f.approveRequestID + "/approve", token: admin, status: 410},
+		"POST /api/v1/agent-requests/{id}/reject":                 {path: "/api/v1/agent-requests/" + f.rejectRequestID + "/reject", body: map[string]any{"reason": "Not now"}, token: admin, status: 410},
+		"GET /api/v1/roles":                                       {path: "/api/v1/roles", token: admin, status: 200},
+		"POST /api/v1/roles":                                      {path: "/api/v1/roles", body: map[string]any{"name": "Contract new", "permissions": []string{"tags:read"}}, token: admin, status: 201},
+		"GET /api/v1/roles/{id}":                                  {path: "/api/v1/roles/" + f.roleID, token: admin, status: 200},
+		"PATCH /api/v1/roles/{id}":                                {path: "/api/v1/roles/" + f.roleID, body: map[string]any{"description": "Edits and reads articles"}, token: admin, status: 200},
+		"DELETE /api/v1/roles/{id}":                               {path: "/api/v1/roles/" + f.spareRoleID, token: admin, status: 204},
+		"POST /api/v1/roles/{id}/reset":                           {path: "/api/v1/roles/Agent/reset", token: admin, status: 200},
+		"POST /api/v1/roles/{id}/restore":                         {path: "/api/v1/roles/" + f.deletedRoleID + "/restore", token: admin, status: 200},
+		"PUT /api/v1/agents/{id}/roles":                           {path: "/api/v1/agents/" + f.agentID + "/roles", body: map[string]any{"roles": []string{"Agent", "Contract editors"}}, token: admin, status: 200},
+		"POST " + replyDraftsPath:                                 {path: "/api/v1/conversations/" + f.conversationID + "/reply-drafts", body: map[string]any{"text": "Thanks, it is fixed."}, token: admin, status: 201},
 		"POST /api/v1/support/problem-reports":                    {path: "/api/v1/support/problem-reports", body: goodReport(), token: admin, status: 201},
 		"GET /api/v1/imports":                                     {path: "/api/v1/imports", token: admin, status: 200},
 		"GET /api/v1/imports/{id}":                                {path: "/api/v1/imports/" + f.imports.previewed, token: admin, status: 200},

@@ -711,13 +711,18 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 .bulk-message:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; }
 /* One grid for the whole list, so role, state, last activity and the actions line up from row to row. */
-.team-list { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; column-gap: var(--space-4); }
+/* The person keeps room for their name; the role chips (and Change roles) share a column of their own and
+   wrap within it. The list measures its own width: beside the Settings headings it is far narrower than the
+   window, so below what five columns need it stacks each member, as on a phone. */
+.settings-body:has(> .team-list) { container-type: inline-size; }
+.team-list { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(10rem, 1fr) auto auto auto; column-gap: var(--space-4); }
 .team-list article { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; row-gap: var(--space-3); }
 .team-list .team-cells { display: contents; }
 .team-list .team-confirm { grid-template-columns: minmax(0, 1fr); justify-items: start; }
 .team-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .team-actions:empty { display: none; }
 .team-list .team-person { display: grid; min-width: 0; }
+.team-list .team-person strong { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 .team-list .team-person small { overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
 .team-confirm { display: grid; grid-column: 1 / -1; gap: var(--space-2); border-left: 2px solid var(--danger); padding-left: var(--space-3); }
 .team-confirm label { display: flex; align-items: center; gap: var(--space-2); }
@@ -729,6 +734,13 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 44rem) {
   .team-list { display: block; }
   .team-list article { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
+  .team-actions { justify-content: flex-start; }
+}
+@container (max-width: 46rem) {
+  .team-list { display: block; }
+  /* Name, roles and actions take a line each; whether active and when last active share one. */
+  .team-list article { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); row-gap: var(--space-2); }
+  .team-list article > :not(.team-cells), .team-list .team-person, .team-list .team-role { grid-column: 1 / -1; }
   .team-actions { justify-content: flex-start; }
 }
 
@@ -985,11 +997,11 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
-.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button, .roles-page a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-@media (pointer: coarse), (max-width: 30rem) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button, .roles-page a.button { min-height: var(--touch); } }
 .empty-copy .button-row { justify-content: center; margin-top: var(--space-3); }
-.import-page a.button.primary-action, .agent-tokens a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
+.import-page a.button.primary-action, .agent-tokens a.button.primary-action, .roles-page a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
 /* On a phone the actions of the import stay at the bottom of the screen, whatever the table above
    them holds: nothing to scroll to before starting, stopping or confirming. */
 @media (max-width: 40rem) {
@@ -1078,3 +1090,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .target-met { color: var(--ok); }
 .target-quiet { color: var(--text-3); }
 .targets-foot { margin: var(--space-2) 0 0; color: var(--text-3); font-size: var(--fs-label); }
+/* A page the session's roles may not open: why, and the areas it can open instead. */
+.closed-screen .button-row a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+@media (pointer: coarse), (max-width: 30rem) { .closed-screen .button-row a.button { min-height: var(--touch); } }

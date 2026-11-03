@@ -38,7 +38,7 @@ func TestProblemReportToolFilesAConversationInTheSupportDesk(t *testing.T) {
 	id := items[0].(map[string]any)["id"].(string)
 	_, thread := e.rest(http.MethodGet, "/api/v1/conversations/"+id+"/messages", nil, support.admin)
 	body := stringify(thread)
-	for _, want := range []string{"Replies fail to send from the agent.", "feedc0de1234", "agent token (read)", reference, "Report Tool Desk"} {
+	for _, want := range []string{"Replies fail to send from the agent.", "feedc0de1234", "agent token (custom)", reference, "Report Tool Desk"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("support message lacks %q: %s", want, body)
 		}
