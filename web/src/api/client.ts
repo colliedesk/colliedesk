@@ -178,17 +178,49 @@ function noteFailure(path: string, init: RequestInit | undefined, response: Resp
 // never answers it with a 403. undefined until the session is known; null when there is none to go by.
 let held: ReadonlySet<string> | null | undefined;
 let waiting: Array<() => void> = [];
+// The permissions the session had when it was last known, kept across page loads: until the session
+// answers, a read they allowed goes out at once, with the session request, instead of a round trip later.
+// Only a read they did not allow (or none known) waits; a stale list costs at most one refused read.
+const rememberedKey = 'colliedesk:permissions';
+let remembered: ReadonlySet<string> | null = readRemembered();
+
+function readRemembered(): ReadonlySet<string> | null {
+  try {
+    const stored = globalThis.localStorage?.getItem(rememberedKey);
+    const list: unknown = stored ? JSON.parse(stored) : null;
+    return Array.isArray(list) ? new Set(list.filter((name): name is string => typeof name === 'string')) : null;
+  } catch {
+    return null;
+  }
+}
+
+function remember(list: readonly string[] | null) {
+  remembered = list ? new Set(list) : null;
+  try {
+    if (list) globalThis.localStorage?.setItem(rememberedKey, JSON.stringify(list));
+    else globalThis.localStorage?.removeItem(rememberedKey);
+  } catch { /* storage refused (private mode, quota): the reads wait for the session instead */ }
+}
 const routeMatchers = routePermissions.map(([route, permission]) => [new RegExp(`^${route.replace(/\{[^}]+\}/g, '[^/]+')}$`), permission] as const);
 
 // knowPermissions records the session's permissions; null means there is no session to go by.
 export function knowPermissions(list: readonly string[] | null) {
   held = list ? new Set(list) : null;
+  remember(list);
+  for (const go of waiting.splice(0)) go();
+}
+
+// forgetPermissionsKeepingMemory drops the known session but keeps the remembered permissions, as a new
+// page load starts (tests).
+export function forgetPermissionsKeepingMemory() {
+  held = undefined;
   for (const go of waiting.splice(0)) go();
 }
 
 // forgetPermissions drops what is known of the session, as when it signs out (and between tests).
 export function forgetPermissions() {
   held = undefined;
+  remember(null);
   for (const go of waiting.splice(0)) go();
 }
 
@@ -214,7 +246,7 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   // Only a read is skipped: a change goes to the server, which decides it and says why. A known session is
   // checked at once, so a read goes out in the same tick as before.
   const permission = (init?.method ?? 'GET').toUpperCase() === 'GET' ? permissionOf(path) : undefined;
-  if (permission) refuseUnheld(held === undefined ? await sessionPermissions() : held, permission);
+  if (permission && !(held === undefined && remembered?.has(permission))) refuseUnheld(held === undefined ? await sessionPermissions() : held, permission);
   const parsed = await send(path, schema, init);
   if (path === '/api/v1/auth/me') knowPermissions((parsed as { permissions?: string[] }).permissions ?? null);
   return parsed;

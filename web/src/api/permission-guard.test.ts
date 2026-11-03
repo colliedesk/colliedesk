@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { api, forgetPermissions, PermissionError } from './client';
+import { api, forgetPermissions, forgetPermissionsKeepingMemory, PermissionError } from './client';
 import { permissionsOf, rolesOf } from '../test-roles';
 
 const fetchMock = vi.fn();
@@ -49,4 +49,35 @@ test('a change is never skipped: the server decides it and says why', async () =
   await api.me();
   await api.createTag('x', 'key-1').catch(() => undefined);
   expect(paths()).toContain('/api/v1/tags');
+});
+
+// A page load knows the permissions the session had last time: a read they allowed leaves with the session
+// request instead of a round trip after it; a read they did not allow still waits for the session.
+test('a read the remembered permissions allow is sent before the session answers', async () => {
+  fetchMock.mockImplementation(async (path: string) => (path === '/api/v1/auth/me' ? answer(me(['conversations:read'])) : answer({ items: [] })));
+  await api.me();
+  forgetPermissionsKeepingMemory();
+  let release!: () => void;
+  const meAnswered = new Promise<void>((resolve) => { release = resolve; });
+  fetchMock.mockReset().mockImplementation(async (path: string) => {
+    if (path === '/api/v1/auth/me') { await meAnswered; return answer(me(['conversations:read'])); }
+    return answer({ items: [] });
+  });
+  const session = api.me();
+  const conversations = api.conversations('status=open').catch((error: unknown) => error);
+  const tags = api.tags().catch((error: unknown) => error);
+  await vi.waitFor(() => expect(paths().some((path) => path.startsWith('/api/v1/conversations'))).toBe(true));
+  expect(paths()).not.toContain('/api/v1/tags');
+  release();
+  await session;
+  await conversations;
+  expect(await tags).toBeInstanceOf(PermissionError);
+  expect(paths()).not.toContain('/api/v1/tags');
+});
+
+test('signing out forgets the remembered permissions', async () => {
+  fetchMock.mockImplementation(async (path: string) => (path === '/api/v1/auth/me' ? answer(me(['conversations:read'])) : answer({ items: [] })));
+  await api.me();
+  forgetPermissions();
+  expect(localStorage.getItem('colliedesk:permissions')).toBeNull();
 });
