@@ -33,6 +33,10 @@ An admin, in this order:
 
 ## Connect an OA
 
+Zalo is used in Vietnam, so **Connect Zalo OA** and **Settings → Channels → Zalo OA** show when you open
+Colliedesk from a Vietnamese address (an address block APNIC delegates to Vietnam), from this machine or a
+private network, or once your workspace has a Zalo OA. Abroad, a workspace without one does not see them.
+
 An admin opens **Settings → Channels → Add channel → Connect Zalo OA** and fills in:
 
 1. **OA ID** and **App ID**: the numbers Zalo for Developers shows for the Official Account and the app it

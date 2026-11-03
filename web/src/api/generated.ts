@@ -8330,7 +8330,7 @@ export interface components {
         };
         ChannelTypeInfo: {
             type: components["schemas"]["ChannelType"];
-            /** @description Whether a channel of the type can be added now. */
+            /** @description Whether the type is offered to add now. Zalo OA is offered only to a person whose address is in Vietnam (blocks APNIC delegates to Vietnam), or whose address says nothing of where they are (this machine, a private network), or to a workspace that has a Zalo OA already; adding one stays possible. */
             available: boolean;
             /** @description How many live channels of the type the workspace has. */
             count: number;
