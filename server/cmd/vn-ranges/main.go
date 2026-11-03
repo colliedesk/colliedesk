@@ -75,25 +75,46 @@ func vietnamese(input io.Reader) ([]netip.Prefix, error) {
 			(fields[6] != "allocated" && fields[6] != "assigned") {
 			continue
 		}
-		start, err := netip.ParseAddr(fields[3])
+		block, err := delegation(fields[2], fields[3], fields[4])
 		if err != nil {
 			return nil, fmt.Errorf("line %q: %w", scanner.Text(), err)
 		}
-		size, err := strconv.ParseUint(fields[4], 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("line %q: %w", scanner.Text(), err)
-		}
-		switch fields[2] {
-		case "ipv4":
-			prefixes = append(prefixes, ipv4Prefixes(start, size)...)
-		case "ipv6":
-			prefixes = append(prefixes, netip.PrefixFrom(start, int(size)).Masked())
-		}
+		prefixes = append(prefixes, block...)
 	}
 	return prefixes, scanner.Err()
 }
 
-// ipv4Prefixes covers count addresses from start with the fewest prefixes.
+// delegation turns one line's family, start address and size into prefixes, refusing a size that does
+// not fit the family: an IPv4 count that runs past 255.255.255.255, an IPv6 length above 128.
+func delegation(family, address, size string) ([]netip.Prefix, error) {
+	start, err := netip.ParseAddr(address)
+	if err != nil {
+		return nil, err
+	}
+	if start.Is4() != (family == "ipv4") {
+		return nil, fmt.Errorf("%s is not an %s address", start, family)
+	}
+	if family == "ipv4" {
+		count, err := strconv.ParseUint(size, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		bytes := start.As4()
+		first := uint64(bytes[0])<<24 | uint64(bytes[1])<<16 | uint64(bytes[2])<<8 | uint64(bytes[3])
+		if count == 0 || count > 1<<32-first {
+			return nil, fmt.Errorf("%d addresses from %s do not fit IPv4", count, start)
+		}
+		return ipv4Prefixes(start, count), nil
+	}
+	length, err := strconv.ParseUint(size, 10, 8)
+	if err != nil || int(length) > start.BitLen() {
+		return nil, fmt.Errorf("%q is not an IPv6 prefix length", size)
+	}
+	return []netip.Prefix{netip.PrefixFrom(start, int(length)).Masked()}, nil
+}
+
+// ipv4Prefixes covers count addresses from start with the fewest prefixes; the caller keeps
+// start+count within IPv4.
 func ipv4Prefixes(start netip.Addr, count uint64) []netip.Prefix {
 	bytes := start.As4()
 	next := uint64(bytes[0])<<24 | uint64(bytes[1])<<16 | uint64(bytes[2])<<8 | uint64(bytes[3])
