@@ -382,6 +382,9 @@ type Definition struct {
 	// ActivationEvent is the product event a channel of the type records when it is connected or moved
 	// to another account (its summary changed); empty records none.
 	ActivationEvent string
+	// VietnamOnly offers the type to add only to a person in Vietnam (by their address), or to a
+	// workspace that has a channel of it already: its service is used in Vietnam alone (Zalo).
+	VietnamOnly bool
 	// WhenOff is OffHold or OffRefuse.
 	WhenOff  string
 	Defaults Settings

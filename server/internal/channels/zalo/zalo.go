@@ -101,7 +101,7 @@ func New(config Config) *Adapter {
 
 func (a *Adapter) Definition() channels.Definition {
 	return channels.Definition{Type: Type, Identified: true, Name: "Zalo OA", Guide: "zalo.md",
-		Capabilities: []string{"threads", "attachments_in", "attachments_out"}, ReplyTo: IdentityUser, WhenOff: channels.OffHold,
+		Capabilities: []string{"threads", "attachments_in", "attachments_out"}, ReplyTo: IdentityUser, WhenOff: channels.OffHold, VietnamOnly: true,
 		Scopes: []string{ScopeDirect, ScopeGroup}, IntakeScopes: []string{ScopeGroup}, SharedScopes: []string{ScopeGroup},
 		FileLimits: channels.FileLimits{PerFile: 25 << 20, PerEvent: 50 << 20},
 		Defaults: channels.Settings{JoinPolicy: channels.JoinPolicy{Kind: channels.JoinWithinDays, Days: 7},

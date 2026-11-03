@@ -225,7 +225,8 @@ export const microsoftSettingsSchema = z.object({
 export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'connectGmail', 200>>;
 // How many live channels each type has: the inbox says which mailbox a reply leaves from once there are two.
 // The whole list and its schemas load with Settings, not with the inbox.
-export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })) });
+// available: false when the type is not offered to this person (Zalo OA outside Vietnam); Settings leaves it out then.
+export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number(), available: z.boolean() })) });
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),

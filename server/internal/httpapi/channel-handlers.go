@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/colliedesk/colliedesk/server/internal/vnaddr"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -223,11 +225,21 @@ func (a *API) listChannels(response http.ResponseWriter, request *http.Request) 
 			defaults[public.Channel.Type] = &id
 		}
 	}
+	inVietnam := a.mayBeInVietnam(request)
 	types := []typeBody{}
 	for _, definition := range a.store.Channels().Definitions() {
-		types = append(types, typeBody{Type: definition.Type, Available: true, Count: counts[definition.Type], DefaultChannelID: defaults[definition.Type]})
+		available := !definition.VietnamOnly || inVietnam || counts[definition.Type] > 0
+		types = append(types, typeBody{Type: definition.Type, Available: available, Count: counts[definition.Type], DefaultChannelID: defaults[definition.Type]})
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "types": types})
+}
+
+// mayBeInVietnam is false only when the person's address is public and outside Vietnam: an address
+// that says nothing of where they are (this machine, a private network, a proxy not in
+// TRUSTED_PROXIES) leaves every type offered.
+func (a *API) mayBeInVietnam(request *http.Request) bool {
+	address, err := netip.ParseAddr(clientIP(request, a.config.TrustedProxies))
+	return err != nil || !vnaddr.Located(address) || vnaddr.Contains(address)
 }
 
 func (a *API) getChannel(response http.ResponseWriter, request *http.Request) {
