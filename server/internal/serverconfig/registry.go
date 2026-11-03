@@ -60,7 +60,7 @@ var keys = []Key{
 	{Name: "ai.server.models", Env: "AI_SERVER_MODELS", Group: GroupAI, Import: "ai-server"},
 	{Name: "ai.server.label", Env: "AI_SERVER_LABEL", Default: "Server provider", Group: GroupAI, Import: "ai-server"},
 	{Name: "ai.server.prices", Env: "AI_SERVER_PRICES", Group: GroupAI, Import: "ai-server"},
-	{Name: "ai.server.monthly_allowance", Env: "AI_SERVER_MONTHLY_ALLOWANCE", Group: GroupAI, Import: "ai-server"},
+	{Name: "ai.server.monthly_credits", Env: "AI_SERVER_MONTHLY_CREDITS", Group: GroupAI, Import: "ai-server"},
 
 	{Name: "smtp.host", Env: "SMTP_HOST", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardReenterSecret}, Reenter: "smtp.password"},
 	{Name: "smtp.port", Env: "SMTP_PORT", Default: "587", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardReenterSecret}, Reenter: "smtp.password"},
@@ -169,7 +169,7 @@ var Bootstrap = []string{"DATABASE_URL", "DATABASE_REQUEST_URL", "APP_ORIGIN", "
 var TelemetryOffEnvs = []string{"DISABLE_TELEMETRY", "DO_NOT_TRACK"}
 
 // DeadEnvs are variables no release reads; a leftover one is harmless and the doctor says so.
-var DeadEnvs = []string{"APP_SECRET"}
+var DeadEnvs = []string{"APP_SECRET", "AI_SERVER_MONTHLY_ALLOWANCE"}
 
 // Keys returns every key, in the order of the console.
 func Keys() []Key { return slices.Clone(keys) }

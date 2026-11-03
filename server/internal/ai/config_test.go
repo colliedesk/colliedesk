@@ -77,3 +77,38 @@ func TestCachePricesLeftOutAreSharesOfTheInputPrice(t *testing.T) {
 		}
 	}
 }
+
+// The server's provider is bounded in credits: one reply draft or one triage suggestion is one credit.
+// A workspace gets its credits each month, and a trial its own number for the whole trial.
+func TestMonthlyCreditsFromEnv(t *testing.T) {
+	base := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5"}
+	with := func(credits string) map[string]string {
+		values := map[string]string{"AI_SERVER_MONTHLY_CREDITS": credits}
+		for key, value := range base {
+			values[key] = value
+		}
+		return values
+	}
+	for value, want := range map[string]ai.Allowance{
+		"1000":                      {PerWorkspace: 1000},
+		"1000,trial=500":            {PerWorkspace: 1000, Trial: 500},
+		"workspace=1000, trial=500": {PerWorkspace: 1000, Trial: 500},
+	} {
+		server, err := ai.ServerProviderFromEnv(getenv(with(value)))
+		if err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+		if server.Allowance == nil || *server.Allowance != want {
+			t.Fatalf("%q = %+v, want %+v", value, server.Allowance, want)
+		}
+	}
+	// Credits need no prices: no model is priced here.
+	if server, err := ai.ServerProviderFromEnv(getenv(base)); err != nil || server.Allowance != nil {
+		t.Fatalf("without credits: %+v %v, want no limit", server, err)
+	}
+	for _, value := range []string{"ten", "1000.5", "-1", "agent=3,trial=2", "1000,trial=x"} {
+		if _, err := ai.ServerProviderFromEnv(getenv(with(value))); err == nil || !strings.Contains(err.Error(), "ai.server.monthly_credits") {
+			t.Fatalf("%q: %v, want an error naming ai.server.monthly_credits", value, err)
+		}
+	}
+}

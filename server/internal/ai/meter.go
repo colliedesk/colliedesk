@@ -49,44 +49,71 @@ type Call struct {
 	Automatic bool
 }
 
-// ErrAllowanceReached means the server's provider spent this month's allowance of the workspace:
-// nothing was sent. A workspace key is never limited this way.
-var ErrAllowanceReached = errors.New("this month's included AI is used up")
+// ErrAllowanceReached means the workspace used its credits on the server's provider: nothing was sent.
+// A workspace key is never limited this way.
+var ErrAllowanceReached = errors.New("this month's AI credits are used up")
 
-// ErrAllowanceHeld means the call would fit once the calls still running finish and give back what
-// they hold: the task waits a moment instead of failing.
-var ErrAllowanceHeld = errors.New("the included AI left is held by calls still running")
+// ErrAllowanceHeld means the call would fit once the calls still running finish: a call that fails gives
+// its credit back. The task waits a moment instead of failing.
+var ErrAllowanceHeld = errors.New("the AI credits left are held by calls still running")
 
-// monthStart is the first instant of the UTC calendar month of at: allowances reset then.
+// monthStart is the first instant of the UTC calendar month of at: credits start again then.
 func monthStart(at time.Time) time.Time {
 	at = at.UTC()
 	return time.Date(at.Year(), at.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
-// allowanceLeft is the month's allowance minus what the server's provider spent for the workspace and
-// what the calls still running hold (their most possible cost), in micro-dollars, and the allowance;
-// ok is false when the server sets none.
-func (s *Service) allowanceLeft(ctx context.Context, tx pgx.Tx, workspaceID string) (left, limit int64, ok bool, err error) {
+// credits are a workspace's credits on the server's provider: how many it gets (limit), how many results
+// used one (used) and how many of those are calls still running (held), counted from from until resets.
+type credits struct {
+	limit, used, held int64
+	from, resets      time.Time
+}
+
+// creditSQL counts results: a task's calls (retries, intake's fallback model) are one result, a call
+// without a task is one, and a failed call is none. The help center's chat and provider checks use no
+// credit.
+const creditSQL = `SELECT count(DISTINCT k), count(DISTINCT k) FILTER (WHERE status='ok') FROM (
+		SELECT COALESCE(task_id::text,id::text) AS k, status FROM ai_usage
+		WHERE workspace_id=$1 AND billed_to='server' AND feature NOT IN ('chat','check') AND status IN ('ok','started') AND started_at>=$2 %s) u`
+
+// credits reads the workspace's credits now: those of the UTC month, or of the whole trial when the
+// server gives a trial its own number. ok is false when the server sets none.
+func (s *Service) credits(ctx context.Context, tx pgx.Tx, workspaceID string) (c credits, ok bool, err error) {
 	server := s.config.Server
 	if server == nil || server.Allowance == nil {
-		return 0, 0, false, nil
+		return credits{}, false, nil
 	}
 	var access domain.Access
 	if s.config.PlanLimits {
 		if access, err = store.WorkspaceAccess(ctx, tx, workspaceID, s.now()); err != nil {
-			return 0, 0, false, err
+			return credits{}, false, err
 		}
 	}
-	var agents int
-	var used int64
-	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
-			(SELECT COALESCE(sum(CASE WHEN status='started' THEN COALESCE(reserved_micro_usd,0) ELSE COALESCE(cost_micro_usd,0) END),0)
-				FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND started_at>=$2)`,
-		workspaceID, monthStart(s.now())).Scan(&agents, &used); err != nil {
-		return 0, 0, false, err
+	month := monthStart(s.now())
+	c = credits{limit: server.Allowance.For(access), from: month, resets: month.AddDate(0, 1, 0)}
+	if server.Allowance.Trial > 0 && access.Plan == domain.PlanTrial {
+		c.from, c.resets = access.TrialEndsAt.Add(-domain.TrialLength), access.TrialEndsAt
 	}
-	limit = server.Allowance.For(access, agents)
-	return limit - used, limit, true, nil
+	var finished int64
+	if err := tx.QueryRow(ctx, fmt.Sprintf(creditSQL, ""), workspaceID, c.from).Scan(&c.used, &finished); err != nil {
+		return credits{}, false, err
+	}
+	c.held = c.used - finished
+	return c, true, nil
+}
+
+// creditCounted says whether the task already used its credit: its next call (a retry, intake's
+// fallback model) uses no other.
+func (s *Service) creditCounted(ctx context.Context, tx pgx.Tx, workspaceID, taskID string, from time.Time) (bool, error) {
+	if taskID == "" {
+		return false, nil
+	}
+	var results, finished int64
+	if err := tx.QueryRow(ctx, fmt.Sprintf(creditSQL, "AND task_id=$3"), workspaceID, from, taskID).Scan(&results, &finished); err != nil {
+		return false, err
+	}
+	return results > 0, nil
 }
 
 type usageHop struct {
@@ -164,29 +191,28 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 				return err
 			}
 			reserved = hold
-		} else if call.BilledTo == BilledToServer && s.config.Server != nil {
-			// Checked and held in one step per workspace: calls that start together each see what the
-			// others hold, so together they never pass the allowance by more than their estimates miss.
+		} else if call.BilledTo == BilledToServer && s.config.Server != nil && call.Feature != FeatureCheck {
+			// Checked and held in one step per workspace: a running call holds its credit, so calls that
+			// start together each see the others and together never pass the credits.
 			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-allowance:"+call.WorkspaceID); err != nil {
 				return err
 			}
-			hold := estimateMicroUSD(s.config.Server.Prices, model, tokens[0], tokens[1])
-			left, _, limited, err := s.allowanceLeft(ctx, tx, call.WorkspaceID)
+			c, limited, err := s.credits(ctx, tx, call.WorkspaceID)
 			if err != nil {
 				return err
 			}
-			if limited && (left <= 0 || hold > left) {
-				var held int64
-				if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND status='started'`,
-					call.WorkspaceID).Scan(&held); err != nil {
+			if limited && c.used >= c.limit {
+				counted, err := s.creditCounted(ctx, tx, call.WorkspaceID, call.TaskID, c.from)
+				if err != nil {
 					return err
 				}
-				if held > 0 && hold <= left+held {
-					return ErrAllowanceHeld
+				if !counted {
+					if c.held > 0 && c.used-c.held < c.limit {
+						return ErrAllowanceHeld
+					}
+					return ErrAllowanceReached
 				}
-				return ErrAllowanceReached
 			}
-			reserved = &hold
 		}
 		return tx.QueryRow(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,status,actor_agent_id,actor_token_id,
 				task_id,automatic,started_at,reserved_micro_usd)
@@ -280,26 +306,8 @@ func nullable(value string) any {
 // A typical reply draft: the conversation, a few articles and excerpts in, a short reply out.
 const typicalDraftInput, typicalDraftOutput = 6000, 500
 
-func (s *Service) allowanceView(ctx context.Context, tx pgx.Tx, workspaceID string, left, limit int64, resets time.Time) (*AllowanceView, error) {
-	view := &AllowanceView{LimitMicroUSD: limit, UsedMicroUSD: limit - left, ResetsAt: resets}
-	var average *float64
-	if err := tx.QueryRow(ctx, `SELECT avg(cost_micro_usd)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='draft' AND billed_to='server'
-		AND cost_micro_usd>0 AND started_at>=$2`, workspaceID, s.now().Add(-30*24*time.Hour)).Scan(&average); err != nil {
-		return nil, err
-	}
-	if average == nil && s.config.Server != nil {
-		if models := s.config.Server.ModelsFor(SlotDraft); len(models) > 0 {
-			if price, ok := s.config.Server.Prices[models[0]]; ok {
-				typical := typicalDraftInput*price.Input + typicalDraftOutput*price.Output
-				average = &typical
-			}
-		}
-	}
-	if average != nil && *average > 0 {
-		drafts := int64(float64(max(left, 0)) / *average)
-		view.DraftsLeft = &drafts
-	}
-	return view, nil
+func (c credits) view() *AllowanceView {
+	return &AllowanceView{LimitCredits: c.limit, UsedCredits: c.used, ResetsAt: c.resets}
 }
 
 func (s *Service) autoDraftEstimate(ctx context.Context, tx pgx.Tx, workspaceID string) (AutoDraftEstimate, error) {
@@ -326,22 +334,14 @@ func (s *Service) autoDraftEstimate(ctx context.Context, tx pgx.Tx, workspaceID 
 	return estimate, nil
 }
 
-// typicalCallFits refuses a call of that size that could not fit what is left of the allowance even
-// with nothing else running: what a person asks for is refused at once, not after it was queued.
-func (s *Service) typicalCallFits(ctx context.Context, tx pgx.Tx, workspaceID, model string, input, output int64) error {
-	if s.config.Server == nil {
-		return nil
-	}
-	left, _, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
+// creditsLeft refuses at once what could never run: no credit left even once the calls still running
+// give theirs back. What a person asks for is refused before it is queued.
+func (s *Service) creditsLeft(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	c, limited, err := s.credits(ctx, tx, workspaceID)
 	if err != nil || !limited {
 		return err
 	}
-	var held int64
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND status='started'`,
-		workspaceID).Scan(&held); err != nil {
-		return err
-	}
-	if left+held <= 0 || estimateMicroUSD(s.config.Server.Prices, model, input, output) > left+held {
+	if c.used-c.held >= c.limit {
 		return ErrAllowanceReached
 	}
 	return nil

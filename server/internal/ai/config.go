@@ -37,9 +37,9 @@ type ServerProvider struct {
 	// Models lists, per slot, the models a workspace may pick; the first is the default. A slot
 	// without models cannot use the server's provider.
 	Models map[string][]string
-	// Prices prices the models the provider bills (AI_SERVER_PRICES); Allowance, when set, bounds what
-	// it spends per workspace and month (AI_SERVER_MONTHLY_ALLOWANCE). Without an allowance there is
-	// no limit, as on a self-hosted server that pays its own provider.
+	// Prices prices the models the provider bills (AI_SERVER_PRICES); Allowance, when set, is how many
+	// credits a workspace gets (AI_SERVER_MONTHLY_CREDITS). Without an allowance there is no limit, as on
+	// a self-hosted server that pays its own provider.
 	Prices    map[string]Price
 	Allowance *Allowance
 }
@@ -63,13 +63,13 @@ func (s *ServerProvider) ModelsFor(slot string) []string {
 
 // ServerProviderFromEnv reads AI_SERVER_PROVIDER (anthropic or openai_compatible), AI_SERVER_API_KEY,
 // AI_SERVER_BASE_URL, AI_SERVER_MODELS (triage=model|other,draft=model), AI_SERVER_LABEL,
-// AI_SERVER_PRICES and AI_SERVER_MONTHLY_ALLOWANCE. None set means the server has no provider; an
-// allowance needs a price for every model it offers. A partial setting is an error that names what is missing or
+// AI_SERVER_PRICES and AI_SERVER_MONTHLY_CREDITS. None set means the server has no provider. A partial
+// setting is an error that names what is missing or
 // wrong (never a value), so a half-configured server never starts.
 func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) {
 	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
 	kind, key, base, models, label := value("AI_SERVER_PROVIDER"), value("AI_SERVER_API_KEY"), value("AI_SERVER_BASE_URL"), value("AI_SERVER_MODELS"), value("AI_SERVER_LABEL")
-	prices, allowance := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_ALLOWANCE")
+	prices, allowance := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_CREDITS")
 	if kind == "" && key == "" && base == "" && models == "" && label == "" && prices == "" && allowance == "" {
 		return nil, nil
 	}
@@ -117,19 +117,6 @@ func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) 
 	}
 	if server.Allowance, err = parseAllowance(allowance); err != nil {
 		return nil, err
-	}
-	if server.Allowance != nil {
-		var unpriced []string
-		for _, slot := range Slots {
-			for _, model := range server.Models[slot] {
-				if _, ok := server.Prices[model]; !ok && !slices.Contains(unpriced, model) {
-					unpriced = append(unpriced, model)
-				}
-			}
-		}
-		if len(unpriced) > 0 {
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE needs a price in AI_SERVER_PRICES for %s", strings.Join(unpriced, ", "))
-		}
 	}
 	return server, nil
 }

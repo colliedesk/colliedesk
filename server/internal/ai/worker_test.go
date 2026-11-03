@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -207,11 +208,10 @@ func TestAutomaticTasksStopAtTheDailyLimitAndPeopleDoNot(t *testing.T) {
 	}
 }
 
-func TestTheServerProviderStopsAtTheMonthlyAllowance(t *testing.T) {
+func TestTheServerProviderStopsAtTheMonthlyCredits(t *testing.T) {
 	server := *testServer
-	// 1,100 micro-dollars; each call holds about 1,006 while it runs and costs 70: two fit, one after
-	// the other, and the third no longer does.
-	server.Allowance = &ai.Allowance{PerWorkspace: 0.0011}
+	// Two credits: two drafts, one after the other, and the third no longer fits.
+	server.Allowance = &ai.Allowance{PerWorkspace: 2}
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
 	q.turnOn(t, q.a, ai.SlotDraft)
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
@@ -226,13 +226,13 @@ func TestTheServerProviderStopsAtTheMonthlyAllowance(t *testing.T) {
 		}
 	}
 	if state, code := q.state(t, third); state != ai.TaskFailed || code != ai.CodeAllowanceReached {
-		t.Fatalf("third = %s %s, want refused once what is left cannot pay for a call", state, code)
+		t.Fatalf("third = %s %s, want refused once the credits are used", state, code)
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1`, q.a.id); n > 2 {
 		t.Fatalf("%d calls went out; a refused task sends nothing", n)
 	}
 	settings, _ := q.service.Settings(context.Background(), q.a.id)
-	if settings.Allowance == nil || settings.Allowance.LimitMicroUSD != 1100 || settings.Allowance.UsedMicroUSD != 140 ||
+	if settings.Allowance == nil || settings.Allowance.LimitCredits != 2 || settings.Allowance.UsedCredits != 2 ||
 		!settings.Allowance.ResetsAt.Equal(time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("allowance = %+v", settings.Allowance)
 	}
@@ -426,11 +426,10 @@ func TestTheMinuteLimitLooksAcrossMidnight(t *testing.T) {
 	}
 }
 
-func TestCallsRunningAtOnceNeverPassTheAllowance(t *testing.T) {
+func TestCallsRunningAtOnceNeverPassTheCredits(t *testing.T) {
 	server := *testServer
-	// 1,500 micro-dollars. One test call reserves about 1,006 (100 tokens out at 10, a few in at 2) and
-	// costs 70: two that start together must not both fit.
-	server.Allowance = &ai.Allowance{PerWorkspace: 0.0015}
+	// One credit: a running call holds it, so two that start together must not both go out.
+	server.Allowance = &ai.Allowance{PerWorkspace: 1}
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
 	q.turnOn(t, q.a, ai.SlotDraft)
 	// Each call waits (up to a second) for the other to be in flight, so both run at once when both
@@ -462,7 +461,7 @@ func TestCallsRunningAtOnceNeverPassTheAllowance(t *testing.T) {
 		}
 	}
 	if done != 1 || waiting != 1 {
-		t.Fatalf("done %d, waiting %d: two calls started together both fit an allowance that holds one", done, waiting)
+		t.Fatalf("done %d, waiting %d: two calls started together both fit one credit", done, waiting)
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1`, q.a.id); n != 1 {
 		t.Fatalf("%d calls went out", n)
@@ -474,20 +473,24 @@ func TestCallsRunningAtOnceNeverPassTheAllowance(t *testing.T) {
 
 func TestATaskWaitingOnlyForAnotherCallsHoldRunsOnceItIsFree(t *testing.T) {
 	server := *testServer
-	server.Allowance = &ai.Allowance{PerWorkspace: 0.0015} // holds one call (about 1,006) at a time
+	server.Allowance = &ai.Allowance{PerWorkspace: 1} // a running call holds the only credit
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
 	q.turnOn(t, q.a, ai.SlotDraft)
 	var inFlight sync.WaitGroup
 	inFlight.Add(2)
+	var calls atomic.Int32
 	q.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
-		inFlight.Done()
-		waited := make(chan struct{})
-		go func() { inFlight.Wait(); close(waited) }()
-		// The call holds the allowance long enough for the other task to ask for it, even on a slow
-		// runner (300 ms let the other task start only after this call had finished).
-		select {
-		case <-waited:
-		case <-time.After(2 * time.Second):
+		if calls.Add(1) == 1 {
+			inFlight.Done()
+			waited := make(chan struct{})
+			go func() { inFlight.Wait(); close(waited) }()
+			// The call holds the credit long enough for the other task to ask for it, even on a slow
+			// runner, then fails: a failed call uses no credit and gives it back.
+			select {
+			case <-waited:
+			case <-time.After(2 * time.Second):
+			}
+			return aiprovider.Response{}, &aiprovider.Error{Code: aiprovider.ErrorBadRequest, Status: 400}
 		}
 		usage := aiprovider.Usage{Reported: true, InputTokens: 10, OutputTokens: 5}
 		return aiprovider.Response{Text: "ok", Stop: aiprovider.StopDone, Model: request.Model, Usage: usage, Hops: []aiprovider.Hop{{Model: request.Model, Usage: usage}}}, nil
@@ -495,28 +498,29 @@ func TestATaskWaitingOnlyForAnotherCallsHoldRunsOnceItIsFree(t *testing.T) {
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	second := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
-	// One ran; the other only waited on its hold: it is queued again, not failed for an allowance
-	// that still has room.
+	// One ran and failed; the other only waited on its hold: it is queued again, not failed for
+	// credits that were still there.
 	states := map[string]int{}
 	for _, id := range []string{first, second} {
 		state, _ := q.state(t, id)
 		states[state]++
 	}
-	if states[ai.TaskDone] != 1 || states[ai.TaskQueued] != 1 {
-		t.Fatalf("states after the first tick = %v, want one done and one queued", states)
+	if states[ai.TaskFailed] != 1 || states[ai.TaskQueued] != 1 {
+		t.Fatalf("states after the first tick = %v, want one failed and one queued", states)
 	}
 	q.clock.Add(10 * time.Second)
 	q.tick(t)
+	done := 0
 	for _, id := range []string{first, second} {
-		if state, code := q.state(t, id); state != ai.TaskDone {
-			t.Fatalf("task %s = %s %s once the other call finished", id, state, code)
+		if state, _ := q.state(t, id); state == ai.TaskDone {
+			done++
 		}
 	}
-	// Past what is left with nothing running, a task fails at once and says so.
-	third := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
-	if _, err := q.pool.Exec(context.Background(), `UPDATE ai_usage SET cost_micro_usd=1000 WHERE workspace_id=$1`, q.a.id); err != nil {
-		t.Fatal(err)
+	if done != 1 {
+		t.Fatalf("%d tasks done once the failed call gave its credit back, want 1", done)
 	}
+	// With the credit used and nothing running, a task fails at once and says so.
+	third := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
 	if state, code := q.state(t, third); state != ai.TaskFailed || code != ai.CodeAllowanceReached {
 		t.Fatalf("third = %s %s", state, code)
@@ -624,52 +628,120 @@ func TestUndecidedSuggestionsExpireAndOldReasonsAreErased(t *testing.T) {
 	}
 }
 
-func TestTheAllowanceSaysAboutHowManyDraftsAreLeft(t *testing.T) {
+// One credit is one result on the server's provider: a task's retries and fallbacks use one, a failed
+// call none, and the help center's chat, provider checks, the workspace's own key and last month none.
+func TestOneCreditIsOneResultOfTheServersProvider(t *testing.T) {
 	server := *testServer
-	server.Allowance = &ai.Allowance{PerWorkspace: 1} // 1,000,000 micro-dollars
+	server.Allowance = &ai.Allowance{PerWorkspace: 10}
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
-	settings, err := q.service.Settings(context.Background(), q.a.id)
+	ctx := context.Background()
+	draft := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	intake := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	failed := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	now, lastMonth := q.clock.Now().Add(-time.Hour), time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	errorCode := func(status string) any {
+		if status == "error" {
+			return "overloaded"
+		}
+		return nil
+	}
+	for _, row := range []struct {
+		feature, billedTo, status string
+		task                      any
+		at                        time.Time
+	}{
+		{"draft", "server", "ok", draft, now},
+		{"intake", "server", "error", intake, now},
+		{"intake", "server", "ok", intake, now},
+		{"intake", "server", "ok", intake, now},
+		{"draft", "server", "error", failed, now},
+		{"triage", "server", "ok", nil, now},
+		{"chat", "server", "ok", nil, now},
+		{"check", "server", "ok", nil, now},
+		{"draft", "workspace_key", "ok", nil, now},
+		{"draft", "server", "ok", nil, lastMonth},
+	} {
+		if _, err := q.pool.Exec(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,error_code,task_id,started_at,finished_at)
+			VALUES($1,$2,$3,'anthropic','Colliedesk AI','claude-sonnet-5-5',$4,$5,$6,$7,$7)`, q.a.id, row.feature, row.billedTo, row.status, errorCode(row.status), row.task, row.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settings, err := q.service.Settings(ctx, q.a.id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Before the first draft, a typical one on Sonnet's prices: 6,000×2 + 500×10 = 17,000.
-	if settings.Allowance == nil || settings.Allowance.DraftsLeft == nil || *settings.Allowance.DraftsLeft != 58 {
-		t.Fatalf("allowance before any draft = %+v", settings.Allowance)
+	// The draft, the intake task (three calls) and the triage without a task.
+	if settings.Allowance == nil || settings.Allowance.UsedCredits != 3 || settings.Allowance.LimitCredits != 10 {
+		t.Fatalf("allowance = %+v, want 3 of 10 credits used", settings.Allowance)
 	}
+	usage, err := q.service.Usage(ctx, q.a.id, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil || usage.Allowance == nil || usage.Allowance.UsedCredits != 3 {
+		t.Fatalf("usage allowance = %+v %v", usage.Allowance, err)
+	}
+	// Another workspace's credits are its own.
+	other, err := q.service.Settings(ctx, q.b.id)
+	if err != nil || other.Allowance == nil || other.Allowance.UsedCredits != 0 {
+		t.Fatalf("workspace B = %+v %v", other.Allowance, err)
+	}
+}
+
+// A trial has its own credits for the whole trial: they do not come back on the first of the month.
+func TestATrialHasItsCreditsForTheWholeTrial(t *testing.T) {
+	server := *testServer
+	server.Allowance = &ai.Allowance{PerWorkspace: 1000, Trial: 2}
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server; config.PlanLimits = true })
+	ctx := context.Background()
 	q.turnOn(t, q.a, ai.SlotDraft)
-	q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	// The trial runs from 22 October to 5 November.
+	if _, err := q.pool.Exec(ctx, `UPDATE workspaces SET trial_ends_at=$2 WHERE id=$1`, q.a.id, time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+		q.tick(t)
+	}
+	q.clock.Add(11 * 24 * time.Hour) // 2 November
+	third := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
-	// Then the workspace's own: one draft of 70 micro-dollars.
-	settings, _ = q.service.Settings(context.Background(), q.a.id)
-	if *settings.Allowance.DraftsLeft != (1_000_000-70)/70 {
-		t.Fatalf("drafts left after one draft = %d", *settings.Allowance.DraftsLeft)
+	if state, code := q.state(t, third); state != ai.TaskFailed || code != ai.CodeAllowanceReached {
+		t.Fatalf("a third draft in November of the same trial = %s %s", state, code)
+	}
+	settings, err := q.service.Settings(ctx, q.a.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := settings.Allowance; a == nil || a.LimitCredits != 2 || a.UsedCredits != 2 || !a.ResetsAt.Equal(time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("trial allowance = %+v, want 2 of 2 used until the trial ends", settings.Allowance)
 	}
 }
 
 func TestADraftThatCouldNeverFitWhatIsLeftIsRefusedAtOnce(t *testing.T) {
 	server := *testServer
-	// 30,000 micro-dollars: a typical draft on Sonnet holds 6,000×2 + 4,000×10 = 52,000.
-	server.Allowance = &ai.Allowance{PerWorkspace: 0.03}
+	server.Allowance = &ai.Allowance{PerWorkspace: 1}
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
 	q.turnOn(t, q.a, ai.SlotDraft)
+	if _, err := q.pool.Exec(context.Background(), `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,started_at,finished_at)
+		VALUES($1,'triage','server','anthropic','Colliedesk AI','claude-haiku-5-5','ok',$2,$2)`, q.a.id, q.clock.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 	var conversation string
 	if err := q.pool.QueryRow(context.Background(), `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@example.com') RETURNING id)
 		INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id::text`, q.a.id).Scan(&conversation); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := q.service.CreateDraft(context.Background(), q.a.id, q.actor(q.a), conversation, ""); !errors.Is(err, ai.ErrAllowanceReached) {
-		t.Fatalf("CreateDraft = %v, want the allowance refusal before anything is queued", err)
+		t.Fatalf("CreateDraft = %v, want the credits refusal before anything is queued", err)
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_tasks WHERE workspace_id=$1`, q.a.id); n != 0 {
 		t.Fatalf("%d tasks queued", n)
 	}
 }
 
-// Automatic drafts on the server's provider may spend half of the month's allowance; the other half
+// Automatic drafts on the server's provider may use half of the month's credits; the other half
 // stays for the drafts people ask for.
-func TestAutomaticDraftsStopAtHalfTheAllowance(t *testing.T) {
+func TestAutomaticDraftsStopAtHalfTheCredits(t *testing.T) {
 	server := *testServer
-	server.Allowance = &ai.Allowance{PerWorkspace: 1} // 1,000,000 micro-dollars
+	server.Allowance = &ai.Allowance{PerWorkspace: 2}
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
 	ctx := context.Background()
 	automatic := true
@@ -685,7 +757,7 @@ func TestAutomaticDraftsStopAtHalfTheAllowance(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := q.pool.Exec(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,started_at,finished_at,cost_micro_usd,automatic)
-		VALUES($1,'draft','server','anthropic','Colliedesk AI','claude-sonnet-5-5','ok',$2,$2,500000,true)`, q.a.id, q.clock.Now().Add(-time.Hour)); err != nil {
+		VALUES($1,'draft','server','anthropic','Colliedesk AI','claude-sonnet-5-5','ok',$2,$2,70,true)`, q.a.id, q.clock.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := q.pool.Exec(ctx, `UPDATE ai_tasks SET next_run_at=$2 WHERE workspace_id=$1 AND automatic`, q.a.id, q.clock.Now()); err != nil {
@@ -697,7 +769,7 @@ func TestAutomaticDraftsStopAtHalfTheAllowance(t *testing.T) {
 		t.Fatal(err)
 	}
 	if state != "cancelled" || code != "allowance_reserved" {
-		t.Fatalf("automatic draft past half the allowance: %s %s", state, code)
+		t.Fatalf("automatic draft past half the credits: %s %s", state, code)
 	}
 	settings, err := q.service.Settings(ctx, q.a.id)
 	if err != nil {

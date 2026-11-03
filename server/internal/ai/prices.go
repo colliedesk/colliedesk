@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -17,25 +18,20 @@ type Price struct {
 	Input, Output, CacheRead, CacheWrite float64
 }
 
-// Allowance is how much the server's provider may spend for one workspace in a UTC calendar month
-// (AI_SERVER_MONTHLY_ALLOWANCE), in US dollars: a flat amount, or an amount per active agent with
-// another for a workspace on its trial (Colliedesk Cloud: 3 per agent, 2 for a trial).
+// Allowance is how many credits the server's provider gives one workspace (AI_SERVER_MONTHLY_CREDITS):
+// PerWorkspace each UTC calendar month, or Trial for the whole trial when it is set. One credit is one
+// result: a reply draft, a triage suggestion or an intake decision, whatever the model costs.
 type Allowance struct {
-	PerWorkspace float64
-	PerAgent     float64
-	Trial        float64
+	PerWorkspace int64
+	Trial        int64
 }
 
-// For is the month's allowance in micro-dollars for a workspace with this plan and agent count.
-func (a *Allowance) For(access domain.Access, activeAgents int) int64 {
-	dollars := a.PerWorkspace
-	switch {
-	case a.Trial > 0 && access.Plan == domain.PlanTrial:
-		dollars = a.Trial
-	case a.PerAgent > 0:
-		dollars = a.PerAgent * float64(max(activeAgents, 1))
+// For is the number of credits of a workspace with this plan.
+func (a *Allowance) For(access domain.Access) int64 {
+	if a.Trial > 0 && access.Plan == domain.PlanTrial {
+		return a.Trial
 	}
-	return int64(math.Round(dollars * 1e6))
+	return a.PerWorkspace
 }
 
 // The cache prices of a model whose AI_SERVER_PRICES entry leaves them out, as shares of its input price.
@@ -80,34 +76,33 @@ func parsePrices(value string) (map[string]Price, error) {
 	return prices, nil
 }
 
+const creditsFormat = "ai.server.monthly_credits must be a whole number of credits a month (1000), with a trial's own number if it has one (1000,trial=500)"
+
 func parseAllowance(value string) (*Allowance, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil, nil
 	}
 	allowance := &Allowance{}
-	if amount, err := strconv.ParseFloat(value, 64); err == nil {
-		if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE must be a number of dollars")
-		}
-		allowance.PerWorkspace = amount
-		return allowance, nil
-	}
-	for _, entry := range strings.Split(value, ",") {
+	for index, entry := range strings.Split(value, ",") {
 		key, number, ok := strings.Cut(strings.TrimSpace(entry), "=")
-		amount, err := strconv.ParseFloat(strings.TrimSpace(number), 64)
-		if !ok || err != nil || amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)")
+		if !ok {
+			key, number = "workspace", key
+			if index > 0 {
+				return nil, errors.New(creditsFormat)
+			}
+		}
+		amount, err := strconv.ParseInt(strings.TrimSpace(number), 10, 64)
+		if err != nil || amount < 0 {
+			return nil, errors.New(creditsFormat)
 		}
 		switch strings.TrimSpace(key) {
-		case "agent":
-			allowance.PerAgent = amount
-		case "trial":
-			allowance.Trial = amount
 		case "workspace":
 			allowance.PerWorkspace = amount
+		case "trial":
+			allowance.Trial = amount
 		default:
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE knows workspace, agent and trial, not %q", key)
+			return nil, errors.New(creditsFormat)
 		}
 	}
 	return allowance, nil
@@ -127,7 +122,7 @@ func estimateMicroUSD(prices map[string]Price, model string, input, output int64
 
 // costMicroUSD prices every hop of an answer at its own model's price. A model without a declared
 // price (a refusal fallback the operator did not list) is charged the highest declared price of each
-// kind, so an allowance is never exceeded by a model nobody priced; known is false then.
+// kind, so a spending limit is never exceeded by a model nobody priced; known is false then.
 func costMicroUSD(prices map[string]Price, hops []aiprovider.Hop) (cost int64, known bool) {
 	known = true
 	var highest Price

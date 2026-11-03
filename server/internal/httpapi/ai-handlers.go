@@ -268,7 +268,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrDraftDecided):
 		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
-		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → Built-in AI, or move to a larger plan.")
+		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "The AI credits are used up. Add your own provider in Settings → Built-in AI (no fee, no limit), or wait until they start again: Settings → Built-in AI → Usage says when.")
 	case errors.Is(err, ai.ErrCheckRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_checks_rate_limited", "At most 10 provider checks a minute in a workspace; try again shortly.")

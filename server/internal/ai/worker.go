@@ -465,7 +465,7 @@ func (s *Service) admitAutomaticDraft(ctx context.Context, tx pgx.Tx, workspaceI
 		return CodeConversationCap, nil
 	}
 	if server {
-		reserved, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
+		reserved, _, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
 		if err != nil || reserved {
 			return CodeAllowanceReserved, err
 		}

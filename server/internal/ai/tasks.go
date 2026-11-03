@@ -344,30 +344,30 @@ func (s *Service) automaticLimits(ctx context.Context, tx pgx.Tx, workspaceID st
 	if limits.IntakeToday >= limits.IntakePerDay || limits.UsedToday >= limits.PerDay {
 		limits.IntakePausedUntil = &next
 	}
-	reserved, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
+	reserved, until, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
 	if err != nil {
 		return AutomaticLimits{}, 0, err
 	}
 	if reserved {
-		month := monthStart(now).AddDate(0, 1, 0)
-		limits.DraftsReservedUntil = &month
+		limits.DraftsReservedUntil = &until
 	}
 	return limits, minute, nil
 }
 
-// automaticDraftsReserved says whether automatic drafts spent half of this month's allowance of the
-// server's provider (what their calls cost, or hold while running).
-func (s *Service) automaticDraftsReserved(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
-	_, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
+// automaticDraftsReserved says whether automatic drafts used half of the workspace's credits on the
+// server's provider (running ones included), and until when they wait: when the credits start again.
+func (s *Service) automaticDraftsReserved(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, time.Time, error) {
+	c, limited, err := s.credits(ctx, tx, workspaceID)
 	if err != nil || !limited {
-		return false, err
+		return false, time.Time{}, err
 	}
-	var spent int64
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(CASE WHEN status='started' THEN COALESCE(reserved_micro_usd,0) ELSE COALESCE(cost_micro_usd,0) END),0)
-		FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature='draft' AND automatic AND started_at>=$2`, workspaceID, monthStart(s.now())).Scan(&spent); err != nil {
-		return false, err
+	var used int64
+	if err := tx.QueryRow(ctx, `SELECT count(DISTINCT COALESCE(task_id::text,id::text)) FROM ai_usage
+		WHERE workspace_id=$1 AND billed_to='server' AND feature='draft' AND automatic AND status IN ('ok','started') AND started_at>=$2`,
+		workspaceID, c.from).Scan(&used); err != nil {
+		return false, time.Time{}, err
 	}
-	return spent*2 >= limit, nil
+	return used*2 >= c.limit, c.resets, nil
 }
 
 // SetAutomaticLimits changes how many automatic tasks the workspace runs a day and a minute, and how
