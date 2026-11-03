@@ -19,7 +19,7 @@
 - [ ] Easy for both users: person steps and AI agent MCP calls, before and after, are in "What and why" (item 7 in AGENTS.md)
 - [ ] New or changed UI actions are available to agents: route classified in `token-scope.go`, MCP tool added or gap tracked (item 6 in AGENTS.md)
 - [ ] User-visible change updates its page in `docs/user/` (server operation: `docs/self-host/`)
-- [ ] Ships a `planned` issue: its line is removed from `ROADMAP.md` in this PR (CI checks)
+- [ ] Ships a roadmap issue: its item in `ROADMAP.md` is marked `shipped` in this PR (CI checks)
 
 External contributions need the HC Labs Contributor License Agreement before they can be merged.
 See `CONTRIBUTING.md`.

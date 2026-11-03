@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""ROADMAP.md promises only what the issue tracker backs: Next/Then links are open `planned`
-issues, Later links are open `accepted` or `planned` issues. Runs the real script with the issue
-lookup replaced by a JSON file (ROADMAP_ISSUES_FILE), so no network is used."""
+"""ROADMAP.md promises only what the issue tracker backs. Every item carries a status: a
+`planned` item links open `planned` issues, a `later` item links open `accepted` or `planned`
+issues, a `shipped` item is not checked. Runs the real script with the issue lookup replaced by a
+JSON file (ROADMAP_ISSUES_FILE), so no network is used."""
 import json
 import os
 import subprocess
@@ -26,11 +27,14 @@ def run(roadmap, issues, closing=""):
                               capture_output=True, text=True)
 
 
-def doc(next_items="", then_items="", later_items="", now_items=""):
-    return ("# Roadmap\n\n## Now: alpha (0.0.x)\n\n" + now_items +
-            "\n## Next: beta (0.1.0)\n\n" + next_items +
-            "\n## Then: AI included\n\n" + then_items +
-            "\n## Later\n\n" + later_items + "\nHave a need?\n")
+def doc(*items):
+    return ("# Roadmap\n\nIntro line.\n\n## leave Freshdesk without losing anything\n\n" +
+            "".join(item + "\n" for item in items) + "\nHave a need?\n")
+
+
+def item(status, number=None, repo=REPO):
+    link = f" ([#{number}]({repo}{number}))" if number else ""
+    return f"- **Thing**: what it does for you{link}. `{status}`"
 
 
 def issue(state="open", labels=()):
@@ -39,33 +43,42 @@ def issue(state="open", labels=()):
 
 CASES = [
     # (name, roadmap, issues, should_pass, expected text in output[, issues the PR closes])
-    ("planned issue in Next passes",
-     doc(next_items=f"- Import ([#97]({REPO}97)).\n"), {"97": issue(labels=["planned"])}, True, ""),
-    ("planned issue in Then passes",
-     doc(then_items=f"- Backtest ([#99]({REPO}99)).\n"), {"99": issue(labels=["planned", "enhancement"])}, True, ""),
-    ("accepted issue in Later passes",
-     doc(later_items=f"- Slack ([#102]({REPO}102)).\n"), {"102": issue(labels=["accepted"])}, True, ""),
-    ("accepted-only issue in Next fails",
-     doc(next_items=f"- Import ([#97]({REPO}97)).\n"), {"97": issue(labels=["accepted"])}, False, "#97"),
-    ("unlabelled issue in Later fails",
-     doc(later_items=f"- Slack ([#102]({REPO}102)).\n"), {"102": issue(labels=["enhancement"])}, False, "#102"),
+    ("planned item on a planned issue passes",
+     doc(item("planned", 97)), {"97": issue(labels=["planned"])}, True, ""),
+    ("later item on an accepted issue passes",
+     doc(item("later", 102)), {"102": issue(labels=["accepted"])}, True, ""),
+    ("later item on a planned issue passes",
+     doc(item("later", 99)), {"99": issue(labels=["planned", "enhancement"])}, True, ""),
+    ("planned item on an accepted-only issue fails",
+     doc(item("planned", 97)), {"97": issue(labels=["accepted"])}, False, "#97"),
+    ("later item on an unlabelled issue fails",
+     doc(item("later", 102)), {"102": issue(labels=["enhancement"])}, False, "#102"),
     ("closed issue fails",
-     doc(then_items=f"- Drafts ([#89]({REPO}89)).\n"), {"89": issue(state="closed", labels=["planned"])}, False, "closed"),
+     doc(item("planned", 89)), {"89": issue(state="closed", labels=["planned"])}, False, "closed"),
     ("unknown issue fails",
-     doc(next_items=f"- Ghost ([#999]({REPO}999)).\n"), {}, False, "#999"),
-    ("links in Now are not checked",
-     doc(now_items=f"- Shipped ([#5]({REPO}5)).\n"), {}, True, ""),
+     doc(item("later", 999)), {}, False, "#999"),
+    ("planned item without an issue fails",
+     doc(item("planned")), {}, False, "link"),
+    ("later item without an issue fails",
+     doc(item("later")), {}, False, "link"),
+    ("shipped items are not checked",
+     doc(item("shipped", 5), item("shipped")), {}, True, ""),
+    ("item without a status fails",
+     doc("- **Thing**: what it does for you."), {}, False, "status"),
+    ("item with an unknown status fails",
+     doc(item("in progress", 97)), {"97": issue(labels=["planned"])}, False, "status"),
     ("links to other repositories are ignored",
-     doc(next_items="- Site ([#31](https://github.com/colliedesk/colliedesk.com/issues/31)).\n"), {}, True, ""),
-    # A pull request that closes a planned issue must take it off the roadmap in the same PR.
-    ("PR closing an issue still on the roadmap fails",
-     doc(next_items=f"- Import ([#97]({REPO}97)).\n"), {"97": issue(labels=["planned"])}, False,
-     "closes #97", "97"),
-    ("PR closing an issue already taken off the roadmap passes",
-     doc(next_items=f"- Collision ([#101]({REPO}101)).\n"), {"101": issue(labels=["planned"])}, True,
-     "", "97 12"),
-    ("PR closing an issue listed under Now passes",
-     doc(now_items=f"- Import ([#97]({REPO}97)).\n"), {}, True, "", "97"),
+     doc(item("shipped"), "- **Site**: ([#31](https://github.com/colliedesk/colliedesk.com/issues/31)). `shipped`"),
+     {}, True, ""),
+    ("lines outside a section are not items",
+     "# Roadmap\n\n- an intro bullet\n\n## inbox\n\n" + item("shipped") + "\n", {}, True, ""),
+    # A pull request that closes an issue must mark its item shipped in the same PR.
+    ("PR closing an issue still planned fails",
+     doc(item("planned", 97)), {"97": issue(labels=["planned"])}, False, "closes #97", "97"),
+    ("PR closing an issue no longer on the roadmap passes",
+     doc(item("planned", 101)), {"101": issue(labels=["planned"])}, True, "", "97 12"),
+    ("PR closing an issue whose item is shipped passes",
+     doc(item("shipped", 97)), {}, True, "", "97"),
 ]
 
 failed = 0

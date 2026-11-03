@@ -471,8 +471,8 @@ jobs:
     with:
       upload-sarif: false
 
-  # ROADMAP.md is read by people deciding whether to move to Colliedesk: every linked item must be
-  # an open issue labelled for its section (.github/scripts/roadmap-check.py).
+  # ROADMAP.md is read by people deciding whether to move to Colliedesk: every `planned` or `later`
+  # item must link an open issue labelled for its status (.github/scripts/roadmap-check.py).
   roadmap:
     runs-on: ubuntu-latest
     timeout-minutes: 10

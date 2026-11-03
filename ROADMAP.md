@@ -1,84 +1,67 @@
 # Roadmap
 
-We share what we are building and in what order. Dates are targets, not promises.
-Feature details live in [docs/feature-spec.md](docs/feature-spec.md). Releases are listed in the
-[changelog](CHANGELOG.md).
+Colliedesk is an open-source help desk for teams moving off Freshdesk. We are a small team, we
+merge into `main` nearly every day, and we build in the open: every item below is either live
+today or backed by an open issue you can follow.
 
-## Now: alpha (0.0.x)
+`shipped` is live on Colliedesk Cloud. `planned` is committed and next in line. `later` is
+accepted and waiting for its turn.
 
-Released as `0.0.x` and running on Colliedesk Cloud. Any release may change the interface or the
-database schema.
+We are in alpha (`0.0.x`): any release may change the interface or the database schema. Beta
+(`0.1.0`) starts when a first team that moved from Freshdesk works in Colliedesk every day.
+Releases are listed in the [changelog](CHANGELOG.md); feature details live in
+[docs/feature-spec.md](docs/feature-spec.md).
 
-- Passwordless sign-in: one-time pairing and invite links, role ceilings, revocable sessions;
-  cloud sign-in through Clerk.
-- Shared inbox: replies, private notes, status, priority, assignee, tags, search, pagination,
-  bulk actions, saved replies, attachments, Cc on replies, live updates and browser notifications.
-- **New conversation from the inbox**: email a contact first, and see a contact's history with
-  merged duplicates.
-- **Email channel**: inbound and outbound, threading, spoof and loop protection.
-- **Freshdesk importer**: tickets (including archived), replies, notes, attachments
-  (checksummed), tags, contacts, companies, time entries and canned responses, with a reconcile
-  report. In the app or from the command line; in the app, recent tickets come first and the
-  Freshdesk agents can be invited and linked.
-- **Help Scout importer**: conversations of one inbox, replies, notes, attachments (checksummed),
-  inline images, tags and customers, with a reconcile report and undo.
-- **Knowledge base and public help center**: Markdown articles in collections with history and a
-  trash, a media library with images and videos, a public help center without scripts,
-  your Freshdesk solution articles imported, and article links in replies.
-- Team settings: invite, deactivate and reactivate agents.
-- **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and
-  triage conversations and add private notes, with read, draft-only, send and admin agent tokens; an
-  admin token runs workspace settings, the team and channels, and risky actions wait for a person.
-- Workspace isolation, per-workspace timezone with per-agent override, full workspace export.
-- **One-command install** and a signed container image.
-- **Tested upgrades**: every release is upgraded from the previous one on real-shaped data before it
-  ships, with an upgrade guide, rollback from a backup and a one-workspace restore.
-- **Colliedesk Cloud**: 14-day free trial, then Team or Founding; a workspace whose trial ended is
-  locked and can still export everything.
-- **AI included**: reply drafts and triage suggestions from your own knowledge base and solved
-  tickets, with their sources shown; your own provider key or the server's; optionally a draft for
-  every customer message and suggestions that apply themselves (with Undo). AI never sends a reply
-  in a conversation.
-- **Help chat**: an AI on your help center (its chat page, every article, and your own site) that
-  answers customers only from your published articles, shows its sources, and hands the chat to
-  your team as a conversation; with its own monthly limit and every transcript kept for the team.
-- **Results**: your numbers in Colliedesk next to the history you imported from Freshdesk (first
-  response, time to resolve, reopens, volume, AI drafts), each opening the conversations it counts,
-  with a share link and a weekly email to admins.
+## Leave Freshdesk without losing anything
 
-## Next: beta (0.1.0)
+- **Freshdesk importer**: tickets (archived ones too), replies, notes, checksummed attachments, contacts, companies, time entries and canned responses, with a reconcile report; recent tickets come first and your Freshdesk agents can be invited. `shipped`
+- **Help Scout importer**: one inbox's conversations, replies, notes, inline images and customers, with a reconcile report and undo. `shipped`
+- **Your numbers next to your Freshdesk history**: first response, time to resolve, reopens and volume side by side, each opening the conversations it counts, with a share link and a weekly email to admins. `shipped`
+- **Connect Gmail or Microsoft 365 in one click**: replies leave from your own address, and forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)). `planned`
+- **Stay in sync with Freshdesk until you switch**: no freeze day, your team moves when it is ready ([#98](https://github.com/colliedesk/colliedesk/issues/98)). `later`
+- **Zendesk importer**: the same move, from Zendesk ([#122](https://github.com/colliedesk/colliedesk/issues/122)). `later`
 
-Beta starts when HC Labs announces it. Before that:
+## AI that drafts, and a person who sends
 
-- Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
-  leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
-- A first team that moved from Freshdesk and works in Colliedesk every day.
+- **Reply drafts from your own answers**: drafts and triage suggestions from your knowledge base and solved tickets, with their sources shown; optionally a draft for every customer message. AI never sends a reply in a conversation. `shipped`
+- **Help chat on your help center**: answers customers only from your published articles, shows its sources, and hands the chat to your team as a conversation, with every transcript kept. `shipped`
+- **Bring your own AI key**: use your provider's key, or the AI included with Cloud. `shipped`
+- **A backtest before you pay**: see how drafts would have answered your own past tickets ([#99](https://github.com/colliedesk/colliedesk/issues/99)). `planned`
+- **Auto-answer where drafts proved right**: only for topics where drafts were accurate, with a person in the loop ([#281](https://github.com/colliedesk/colliedesk/issues/281)). `later`
+- **AI usage you can see on Cloud**: drafts and triage within a monthly allowance, auto-answer priced per resolution ([#262](https://github.com/colliedesk/colliedesk/issues/262)). `later`
+- **AI drafts that look up customer data**: read-only, through your own MCP servers ([#104](https://github.com/colliedesk/colliedesk/issues/104)). `later`
 
-## Then: AI included
+## Your AI agent works the queue
 
-- A backtest before you pay: how drafts would have answered your own past tickets ([#99](https://github.com/colliedesk/colliedesk/issues/99)).
-- Auto-answer only for topics where drafts proved accurate, with a human in the loop.
-- Usage metering; bring your own AI key.
+- **MCP server**: Claude, Codex or Cursor search, read and triage conversations and add private notes, with read, draft-only, send and admin tokens; risky actions wait for a person. `shipped`
+- **A sandbox workspace**: try an AI agent on real-shaped data before it touches your queue ([#116](https://github.com/colliedesk/colliedesk/issues/116)). `later`
 
-## Later
+## Everything a support team expects
 
-- Keep Colliedesk in sync with Freshdesk until you switch, so there is no freeze day ([#98](https://github.com/colliedesk/colliedesk/issues/98)).
-- Slack notifications ([#102](https://github.com/colliedesk/colliedesk/issues/102)).
-- Simple rules on arrival: assign, tag, set priority ([#103](https://github.com/colliedesk/colliedesk/issues/103)).
-- AI drafts that look up customer data through your MCP servers, read-only ([#104](https://github.com/colliedesk/colliedesk/issues/104)).
-- Macros: a saved reply plus actions in one step ([#117](https://github.com/colliedesk/colliedesk/issues/117)).
-- Log time on conversations and export it per company ([#119](https://github.com/colliedesk/colliedesk/issues/119)).
-- Customer satisfaction rating after a conversation is resolved ([#120](https://github.com/colliedesk/colliedesk/issues/120)).
-- Reports: volume, first response and resolution time per agent and tag ([#121](https://github.com/colliedesk/colliedesk/issues/121)).
-- Importer for Zendesk ([#122](https://github.com/colliedesk/colliedesk/issues/122)).
-- Live chat widget into the same inbox ([#124](https://github.com/colliedesk/colliedesk/issues/124)).
-- A sandbox workspace for testing an AI agent safely ([#116](https://github.com/colliedesk/colliedesk/issues/116)).
-- No Colliedesk branding on anything your customers see ([#125](https://github.com/colliedesk/colliedesk/issues/125)).
-- Help center articles end with a helpful vote, a still-need-help step and related articles ([#338](https://github.com/colliedesk/colliedesk/issues/338)).
+- **Shared inbox**: replies, private notes, status, priority, assignee, tags, search, bulk actions, saved replies, attachments, Cc, live updates and browser notifications. `shipped`
+- **Email channel**: inbound and outbound, threading, spoof and loop protection; start a conversation with a contact and see their history. `shipped`
+- **Knowledge base and public help center**: Markdown articles in collections with history, a media library, a help center without scripts, and your Freshdesk articles imported. `shipped`
+- **Your team, signed in without passwords**: one-time invite links, role ceilings, revocable sessions, per-agent timezone. `shipped`
+- **Simple rules on arrival**: assign, tag and set priority as conversations come in ([#103](https://github.com/colliedesk/colliedesk/issues/103)). `later`
+- **Macros**: a saved reply plus its actions in one step ([#117](https://github.com/colliedesk/colliedesk/issues/117)). `later`
+- **Slack notifications** ([#102](https://github.com/colliedesk/colliedesk/issues/102)). `later`
+- **Reports**: volume, first response and resolution time per agent and tag ([#121](https://github.com/colliedesk/colliedesk/issues/121)). `later`
+- **Customer satisfaction rating** after a conversation is resolved ([#120](https://github.com/colliedesk/colliedesk/issues/120)). `later`
+- **Time logged on conversations**, exported per company ([#119](https://github.com/colliedesk/colliedesk/issues/119)). `later`
+- **Live chat widget** into the same inbox ([#124](https://github.com/colliedesk/colliedesk/issues/124)). `later`
+- **Help center articles that help further**: a helpful vote, a still-need-help step and related articles ([#338](https://github.com/colliedesk/colliedesk/issues/338)). `later`
+- **No Colliedesk branding** on anything your customers see ([#125](https://github.com/colliedesk/colliedesk/issues/125)). `later`
 
-How items get here: ideas start in [Discussions → Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas),
+## Yours to keep
+
+- **Open source, one-command install**: run it on your own server from a signed container image. `shipped`
+- **Tested upgrades**: every release is upgraded from the previous one on real-shaped data before it ships, with an upgrade guide, rollback from a backup and a one-workspace restore. `shipped`
+- **Your data leaves with you**: full workspace export, also after a Cloud trial ends. `shipped`
+- **Workspaces kept apart**: every query is scoped to its workspace. `shipped`
+
+## Tell us what you need
+
+Ideas start in [Discussions → Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas),
 where upvotes show how many teams need them. An idea we agree with becomes an issue labelled
-`accepted`; when we commit to it, it is labelled `planned` and listed under Next or Then. A CI check
-keeps this page in step with those labels.
-
-Have a need that is not here? Share it in [Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas).
+`accepted` and shows here as `later`; when we commit to it, it is labelled `planned`. A CI check
+keeps every status on this page in step with those labels.
