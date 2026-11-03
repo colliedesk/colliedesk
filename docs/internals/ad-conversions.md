@@ -55,8 +55,10 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
 > Warning: while `META_CONVERSIONS_TEST_EVENT_CODE` is set, every real event also goes to Test
 > events only, so Meta stops learning from real trials. Unset it on the same day.
 
-1. In Events Manager, open the `Colliedesk` dataset, then **Test events**. Copy the test code
-   (`TEST…`). It is not a secret.
+1. In Events Manager, open the `Colliedesk` dataset, then **Test events** (channel "Website",
+   "Confirm that your server's events are set up correctly"). Copy the test code (`TEST…`). It is
+   not a secret. Keep that page open until step 6: the code belongs to this page session and
+   changes when the page is opened again, and an event sent with an older code does not show.
 2. An agent sets `META_CONVERSIONS_TEST_EVENT_CODE` to that code on Cloud and restarts the server.
 3. Open a private browser window.
 4. Open `https://app.colliedesk.com/sign-in?intent=trial&fbclid=test123`.
@@ -65,6 +67,11 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
    so each new test needs a new address and workspace.
 6. Within one minute, Test events shows one `StartTrial`. Its event id is the workspace id.
 7. An agent unsets the variable and restarts the server.
+
+An agent runs the whole check alone. The email form's bot check stops an automated browser, so the
+agent signs in a test account with a one-time sign-in token from Clerk's Backend API instead, in
+the same tab that opened the ad link, then fills the workspace form. Only the email code is
+skipped; the attribution, the workspace form and the event are the real ones.
 
 `Subscribe` needs a real payment, so it is not part of this test. After the first paid workspace that
 came from an ad, check its row instead. If Test events stays empty, `SELECT event_name, attempts,
