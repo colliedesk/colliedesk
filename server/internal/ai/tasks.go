@@ -30,7 +30,7 @@ const (
 	CodeCancelledByPerson = "cancelled"
 	// An automatic draft is not written when it would not be used or may not be: someone replied
 	// (answered), the conversation closed, the automatic mode went off, the day's or the
-	// conversation's automatic drafts are used, or they spent their half of the allowance.
+	// conversation's automatic drafts are used, or they used their half of the credits.
 	CodeAnswered         = "answered"
 	CodeConversationShut = "conversation_closed"
 	CodeAutomationOff    = "automation_off"

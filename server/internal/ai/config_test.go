@@ -112,3 +112,16 @@ func TestMonthlyCreditsFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// A dollar amount left in the old setting must never be read as credits: the server stops and names the new one.
+func TestTheOldDollarAllowanceStopsTheServerAndNamesTheCreditsSetting(t *testing.T) {
+	values := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5",
+		"AI_SERVER_MONTHLY_ALLOWANCE": "10"}
+	_, err := ai.ServerProviderFromEnv(getenv(values))
+	if err == nil || !strings.Contains(err.Error(), "AI_SERVER_MONTHLY_CREDITS") || !strings.Contains(err.Error(), "AI_SERVER_MONTHLY_ALLOWANCE") {
+		t.Fatalf("error = %v, want one naming both settings", err)
+	}
+	if strings.Contains(err.Error(), "10") && strings.Contains(err.Error(), "=10") {
+		t.Fatalf("error repeats the value: %v", err)
+	}
+}

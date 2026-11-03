@@ -131,8 +131,8 @@ type Settings struct {
 	ProviderLimit        int  `json:"provider_limit"`
 	CanStoreKeys         bool `json:"can_store_keys"`
 	AllowPrivateBaseURLs bool `json:"allow_private_base_urls"`
-	// Automatic is the workspace's automatic limits and today's use; Allowance what the server's
-	// provider may still spend this month, null when the server sets no allowance.
+	// Automatic is the workspace's automatic limits and today's use; Allowance the workspace's credits on the server's
+	// provider, null when the server sets none.
 	Automatic AutomaticLimits `json:"automatic"`
 	Allowance *AllowanceView  `json:"allowance"`
 	// AutoTriage counts the suggestions AI applied by itself in the last 30 days, and how many of those

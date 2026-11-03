@@ -53,6 +53,13 @@ type Call struct {
 // A workspace key is never limited this way.
 var ErrAllowanceReached = errors.New("this month's AI credits are used up")
 
+// AllowanceReachedError is ErrAllowanceReached with the day the credits start again, so the refusal can
+// say when to come back. errors.Is(err, ErrAllowanceReached) holds for it.
+type AllowanceReachedError struct{ ResetsAt time.Time }
+
+func (e *AllowanceReachedError) Error() string        { return ErrAllowanceReached.Error() }
+func (e *AllowanceReachedError) Is(target error) bool { return target == ErrAllowanceReached }
+
 // ErrAllowanceHeld means the call would fit once the calls still running finish: a call that fails gives
 // its credit back. The task waits a moment instead of failing.
 var ErrAllowanceHeld = errors.New("the AI credits left are held by calls still running")
@@ -210,7 +217,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 					if c.held > 0 && c.used-c.held < c.limit {
 						return ErrAllowanceHeld
 					}
-					return ErrAllowanceReached
+					return &AllowanceReachedError{ResetsAt: c.resets}
 				}
 			}
 		}
@@ -342,7 +349,7 @@ func (s *Service) creditsLeft(ctx context.Context, tx pgx.Tx, workspaceID string
 		return err
 	}
 	if c.used-c.held >= c.limit {
-		return ErrAllowanceReached
+		return &AllowanceReachedError{ResetsAt: c.resets}
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -317,6 +318,12 @@ func TestUsedUpCreditsRefuseADraftAndSayHowToGoOn(t *testing.T) {
 	wantResponse(t, response, http.StatusPaymentRequired, "ai_allowance_reached")
 	if body := response.Body.String(); !strings.Contains(body, "credits") || !strings.Contains(body, "your own provider") || strings.Contains(body, "larger plan") {
 		t.Fatalf("refusal = %s, want the credits named and the two ways on", body)
+	}
+	// The answer names the day the credits start again: the first of next month, UTC.
+	now := time.Now().UTC()
+	reset := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC).Format("2 January 2006")
+	if !strings.Contains(response.Body.String(), reset) {
+		t.Fatalf("refusal = %s, want the reset date %q", response.Body.String(), reset)
 	}
 	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_tasks WHERE workspace_id=$1`, desk.workspaceA); n != "0" {
 		t.Fatalf("%s tasks queued", n)

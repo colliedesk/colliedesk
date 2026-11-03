@@ -5,6 +5,7 @@
 package ai
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -69,6 +70,9 @@ func (s *ServerProvider) ModelsFor(slot string) []string {
 func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) {
 	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
 	kind, key, base, models, label := value("AI_SERVER_PROVIDER"), value("AI_SERVER_API_KEY"), value("AI_SERVER_BASE_URL"), value("AI_SERVER_MODELS"), value("AI_SERVER_LABEL")
+	if value("AI_SERVER_MONTHLY_ALLOWANCE") != "" {
+		return nil, errors.New("AI_SERVER_MONTHLY_ALLOWANCE (dollars) is no longer read: remove it and set AI_SERVER_MONTHLY_CREDITS, a number of credits (1000 or 1000,trial=500)")
+	}
 	prices, allowance := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_CREDITS")
 	if kind == "" && key == "" && base == "" && models == "" && label == "" && prices == "" && allowance == "" {
 		return nil, nil
