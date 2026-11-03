@@ -302,7 +302,7 @@ func sessionToken(grant *restTokenGrant) map[string]any {
 	if grant.Role != nil {
 		out["role"] = grant.Role.Name
 		if grant.RoleHeld != nil && !*grant.RoleHeld {
-			out["stopped"] = "Its person no longer holds this role, so the token can do nothing until the role is given back."
+			out["stopped"] = "Its person no longer holds every permission of this role, so the token can do nothing until they hold them again (giving them the role does it)."
 		}
 	}
 	if grant.LegacyTier != nil {

@@ -16,8 +16,8 @@ type AgentToken struct {
 	Session domain.Session `json:"session"`
 }
 
-// CreateAgentToken gives the signed-in person a token that follows one of their roles or holds a fixed
-// list of permissions they hold. Only a person's own session makes tokens (the route is person-only).
+// CreateAgentToken gives the signed-in person a token that follows a role whose permissions they all
+// hold (any role of the workspace for an admin) or holds a fixed list of permissions they hold. Only a person's own session makes tokens (the route is person-only).
 func (s *Service) CreateAgentToken(ctx context.Context, principal Principal, request TokenRequest) (AgentToken, error) {
 	request, err := checkTokenRequest(request)
 	if err != nil {
@@ -61,23 +61,28 @@ func (s *Service) IssueAgentToken(ctx context.Context, workspaceSlug, email stri
 	return created, err
 }
 
-// insertAgentToken stores the token of agentID, who holds held. A role must be one they hold
-// (domain.ErrRoleNotYours); a list must be within held (*domain.ExceedsYoursError).
+// insertAgentToken stores the token of agentID, who holds held. A role may be any of the workspace's
+// whose permissions are all within held, so an admin may pick every role and anyone may pick their own
+// (domain.ErrRoleNotFound, or *domain.ExceedsYoursError naming what they lack); a list must be within
+// held (*domain.ExceedsYoursError).
 func (s *Service) insertAgentToken(ctx context.Context, tx pgx.Tx, workspaceID, agentID string, held PermissionSet, request TokenRequest) (AgentToken, error) {
 	scope, roleID, given := ScopeCustom, "", request.Permissions
 	if request.Permissions == nil {
 		var role roleRow
 		err := tx.QueryRow(ctx, `SELECT r.id::text,r.name,r.system,r.permissions FROM roles r
-			JOIN agent_roles ar ON ar.workspace_id=r.workspace_id AND ar.role_id=r.id AND ar.agent_id=$2
-			WHERE r.workspace_id=$1 AND r.deleted_at IS NULL AND (r.id::text=$3 OR ($3='' AND lower(r.name)=lower($4)))`,
-			workspaceID, agentID, request.RoleID, strings.TrimSpace(request.RoleName)).Scan(&role.ID, &role.Name, &role.System, &role.Permissions)
+			WHERE r.workspace_id=$1 AND r.deleted_at IS NULL AND (r.id::text=$2 OR ($2='' AND lower(r.name)=lower($3)))`,
+			workspaceID, request.RoleID, strings.TrimSpace(request.RoleName)).Scan(&role.ID, &role.Name, &role.System, &role.Permissions)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return AgentToken{}, domain.ErrRoleNotYours
+			return AgentToken{}, domain.ErrRoleNotFound
 		}
 		if err != nil {
 			return AgentToken{}, fmt.Errorf("find role: %w", err)
 		}
-		scope, roleID, given = ScopeRole, role.ID, role.permissions().Sorted()
+		given = role.permissions().Sorted()
+		if missing := held.Missing(given); len(missing) > 0 {
+			return AgentToken{}, &domain.ExceedsYoursError{Missing: missing}
+		}
+		scope, roleID = ScopeRole, role.ID
 	} else if missing := held.Missing(request.Permissions); len(missing) > 0 {
 		return AgentToken{}, &domain.ExceedsYoursError{Missing: missing}
 	}

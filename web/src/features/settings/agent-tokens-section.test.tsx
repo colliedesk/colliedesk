@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { InvalidRequestError, PlanLimitError, UnauthorizedError, WorkspaceLockedError } from '../../api/client';
-import { AgentTokensSection } from './agent-tokens-section';
-import { permissionsOf, rolesOf } from '../../test-roles';
+import { AgentTokensSection, followableRoles } from './agent-tokens-section';
+import { permissionsOf, roleOf, rolesOf } from '../../test-roles';
 
 const origin = 'https://acme.example.com';
 const token = 'cdk_agent_7Qm2vK9xT4pLw8RzN1cY5bH3sJ6dF0aE';
@@ -39,7 +39,7 @@ test('a person with one role sees it named, not a list with one choice, and the 
 
 test('a token follows the role with the fewest permissions by default, is shown once, copied, then hidden for good', async () => {
   const onCreate = show();
-  expect(screen.getByRole('radio', { name: 'Follow my role' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Follow a role' })).toBeChecked();
   expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue(editor.id);
   expect(screen.getByText(/2 permissions/)).toBeInTheDocument();
   fireEvent.change(nameField(), { target: { value: '  Claude Code  ' } });
@@ -224,4 +224,16 @@ test('the default role follows the person\'s roles as they change', () => {
   expect(screen.getByText('Admin', { selector: 'strong' })).toBeInTheDocument();
   rerender(<AgentTokensSection roles={[admin, editor]} rolePermissions={permissions} held={permissionsOf('admin')} origin={origin} onCreate={vi.fn()} />);
   expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue(editor.id);
+});
+
+test('a token may follow any role whose permissions the person all holds: every role for an admin', () => {
+  const admin = roleOf(rolesOf('admin')[0], permissionsOf('admin'));
+  const agent = roleOf(rolesOf('agent')[0], permissionsOf('agent'));
+  const exporter = roleOf({ id: '88888888-8888-4888-8888-888888888888', name: 'Exporter', system: null }, ['conversations:read', 'workspace:export']);
+  const gone = { ...roleOf({ id: '77777777-7777-4777-8777-777777777777', name: 'Old', system: null }, ['tags:read']), deleted_at: '2026-10-01T00:00:00Z' };
+  const all = [admin, agent, exporter, gone];
+  expect(followableRoles(rolesOf('admin'), all, permissionsOf('admin')).map((role) => role.name)).toEqual(['Admin', 'Agent', 'Exporter']);
+  expect(followableRoles(rolesOf('agent'), all, permissionsOf('agent')).map((role) => role.name)).toEqual(['Agent']);
+  // Without the workspace's roles (no team:read), only the person's own.
+  expect(followableRoles(rolesOf('agent'), undefined, permissionsOf('agent'))).toEqual(rolesOf('agent'));
 });

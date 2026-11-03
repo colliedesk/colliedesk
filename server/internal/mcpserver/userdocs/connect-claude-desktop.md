@@ -7,8 +7,8 @@ carries Claude's requests to your Colliedesk; the token is kept by Claude Deskto
 ## Before you start
 
 1. Sign in to Colliedesk and open **Settings → External AI agents**.
-2. Name the token (for example "Claude Desktop on my laptop"), choose what it may do (follow one of your
-   roles, or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
+2. Name the token (for example "Claude Desktop on my laptop"), choose what it may do (follow a role,
+   or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
    See [Agent tokens](sessions.md#agent-tokens).
 3. Copy the token. It starts with `cdk_agent_` and is shown once.
 

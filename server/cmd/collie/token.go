@@ -23,7 +23,7 @@ func tokenCommand(ctx context.Context, service *auth.Service, args []string, out
 	flags.SetOutput(io.Discard)
 	workspace := flags.String("workspace", "", "workspace slug")
 	email := flags.String("email", "", "email of the agent the token acts as")
-	role := flags.String("role", "", "one of the person's roles, by name; the token follows it")
+	role := flags.String("role", "", "a role of the workspace, by name, whose permissions the person all holds (an admin may pick any); the token follows it")
 	scope := flags.String("scope", "", "deprecated: read, draft or send become that tier's old list of permissions, admin the Admin role")
 	label := flags.String("label", "", "name shown in Settings → Sessions")
 	var permissions permissionFlags
@@ -44,12 +44,16 @@ func tokenCommand(ctx context.Context, service *auth.Service, args []string, out
 		return fmt.Errorf("--scope %s is not a tier; --scope is deprecated: use --role <name> or --permission <resource:action>", *scope)
 	}
 	created, err := service.IssueAgentToken(ctx, *workspace, *email, auth.TokenRequest{Label: *label, RoleName: *role, Permissions: permissions, LegacyScope: *scope})
-	if errors.Is(err, domain.ErrRoleNotYours) {
-		name := *role
-		if *scope == "admin" {
-			name = "Admin"
-		}
-		return fmt.Errorf("%s does not hold the role %q; a token follows only a role its person holds", *email, name)
+	name := *role
+	if *scope == "admin" {
+		name = "Admin"
+	}
+	if errors.Is(err, domain.ErrRoleNotFound) {
+		return fmt.Errorf("workspace %q has no role %q", *workspace, name)
+	}
+	var exceeds *domain.ExceedsYoursError
+	if errors.As(err, &exceeds) {
+		return fmt.Errorf("%s does not hold %s, so the token cannot have them; a token follows only a role whose permissions its person holds", *email, strings.Join(exceeds.Missing, ", "))
 	}
 	if err != nil {
 		return err

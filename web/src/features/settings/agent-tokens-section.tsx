@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { InvalidRequestError, PlanLimitError, UnauthorizedError } from '../../api/client';
-import type { AgentToken, RoleRef, TokenPermission } from '../../api/schemas';
+import type { AgentToken, Role, RoleRef, TokenPermission } from '../../api/schemas';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { CopyButton } from './copy-button';
 import { connectHosts, connectSnippets, exampleOrigin, mcpServerName } from './connect-snippets.generated';
@@ -11,11 +11,21 @@ import { PermissionMatrix } from './permission-matrix';
 import { roleMessages } from './roles-messages';
 import './agent-tokens.css';
 
-// What a token is created with: one of the person's roles, which it follows, or a fixed list.
+// The roles a token may follow: any of the workspace whose permissions the person all holds (every role
+// for an admin), or only their own roles while the workspace's roles cannot be read.
+export function followableRoles(own: RoleRef[], workspace: Role[] | undefined, held: readonly string[]): RoleRef[] {
+  if (!workspace) return own;
+  const holds = new Set(held);
+  return workspace.filter((role) => role.deleted_at === null && role.permissions.every((name) => holds.has(name)))
+    .map(({ id, name, system }) => ({ id, name, system }));
+}
+
+// What a token is created with: a role it follows, or a fixed list.
 export type TokenChoice = { role_id: string } | { permissions: TokenPermission[] };
 
 interface AgentTokensSectionProps {
-  // The person's roles, and what each holds when the person may read roles; held is what they may do now.
+  // The roles a token may follow (followableRoles), and what each holds when the person may read roles;
+  // held is what they may do now.
   roles: RoleRef[];
   rolePermissions?: ReadonlyMap<string, readonly string[]>;
   held: readonly string[];
@@ -47,8 +57,8 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
   // The role with the fewest permissions comes first, and is the one a new token follows by default.
   const ordered = [...roles].sort((a, b) => (rolePermissions ? permissionsOf(a.id).length - permissionsOf(b.id).length : 0));
   const [mode, setMode] = useState<'role' | 'pick'>('role');
-  // Only a role the person picked is kept; until then, and when it is no longer theirs, the default is the
-  // role with the fewest permissions among the roles they hold now.
+  // Only a role the person picked is kept; until then, and when it may no longer be followed, the default
+  // is the role with the fewest permissions among those it may follow now.
   const [roleId, setRoleId] = useState<string>();
   const role = roleId !== undefined && ordered.some((item) => item.id === roleId) ? roleId : ordered[0]?.id;
   // A fixed list starts from the permissions of the role chosen above.

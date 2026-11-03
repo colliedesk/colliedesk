@@ -250,7 +250,7 @@ func TestRolesStayInTheirWorkspace(t *testing.T) {
 	} {
 		response := request(t, alpha.api, call.method, call.path, call.body, alpha.admin, nil)
 		if response.Code != http.StatusNotFound && response.Code != http.StatusForbidden || strings.Contains(response.Body.String(), "Beta only") {
-			t.Errorf("%s %s with another workspace's role: %d %s, want 404 (or 403 role_not_yours) and nothing of it", call.method, call.path, response.Code, response.Body.String())
+			t.Errorf("%s %s with another workspace's role: %d %s, want 404 (or 403) and nothing of it", call.method, call.path, response.Code, response.Body.String())
 		}
 	}
 	var roles struct {
@@ -285,14 +285,14 @@ func TestPermissionMissingSaysWhatAndHow(t *testing.T) {
 	validateContractResponse(t, newRequest(t, http.MethodPost, "/api/v1/conversations/"+desk.conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hi"}, token, nil), response)
 }
 
-func TestARoleTokenStopsWhileItsPersonLacksTheRoleAndStartsAgain(t *testing.T) {
+func TestARoleTokenStopsWhileItsPersonLacksAPermissionOfTheRoleAndStartsAgain(t *testing.T) {
 	desk := newRequestDesk(t, "Roles Token")
 	agent := joinAsAgent(t, desk.api, desk.admin, "agent@roles-token.example.com")
 	agentID := memberIDByEmail(t, desk.api, desk.admin, "agent@roles-token.example.com")
-	kbCall(t, desk.api, http.MethodPost, "/api/v1/roles", map[string]any{"name": "Tag keeper", "permissions": []string{"tags:read", "tags:create"}}, desk.admin, http.StatusCreated, nil)
+	kbCall(t, desk.api, http.MethodPost, "/api/v1/roles", map[string]any{"name": "Tag keeper", "permissions": []string{"tags:read", "tags:create", "workspace:export"}}, desk.admin, http.StatusCreated, nil)
 	setRoles(t, desk.api, desk.admin, agentID, "Agent", "Tag keeper")
 	token := issueTokenWith(t, desk.api, agent, map[string]any{"label": "Tagger", "role_id": roleID(t, desk.api, agent, "Tag keeper")}).Token
-	if got := myPermissions(t, desk.api, token); !slices.Equal(got, []string{"tags:read", "tags:create"}) {
+	if got := myPermissions(t, desk.api, token); !slices.Equal(got, []string{"tags:read", "tags:create", "workspace:export"}) {
 		t.Fatalf("a token following Tag keeper may do %v", got)
 	}
 	refused(t, desk.api, http.MethodGet, "/api/v1/conversations", nil, token, "conversations:read")
@@ -303,8 +303,8 @@ func TestARoleTokenStopsWhileItsPersonLacksTheRoleAndStartsAgain(t *testing.T) {
 	}
 	setRoles(t, desk.api, desk.admin, agentID, "Agent")
 	response := request(t, desk.api, http.MethodGet, "/api/v1/tags", nil, token, nil)
-	if missing, _, from := permissionMissing(t, response); !missing || from != "person" || !strings.Contains(response.Body.String(), "no longer holds") {
-		t.Fatalf("a token whose person lost its role: %d %s", response.Code, response.Body.String())
+	if missing, _, from := permissionMissing(t, response); !missing || from != "person" || !strings.Contains(response.Body.String(), "no longer holds every permission") {
+		t.Fatalf("a token whose person lost its role (and workspace:export): %d %s", response.Code, response.Body.String())
 	}
 	var sessions struct {
 		Items []struct {

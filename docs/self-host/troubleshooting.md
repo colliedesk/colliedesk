@@ -79,7 +79,8 @@ docker compose exec server /app/collie token create \
   --workspace <slug> --email you@example.com --role Agent --label "Claude Code"
 ```
 
-`--role` is one of the roles that person holds, by name; the token follows it. For a fixed list
+`--role` is a role of the workspace, by name, whose permissions that person all holds (an admin
+may name any role, for example Agent); the token follows it. For a fixed list
 instead, repeat `--permission`, for example `--permission conversations:read --permission
 messages:note`; each must be a permission the person holds. Give one or the other. The token is
 printed once; Colliedesk keeps only its hash. See [roles and permissions](../user/roles-and-permissions.md).

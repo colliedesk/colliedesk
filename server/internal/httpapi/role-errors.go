@@ -69,8 +69,6 @@ func writeRoleError(response http.ResponseWriter, err error) bool {
 		writeError(response, http.StatusConflict, "system_role_locked", "Admin always holds every permission and cannot change; Agent and Admin cannot be deleted, and only Agent can be reset.")
 	case errors.Is(err, domain.ErrRoleNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No such role in this workspace.")
-	case errors.Is(err, domain.ErrRoleNotYours):
-		writeError(response, http.StatusForbidden, "role_not_yours", "A token can only follow one of your own roles. Pick a role you hold, or a list of permissions.")
 	case errors.Is(err, domain.ErrNoRoles):
 		writeError(response, http.StatusBadRequest, "invalid_request", "Everyone needs at least one role.")
 	case errors.Is(err, store.ErrAgentNotFound):

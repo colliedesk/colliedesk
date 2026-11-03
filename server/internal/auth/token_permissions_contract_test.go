@@ -96,18 +96,32 @@ func TestARoleTokenFollowsItsRole(t *testing.T) {
 	}
 }
 
-func TestARoleTokenStopsWhileItsPersonLacksTheRole(t *testing.T) {
-	kb := kbRole()
-	stopped := principalOf([]roleRow{agentRole()}, kb, ScopeRole, nil, false)
+func TestARoleTokenStopsWhileItsPersonLacksAPermissionOfTheRole(t *testing.T) {
+	exporter := roleRow{ID: "exporter", Name: "Exporter", Permissions: []string{PermConversationsRead, PermWorkspaceExport}}
+	stopped := principalOf([]roleRow{agentRole()}, exporter, ScopeRole, nil, false)
 	if len(stopped.Effective()) != 0 || stopped.Token.RoleHeld {
-		t.Fatalf("a token whose person no longer holds its role may do %v", stopped.Effective())
+		t.Fatalf("a token whose person lacks workspace:export of its role may do %v", stopped.Effective())
 	}
-	if !slices.Contains(stopped.Token.Permissions, PermKBArticlesRead) {
+	if !slices.Contains(stopped.Token.Permissions, PermWorkspaceExport) {
 		t.Fatal("a stopped token still says what its role gives")
 	}
-	back := principalOf([]roleRow{agentRole(), kb}, kb, ScopeRole, nil, false)
-	if !back.Can(PermKBArticlesRead) {
+	back := principalOf([]roleRow{agentRole(), exporter}, exporter, ScopeRole, nil, false)
+	if !back.Can(PermWorkspaceExport) || !back.Token.RoleHeld {
 		t.Fatal("giving the role back starts the token again")
+	}
+}
+
+// A token may follow a role its person does not hold while they hold everything it gives: an admin's
+// token that follows Agent, or an agent's that follows a narrower role.
+func TestARoleTokenFollowsARoleItsPersonDoesNotHoldButCovers(t *testing.T) {
+	admins := principalOf([]roleRow{adminRole()}, agentRole(), ScopeRole, nil, false)
+	if !admins.Token.RoleHeld || !admins.Can(PermMessagesSend) || admins.Can(PermWorkspaceExport) {
+		t.Fatalf("an admin's token following Agent: %v %+v", admins.Effective(), admins.Token)
+	}
+	kb := kbRole()
+	agents := principalOf([]roleRow{agentRole()}, kb, ScopeRole, nil, false)
+	if !agents.Token.RoleHeld || !agents.Can(PermKBArticlesPublish) || agents.Can(PermMessagesSend) {
+		t.Fatalf("an agent's token following %s: %v %+v", kb.Name, agents.Effective(), agents.Token)
 	}
 }
 

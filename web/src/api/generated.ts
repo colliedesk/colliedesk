@@ -420,7 +420,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in person, needing `team:create_tokens`. Send `role_id` (one of the caller's own roles; 403 `role_not_yours` otherwise) for a token that follows that role: it changes when the role changes and stops while the person no longer holds it. Or send `permissions` (resource:action, each one the caller holds; 403 `role_exceeds_yours` names the others) for a fixed list. Never both. Whichever it is, a call never gets more than the person holds at that moment. People only: an agent token gets 403 `person_only` (a token that made tokens would leave them behind after it was revoked). A `scope` (the old tiers) is refused with 400. It appears in `GET /api/v1/auth/sessions` with its label and what it was given, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in person, needing `team:create_tokens`. Send `role_id` (any role of the workspace whose permissions the caller all holds, so an admin may pick every role; 403 `role_exceeds_yours` names what the caller lacks, 404 when there is no such role) for a token that follows that role: it changes when the role changes and stops while the person does not hold every permission of it. Or send `permissions` (resource:action, each one the caller holds; 403 `role_exceeds_yours` names the others) for a fixed list. Never both. Whichever it is, a call never gets more than the person holds at that moment. People only: an agent token gets 403 `person_only` (a token that made tokens would leave them behind after it was revoked). A `scope` (the old tiers) is refused with 400. It appears in `GET /api/v1/auth/sessions` with its label and what it was given, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -6450,7 +6450,7 @@ export interface components {
              */
             kind: "role" | "custom" | "legacy";
             role: null | components["schemas"]["RoleRef"];
-            /** @description For kind role: false while its person no longer holds the role (the token is stopped until the role is given back). True otherwise. */
+            /** @description For kind role: false while its person does not hold every permission of the role (the token is stopped until they do; giving them the role does it). A token may follow a role its person does not hold, such as an admin's token that follows Agent. True otherwise. */
             role_held: boolean;
             /** @description What the token was given (a role token: the role's permissions now). */
             permissions: components["schemas"]["TokenPermission"][];

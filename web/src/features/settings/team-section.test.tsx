@@ -35,7 +35,25 @@ test('an agent sees the team read-only', () => {
 
 const adminRole = roleOf(rolesOf('admin')[0], permissionsOf('admin'));
 const agentRole = roleOf(rolesOf('agent')[0], permissionsOf('agent'));
-const editor = roleOf({ id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null }, ['kb_articles:read'], { tokens: [{ id: 't1', label: 'Claude on laptop', owner: 'ann@example.com', owner_id: '22222222-2222-4222-8222-222222222222' }] });
+const editor = roleOf({ id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null }, ['kb_articles:read', 'workspace:export'], { tokens: [{ id: 't1', label: 'Claude on laptop', owner: 'ann@example.com', owner_id: '22222222-2222-4222-8222-222222222222' }] });
+
+// A token may follow a role its person does not hold, while their roles cover it: an admin's token that
+// follows Agent keeps working when Admin becomes Agent, and stops when the new roles leave part of it out.
+test('a token following a role its person covers stops only when the new roles no longer cover it', () => {
+  const agentWithToken = { ...agentRole, tokens: [{ id: 't2', label: 'Ops bot', owner: 'admin@example.com', owner_id: admin.id }] };
+  const other = member({ id: '55555555-5555-4555-8555-555555555555', email: 'eve@example.com', roles: rolesOf('admin') });
+  render(<TeamSection members={[admin, other]} currentAgentId={other.id} canManage roles={[adminRole, agentWithToken, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  const group = screen.getByRole('group', { name: 'Roles of Ada Admin' });
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Agent/ }));
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Admin/ }));
+  expect(group).not.toHaveTextContent('Ops bot');
+  expect(within(group).getByRole('button', { name: 'Apply' })).toBeEnabled();
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Editor/ }));
+  fireEvent.click(within(group).getByRole('checkbox', { name: /Agent/ }));
+  expect(group).toHaveTextContent('Ops bot');
+  expect(within(group).getByRole('button', { name: 'Remove and stop 1 token' })).toBeEnabled();
+});
 
 test('changing roles changes nothing until Apply is pressed, then sets the whole list', async () => {
   const onSetRoles = vi.fn().mockResolvedValue(undefined);

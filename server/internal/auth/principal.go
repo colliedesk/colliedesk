@@ -73,10 +73,8 @@ type TokenGrant = domain.TokenGrant
 // legacy are the session's columns; limit is the role of sessions.role_id (empty ID when none).
 func (p *Principal) setAccess(roles []roleRow, limit roleRow, scope string, permissions []string, legacy bool) {
 	p.Agent.Roles = make([]domain.RoleRef, len(roles))
-	held := map[string]bool{}
 	for index, role := range roles {
 		p.Agent.Roles[index] = role.ref()
-		held[role.ID] = true
 	}
 	p.person = rolesPermissions(roles)
 	if scope == "" {
@@ -94,11 +92,11 @@ func (p *Principal) setAccess(roles []roleRow, limit roleRow, scope string, perm
 		p.Token = &domain.TokenGrant{Kind: domain.TokenKindLegacy, LegacyTier: &tier}
 	case scope == ScopeRole:
 		ref := limit.ref()
-		p.Token = &domain.TokenGrant{Kind: domain.TokenKindRole, Role: &ref, RoleHeld: held[limit.ID]}
 		p.given = limit.permissions()
-		p.Token.Permissions = p.given.Sorted()
+		p.Token = &domain.TokenGrant{Kind: domain.TokenKindRole, Role: &ref, RoleHeld: p.person.HoldsAll(p.given), Permissions: p.given.Sorted()}
 		if !p.Token.RoleHeld {
-			// The person no longer holds the role: the token is stopped until it is given back.
+			// The person no longer holds every permission of the role (they may follow a role they do not
+			// hold, such as an admin's token that follows Agent): the token is stopped until they do.
 			p.given = PermissionSet{}
 		}
 		return

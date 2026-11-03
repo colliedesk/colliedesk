@@ -113,9 +113,10 @@ These hold for people and tokens alike:
 Create a token in **Settings → External AI agents**. Creating a token is something only a person
 does there; an AI agent cannot create one. Under **Access**, choose one of:
 
-- **Follow my role**: pick one of the roles you hold. The token gets that role's permissions as they
-  are on each call: change the role and the token changes with it. If the role is taken from you,
-  the token stops until you hold it again.
+- **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
+  and for an Admin every role. The token gets that role's permissions as they are on each call:
+  change the role and the token changes with it. If you stop holding every permission of the role
+  (it is taken from you, or it gains one you lack), the token stops until you hold them again.
 - **Pick permissions (fixed)**: tick the permissions the token gets, out of the ones you hold. The
   list is fixed when you create the token.
 

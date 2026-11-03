@@ -10,7 +10,8 @@ import './role-pickers.css';
 function sessionState(session: Session): keyof typeof settingsMessages.sessionStates {
   if (session.revoked_at) return 'revoked';
   if (Date.parse(session.expires_at) <= Date.now()) return 'expired';
-  // A token whose person no longer holds the role it follows works again once they do: stopped, not active.
+  // A token whose person no longer holds every permission of the role it follows works again once they do:
+  // stopped, not active.
   return session.token?.kind === 'role' && !session.token.role_held ? 'stopped' : 'active';
 }
 
@@ -21,7 +22,7 @@ interface SessionsSectionProps {
 }
 
 // TokenDetail says what an agent token was given: the role it follows (or that it is stopped while its
-// person lacks that role), a fixed list, or the tier of a token made before roles.
+// person lacks a permission of that role), a fixed list, or the tier of a token made before roles.
 function TokenDetail({ session }: { session: Session }) {
   const token = session.token;
   if (!token) return session.role ? <span className="badge">{settingsMessages.limitedSession(session.role.name)}</span> : null;

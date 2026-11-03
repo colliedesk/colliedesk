@@ -152,7 +152,7 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 // sessionColumns is the select list scanSession reads, from sessionFrom.
 const sessionColumns = `s.id::text,s.agent_id::text,a.email,COALESCE(NULLIF(btrim(a.display_name),''),a.email),s.label,COALESCE(s.scope,''),s.permissions,s.legacy,
 	COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions,
-	EXISTS (SELECT 1 FROM agent_roles ar WHERE ar.workspace_id=s.workspace_id AND ar.agent_id=s.agent_id AND ar.role_id=s.role_id),
+	`+personRolesColumn+`,
 	s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
 
 // sessionFrom joins a session to its person and its role.
@@ -165,10 +165,11 @@ func scanSession(row pgx.Row) (domain.Session, error) {
 	var session domain.Session
 	var scope string
 	var permissions []string
-	var legacy, held bool
+	var legacy bool
 	var role roleRow
+	var personRoles []roleRow
 	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.AgentName, &session.Label, &scope, &permissions, &legacy,
-		&role.ID, &role.Name, &role.System, &role.Permissions, &held,
+		&role.ID, &role.Name, &role.System, &role.Permissions, &personRoles,
 		&session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
 		return domain.Session{}, fmt.Errorf("scan session: %w", err)
 	}
@@ -187,7 +188,8 @@ func scanSession(row pgx.Row) (domain.Session, error) {
 		session.Token = &domain.TokenGrant{Kind: domain.TokenKindLegacy, LegacyTier: &tier, Permissions: legacyGiven(scope, permissions).Sorted()}
 	case scope == ScopeRole:
 		ref := role.ref()
-		session.Token = &domain.TokenGrant{Kind: domain.TokenKindRole, Role: &ref, RoleHeld: held, Permissions: role.permissions().Sorted()}
+		given := role.permissions()
+		session.Token = &domain.TokenGrant{Kind: domain.TokenKindRole, Role: &ref, RoleHeld: rolesPermissions(personRoles).HoldsAll(given), Permissions: given.Sorted()}
 	default:
 		session.Token = &domain.TokenGrant{Kind: domain.TokenKindCustom, Permissions: NewPermissionSet(permissions).Sorted()}
 	}

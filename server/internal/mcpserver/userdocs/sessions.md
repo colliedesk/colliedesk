@@ -33,10 +33,12 @@ Create a token in **Settings → External AI agents** (it needs `team:create_tok
 and Admin roles hold). Give it a name you will recognise in Sessions (1 to 80 characters, for
 example **Claude Code on my laptop**), then under **Access** choose one of:
 
-- **Follow my role**: pick one of the roles you hold. The token gets that role's permissions as they
-  are on each call: when someone changes the role, the token changes with it, and if the role is
-  taken from you, the token stops until you hold it again. A role that can export data, change roles
-  or reach outside the workspace says so; pick permissions to leave some out.
+- **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
+  and for an Admin every role (for example Agent, so the token cannot export or change roles). The
+  token gets that role's permissions as they are on each call: when someone changes the role, the
+  token changes with it. If you stop holding every permission of the role (it is taken from you, or
+  it gains one you lack), the token stops until you hold them again. A role that can export data,
+  change roles or reach outside the workspace says so; pick permissions to leave some out.
 - **Pick permissions (fixed)**: tick the permissions the token gets, out of the ones you hold. The
   list is fixed when you create the token. An orange dot marks what reaches outside the workspace (a
   customer, the public help center, another service).
@@ -65,7 +67,7 @@ In Sessions a token shows one of:
 Creating a token is something only a person does: an AI agent's token cannot create another one
 (HTTP 403 `person_only`), because a token that made tokens would leave them behind after it was
 revoked. A program signed in as a person can create one with `POST /api/v1/auth/tokens` and a body
-such as `{"label": "Claude Code", "role_id": "<id of one of your roles>"}`, or `{"label": "KB writer",
+such as `{"label": "Claude Code", "role_id": "<id of a role whose permissions you hold>"}`, or `{"label": "KB writer",
 "permissions": ["kb_articles:read", "kb_articles:create", "kb_articles:update"]}` for a fixed list.
 Each permission is `resource:action`. The old `scope` field is refused. On your own server you can
 also use the [command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line).

@@ -89,6 +89,16 @@ func (s PermissionSet) Intersect(other PermissionSet) PermissionSet {
 	return both
 }
 
+// HoldsAll reports whether this set holds every permission of other.
+func (s PermissionSet) HoldsAll(other PermissionSet) bool {
+	for name := range other {
+		if !s[name] {
+			return false
+		}
+	}
+	return true
+}
+
 // Missing lists the names this set does not hold, in the matrix order.
 func (s PermissionSet) Missing(names []string) []string {
 	want := NewPermissionSet(names)

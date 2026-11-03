@@ -69,7 +69,7 @@ func (a *API) writePermissionMissingHint(response http.ResponseWriter, request *
 	switch {
 	case who.IsToken() && who.Token.Kind == "role" && !who.Token.RoleHeld:
 		fields["missing_from"] = "person"
-		message = "This token follows the role " + who.Token.Role.Name + ", which " + name + " no longer holds. Giving the role back starts it again."
+		message = "This token follows the role " + who.Token.Role.Name + ", and " + name + " no longer holds every permission of it, so it is stopped. Giving " + name + " that role (or a role with those permissions) starts it again."
 	case who.IsToken() && !personLacks:
 		fields["missing_from"] = "token"
 		message = "This agent token was not given " + list + ". " + name + " holds it: create a token that includes it in Settings → External AI agents, then use that token."

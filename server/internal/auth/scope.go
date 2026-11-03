@@ -23,8 +23,8 @@ func (e *InvalidTokenError) Error() string { return e.Reason }
 
 const maxTokenLabelRunes = 80
 
-// TokenRequest asks for a token that follows one of the person's roles (RoleID, or RoleName for the
-// CLI) or holds a fixed list of Permissions; exactly one of them. LegacyScope is the CLI's deprecated
+// TokenRequest asks for a token that follows a role whose permissions the person all holds (RoleID, or
+// RoleName for the CLI) or holds a fixed list of Permissions; exactly one of them. LegacyScope is the CLI's deprecated
 // --scope: read, draft and send become that tier's old list, admin the Admin role.
 type TokenRequest struct {
 	Label       string

@@ -14,8 +14,8 @@ token that holds `messages:send` only when you want it to write to customers.
 - Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
   person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
 - Create the token in **Settings → External AI agents**, as described in
-  [Agent tokens](sessions.md#agent-tokens): it follows one of your roles, or holds a fixed list of
-  your permissions. Give it only what the job needs. The token is shown once; revoke it in
+  [Agent tokens](sessions.md#agent-tokens): it follows a role (one whose permissions you all hold), or holds a fixed
+  list of your permissions. Give it only what the job needs. The token is shown once; revoke it in
   **Settings → Sessions**.
 
 The agent does what the token's [permissions](roles-and-permissions.md) allow, at once; nothing waits

@@ -106,8 +106,8 @@ func TestTokenCreateGivesTheAdminTierOnlyToAnAdmin(t *testing.T) {
 	if _, err := env.pool.Exec(context.Background(), `INSERT INTO agents(workspace_id,email,role) SELECT id,'helper@admintokendesk.example.com','agent' FROM workspaces WHERE slug='admin-token-desk'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.run("token", "create", "--workspace", "admin-token-desk", "--email", "helper@admintokendesk.example.com", "--scope", "admin", "--label", "x"); err == nil || !strings.Contains(err.Error(), `does not hold the role "Admin"`) {
-		t.Fatalf("an admin token for an agent: err=%v, want a refusal naming the admin role", err)
+	if _, err := env.run("token", "create", "--workspace", "admin-token-desk", "--email", "helper@admintokendesk.example.com", "--scope", "admin", "--label", "x"); err == nil || !strings.Contains(err.Error(), "helper@admintokendesk.example.com does not hold ") || !strings.Contains(err.Error(), "workspace:export") {
+		t.Fatalf("an admin token for an agent: err=%v, want a refusal naming what the agent lacks", err)
 	}
 	token := strings.TrimSpace(env.mustRun("token", "create", "--workspace", "admin-token-desk", "--email", "admin@admintokendesk.example.com", "--scope", "admin", "--label", "Ops"))
 	me := tokenAPICall(t, env, http.MethodGet, "/api/v1/auth/me", token, "")
@@ -124,7 +124,7 @@ func TestTokenCreateRefusesBadInputAndCreatesNothing(t *testing.T) {
 	}{
 		"unknown scope":      {[]string{"--scope", "owner", "--label", "x"}, "--role"},
 		"missing access":     {[]string{"--label", "x"}, "--permission"},
-		"unknown role":       {[]string{"--role", "Owner", "--label", "x"}, `does not hold the role "owner"`},
+		"unknown role":       {[]string{"--role", "Owner", "--label", "x"}, `has no role "owner"`},
 		"unknown permission": {[]string{"--permission", "tickets:eat", "--label", "x"}, "tickets:eat"},
 		"missing label":      {[]string{"--scope", "read"}, "label"},
 		"unknown agent":      {[]string{"--email", "nobody@tokenrefusal.example.com", "--scope", "read", "--label", "x"}, "nobody@tokenrefusal.example.com"},

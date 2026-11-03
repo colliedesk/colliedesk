@@ -45,8 +45,11 @@ set of them. Code: `auth/principal.go`, `auth/permissions.go`, `auth/legacy.go`,
   (cut to `LimitedTo` for a limited session); `given` is what a token was given; `Can(p)` needs both.
   Both are read on every call, so a role change, a role taken away or a deactivation applies to every
   session and token at once. A token that follows a role gets the role's permissions as they are now
-  (`given = role.permissions()`), and nothing while its person no longer holds the role (`RoleHeld`
-  false: "Stopped" in Sessions; giving the role back starts it again). A custom token is a fixed list
+  (`given = role.permissions()`), and nothing while its person does not hold every permission of the
+  role (`RoleHeld` false: "Stopped" in Sessions; giving the role back starts it again). The role need
+  not be one the person holds: an admin's token may follow Agent. Creating and running use the same
+  rule (person ⊇ role), so a token never starts in a state it would be stopped in. A role edit that
+  adds a permission its token's person lacks stops that token. A custom token is a fixed list
   (`scope='custom'`, `permissions text[]`), still cut by what the person holds now.
 - **Refusals say how to fix them.** A missing permission is 403 `permission_missing` with
   `missing_permissions`, `missing_from` (`token` when the person holds it, `person` otherwise) and, for
@@ -63,7 +66,8 @@ set of them. Code: `auth/principal.go`, `auth/permissions.go`, `auth/legacy.go`,
   tokens would leave them behind after it was revoked. That is why `maxPersonOnly` is 4 in
   `mcpserver/agent_parity_test.go` (the two agent-request decision routes, the mail image proxy and
   token creation; raising it needs the maintainer's written approval). A token is created with
-  `role_id` (one of the caller's roles, else 403 `role_not_yours`) or `permissions` (each held, else
+  `role_id` (any role whose permissions the caller all holds, else 403 `role_exceeds_yours`; 404 when
+  there is no such role) or `permissions` (each held, else
   `role_exceeds_yours`), never both; a `scope` is 400. The CLI's `--scope` maps `read`/`draft`/`send`
   to that tier's old list and `admin` to the Admin role (`checkTokenRequest`).
 - **Tokens made before roles** keep `scope` as their tier and `legacy=true`. `legacyGiven` gives them

@@ -151,7 +151,8 @@ interface ChangeRolesProps {
 }
 
 // ChangeRoles is the list of roles under a member's row: tick the roles they should hold, then Apply.
-// Taking a role a token of theirs follows stops that token (said before, with its name), and taking
+// Roles that leave a token of theirs without every permission of the role it follows stop that token
+// (said before, with its name), and taking
 // Change roles from yourself is said too.
 function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel, onApply }: ChangeRolesProps) {
   const name = nameOf(member);
@@ -163,8 +164,13 @@ function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel
   const admin = roles.find((role) => role.system === 'admin');
   const locked = new Map<string, string>();
   if (lastAdmin && admin) locked.set(admin.id, settingsMessages.teamLastAdmin);
-  const removed = member.roles.filter((role) => !chosen.includes(role.id)).map((role) => role.id);
-  const stopping = roles.filter((role) => removed.includes(role.id)).flatMap((role) => role.tokens.filter((token) => token.owner_id === member.id).map((token) => token.label));
+  // A token follows a role while its person holds every permission of it (a role they hold, or one their
+  // roles cover, such as an admin's token following Agent): it stops when the new roles no longer cover it.
+  const holdsAfter = new Set(roles.filter((role) => chosen.includes(role.id)).flatMap((role) => role.permissions));
+  const holdsBefore = new Set(roles.filter((role) => member.roles.some((held) => held.id === role.id)).flatMap((role) => role.permissions));
+  const stops = (role: Role) => role.permissions.every((name) => holdsBefore.has(name)) && !role.permissions.every((name) => holdsAfter.has(name));
+  const tokensOf = (role: Role) => role.tokens.filter((token) => token.owner_id === member.id).map((token) => token.label);
+  const stopping = roles.filter(stops).flatMap(tokensOf);
   const keepsManage = chosen.some((id) => { const role = roles.find((item) => item.id === id); return role?.system === 'admin' || role?.permissions.includes('team:manage_roles'); });
   const losesManage = isSelf && myPermissions.includes('team:manage_roles') && !keepsManage;
   const apply = async () => {
@@ -183,8 +189,8 @@ function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onCancel(); } }}>
       <RoleCheckboxes idPrefix={`member-${member.id}`} roles={roles} chosen={chosen} onChange={setChosen} locked={locked}
         note={(role) => {
-          const tokens = role.tokens.filter((token) => token.owner_id === member.id).map((token) => token.label);
-          return removed.includes(role.id) && tokens.length > 0 ? <p className="warning-note">{roleMessages.tokensStop(name, tokens)}</p> : null;
+          const tokens = tokensOf(role);
+          return stops(role) && tokens.length > 0 ? <p className="warning-note">{roleMessages.tokensStop(name, tokens)}</p> : null;
         }} />
       {losesManage && <p className="warning-note">{roleMessages.loseManageTeam}</p>}
       {chosen.length === 0 && <p className="error-copy">{roleMessages.atLeastOne}</p>}

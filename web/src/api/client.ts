@@ -141,7 +141,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo, reason } = body.error ?? {};
     // A permission the caller lacks, a role beyond theirs, a member who outranks them: the message says
     // what is missing and how to get it, and detail keeps missing_permissions and ask.
-    if (['permission_missing', 'role_exceeds_yours', 'member_outranks_you', 'role_not_yours', 'person_only'].includes(String(code)) && typeof message === 'string' && message)
+    if (['permission_missing', 'role_exceeds_yours', 'member_outranks_you', 'person_only'].includes(String(code)) && typeof message === 'string' && message)
       return new PermissionError(message, body.error as { code?: unknown; [field: string]: unknown });
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
@@ -361,7 +361,7 @@ export const api = {
   // A press of Restore or Undo is named by its key, so a repeat of it restores once.
   restoreRole: (id: string, key: string) => request(`/api/v1/roles/${encodeURIComponent(id)}/restore`, roleSchema, { method: 'POST', headers: { 'Idempotency-Key': key } }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
-  // A token follows one of the person's roles (role_id) or holds a fixed list of permissions, never both.
+  // A token follows a role whose permissions the person all holds (role_id) or holds a fixed list of permissions, never both.
   createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>, key: string) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createAgentToken'>({ label, ...choice }) }),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),

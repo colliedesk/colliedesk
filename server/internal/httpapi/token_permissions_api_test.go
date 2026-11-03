@@ -98,7 +98,9 @@ func TestTokenRequestsAreChecked(t *testing.T) {
 		{"a scope (the old tiers)", desk.admin, map[string]any{"label": "x", "scope": "read"}, http.StatusBadRequest, "invalid_request"},
 		{"role and permissions", desk.admin, map[string]any{"label": "x", "role_id": adminRole, "permissions": []string{"tags:read"}}, http.StatusBadRequest, "invalid_request"},
 		{"agent gives a permission they lack", agent, map[string]any{"label": "x", "permissions": []string{"kb_articles:read", "kb_media:purge"}}, http.StatusForbidden, "role_exceeds_yours"},
-		{"agent follows a role they lack", agent, map[string]any{"label": "x", "role_id": adminRole}, http.StatusForbidden, "role_not_yours"},
+		{"agent follows a role whose permissions they lack", agent, map[string]any{"label": "x", "role_id": adminRole}, http.StatusForbidden, "role_exceeds_yours"},
+		{"a role that does not exist", desk.admin, map[string]any{"label": "x", "role_id": "00000000-0000-4000-8000-000000000000"}, http.StatusNotFound, "not_found"},
+		{"admin follows the Agent role they do not hold", desk.admin, map[string]any{"label": "z", "role_id": roleID(t, desk.api, desk.admin, "Agent")}, http.StatusCreated, ""},
 		{"agent gives the agent's permissions", agent, map[string]any{"label": "x", "permissions": []string{"kb_articles:read", "messages:send"}}, http.StatusCreated, ""},
 		{"agent follows the Agent role", agent, map[string]any{"label": "y", "role_id": roleID(t, desk.api, agent, "Agent")}, http.StatusCreated, ""},
 	} {

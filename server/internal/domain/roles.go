@@ -65,7 +65,8 @@ func (r Role) Ref() RoleRef { return RoleRef{ID: r.ID, Name: r.Name, System: r.S
 // TokenGrant is what an agent token was given. Kind is role (it follows Role), custom (a fixed list) or
 // legacy (made before roles; LegacyTier is what it was made as). Permissions is the given list (a role
 // token: the role's permissions now); a call gets these limited to what the person holds at that moment.
-// RoleHeld is false while the person of a role token no longer holds its role.
+// RoleHeld is false while the person of a role token does not hold every permission of its role (a
+// token may follow a role its person does not hold, as long as they hold all it gives).
 type TokenGrant struct {
 	Kind        string   `json:"kind"`
 	Role        *RoleRef `json:"role"`
@@ -86,7 +87,6 @@ var (
 	ErrRoleNameTaken    = errors.New("another role has this name")
 	ErrSystemRoleLocked = errors.New("this built-in role cannot be changed that way")
 	ErrRoleNotFound     = errors.New("no such role")
-	ErrRoleNotYours     = errors.New("you do not hold this role")
 	ErrNoRoles          = errors.New("everyone needs at least one role")
 )
 
