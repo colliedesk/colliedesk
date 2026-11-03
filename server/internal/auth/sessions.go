@@ -152,7 +152,7 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 // sessionColumns is the select list scanSession reads, from sessionFrom.
 const sessionColumns = `s.id::text,s.agent_id::text,a.email,COALESCE(NULLIF(btrim(a.display_name),''),a.email),s.label,COALESCE(s.scope,''),s.permissions,s.legacy,
 	COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions,
-	`+personRolesColumn+`,
+	` + personRolesColumn + `,
 	s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
 
 // sessionFrom joins a session to its person and its role.
