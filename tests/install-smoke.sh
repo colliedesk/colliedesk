@@ -67,7 +67,7 @@ bearer=$(printf '%s' "$session" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 me=$(curl -fsS "http://localhost:$PORT/api/v1/auth/me" -H "Authorization: Bearer $bearer") || fail 'session was refused'
 printf '%s' "$me" | grep -F '"email":"admin@smoke.example"' >/dev/null || fail "signed in as the wrong agent: $me"
 printf '%s' "$me" | grep -F '"name":"Smoke Desk"' >/dev/null || fail "signed in to the wrong workspace: $me"
-printf '%s' "$me" | grep -F '"role":"admin"' >/dev/null || fail "first agent is not an admin: $me"
+printf '%s' "$me" | grep -F '"system":"admin"' >/dev/null || fail "first agent does not hold the Admin role: $me"
 
 # The link works once.
 status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:$PORT/api/v1/auth/redeem" \
