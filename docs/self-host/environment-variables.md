@@ -176,9 +176,10 @@ provider use none. A running call holds its credit. Without `ai.server.monthly_c
 limit. Credits count results, not dollars, so `ai.server.prices` is optional: set it to see what the
 server's provider costs in the usage records.
 
-`ai.server.monthly_allowance` (dollars) is no longer read. While the database holds it, or
-`AI_SERVER_MONTHLY_ALLOWANCE` is set during the first import, the AI settings are refused with a message
-naming `ai.server.monthly_credits`, so a dollar amount is never read as credits. Replace it with
+`ai.server.monthly_allowance` (dollars) is no longer read, so a dollar amount is never read as credits.
+While it is set and `ai.server.monthly_credits` is not, the server's provider gives no credits (its
+features pause; your own providers keep working) and the server logs a warning naming
+`ai.server.monthly_credits`. Every other setting still loads. Replace it with
 `collie config set ai.server.monthly_credits=…` and `collie config unset ai.server.monthly_allowance`.
 
 `ai.server.prices` is `input:output[:cache_read[:cache_write]]` dollars per million tokens, as your provider

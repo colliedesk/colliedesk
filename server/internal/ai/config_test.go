@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func getenv(values map[string]string) func(string) string {
@@ -114,14 +115,44 @@ func TestMonthlyCreditsFromEnv(t *testing.T) {
 }
 
 // A dollar amount left in the old setting must never be read as credits: the server stops and names the new one.
-func TestTheOldDollarAllowanceStopsTheServerAndNamesTheCreditsSetting(t *testing.T) {
+// A stored dollar value must not stop the configuration from loading (that would drop every other
+// setting with it), and must never be read as credits: the server's provider gets no credits until
+// AI_SERVER_MONTHLY_CREDITS is set.
+func TestTheOldDollarAllowanceAloneGivesNoCreditsAndIsFlagged(t *testing.T) {
 	values := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5",
 		"AI_SERVER_MONTHLY_ALLOWANCE": "10"}
-	_, err := ai.ServerProviderFromEnv(getenv(values))
-	if err == nil || !strings.Contains(err.Error(), "AI_SERVER_MONTHLY_CREDITS") || !strings.Contains(err.Error(), "AI_SERVER_MONTHLY_ALLOWANCE") {
-		t.Fatalf("error = %v, want one naming both settings", err)
+	server, err := ai.ServerProviderFromEnv(getenv(values))
+	if err != nil {
+		t.Fatalf("error = %v, want the configuration to load", err)
 	}
-	if strings.Contains(err.Error(), "10") && strings.Contains(err.Error(), "=10") {
-		t.Fatalf("error repeats the value: %v", err)
+	if !server.LegacyAllowance {
+		t.Fatal("LegacyAllowance = false, want the old setting flagged")
+	}
+	if server.Allowance == nil {
+		t.Fatal("Allowance = nil (no limit), want 0 credits")
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTrial}); got != 0 {
+		t.Fatalf("trial credits = %d, want 0", got)
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTeam}); got != 0 {
+		t.Fatalf("plan credits = %d, want 0", got)
+	}
+}
+
+func TestTheCreditsSettingWinsOverTheOldDollarAllowance(t *testing.T) {
+	values := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5",
+		"AI_SERVER_MONTHLY_ALLOWANCE": "10", "AI_SERVER_MONTHLY_CREDITS": "1000,trial=500"}
+	server, err := ai.ServerProviderFromEnv(getenv(values))
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if !server.LegacyAllowance {
+		t.Fatal("LegacyAllowance = false, want the old setting flagged so the operator removes it")
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTeam}); got != 1000 {
+		t.Fatalf("plan credits = %d, want 1000", got)
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTrial}); got != 500 {
+		t.Fatalf("trial credits = %d, want 500", got)
 	}
 }

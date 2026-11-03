@@ -237,8 +237,11 @@ even once the running ones are done fails `ai_allowance_reached` (`AllowanceReac
 the credits start again for the 402 message).
 
 Trap: the old dollar setting must never be read as credits (10 dollars would be 10 credits). It stays a
-registry key (`ai.server.monthly_allowance`) only so an operator can unset what the database holds;
-`ServerProviderFromEnv` refuses it and names `AI_SERVER_MONTHLY_CREDITS`.
+registry key (`ai.server.monthly_allowance`) only so an operator can unset what the database holds.
+`ServerProviderFromEnv` must not refuse it: a refused value rejects the whole configuration version,
+the server falls back to the last good one (which holds the same key) and then to defaults, dropping
+SMTP, billing and the provider. Instead it sets `LegacyAllowance` (a startup warning) and, without
+`AI_SERVER_MONTHLY_CREDITS`, an allowance of 0 credits.
 
 ## Reply drafts
 

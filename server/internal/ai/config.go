@@ -5,7 +5,6 @@
 package ai
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -43,6 +42,10 @@ type ServerProvider struct {
 	// a self-hosted server that pays its own provider.
 	Prices    map[string]Price
 	Allowance *Allowance
+	// LegacyAllowance is true when the old dollar setting (AI_SERVER_MONTHLY_ALLOWANCE) is still set. It
+	// is never read as credits: alone it gives no credits, so the server's provider waits until
+	// AI_SERVER_MONTHLY_CREDITS is set, and the rest of the configuration still loads.
+	LegacyAllowance bool
 }
 
 // PriceOf returns the server's price for a model; false when it declares none (or there is no server provider).
@@ -70,14 +73,11 @@ func (s *ServerProvider) ModelsFor(slot string) []string {
 func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) {
 	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
 	kind, key, base, models, label := value("AI_SERVER_PROVIDER"), value("AI_SERVER_API_KEY"), value("AI_SERVER_BASE_URL"), value("AI_SERVER_MODELS"), value("AI_SERVER_LABEL")
-	if value("AI_SERVER_MONTHLY_ALLOWANCE") != "" {
-		return nil, errors.New("AI_SERVER_MONTHLY_ALLOWANCE (dollars) is no longer read: remove it and set AI_SERVER_MONTHLY_CREDITS, a number of credits (1000 or 1000,trial=500)")
-	}
-	prices, allowance := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_CREDITS")
+	prices, allowance, legacy := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_CREDITS"), value("AI_SERVER_MONTHLY_ALLOWANCE") != ""
 	if kind == "" && key == "" && base == "" && models == "" && label == "" && prices == "" && allowance == "" {
 		return nil, nil
 	}
-	server := &ServerProvider{Kind: aiprovider.Kind(kind), Label: label, APIKey: key, BaseURL: base}
+	server := &ServerProvider{Kind: aiprovider.Kind(kind), Label: label, APIKey: key, BaseURL: base, LegacyAllowance: legacy}
 	if server.Label == "" {
 		server.Label = DefaultServerLabel
 	}
@@ -121,6 +121,9 @@ func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) 
 	}
 	if server.Allowance, err = parseAllowance(allowance); err != nil {
 		return nil, err
+	}
+	if server.Allowance == nil && legacy {
+		server.Allowance = &Allowance{}
 	}
 	return server, nil
 }

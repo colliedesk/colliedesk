@@ -163,6 +163,9 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// Microsoft 365 seals its grants with the same ring as Gmail (MAILBOX_TOKEN_KEYS).
 	emailConfig, googleConfig, microsoftConfig, helpCenterDomain, aiServer := config.Email, config.Google, config.Microsoft, config.HelpCenterDomain, config.AIServer
 	googleConfig.Base = googleBaseURL
+	if aiServer != nil && aiServer.LegacyAllowance {
+		logger.Warn("ai.server.monthly_allowance (dollars) is no longer read; remove it and set ai.server.monthly_credits. Until then the server's provider gives no credits")
+	}
 	microsoftConfig.Base = microsoftBaseURL
 	githubConfig := config.GitHub
 	githubConfig.Base = githubBaseURL

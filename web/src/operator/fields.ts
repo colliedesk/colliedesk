@@ -24,7 +24,7 @@ export const fields: Record<string, FieldInfo> = {
   'ai.server.label': { label: 'Name shown to workspaces', kind: 'text' },
   'ai.server.prices': { label: 'Prices per million tokens', kind: 'textarea', help: 'model=input:output[:cache_read[:cache_write]], comma separated, in US dollars.' },
   'ai.server.monthly_credits': { label: 'AI credits per workspace', kind: 'text', help: 'Credits a month (1000), or with a trial\'s own number for the whole trial (1000,trial=500). One credit is one draft, triage suggestion or intake decision. Empty: no limit.' },
-  'ai.server.monthly_allowance': { label: 'Old dollar allowance (remove)', kind: 'text', help: 'No longer read, and while it is set the AI settings are refused. Remove it and set the credits.' },
+  'ai.server.monthly_allowance': { label: 'Old dollar allowance (remove)', kind: 'text', help: 'No longer read. While it is set and the credits are not, the server provider gives no credits. Remove it and set the credits.' },
   'smtp.host': { label: 'SMTP server', kind: 'text', help: 'Empty: mail waits in the outbox and nothing is lost.' },
   'smtp.port': { label: 'Port', kind: 'number', help: '587 with STARTTLS; port 465 is not supported.' },
   'smtp.username': { label: 'Username', kind: 'text' },
