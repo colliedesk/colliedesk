@@ -8904,7 +8904,7 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
-                /** @description Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. */
+                /** @description Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks. */
                 missing_permissions?: components["schemas"]["TokenPermission"][];
                 /**
                  * @description Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.

@@ -222,3 +222,51 @@ func TestTheCloudRefusesBrandNamesThroughTheTools(t *testing.T) {
 		t.Fatalf("self-hosted rename = %v", renamed)
 	}
 }
+
+// A token that follows a role its person no longer holds all of is stopped, and whoami says so and how to
+// start it again, as sessions_list does.
+func TestWhoamiSaysATokenIsStopped(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Whoami Stopped", "admin@whoami-stopped.example.com")
+	exporter := e.created("/api/v1/roles", map[string]any{"name": "Exporter", "permissions": []string{"conversations:read", "workspace:export"}}, w.admin)
+	status, invite := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "agent@whoami-stopped.example.com", "roles": []string{"Agent", "Exporter"}}, w.admin)
+	if status != http.StatusCreated {
+		t.Fatalf("invite: status=%d body=%v", status, invite)
+	}
+	parsed, err := url.Parse(invite["url"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, redeemed := e.rest(http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": parsed.Query().Get("token")}, "")
+	if status != http.StatusOK {
+		t.Fatalf("redeem: status=%d body=%v", status, redeemed)
+	}
+	agent := redeemed["token"].(string)
+	agentID := redeemed["agent"].(map[string]any)["id"].(string)
+	session := e.connect(e.token(agent, "Exporter bot", "Exporter", nil), "")
+	if who := e.ok(session, "colliedesk_whoami", nil); at(t, who, "token", "role") != "Exporter" || strings.Contains(stringify(who), `"stopped"`) {
+		t.Fatalf("whoami of a running token = %v", who)
+	}
+	if status, body := e.rest(http.MethodPut, "/api/v1/agents/"+agentID+"/roles", map[string]any{"role_ids": []string{roleIDNamed(t, e, w, "Agent")}}, w.admin); status != http.StatusOK {
+		t.Fatalf("take Exporter: status=%d body=%v", status, body)
+	}
+	who := e.ok(session, "colliedesk_whoami", nil)
+	if stopped, _ := who["token"].(map[string]any)["stopped"].(string); !strings.Contains(stopped, "no longer holds every permission") || len(who["permissions"].([]any)) != 0 {
+		t.Fatalf("whoami of a stopped token = %v (exporter %s)", who, exporter)
+	}
+}
+
+func roleIDNamed(t *testing.T, e *env, w workspace, name string) string {
+	t.Helper()
+	status, roles := e.rest(http.MethodGet, "/api/v1/roles", nil, w.admin)
+	if status != http.StatusOK {
+		t.Fatalf("roles: status=%d body=%v", status, roles)
+	}
+	for _, item := range roles["items"].([]any) {
+		if role := item.(map[string]any); role["name"] == name {
+			return role["id"].(string)
+		}
+	}
+	t.Fatalf("no role %s in %v", name, roles)
+	return ""
+}

@@ -293,6 +293,9 @@ func sessionsList(c *call, _ map[string]any) (any, error) {
 	return map[string]any{"sessions": sessions}, nil
 }
 
+// tokenStopped says why a token that follows a role does nothing (role_held false) and how to start it.
+const tokenStopped = "Its person no longer holds every permission of this role, so the token can do nothing until they hold them again (giving them the role does it)."
+
 // sessionToken is how an agent token got its permissions, by role name; nil for a person's sign-in.
 func sessionToken(grant *restTokenGrant) map[string]any {
 	if grant == nil {
@@ -302,7 +305,7 @@ func sessionToken(grant *restTokenGrant) map[string]any {
 	if grant.Role != nil {
 		out["role"] = grant.Role.Name
 		if grant.RoleHeld != nil && !*grant.RoleHeld {
-			out["stopped"] = "Its person no longer holds every permission of this role, so the token can do nothing until they hold them again (giving them the role does it)."
+			out["stopped"] = tokenStopped
 		}
 	}
 	if grant.LegacyTier != nil {

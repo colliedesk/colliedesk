@@ -12383,7 +12383,7 @@ components:
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
-            missing_permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks.'}
+            missing_permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks.'}
             missing_from: {type: string, enum: [token, person], description: 'Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.'}
             ask: {type: array, items: {type: string}, description: 'Only on permission_missing from the person: names of active members who can change roles (team:manage_roles).'}
             where: {type: string, description: 'Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading.'}

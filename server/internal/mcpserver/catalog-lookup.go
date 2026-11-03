@@ -14,9 +14,9 @@ func whoamiSpec() Spec {
 			`"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}},` +
 			`"agent":{"type":"object","properties":{"name":{"type":"string"},"email":{"type":"string"},"roles":{"type":"array","items":{"type":"string"},"description":"Names of the roles the team member holds."}}},` +
 			`"token":{"type":["object","null"],"description":"null for a person's own sign-in.","properties":{` +
-			`"kind":{"type":"string","enum":["role","custom","legacy"],"description":"role: follows a role of its person; custom: a list picked when it was made; legacy: made before roles."},` +
+			`"kind":{"type":"string","enum":["role","custom","legacy"],"description":"role: follows a role (one its person holds all the permissions of); custom: a list picked when it was made; legacy: made before roles."},` +
 			`"role":{"type":["string","null"],"description":"Name of the role it follows."},"given":{"type":"array","items":{"type":"string"},"description":"What the token was given, before it is limited to what its person holds."},` +
-			`"legacy_tier":{"type":["string","null"]}}},` +
+			`"legacy_tier":{"type":["string","null"]},"stopped":{"type":"string","description":"Only while the token is stopped: its person no longer holds every permission of the role it follows, and how to start it again."}}},` +
 			`"permissions":{"type":"array","items":{"type":"string"},"description":"What this call may do now (resource:action)."},"permissions_meaning":{"type":"string"},` +
 			`"workspace_locked":{"type":"boolean"},"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
 		run: whoami,

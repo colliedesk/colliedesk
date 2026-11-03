@@ -21,6 +21,8 @@ type whoamiToken struct {
 	Role       *string  `json:"role"`
 	Given      []string `json:"given"`
 	LegacyTier *string  `json:"legacy_tier"`
+	// Stopped is set while the token follows a role its person no longer holds all of.
+	Stopped string `json:"stopped,omitempty"`
 }
 
 type whoamiOut struct {
@@ -61,6 +63,9 @@ func whoami(c *call, _ map[string]any) (any, error) {
 		}
 		if grant.Role != nil {
 			out.Token.Role = &grant.Role.Name
+			if grant.RoleHeld != nil && !*grant.RoleHeld {
+				out.Token.Stopped = tokenStopped
+			}
 		}
 		if grant.Kind == "legacy" {
 			out.PermissionsMeaning += legacyMeaning

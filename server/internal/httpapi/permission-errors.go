@@ -68,8 +68,19 @@ func (a *API) writePermissionMissingHint(response http.ResponseWriter, request *
 	var message string
 	switch {
 	case who.IsToken() && who.Token.Kind == "role" && !who.Token.RoleHeld:
-		fields["missing_from"] = "person"
-		message = "This token follows the role " + who.Token.Role.Name + ", and " + name + " no longer holds every permission of it, so it is stopped. Giving " + name + " that role (or a role with those permissions) starts it again."
+		// The token is stopped: what the person lacks is part of the role it follows, not (always) the
+		// permission of this call, so that is what is named.
+		lacking := []string{}
+		for _, permission := range who.Token.Permissions {
+			if !who.PersonCan(permission) {
+				lacking = append(lacking, permission)
+			}
+		}
+		fields["missing_permissions"], fields["missing_from"] = lacking, "person"
+		ask, _ := a.store.NamesHolding(request.Context(), who.Workspace.ID, auth.PermTeamManageRoles)
+		fields["ask"] = ask
+		message = "This token follows the role " + who.Token.Role.Name + ", and " + name + " no longer holds every permission of it (" + strings.Join(lacking, ", ") +
+			" missing), so it is stopped. Giving " + name + " that role (or a role with those permissions) starts it again."
 	case who.IsToken() && !personLacks:
 		fields["missing_from"] = "token"
 		message = "This agent token was not given " + list + ". " + name + " holds it: create a token that includes it in Settings → External AI agents, then use that token."

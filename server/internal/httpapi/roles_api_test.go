@@ -303,7 +303,7 @@ func TestARoleTokenStopsWhileItsPersonLacksAPermissionOfTheRoleAndStartsAgain(t 
 	}
 	setRoles(t, desk.api, desk.admin, agentID, "Agent")
 	response := request(t, desk.api, http.MethodGet, "/api/v1/tags", nil, token, nil)
-	if missing, _, from := permissionMissing(t, response); !missing || from != "person" || !strings.Contains(response.Body.String(), "no longer holds every permission") {
+	if missing, names, from := permissionMissing(t, response); !missing || from != "person" || !slices.Equal(names, []string{"workspace:export"}) || !strings.Contains(response.Body.String(), "no longer holds every permission") {
 		t.Fatalf("a token whose person lost its role (and workspace:export): %d %s", response.Code, response.Body.String())
 	}
 	var sessions struct {
