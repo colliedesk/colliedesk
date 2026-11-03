@@ -131,7 +131,7 @@ test('past the daily limit it says automatic suggestions are paused and a person
 test('a failure a setting causes sends an admin to AI settings', async () => {
   serve(() => ({ suggestion: suggestion({ status: 'failed', error_code: 'ai_allowance_reached', ...empty, ready_at: null }), auto_applied: null }));
   show(vi.fn(), true);
-  expect(await screen.findByText(/this month’s included AI is used up/)).toBeInTheDocument();
+  expect(await screen.findByText(/the AI credits are used up/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open AI settings' })).toHaveAttribute('href', '/settings/ai');
 });
 

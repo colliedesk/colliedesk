@@ -168,9 +168,9 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
       <span><strong>{m.pausedHeading(formatDate(settings.automatic.paused_until, props.timezone))}</strong> {m.pausedBody(settings.automatic.per_day)}</span>
       {isAdmin && <div className="notice-actions"><button type="button" onClick={props.onOpenAutomatic}>{m.raiseLimit}</button></div>}
     </div>}
-    {settings.allowance && settings.allowance.used_micro_usd >= settings.allowance.limit_micro_usd && settings.slots.some((slot) => slot.source === 'server' && slot.enabled)
+    {settings.allowance && settings.allowance.used_credits >= settings.allowance.limit_credits && settings.slots.some((slot) => slot.source === 'server' && slot.enabled)
       && <div className="notice notice-danger" role="alert">
-        <span><strong>{m.allowanceUsedHeading(server?.label ?? '')}</strong> {m.allowanceUsedBody(formatDay(settings.allowance.resets_at, 'UTC'))}</span>
+        <span><strong>{m.allowanceUsedHeading}</strong> {m.allowanceUsedBody(server?.label ?? '', formatDay(settings.allowance.resets_at, 'UTC'))}</span>
         {isAdmin && <div className="notice-actions"><button type="button" className="primary-action" onClick={props.onOpenAdd}>{m.addProvider}</button></div>}
       </div>}
     {props.showConsent && server && isAdmin && <section className="panel ai-consent" aria-labelledby="ai-consent-heading">
@@ -238,7 +238,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
     onSetSlot(slot.slot, input);
   };
   const stopped = slot.enabled && !slot.active;
-  const allowanceUsed = slot.enabled && slot.source === 'server' && settings.allowance !== null && settings.allowance.used_micro_usd >= settings.allowance.limit_micro_usd;
+  const allowanceUsed = slot.enabled && slot.source === 'server' && settings.allowance !== null && settings.allowance.used_credits >= settings.allowance.limit_credits;
   const paused = slot.enabled && slot.slot === 'triage' && settings.automatic.paused_until !== null;
   return (
     <div className="ai-slot">
@@ -377,14 +377,14 @@ function IntakeSources({ settings, isAdmin, onSourceConsent }: { settings: AISet
 
 // AutoDraft is what reply drafts do by themselves where no channel says otherwise: only when asked, or a
 // draft for every customer message (a dialog estimates what it costs); paused for the day at its limit,
-// or until next month once it used half of the included AI.
+// or until the credits start again once it used half of them.
 function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onOff, onRaise }: { slot: AISlot; settings: AISettings; isAdmin: boolean; locked: boolean;
   hasProvider: boolean; onTurnOn: () => void; onOff: () => void; onRaise: () => void }) {
   const level: AILevel = slot.enabled ? slot.default_level : 'off';
   const on = level === 'suggest';
   const limits = settings.automatic;
   const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoDraftNeedsFeature : undefined;
-  const half = settings.allowance ? money(Math.floor(settings.allowance.limit_micro_usd / 2)) : null;
+  const half = settings.allowance ? Math.floor(settings.allowance.limit_credits / 2) : null;
   const pausedDay = on && limits.drafts_paused_until !== null;
   const pausedHalf = on && !pausedDay && limits.drafts_reserved_until !== null;
   const status = pausedDay ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDate(limits.drafts_paused_until ?? '', 'UTC'))}</span>
@@ -447,16 +447,15 @@ function AutoMovedNotice({ settings, slotName, onTurnOn }: { settings: AISetting
 }
 
 function Meter({ allowance }: { allowance: NonNullable<AISettings['allowance']> }) {
-  if (allowance.limit_micro_usd === 0) return <div className="ai-meter"><strong className="ai-meter-none">{m.noneIncluded}</strong></div>;
-  const used = Math.min(allowance.used_micro_usd, allowance.limit_micro_usd);
-  const full = allowance.used_micro_usd >= allowance.limit_micro_usd;
-  const percent = allowance.limit_micro_usd > 0 ? Math.round((used / allowance.limit_micro_usd) * 100) : 100;
+  if (allowance.limit_credits === 0) return <div className="ai-meter"><strong className="ai-meter-none">{m.noneIncluded}</strong></div>;
+  const used = Math.min(allowance.used_credits, allowance.limit_credits);
+  const full = allowance.used_credits >= allowance.limit_credits;
+  const percent = Math.round((used / allowance.limit_credits) * 100);
   return <div className="ai-meter">
-    <div className="ai-meter-top"><strong className={full ? 'error-copy' : undefined}>{m.allowanceUsed(money(allowance.used_micro_usd), money(allowance.limit_micro_usd))}</strong>
+    <div className="ai-meter-top"><strong className={full ? 'error-copy' : undefined}>{m.allowanceUsed(allowance.used_credits, allowance.limit_credits)}</strong>
       <span>{m.resets(formatDay(allowance.resets_at, 'UTC'))}</span></div>
-    <div className={`ai-bar${full ? ' ai-bar-full' : ''}`} role="meter" aria-label={m.includedUsed} aria-valuemin={0} aria-valuemax={allowance.limit_micro_usd}
-      aria-valuenow={used} aria-valuetext={m.allowanceUsed(money(allowance.used_micro_usd), money(allowance.limit_micro_usd))}><i style={{ width: `${percent}%` }} /></div>
-    {allowance.drafts_left !== null && !full && <span className="ai-meter-left">{m.draftsLeft(allowance.drafts_left)}</span>}
+    <div className={`ai-bar${full ? ' ai-bar-full' : ''}`} role="meter" aria-label={m.includedUsed} aria-valuemin={0} aria-valuemax={allowance.limit_credits}
+      aria-valuenow={used} aria-valuetext={m.allowanceUsed(allowance.used_credits, allowance.limit_credits)}><i style={{ width: `${percent}%` }} /></div>
   </div>;
 }
 

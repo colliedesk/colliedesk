@@ -23,7 +23,8 @@ export const fields: Record<string, FieldInfo> = {
   'ai.server.models': { label: 'Models by feature', kind: 'text', help: 'triage=model,draft=model|other; the first of each is the default.' },
   'ai.server.label': { label: 'Name shown to workspaces', kind: 'text' },
   'ai.server.prices': { label: 'Prices per million tokens', kind: 'textarea', help: 'model=input:output[:cache_read[:cache_write]], comma separated, in US dollars.' },
-  'ai.server.monthly_allowance': { label: 'Monthly allowance per workspace', kind: 'text', help: 'US dollars, or agent=3,trial=2. Empty: no limit.' },
+  'ai.server.monthly_credits': { label: 'AI credits per workspace', kind: 'text', help: 'Credits a month (1000), or with a trial\'s own number for the whole trial (1000,trial=500). One credit is one draft, triage suggestion or intake decision. Empty: no limit.' },
+  'ai.server.monthly_allowance': { label: 'Old dollar allowance (remove)', kind: 'text', help: 'No longer read, and while it is set the AI settings are refused. Remove it and set the credits.' },
   'smtp.host': { label: 'SMTP server', kind: 'text', help: 'Empty: mail waits in the outbox and nothing is lost.' },
   'smtp.port': { label: 'Port', kind: 'number', help: '587 with STARTTLS; port 465 is not supported.' },
   'smtp.username': { label: 'Username', kind: 'text' },
@@ -85,7 +86,7 @@ export const sections: Record<string, Section[]> = {
   ],
   ai: [
     { title: 'Server provider', lead: "Workspaces that bring no key of their own use this one.", keys: ['ai.server.provider', 'ai.server.label', 'ai.server.base_url', 'ai.server.api_key', 'ai.server.models'], test: 'ai' },
-    { title: 'Pricing and allowance', lead: 'Costs already counted keep the price of their day.', keys: ['ai.server.prices', 'ai.server.monthly_allowance'] },
+    { title: 'Pricing and credits', lead: 'Costs already counted keep the price of their day.', keys: ['ai.server.prices', 'ai.server.monthly_credits', 'ai.server.monthly_allowance'] },
   ],
   email: [
     { title: 'Outgoing mail (SMTP)', lead: 'Without a server, mail waits in the outbox and nothing is lost.', keys: ['smtp.host', 'smtp.port', 'smtp.username', 'smtp.password', 'smtp.starttls', 'email.from_policy'], test: 'smtp' },

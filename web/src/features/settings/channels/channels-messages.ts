@@ -91,7 +91,7 @@ export const channelsMessages = {
   intakeOverrideReason: 'Why AI may do this before it is ready',
   intakeOverrideNeedsReason: 'Say why, for the channel’s history.',
   intakeEstimate: (calls: number, days: number, cost: string | null) => `About ${calls} AI calls in ${days} days${cost ? `, about ${cost}` : ''}, from the messages of the last ${days} days.`,
-  intakeCostShare: (cost: string, percent: number) => `${cost}, ${percent}% of the AI included each month`,
+  intakeCostShare: (credits: number, percent: number) => `about ${credits} credits, ${percent}% of the AI credits each month`,
   intakeCostCredits: (credits: number) => `${credits} provider credits`,
   intakeEstimateNone: 'No estimate yet: no message was collected here in the last 30 days.',
   loading: 'Loading channels…',

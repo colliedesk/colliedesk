@@ -80,7 +80,7 @@ const text = {
 };
 
 const failures: Record<string, string> = {
-  ai_allowance_reached: 'No suggestion: this month’s included AI is used up. An admin can add your own provider in Settings → Built-in AI.',
+  ai_allowance_reached: 'No suggestion: the AI credits are used up. An admin can add your own provider in Settings → Built-in AI (no fee, no limit), or wait until the credits start again.',
   feature_off: 'No suggestion: triage suggestions were turned off. An admin turns them on in Settings → Built-in AI.',
   auth: 'No suggestion: the AI provider refused its key. An admin can change it in Settings → Built-in AI.',
   quota_exhausted: 'No suggestion: the AI provider account is out of credit. An admin can check it in Settings → Built-in AI.',

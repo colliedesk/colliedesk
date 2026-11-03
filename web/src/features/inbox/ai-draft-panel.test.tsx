@@ -105,13 +105,13 @@ test('a reply whose draft is gone meanwhile is sent without it', async () => {
   await vi.waitFor(() => expect(screen.getByLabelText('Message body')).toHaveValue(''));
 });
 
-test('a draft refused because the included AI is used up says so in the panel, not as a locked workspace', async () => {
+test('a draft refused because the AI credits are used up says so in the panel, not as a locked workspace', async () => {
   serve((_url, init) => init?.method === 'POST'
-    ? new Response(JSON.stringify({ error: { code: 'ai_allowance_reached', message: 'This month’s included AI is used up.' } }), { status: 402 })
+    ? new Response(JSON.stringify({ error: { code: 'ai_allowance_reached', message: 'The AI credits are used up.' } }), { status: 402 })
     : { items: [] });
   render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} onUse={vi.fn()} onClose={vi.fn()} />));
   fireEvent.click(await screen.findByRole('button', { name: 'Write draft' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('This month’s included AI is used up.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('The AI credits are used up.');
 });
 
 test('a draft stopped because the feature was turned off says why', async () => {

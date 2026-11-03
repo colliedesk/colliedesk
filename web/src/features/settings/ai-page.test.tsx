@@ -302,16 +302,17 @@ test('a number out of range marks its own field', async () => {
   expect(within(dialog).getByLabelText('A day (UTC)')).not.toHaveAttribute('aria-invalid');
 });
 
-test('a paused day and a used-up allowance each say what happens and what to do', () => {
+test('a paused day and used-up credits each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
     automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null },
-    allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
+    allowance: { limit_credits: 1000, used_credits: 1000, resets_at: '2026-11-01T00:00:00Z' } }) });
   expect(screen.queryByText(/drafts left/)).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
   expect(screen.getByRole('button', { name: 'Raise the daily limit' })).toBeInTheDocument();
-  expect(screen.getByRole('alert')).toHaveTextContent('This month’s Colliedesk AI allowance is used up');
-  expect(screen.getByRole('meter', { name: 'Allowance used this month' })).toHaveAttribute('aria-valuetext', '$9.00 of $9.00 used');
-  expect(screen.getAllByText('Stopped: allowance used')).toHaveLength(2);
+  expect(screen.getByRole('alert')).toHaveTextContent('The AI credits are used up');
+  expect(screen.getByRole('alert')).toHaveTextContent('Add your own key: no fee, no limit. Or wait until Nov 1, 2026');
+  expect(screen.getByRole('meter', { name: 'AI credits used' })).toHaveAttribute('aria-valuetext', '1,000 of 1,000 credits used');
+  expect(screen.getAllByText('Stopped: credits used')).toHaveLength(2);
   expect(document.querySelector('.ai-st-ok')).toBeNull();
 });
 
@@ -341,14 +342,15 @@ test('a paused feature says so on its row', () => {
   expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
 });
 
-test('a server allowance of nothing reads as none included', () => {
-  page({ settings: settings({ server, allowance: { limit_micro_usd: 0, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
-  expect(screen.getByText(/No AI is included on this server/)).toBeInTheDocument();
+test('a server with no credits reads as none included', () => {
+  page({ settings: settings({ server, allowance: { limit_credits: 0, used_credits: 0, resets_at: '2026-11-01T00:00:00Z' } }) });
+  expect(screen.getByText(/No AI credits on this server/)).toBeInTheDocument();
 });
 
-test('the allowance says about how many reply drafts are left', () => {
-  page({ settings: settings({ server, allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 2_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 1240 } }) });
-  expect(screen.getByText('About 1,240 reply drafts left')).toBeInTheDocument();
+test('the credits say how many are used and when they start again', () => {
+  page({ settings: settings({ server, allowance: { limit_credits: 1000, used_credits: 240, resets_at: '2026-11-01T00:00:00Z' } }) });
+  expect(screen.getByText('240 of 1,000 credits used')).toBeInTheDocument();
+  expect(screen.getByText('resets Nov 1, 2026')).toBeInTheDocument();
 });
 
 const triageLevel = () => screen.getByRole('group', { name: 'Triage: default for channels' });
@@ -413,16 +415,17 @@ test('automatic triage waits for the feature to be on, and says when a provider 
   expect(screen.getByRole('button', { name: 'Turn on again' })).toBeInTheDocument();
 });
 
-test('an admin turns on automatic drafts only after a dialog estimates what they cost', async () => {
+test('an admin turns on automatic drafts only after a dialog says how many credits they may use', async () => {
   const onSetSlot = vi.fn();
   const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true });
-  page({ settings: settings({ server, slots: [slot(), drafts], allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z', drafts_left: 140 },
+  page({ settings: settings({ server, slots: [slot(), drafts], allowance: { limit_credits: 1000, used_credits: 0, resets_at: '2026-11-01T00:00:00Z' },
     auto_draft_estimate: { customer_messages: 412, draft_cost_micro_usd: 64_000 } }), onSetSlot });
   fireEvent.click(within(draftLevel()).getByRole('radio', { name: 'Suggest' }));
   const dialog = await screen.findByRole('dialog', { name: 'Write a draft for every customer message?' });
   expect(within(dialog).getByText('412 customer messages')).toBeInTheDocument();
-  expect(within(dialog).getByText('$26.37 a month · $0.06 a draft')).toBeInTheDocument();
-  expect(within(dialog).getByText(/Automatic drafts may use half: \$4\.50, about 70 drafts/)).toBeInTheDocument();
+  expect(within(dialog).getByText('1,000 credits a month')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/a draft$/)).not.toBeInTheDocument();
+  expect(within(dialog).getByText(/Automatic drafts may use half: 500 credits, one for each draft/)).toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
   expect(onSetSlot).toHaveBeenCalledWith('draft', expect.objectContaining({ source: 'server', enabled: true, default_level: 'suggest' }));
 });

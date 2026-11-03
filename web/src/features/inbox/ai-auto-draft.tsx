@@ -33,7 +33,7 @@ const text = {
   pausedDayRest: ' today’s are used.',
   stillWorks: ' Draft with AI below still works.',
   pausedMonth: (until: string) => `Automatic drafts are paused until ${until}:`,
-  pausedMonthRest: ' they used their half of this month’s included AI.',
+  pausedMonthRest: ' they used half of the AI credits.',
   capped: 'No automatic draft for this message:',
   cappedRest: ' this conversation had 5 in 24 hours.',
   failed: 'The automatic draft failed:',
@@ -49,7 +49,7 @@ const text = {
 const failures: Record<string, string> = {
   auth: 'the AI provider refused its key.',
   quota_exhausted: 'the AI provider account is out of credit.',
-  ai_allowance_reached: 'this month’s included AI is used up.',
+  ai_allowance_reached: 'the AI credits are used up.',
   refused: 'the model declined to write this reply.',
   too_long: 'the draft ran past its length.',
   empty_answer: 'the model returned no reply.',

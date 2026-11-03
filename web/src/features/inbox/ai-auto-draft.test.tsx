@@ -118,7 +118,7 @@ test('while it is written, after the customer wrote again, and when no reply is 
 test('paused, capped, or failed: it says why and that Draft with AI still works; quiet when nobody needs it', async () => {
   serve([draft({ status: 'cancelled', error_code: 'allowance_reserved', text: null, ready_at: null })]);
   const { unmount } = show();
-  expect(await screen.findByText(/they used their half of this month’s included AI/)).toBeInTheDocument();
+  expect(await screen.findByText(/they used half of the AI credits/)).toBeInTheDocument();
   unmount();
   serve([draft({ status: 'failed', error_code: 'auth', text: null, ready_at: null })]);
   const failed = show({ canManage: true });

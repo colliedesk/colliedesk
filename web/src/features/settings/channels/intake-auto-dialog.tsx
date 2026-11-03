@@ -55,16 +55,15 @@ export function IntakeAutoDialog({ channelID, scope, options, settings, onClose,
     onTurnOn({ scope, level: 'auto', options: { ...rest, ...(override.length > 0 ? { gate_override: override, gate_override_reason: reason.trim() } : {}) } });
   };
   const toggle = (action: Action['action'], on: boolean) => setOverride((current) => (on ? [...current, action] : current.filter((item) => item !== action)));
-  // What 30 days cost: in dollars where the server knows its provider's price (with the share of the AI
-  // included each month on Colliedesk AI), in the provider's own credits where it reports those.
+  // What 30 days cost: in AI credits and their share of the month's where intake runs on the server's
+  // provider with credits, else in dollars where the server knows its provider's price, else in the
+  // provider's own credits where it reports those.
   const estimateCost = () => {
     if (!data) return null;
     const { ai_calls: calls, cost_per_call: each } = data.estimate;
-    if (each.micro_usd !== null) {
-      const total = each.micro_usd * calls;
-      const allowance = settings?.slots.find((item) => item.slot === 'intake')?.source === 'server' ? settings?.allowance : null;
-      return allowance && allowance.limit_micro_usd > 0 ? m.intakeCostShare(money(total), Math.max(1, Math.round((total / allowance.limit_micro_usd) * 100))) : money(total);
-    }
+    const allowance = settings?.slots.find((item) => item.slot === 'intake')?.source === 'server' ? settings?.allowance : null;
+    if (allowance && allowance.limit_credits > 0) return m.intakeCostShare(calls, Math.max(1, Math.round((calls / allowance.limit_credits) * 100)));
+    if (each.micro_usd !== null) return money(each.micro_usd * calls);
     return each.provider_cost !== null ? m.intakeCostCredits(Number((each.provider_cost * calls).toPrecision(2))) : null;
   };
   return <Dialog title={m.intakeAutoTitle(scopeName(scope))} help={m.intakeAutoLead} onClose={onClose} closeLabel={m.close} className="ai-dialog"
