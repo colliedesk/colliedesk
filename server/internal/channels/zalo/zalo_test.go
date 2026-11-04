@@ -536,3 +536,48 @@ func TestTheReceivedNoticeQuotesTheOpeningMessageAndAFileSaysWhatItIs(t *testing
 		t.Fatalf("a picture without words = %q", got)
 	}
 }
+
+// In a group, where Zalo shows no quote, the received and the resolved notice tag the customer who
+// opened the conversation ([@user id], Zalo's mention) so they know it is theirs; a mention the subject
+// carries tags no one; the team's replies and the other notices go as written.
+func TestAGroupsReceivedAndResolvedNoticesTagTheirCustomer(t *testing.T) {
+	a := newAt(t)
+	ctx := context.Background()
+	oa := a.channel.ExternalAccount
+	if _, err := a.store.UpdateChannel(ctx, a.workspaceID, a.channel.ID, store.ChannelInput{Settings: []byte(`{"commands":{"bug":{"match":"words","phrases":["report bug"]}},
+		"notices":{"received":"Got it.","status_pending":"Waiting.","status_resolved":"Fixed: {subject}"}}`)}, store.ChannelActor{AgentID: a.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	channel, err := a.store.GetChannel(ctx, a.workspaceID, a.channel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.channel = channel
+	a.receive(t, event("user_send_group_text", oa, "1110001", "g-1", "m-group", "report bug [@5550002] the scale prints nothing"))
+	conversation := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-group'`)
+	subject := a.one(t, `SELECT subject FROM conversations WHERE workspace_id=$1 AND id=$2`, conversation)
+	if !strings.Contains(subject, "[@5550002]") {
+		t.Fatalf("subject = %q, want the customer's own mention in it", subject)
+	}
+	a.deliver(t)
+	a.reply(t, conversation, "Looking at the scale.")
+	a.deliver(t)
+	for _, status := range []string{"pending", "resolved"} {
+		if _, err := a.store.UpdateConversation(ctx, a.workspaceID, conversation, store.ConversationUpdate{Status: &status, ActorID: a.agentID}); err != nil {
+			t.Fatal(err)
+		}
+		a.deliver(t)
+	}
+	var texts []string
+	for _, c := range a.zalo.sends() {
+		message, _ := c.Body["message"].(map[string]any)
+		if c.Path != "/v3.0/oa/group/message" || message["quote_message_id"] != nil {
+			t.Fatalf("send = %+v, want the group without a quote", c)
+		}
+		texts = append(texts, fmt.Sprint(message["text"]))
+	}
+	want := []string{"[@1110001] Got it.", "Looking at the scale.", "Waiting.", "[@1110001] Fixed: " + strings.ReplaceAll(subject, "[@", "[ @")}
+	if fmt.Sprint(texts) != fmt.Sprint(want) {
+		t.Fatalf("texts = %q, want %q", texts, want)
+	}
+}

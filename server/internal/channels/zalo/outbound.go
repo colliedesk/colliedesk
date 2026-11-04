@@ -66,6 +66,10 @@ type answer struct {
 	} `json:"data"`
 }
 
+// taggedInGroup are the notices that tag their customer ([@user id], Zalo's mention) in a group, where a
+// quote does not show: the one saying the request was taken, and the one saying it was resolved.
+var taggedInGroup = map[string]bool{channels.NoticeReceived: true, channels.NoticeStatusResolved: true}
+
 // Send delivers a reply or a notice: to the group it belongs to, or to the customer alone (quoting their
 // last message, once). A long text goes in parts of PartRunes, then each picture as a message of its own;
 // a retry sends only the parts that did not go. An access token Zalo refuses is refreshed once and the
@@ -118,9 +122,24 @@ func (o outbound) Send(ctx context.Context, out channels.Outbound, kit channels.
 		return channels.SendResult{Outcome: channels.OutcomeFailed, Code: CodeNotConnected,
 			Reason: "The OA has no access token yet: add it in the channel's settings, then retry."}
 	}
+	body := out.Message.Body
+	if recipient["group_id"] != "" && out.Message.Notice != "" {
+		// A notice's {subject} may carry a customer's own mention ("[@id] the scale..."): it must not tag that
+		// member again.
+		body = strings.ReplaceAll(body, "[@", "[ @")
+	}
+	if recipient["group_id"] != "" && taggedInGroup[out.Message.Notice] && strings.TrimSpace(body) != "" {
+		// Zalo shows no quote in a group: the notice tags the customer it answers among the members instead.
+		for _, identity := range out.Recipient.Identities {
+			if identity.Kind == IdentityUser && identity.Value != "" {
+				body = "[@" + identity.Value + "] " + body
+				break
+			}
+		}
+	}
 	parts := []map[string]any{}
-	if strings.TrimSpace(out.Message.Body) != "" || len(out.Message.Files) == 0 {
-		for _, text := range split(out.Message.Body, PartRunes) {
+	if strings.TrimSpace(body) != "" || len(out.Message.Files) == 0 {
+		for _, text := range split(body, PartRunes) {
 			parts = append(parts, map[string]any{"text": text})
 		}
 	}

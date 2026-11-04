@@ -151,7 +151,8 @@ alike).
 Each of these is sent by the OA itself, never counts as your team's first reply, and is left unsent
 while empty:
 
-1. **When a conversation opens**: `{ref}` becomes its code.
+1. **When a conversation opens**: `{ref}` becomes its code. In a group, where Zalo shows no quote, it
+   starts with a tag of the customer who opened it (Zalo's mention), so they see the request is theirs.
 2. **When a customer asks for help**: the answer to Help, in a chat or a group; it opens nothing. A chat
    gets it at most once in the time set in **Answer help in one chat at most every** (300 seconds unless
    you change it; 0 answers every time).
@@ -177,7 +178,9 @@ and for a chat moved into another conversation, without a quote. `{ref}` is the
 conversation's code and `{subject}` its subject; an empty box sets that status quietly:
 
 1. **When set to Pending**.
-2. **When set to Resolved**: also sent by **Send and resolve**.
+2. **When set to Resolved**: also sent by **Send and resolve**. In a group it starts with a tag of the
+   conversation's customer, as the notice of a conversation that opens does. A mention the customer wrote
+   in the subject tags no one there.
 3. **When set to Closed**: also sent when a conversation closes by itself.
 
 Reopening is told with **When a resolved or closed conversation is reopened** above. To change a status
