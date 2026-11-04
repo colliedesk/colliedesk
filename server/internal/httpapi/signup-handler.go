@@ -138,16 +138,27 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 }
 
 // queueStartTrial queues the report to Meta of a trial that came from a Meta ad. It only writes a row
-// (metaconversions.Worker sends it), and a failure is logged: the trial exists either way.
+// (metaconversions.Worker sends it), and a failure is logged: the trial exists either way. The Meta pixel's
+// _fbp cookie goes with it when the browser has one: colliedesk.com sets it on .colliedesk.com only after
+// the visitor accepted cookies there. Without a click ID nothing is queued, cookie or not.
 func (a *API) queueStartTrial(request *http.Request, workspaceID string, attribution domain.Attribution, clientIP string) {
 	if !a.config.MetaConversions.Enabled() || attribution.FBCLID == "" {
 		return
 	}
 	err := metaconversions.RecordStartTrial(request.Context(), a.db, metaconversions.StartTrial{
 		WorkspaceID: workspaceID, FBCLID: attribution.FBCLID, ClickIDSeenAt: attribution.ClickIDSeenAt, At: a.now(),
-		ClientIP: clientIP, UserAgent: request.UserAgent(), SourceURL: a.config.Origin + "/sign-in",
+		ClientIP: clientIP, UserAgent: request.UserAgent(), SourceURL: a.config.Origin + "/sign-in", FBP: cookieValue(request, "_fbp"),
 	})
 	if err != nil {
 		slog.Error("meta StartTrial not queued", "workspace", workspaceID, "error", err)
 	}
+}
+
+// cookieValue is the value of the named cookie on request, or "".
+func cookieValue(request *http.Request, name string) string {
+	cookie, err := request.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
 }

@@ -19,10 +19,18 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
   | `META_CONVERSIONS_TEST_EVENT_CODE` | Optional. Sends every event to Events Manager → Test events only. Unset it after the check. |
 
 - **Minimum payload.** `fbc` (`fb.1.<first-seen ms>.<fbclid>`: no `_fbc` cookie exists, so subdomain
-  index 1 and the time the sign-in page first saw the click ID, as Meta's fbp/fbc page says), client
-  IP, user agent, `event_id` = workspace id, `action_source` = `website`, `event_source_url` =
+  index 1 and the time the sign-in page first saw the click ID, as Meta's fbp/fbc page says), `fbp`
+  when the sign-up request carries the Meta pixel's `_fbp` cookie, client IP, user agent, `event_id` = workspace id, `action_source` = `website`, `event_source_url` =
   `APP_ORIGIN/sign-in` or `/settings/billing`, and for `Subscribe` `value` + `currency` from Polar's
   `amount` (cents) and `currency`. Never email, name, company or workspace name.
+- **`fbp` only from the cookie, only with a click ID.** colliedesk.com loads the Meta pixel after
+  the visitor accepts cookies (colliedesk.com#139); fbevents.js sets `_fbp` on `.colliedesk.com`
+  (checked in Chrome on 2026-11-04), so the browser sends it with the sign-up request to
+  app.colliedesk.com (`fetch` with `credentials: 'same-origin'`). The server stores it in
+  `meta_conversion_events.fbp` only when it matches `fb.<digit>.<ms>.<digits>` and is at most 64
+  characters; anything else is dropped and the event goes without it. The `fbclid` gate does not
+  change: a sign-up with `_fbp` and no click ID sends nothing, as the privacy page promises.
+  `Subscribe` copies `fbp` from the `StartTrial` row like `fbc`.
 - **Graph API `v26.0`** (`metaconversions.GraphVersion`), the newest version on 2026-11-01 (released
   2026-07-29). Meta retires a version about two years after release; move it before then.
 
@@ -38,8 +46,8 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
    A retry sends the same `event_id` and `event_time`.
 3. Meta refuses a request whose `event_time` is more than 7 days old, so a row still unsent after
    7 days less an hour gets `abandoned_at`. The log says `meta conversions given up`.
-4. `client_ip` and `user_agent` are cleared when `Subscribe` is sent, when a row is given up, and
-   90 days after a sign-up (Meta's own click cookie lasts 90 days).
+4. `client_ip`, `user_agent` and `fbp` are cleared when `Subscribe` is sent, when a row is given up,
+   and 90 days after a sign-up (Meta's own click cookie lasts 90 days).
 
 ## Checking it
 
