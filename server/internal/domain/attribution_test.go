@@ -74,3 +74,48 @@ func TestAttributionPropertiesNameOnlyTheValuesGiven(t *testing.T) {
 		t.Fatalf("properties=%v, want utm_source, utm_content and fbclid only", got)
 	}
 }
+
+func TestParseAttributionKeepsTheLandingPathOnlyWhenItIsAPlainSitePath(t *testing.T) {
+	now := time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
+	// The site sends a pathname of at most 201 characters: the slash and up to 200 more.
+	longest := "/" + strings.Repeat("a", 200)
+	cases := []struct {
+		name, path, want string
+	}{
+		{name: "a comparison page", path: "/vs/zendesk", want: "/vs/zendesk"},
+		{name: "the home page", path: "/", want: "/"},
+		{name: "a guide with dots and underscores", path: "/guides/move_from-freshdesk.v2/", want: "/guides/move_from-freshdesk.v2/"},
+		{name: "201 characters are kept", path: longest, want: longest},
+		{name: "202 characters are dropped", path: longest + "a", want: ""},
+		{name: "a full address is dropped", path: "https://evil.com", want: ""},
+		// The value is only stored and counted, never followed as a link, so a double slash is just text.
+		{name: "a double slash is kept as text", path: "//vs//zendesk", want: "//vs//zendesk"},
+		{name: "markup is dropped", path: "/vs/<script>", want: ""},
+		{name: "a path without its leading slash is dropped", path: "vs/zendesk", want: ""},
+		{name: "a query string is dropped", path: "/vs/zendesk?email=ana@example.com", want: ""},
+		{name: "capital letters are dropped", path: "/VS/Zendesk", want: ""},
+		{name: "a space is dropped", path: "/vs/zen desk", want: ""},
+		{name: "an empty value is dropped", path: "", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseAttribution(map[string]string{"landing_path": tc.path}, now)
+			if want := (Attribution{LandingPath: tc.want}); got != want {
+				t.Fatalf("ParseAttribution(landing_path=%q)=%+v, want %+v", tc.path, got, want)
+			}
+		})
+	}
+}
+
+func TestAttributionPropertiesCarryTheLandingPathOnlyWhenGiven(t *testing.T) {
+	got := Attribution{UTMSource: "tiktok", LandingPath: "/vs/zendesk"}.Properties()
+	if len(got) != 2 || got["utm_source"] != "tiktok" || got["landing_path"] != "/vs/zendesk" {
+		t.Fatalf("properties=%v, want utm_source and landing_path", got)
+	}
+	if got := (Attribution{UTMSource: "tiktok"}).Properties(); len(got) != 1 || got["utm_source"] != "tiktok" {
+		t.Fatalf("properties without a landing path=%v, want utm_source only", got)
+	}
+	if got := (Attribution{LandingPath: "/"}).Properties(); len(got) != 1 || got["landing_path"] != "/" {
+		t.Fatalf("properties of a home-page landing=%v, want landing_path=/ only", got)
+	}
+}

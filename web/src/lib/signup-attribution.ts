@@ -1,11 +1,14 @@
-// Signup attribution is the post or ad a visitor came from: the utm_* keys of the sign-in link and the
-// click IDs TikTok (ttclid) and Meta (fbclid) add to ad links. Only listed keys with plain values are kept,
-// as colliedesk.com writes them, so nothing else in the address (a sign-in token above all) is stored.
+// Signup attribution is the post, ad or page a visitor came from: the utm_* keys of the sign-in link, the
+// click IDs TikTok (ttclid) and Meta (fbclid) add to ad links, and landing_path, the first colliedesk.com page
+// of the visit. Only listed keys with plain values are kept, as colliedesk.com writes them, so nothing else in
+// the address (a sign-in token above all) is stored.
 // It lives in sessionStorage so it survives the identity-provider round trip before sign-up, and dies
 // with the tab or after a day. The server checks every value again.
-const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ttclid', 'fbclid'] as const;
+const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ttclid', 'fbclid', 'landing_path'] as const;
 const clickIDs = ['ttclid', 'fbclid'] as const;
 const plainValue = /^[A-Za-z0-9._-]{1,300}$/;
+// A pathname only: never a full address, a query or markup.
+const plainPath = /^\/[a-z0-9/._-]{0,200}$/;
 const storageKey = 'colliedesk.signup-attribution';
 const maxAgeMs = 24 * 60 * 60_000;
 
@@ -24,7 +27,7 @@ export function attributionFromSearch(search: string): Values {
   const values: Values = {};
   for (const key of keys) {
     const value = params.get(key);
-    if (value !== null && plainValue.test(value)) values[key] = value;
+    if (value !== null && (key === 'landing_path' ? plainPath : plainValue).test(value)) values[key] = value;
   }
   return values;
 }

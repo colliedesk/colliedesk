@@ -9,21 +9,28 @@ import (
 // a tracking parameter cannot carry an email address or markup into the database or the funnel.
 var attributionValue = regexp.MustCompile(`^[A-Za-z0-9._-]{1,300}$`)
 
+// landingPathValue is the pathname colliedesk.com sends as landing_path: never a full address, a query
+// or markup, so the first page of a visit is all it can say.
+var landingPathValue = regexp.MustCompile(`^/[a-z0-9/._-]{0,200}$`)
+
 // clickIDMaxAge bounds the click time a browser reports. The sign-in page remembers a landing for a day;
 // anything older or in the future is not a time this server can trust, so the sign-up time stands in.
 const clickIDMaxAge = 7 * 24 * time.Hour
 
-// Attribution is the post or ad a cloud sign-up came from: the utm_* keys of the link and the click IDs
-// TikTok (ttclid) and Meta (fbclid) add to ad links. An empty field was not in the link.
+// Attribution is the post, ad or page a cloud sign-up came from: the utm_* keys of the link, the click IDs
+// TikTok (ttclid) and Meta (fbclid) add to ad links, and the first colliedesk.com page of the visit
+// (landing_path). An empty field was not in the link.
 type Attribution struct {
 	UTMSource, UTMMedium, UTMCampaign, UTMContent, UTMTerm string
 	TTCLID, FBCLID                                         string
+	LandingPath                                            string
 	// ClickIDSeenAt is when the browser first saw a click ID; Meta reads it as the click time (fbc).
 	// Zero when there is no click ID.
 	ClickIDSeenAt time.Time
 }
 
-// ParseAttribution keeps the listed keys whose values are plain tokens and drops everything else.
+// ParseAttribution keeps the listed keys whose values are plain tokens, and landing_path when it is a plain
+// site path, and drops everything else.
 // click_id_seen_at is an RFC 3339 time, kept only with a click ID; without a believable one the click
 // counts as seen now.
 func ParseAttribution(values map[string]string, now time.Time) Attribution {
@@ -36,6 +43,9 @@ func ParseAttribution(values map[string]string, now time.Time) Attribution {
 	parsed := Attribution{
 		UTMSource: keep("utm_source"), UTMMedium: keep("utm_medium"), UTMCampaign: keep("utm_campaign"),
 		UTMContent: keep("utm_content"), UTMTerm: keep("utm_term"), TTCLID: keep("ttclid"), FBCLID: keep("fbclid"),
+	}
+	if path := values["landing_path"]; landingPathValue.MatchString(path) {
+		parsed.LandingPath = path
 	}
 	if parsed.TTCLID == "" && parsed.FBCLID == "" {
 		return parsed
@@ -67,5 +77,6 @@ func (a Attribution) fields() map[string]string {
 	return map[string]string{
 		"utm_source": a.UTMSource, "utm_medium": a.UTMMedium, "utm_campaign": a.UTMCampaign,
 		"utm_content": a.UTMContent, "utm_term": a.UTMTerm, "ttclid": a.TTCLID, "fbclid": a.FBCLID,
+		"landing_path": a.LandingPath,
 	}
 }

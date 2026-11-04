@@ -56,7 +56,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		Source        *string `json:"source"`
 		Timezone      string  `json:"timezone"`
 		Next          string  `json:"next"`
-		// Attribution is the sign-in link's utm_* keys and click IDs, as the sign-in page kept them.
+		// Attribution is the sign-in link's utm_* keys, click IDs and landing_path, as the sign-in page kept them.
 		Attribution map[string]string `json:"attribution"`
 	}
 	if err := decodeJSON(request, &input); err != nil {

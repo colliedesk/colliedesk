@@ -6642,7 +6642,7 @@ export interface components {
          * @enum {string}
          */
         OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
-        /** @description The post or ad a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys and the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links. A value is kept only when it matches `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. Stored with the onboarding answers and counted with the trial and the first payment. */
+        /** @description The post, ad or page a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys, the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links, and `landing_path`. A value is kept only when it matches `[A-Za-z0-9._-]{1,300}` (`landing_path`: `^/[a-z0-9/._-]{0,200}$`); any other key or value is dropped, never refused. Stored with the onboarding answers and counted with the trial and the first payment. */
         SignupAttribution: {
             utm_source?: string;
             utm_medium?: string;
@@ -6651,6 +6651,8 @@ export interface components {
             utm_term?: string;
             ttclid?: string;
             fbclid?: string;
+            /** @description The first colliedesk.com page of the visit, as a pathname (`/vs/zendesk`, `/`), as the site adds it to its sign-up links. */
+            landing_path?: string;
             /**
              * Format: date-time
              * @description When the browser first saw `ttclid` or `fbclid`. Missing, in the future or older than 7 days, the sign-up time stands in.
