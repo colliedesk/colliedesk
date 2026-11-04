@@ -23,8 +23,8 @@ const (
 	// maxEventAge: Meta refuses a whole request when an event_time is more than 7 days old, so an event
 	// still unsent an hour before that is given up.
 	maxEventAge = 7*24*time.Hour - time.Hour
-	// contextAge: Meta keeps its own click cookie 90 days; after that the sign-up's address and browser
-	// are of no more use and are cleared.
+	// contextAge: Meta keeps its own click cookie 90 days; after that the sign-up's address, browser and
+	// browser ID are of no more use and are cleared.
 	contextAge = 90 * 24 * time.Hour
 	// maxBackoff caps the wait between two tries of one event.
 	maxBackoff = 6 * time.Hour
@@ -99,11 +99,11 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 }
 
 // claim gives up the events Meta would refuse as too old, clears the address and browser nobody needs any
-// more, and leases the due events. Only workspace ids and event names leave the transaction.
+// more (with the browser ID), and leases the due events. Only workspace ids and event names leave the transaction.
 func (w *Worker) claim(ctx context.Context, now time.Time) ([]claimed, error) {
 	var due []claimed
 	err := w.db.Privileged(ctx, database.PrivilegeMetaConversionClaim, func(tx pgx.Tx) error {
-		abandoned, err := tx.Exec(ctx, `UPDATE meta_conversion_events SET abandoned_at=$1, client_ip=NULL, user_agent=NULL
+		abandoned, err := tx.Exec(ctx, `UPDATE meta_conversion_events SET abandoned_at=$1, client_ip=NULL, user_agent=NULL, fbp=NULL
 			WHERE sent_at IS NULL AND abandoned_at IS NULL AND event_time < $2`, now, now.Add(-maxEventAge))
 		if err != nil {
 			return fmt.Errorf("give up old events: %w", err)
@@ -111,8 +111,8 @@ func (w *Worker) claim(ctx context.Context, now time.Time) ([]claimed, error) {
 		if count := abandoned.RowsAffected(); count > 0 {
 			w.options.Logger.Warn("meta conversions given up: older than Meta accepts", "events", count)
 		}
-		if _, err := tx.Exec(ctx, `UPDATE meta_conversion_events SET client_ip=NULL, user_agent=NULL
-			WHERE (client_ip IS NOT NULL OR user_agent IS NOT NULL) AND created_at < $1 AND (sent_at IS NOT NULL OR abandoned_at IS NOT NULL)`, now.Add(-contextAge)); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE meta_conversion_events SET client_ip=NULL, user_agent=NULL, fbp=NULL
+			WHERE (client_ip IS NOT NULL OR user_agent IS NOT NULL OR fbp IS NOT NULL) AND created_at < $1 AND (sent_at IS NOT NULL OR abandoned_at IS NOT NULL)`, now.Add(-contextAge)); err != nil {
 			return fmt.Errorf("clear old sign-up addresses: %w", err)
 		}
 		rows, err := tx.Query(ctx, `UPDATE meta_conversion_events SET attempts=attempts+1, next_attempt_at=$2
@@ -146,6 +146,7 @@ type serverEvent struct {
 
 type userData struct {
 	FBC             string `json:"fbc"`
+	FBP             string `json:"fbp,omitempty"`
 	ClientIPAddress string `json:"client_ip_address,omitempty"`
 	ClientUserAgent string `json:"client_user_agent,omitempty"`
 }
@@ -170,12 +171,12 @@ func (w *Worker) send(ctx context.Context, event claimed, now time.Time) bool {
 	found := false
 	err := w.db.InWorkspace(ctx, event.workspaceID, func(tx pgx.Tx) error {
 		var eventTime time.Time
-		var ip, agent *string
+		var ip, agent, browser *string
 		var value *float64
 		var currency *string
-		err := tx.QueryRow(ctx, `SELECT event_time, fbc, client_ip, user_agent, event_source_url, value::float8, currency, attempts
+		err := tx.QueryRow(ctx, `SELECT event_time, fbc, fbp, client_ip, user_agent, event_source_url, value::float8, currency, attempts
 			FROM meta_conversion_events WHERE workspace_id=$1 AND event_name=$2 AND sent_at IS NULL AND abandoned_at IS NULL`,
-			event.workspaceID, event.eventName).Scan(&eventTime, &body.UserData.FBC, &ip, &agent, &body.EventSourceURL, &value, &currency, &attempts)
+			event.workspaceID, event.eventName).Scan(&eventTime, &body.UserData.FBC, &browser, &ip, &agent, &body.EventSourceURL, &value, &currency, &attempts)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -184,6 +185,9 @@ func (w *Worker) send(ctx context.Context, event claimed, now time.Time) bool {
 		}
 		found = true
 		body.EventName, body.EventTime, body.EventID, body.ActionSource = event.eventName, eventTime.Unix(), event.workspaceID, "website"
+		if browser != nil {
+			body.UserData.FBP = *browser
+		}
 		if ip != nil {
 			body.UserData.ClientIPAddress = *ip
 		}
@@ -241,8 +245,8 @@ func (w *Worker) post(ctx context.Context, event serverEvent) string {
 	return truncate(fmt.Sprintf("HTTP %d: %s", response.StatusCode, graphError.Error.Message))
 }
 
-// settle records the outcome. A sent Subscribe is the last event of a workspace, so its sign-up's address
-// and browser are cleared from both rows.
+// settle records the outcome. A sent Subscribe is the last event of a workspace, so its sign-up's address,
+// browser and browser ID are cleared from both rows.
 func (w *Worker) settle(ctx context.Context, event claimed, now time.Time, attempts int, failure string) error {
 	return w.db.InWorkspace(ctx, event.workspaceID, func(tx pgx.Tx) error {
 		if failure != "" {
@@ -257,7 +261,7 @@ func (w *Worker) settle(ctx context.Context, event claimed, now time.Time, attem
 		if event.eventName != EventSubscribe {
 			return nil
 		}
-		_, err := tx.Exec(ctx, `UPDATE meta_conversion_events SET client_ip=NULL, user_agent=NULL WHERE workspace_id=$1`, event.workspaceID)
+		_, err := tx.Exec(ctx, `UPDATE meta_conversion_events SET client_ip=NULL, user_agent=NULL, fbp=NULL WHERE workspace_id=$1`, event.workspaceID)
 		return err
 	})
 }
