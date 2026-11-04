@@ -130,8 +130,8 @@ func (a *API) planOfProduct(productID string) string {
 	return a.config.Billing.Products.PlanOf(productID)
 }
 
-// activationProperties are the plan and the post or ad the workspace's sign-up came from. Attribution that
-// cannot be read is left out and logged: the payment is applied and counted either way.
+// activationProperties are the plan and the post, ad or site page the workspace's sign-up came from.
+// Attribution that cannot be read is left out and logged: the payment is applied and counted either way.
 func (a *API) activationProperties(ctx context.Context, workspaceID, plan string) map[string]any {
 	properties := map[string]any{"plan": plan}
 	attribution, err := a.store.SignupAttribution(ctx, workspaceID)

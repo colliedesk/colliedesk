@@ -57,3 +57,22 @@ test('what was remembered is gone after a day, after clearing, or when storage h
   window.sessionStorage.setItem('colliedesk.signup-attribution', '{"values":{"utm_source":"a b"},"at":1}');
   expect(readSignupAttribution()).toBeUndefined();
 });
+
+test.each([
+  ['a comparison page', '?landing_path=%2Fvs%2Fzendesk', { landing_path: '/vs/zendesk' }],
+  ['the home page', '?landing_path=%2F', { landing_path: '/' }],
+  ['201 characters are kept', `?landing_path=/${'a'.repeat(200)}`, { landing_path: `/${'a'.repeat(200)}` }],
+  ['202 characters are dropped', `?landing_path=/${'a'.repeat(201)}`, {}],
+  ['a full address is dropped', '?landing_path=https%3A%2F%2Fevil.com', {}],
+  ['markup is dropped', '?landing_path=%2Fvs%2F%3Cscript%3E', {}],
+  ['a path without its leading slash is dropped', '?landing_path=vs%2Fzendesk', {}],
+  ['capital letters are dropped', '?landing_path=%2FVS', {}],
+])('landing path: %s', (_name, search, want) => {
+  expect(attributionFromSearch(search)).toEqual(want);
+});
+
+test('the site page is remembered with the ad keys and sent with the sign-up', () => {
+  rememberSignupAttribution('?intent=trial&utm_source=google&landing_path=%2Fvs%2Fzendesk');
+  rememberSignupAttribution('?intent=trial');
+  expect(readSignupAttribution()).toEqual({ utm_source: 'google', landing_path: '/vs/zendesk' });
+});

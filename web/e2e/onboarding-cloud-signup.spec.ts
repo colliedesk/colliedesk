@@ -32,9 +32,9 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   });
   expect(unverified.status()).toBe(401);
 
-  // The visitor comes from a TikTok post: the sign-in page keeps the link's keys for the sign-up, which sends
-  // them as the page does once the identity provider verified the email.
-  await page.goto(`${baseURL}/sign-in?intent=trial&utm_source=tiktok&utm_content=post-07`);
+  // The visitor comes from a TikTok post to the Zendesk comparison page: the sign-in page keeps the link's keys
+  // for the sign-up, which sends them as the page does once the identity provider verified the email.
+  await page.goto(`${baseURL}/sign-in?intent=trial&utm_source=tiktok&utm_content=post-07&landing_path=%2Fvs%2Fzendesk`);
   await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem('colliedesk.signup-attribution'))).not.toBeNull();
   const attribution = await page.evaluate(() => (JSON.parse(window.sessionStorage.getItem('colliedesk.signup-attribution') ?? '{}') as { values: Record<string, string> }).values);
   const created = await page.request.post(`${baseURL}/api/v1/auth/cloud/signup`, {
@@ -44,7 +44,7 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   expect(created.status()).toBe(201);
   const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; roles: { name: string; system: string | null }[] } };
   expect(body.agent).toMatchObject({ email, roles: [{ name: 'Admin', system: 'admin' }] });
-  expect(psql(`SELECT concat_ws('/', source, utm_source, utm_content) FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`, database).trim()).toBe('ai_claude/tiktok/post-07');
+  expect(psql(`SELECT concat_ws(' ', source, utm_source, utm_content, landing_path) FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`, database).trim()).toBe('ai_claude tiktok post-07 /vs/zendesk');
 
   // The session cookie from the sign-up opens the new workspace with its trial banner.
   await page.goto(baseURL);
