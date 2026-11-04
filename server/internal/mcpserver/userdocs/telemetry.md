@@ -97,14 +97,17 @@ Each report carries only:
 
 - `fbc`: the click ID and the time the browser first saw it,
 - the IP address and browser (User-Agent) of the sign-up,
+- `fbp`: if the person accepted cookies on colliedesk.com, the random browser ID the Meta pixel stored
+  there in the `_fbp` cookie, which the browser sends with the sign-up,
 - `event_id` = the workspace id, so Meta counts a report once even when it is sent again,
 - for `Subscribe`, the plan's price and currency.
 
 It never carries an email address, a name, a company, the workspace name or anything from the
-workspace. Nothing is reported for a sign-up without `fbclid`. The website and the app load no Meta
-pixel and set no Meta cookie. The server sends the reports in the background, after the sign-up or the
-payment, and retries a failed one later; neither ever waits for Meta. Once the `Subscribe` report is sent,
-or 90 days after a sign-up, the server forgets the sign-up's IP address and browser.
+workspace. Nothing is reported for a sign-up without `fbclid`. The app loads no Meta pixel and sets no
+Meta cookie; the website loads the Meta pixel only after the visitor accepts cookies there. The server
+sends the reports in the background, after the sign-up or the payment, and retries a failed one later;
+neither ever waits for Meta. Once the `Subscribe` report is sent, or 90 days after a sign-up, the server
+forgets the sign-up's IP address, browser and browser ID.
 
 A self-hosted server never sends anything to Meta and has no setting to turn it on.
 
