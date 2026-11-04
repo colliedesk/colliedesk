@@ -11,7 +11,9 @@ import (
 
 // OutMessage is the reply being sent.
 type OutMessage struct {
-	ID, Body  string
+	ID, Body string
+	// Notice is the kind of notice the channel sends by itself (NoticeReceived, ...); empty for the team's reply.
+	Notice    string
 	CC        []string
 	Files     []OutFile
 	CreatedAt time.Time

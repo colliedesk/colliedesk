@@ -667,12 +667,12 @@ func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, e
 func loadThreadNotice(ctx context.Context, tx pgx.Tx, claim OutboxClaim, out channels.Outbound) (channels.Outbound, error) {
 	var place channels.Place
 	var quote, senderKind, senderValue, senderName, contactID *string
-	err := tx.QueryRow(ctx, `SELECT n.id::text,n.body,n.created_at,t.kind,t.external_id,COALESCE(t.name,''),n.quote_external_id,c.sender_kind,c.sender_value,c.sender_name,c.contact_id::text
+	err := tx.QueryRow(ctx, `SELECT n.id::text,n.body,n.created_at,COALESCE(n.disposition_reason,''),t.kind,t.external_id,COALESCE(t.name,''),n.quote_external_id,c.sender_kind,c.sender_value,c.sender_name,c.contact_id::text
 		FROM channel_thread_items n JOIN channel_threads t ON t.workspace_id=n.workspace_id AND t.id=n.thread_id
 		LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.contact_id FROM channel_thread_items i
 			WHERE i.workspace_id=n.workspace_id AND i.thread_id=n.thread_id AND i.direction='in' AND i.external_id=n.quote_external_id LIMIT 1) c ON true
 		WHERE n.workspace_id=$1 AND n.id=$2`, claim.WorkspaceID, claim.ThreadItemID).
-		Scan(&out.Message.ID, &out.Message.Body, &out.Message.CreatedAt, &place.Kind, &place.ExternalID, &place.Name, &quote, &senderKind, &senderValue, &senderName, &contactID)
+		Scan(&out.Message.ID, &out.Message.Body, &out.Message.CreatedAt, &out.Message.Notice, &place.Kind, &place.ExternalID, &place.Name, &quote, &senderKind, &senderValue, &senderName, &contactID)
 	if err != nil {
 		return out, fmt.Errorf("load chat notice %s: %w", claim.ThreadItemID, err)
 	}
