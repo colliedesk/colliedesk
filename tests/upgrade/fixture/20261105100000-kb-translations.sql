@@ -9,9 +9,6 @@ INSERT INTO kb_article_translation_versions (id, workspace_id, article_id, local
         changed_by_agent_id, token_id, token_label, agent_request_id, created_at) VALUES
     (md5('kbt-acme-de-v2')::uuid, md5('ws-acme')::uuid, md5('kba-acme-1')::uuid, 'de', 2, 'restore', 1, 'Passwort zurücksetzen', 'passwort-zurücksetzen',
      'Öffnen Sie **Einstellungen**.', '', '', 'published', md5('agent-acme-ben')::uuid, md5('token-acme-read')::uuid, 'Claude (read)', NULL, '2024-03-02 10:00:00+00');
-INSERT INTO ai_retrieval_docs (id, workspace_id, kb_article_id, kb_locale, conversation_id, title, body, folded, tokens, updated_at) VALUES
-    (md5('aird-acme-3')::uuid, md5('ws-acme')::uuid, md5('kba-acme-1')::uuid, 'de', NULL, 'Passwort zurücksetzen', 'Öffnen Sie **Einstellungen**.',
-     kb_search_vector('passwort zurucksetzen offnen sie einstellungen'), 7, '2026-11-05 09:00:00+00');
 
 INSERT INTO kb_article_translations (workspace_id, article_id, locale, title, slug, body_md, status, published_at, seo_title, seo_description, author_agent_id,
         created_at, updated_at, deleted_at, deleted_by_agent_id) VALUES

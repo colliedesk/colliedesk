@@ -135,6 +135,44 @@ func TestAIRetrievalFindsPublishedArticlesWithoutAccentsAndInEveryLanguage(t *te
 	}
 }
 
+// A row an older build left for a translation that is not published (the translations migration keeps
+// the AI index as it was) never hides its article: the reader of that language gets the article in its
+// own language, and a search in every language still finds it once.
+func TestAIRetrievalSkipsTheLeftoverRowOfADraftTranslation(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval leftover", "admin@retrieval-leftover.example.com")
+	workspace := workspaceID(t, api, admin)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Help"}).ID
+	bigKB(t, api, admin, collection)
+	refund := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Refunds", "body_md": "We refund within five days.", "status": "published"})
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status) VALUES($1,$2,'fr','Remboursements','Nous remboursons refund en cinq jours.','r','draft')`,
+		workspace, refund.ID); err != nil {
+		t.Fatal(err)
+	}
+	buildAIRetrieval(t, pool)
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_retrieval_docs(workspace_id,kb_article_id,kb_locale,title,body,folded,tokens,updated_at)
+		VALUES($1,$2,'fr','Remboursements','Nous remboursons refund en cinq jours.',kb_search_vector('remboursements nous remboursons refund refund refund en cinq jours'),9,now())`,
+		workspace, refund.ID); err != nil {
+		t.Fatal(err)
+	}
+	french := "fr"
+	for name, query := range map[string]store.AIRetrievalQuery{
+		"french reader":  {Text: "refund remboursons", KBLimit: 5, KBReader: &french},
+		"every language": {Text: "refund remboursons", KBLimit: 5},
+	} {
+		var found []string
+		for _, doc := range aiRetrieve(t, pool, workspace, query) {
+			if doc.KBArticleID == refund.ID {
+				found = append(found, doc.KBLocale)
+			}
+		}
+		if len(found) != 1 || found[0] != "" {
+			t.Errorf("%s found the refund article as %q, want once in its own language", name, found)
+		}
+	}
+}
+
 func TestAIRetrievalRanksRareWordsAboveCommonOnes(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "Retrieval Rank", "admin@retrieval-rank.example.com")

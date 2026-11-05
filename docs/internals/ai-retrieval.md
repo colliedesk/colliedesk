@@ -14,9 +14,10 @@ database.
    published translation outside the trash, unless an admin excluded it from AI
    (`kb_articles.ai_excluded`). Drafts and the trash, of articles and of translations, are never in
    it: a translation follows its article's rule (owner decision 2026-11-05). The translations
-   migration removed the rows of draft translations; the trigger on a translation's status or
-   `deleted_at` removes its row in the same transaction, and a search checks it again
-   (`aiReadableTranslation`). Help chat on the help center searches for its reader
+   migration leaves the index as it was (an upgrade never removes rows): a row an older build made
+   for a draft translation is skipped before scoring (`aiPublishedTranslationOf`) and dropped at the
+   next build of its article. The trigger on a translation's status or `deleted_at` removes its row
+   in the same transaction, and a search checks it again (`aiReadableTranslation`). Help chat on the help center searches for its reader
    (`AIRetrievalQuery.KBReader`): each article once, its row in the reader's language where it has
    one, else its own, so a workspace with many languages costs a chat search no more than one
    (`TestAIChatTurnSetupLatencyBudget` measures a French reader on 2,000 translations). The text sent

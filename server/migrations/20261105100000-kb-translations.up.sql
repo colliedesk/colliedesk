@@ -158,6 +158,5 @@ DROP TRIGGER ai_retrieval_translation_updated ON kb_article_translations;
 CREATE TRIGGER ai_retrieval_translation_updated AFTER UPDATE OF title, body_md, status, deleted_at ON kb_article_translations
     FOR EACH ROW WHEN ((OLD.title, OLD.body_md, OLD.status, OLD.deleted_at) IS DISTINCT FROM (NEW.title, NEW.body_md, NEW.status, NEW.deleted_at))
     EXECUTE FUNCTION ai_retrieval_translation_changed();
--- Drafts lose their rows now; the builder reads only published ones from here on.
-DELETE FROM ai_retrieval_docs d USING kb_article_translations t
-    WHERE d.workspace_id = t.workspace_id AND d.kb_article_id = t.article_id AND d.kb_locale = t.locale AND t.status <> 'published';
+-- Rows an older build made for translations that are drafts stay: a search skips them
+-- (aiPublishedTranslationOf in store/ai-retrieval.go) and the next build of their article drops them.
