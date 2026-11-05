@@ -63,11 +63,11 @@ Each decision has a basis: **match** (a command, a reference, a thread key: evid
 carries), **default** (what the scope does with a message that carries none), or **person** (a held
 message put in a conversation). The journal keeps both (`channel_inbound_events.decision_basis`,
 `decision_rule`); a duplicate, an echo, a channel off and a message still being collected keep none,
-since the frame handled them before the rules. An AI decider may replace a default, and a match that
-rests only on the place's thread key (`rules.AIDecides`): in a chat or group the key says where the
-customer wrote, not what about, so it would file every new question in their last conversation. A
-command, a reply to a message and a person's choice are never replaced. When AI does not decide, a
-thread key's batch is replayed through the rules as they stand now, as a default's is.
+since the frame handled them before the rules. With intake on (suggest or auto), AI decides every batch
+a customer wrote, whatever the rules found (`rules.AIDecides`); the rules decide only a command, a cancel
+and a person's choice. Owner's decision (5 Nov 2026): at suggest every card waits for a person
+(`ai_suggests`); at auto AI's decision applies when sure enough, and anything else (below the threshold,
+gate closed, error, past its time) waits for a person; the rules never decide in AI's place.
 
 1. The code is the table, not the design's: an open command whose thread key finds a conversation
    joins it; a reference the join policy refuses lets the next reference try, while a refused thread key
@@ -107,10 +107,11 @@ Email and web forms declare none, so their path gains no row and no query beyond
    place's thread key there continues only a conversation the sender wrote in (a journal row with their
    `sender_key` and a message of it): a group's key is everyone's, so it is no evidence of whose request a
    message is.
-2. **Auto holds only a default.** At intake level `auto`, what the rules decide by `default` (a new
-   request, a review hold, a commands-only scope's chatter) is held with `hold_reason='intake'` through
-   `holdInbound`, so it is stored and counted exactly as a channel-off hold, and the contact is found only
-   when it is stored: a held batch creates nothing. A match is applied at once, never held.
+2. **Intake on holds what a customer wrote.** At intake level `suggest` or `auto`, every batch a customer
+   wrote (`rules.AIDecides`: not a command, a cancel or a person's choice) is held with
+   `hold_reason='intake'` through `holdInbound`, so it is stored and counted exactly as a channel-off hold,
+   and the contact is found only when it is stored: a held batch creates nothing. A command is applied at
+   once, never held.
 3. **Applying is a replay of the whole batch.** `pipeline.ApplyGathering` parses the held events again
    and replays them merged as one message (`IngestRequest.Intake`): `ForceNew` skips the thread lookup,
    so a new request never joins a conversation opened since the hold; the store locks the gathering and
@@ -118,16 +119,17 @@ Email and web forms declare none, so their path gains no row and no query beyond
    decisions), so a person and the sweep never apply twice (the losing one gets `ErrGatheringDecided`,
    also when SKIP LOCKED skips its events). A person's and AI's decisions are `intake_decisions` rows;
    the rules' decisions stay in the journal only.
-4. **The sweep is the fallback.** `intake.Service.Sweep` (every 15 s in `collie serve`, claimed across
-   workspaces under `PrivilegeIntakeDueClaim`) applies the rules' decision to what is past `decide_by`
-   (two minutes): `create` is replayed through the rules as they stand then, without `ForceNew` (a
-   sender's batch held while an earlier one waited too continues the conversation that one opened, as
-   without AI; the journal names the rule that applied), `review` goes to the queue (`no_command`), and a
-   commands-only scope's chatter goes to the queue too (`ai_unavailable`): an admin turned AI on so it
-   would be looked at. `fallback=true` says so.
-5. **Lanes.** A gathering's lane is its place and sender (`lane_key`). At `auto`, a batch behind a card
-   of its lane in review waits in review (`lane_blocked`); deciding that card gives the next blocked one
-   back to `deciding` while it is younger than two hours.
+4. **The sweep sends to a person.** `intake.Service.Sweep` (every 15 s in `collie serve`, claimed across
+   workspaces under `PrivilegeIntakeDueClaim`) sends what is past `decide_by` (two minutes) to the queue
+   (`ai_unavailable`, `fallback=true`): the rules never decide in AI's place. A card whose scope's intake
+   was turned off since it was held is the rules' again: replayed through them as they stand then.
+5. **Lanes.** A gathering's lane is its place and sender (`lane_key`). A batch behind a card of its lane
+   that waits for a person waits in review (`lane_blocked`); deciding that card gives the next blocked one
+   back to `deciding` while it is younger than two hours. A card at `suggest` waiting with AI's suggestion
+   (`ai_suggests`) holds up nothing: the next card of its lane gets its turn with AI. Raising a scope from
+   `suggest` to `auto` therefore lets AI apply a new card before an older suggested one is decided: kept
+   on purpose (the older card's messages are in the place's history AI reads, and a person may still
+   move messages), so the lane has one rule whatever the level.
 6. **Held readers.** `HeldEvents` and the held replay leave out a gathering's events while it is
    deciding, in review or set aside; `DiscardHeld` may throw away what was set aside, and a gathering
    whose events are all discarded is `cancelled`. Removing a channel still counts every held event, and
@@ -144,8 +146,8 @@ Email and web forms declare none, so their path gains no row and no query beyond
 1. **One task a card, one card a lane.** The ingest transaction queues the `intake` AI task in SQL (the
    store cannot import `ai`): `holdForIntake` and every conclusion of a card (`unblockLane`) ask for the
    lane's next turn, which goes to the oldest `deciding` card that never had a task, only while no card of
-   the lane has one waiting or running and none waits for a person. At `suggest`, a card the rules applied
-   by default or by the place's thread key alone (`rules.AIDecides`), or held for a person, gets a task of its own. `ai_tasks_intake_gathering` keeps one live task
+   the lane has one waiting or running and none waits for a person. At `suggest` a card is held like at `auto`
+   and gets its turn the same way; what AI says waits for a person. `ai_tasks_intake_gathering` keeps one live task
    a card. The worker polls (5 s), so a card waits seconds for AI, never the request that brought it.
 2. **The prompt is built from a snapshot.** `store.IntakeSnapshotOf` reads the card, its scope's level and
    options, the workspace's consents, its items, 40 items of the place before it (the prompt shows 15; the
@@ -161,12 +163,12 @@ Email and web forms declare none, so their path gains no row and no query beyond
    `attach_requires_single_candidate` on, while the customer has at most one unresolved conversation among
    the candidates, whatever AI's confidence and runner-up (`several_candidates`). It is off by default: a
    busy customer often has several open conversations, and the check held back even an attach AI was sure
-   of. Otherwise its decision is recorded with `applied=false` and why, and a card that waited at `auto` gets the rules' decision at once
-   (`fallback=false`; true when the model failed): the customer never waits for AI that may not act. A
-   commands-only scope's chatter then waits for a person with the reason AI did not act.
+   of. Otherwise its decision is recorded with `applied=false` and why, and the card waits for a person at
+   once with that reason (`ai_unsure`, `gate_closed`, `credential`, `too_old`, `target_changed`,
+   `ai_unavailable` with `fallback=true` when the model failed; `ai_suggests` at `suggest`).
 4. **Who decided first wins.** The suggestion is written in the task's own transaction (`Run.Record`), so a
-   cancelled task records nothing; a card a person decided meanwhile records `person_first`, one the rules
-   decided past its time `too_old`. An applied decision goes through `Service.Decide` like a person's and
+   cancelled task records nothing; a card a person decided meanwhile records `person_first`, one the sweep
+   already sent to a person `too_old`. An applied decision goes through `Service.Decide` like a person's and
    loses to whoever locked the card first.
 5. **A task that ends without deciding hands the card to the rules.** When the worker cancels or fails an
    intake task (the day's `intake_per_day`, the feature off, a locked workspace, retries spent), it sets

@@ -24,7 +24,7 @@ test('the page names itself, counts what waits and switches lists', () => {
 
 test('cards that wait for AI are counted under Waiting, not listed', () => {
   const { rerender } = render(<ReviewPage {...props({ decidingCount: 2 })} />);
-  expect(screen.getByText('2 more cards wait for AI to decide; the rules decide what it does not in time.')).toBeInTheDocument();
+  expect(screen.getByText('2 more cards wait for AI; what it does not decide in time waits here.')).toBeInTheDocument();
   rerender(<ReviewPage {...props({ decidingCount: 0 })} />);
   expect(screen.queryByText(/wait for AI/)).not.toBeInTheDocument();
 });

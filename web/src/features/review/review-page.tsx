@@ -19,7 +19,7 @@ interface ReviewPageProps {
   onFilter: (filter: string) => void;
   scopes: IntakeSummary['scopes'];
   waitingCount?: number;
-  // decidingCount is how many cards wait for AI (intake on Auto) before the rules decide them.
+  // decidingCount is how many cards wait for AI (intake on) before they are applied or wait for a person.
   decidingCount?: number;
   stats?: IntakeStats;
   items?: IntakeGathering[];

@@ -30,6 +30,8 @@ const (
 
 	ReviewNoCommand     = "no_command"
 	ReviewAIUnavailable = "ai_unavailable"
+	// ReviewAISuggests: at suggest every card waits for a person with what AI suggests.
+	ReviewAISuggests    = "ai_suggests"
 	ReviewLaneBlocked   = "lane_blocked"
 	ReviewRequeued      = "requeued"
 	ReviewTargetChanged = "target_changed"
@@ -51,7 +53,7 @@ func unblockLane(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID string
 		UPDATE intake_gatherings SET state='deciding',review_reason=NULL,decide_by=$3,updated_at=$4
 		WHERE workspace_id=$1 AND id IN (SELECT id FROM next) AND closed_at>$5
 			AND NOT EXISTS(SELECT 1 FROM intake_gatherings o, lane WHERE o.workspace_id=$1 AND o.lane_key=lane.lane_key AND o.state='review'
-				AND o.review_reason<>'lane_blocked')`, workspaceID, gatheringID, now.Add(DecideWithin), now, now.Add(-autoMaxAge))
+				AND o.review_reason NOT IN ('lane_blocked','ai_suggests'))`, workspaceID, gatheringID, now.Add(DecideWithin), now, now.Add(-autoMaxAge))
 	if err != nil {
 		return fmt.Errorf("unblock gathering lane: %w", err)
 	}
@@ -71,6 +73,10 @@ const (
 	intakeSuggest = "suggest"
 	intakeAuto    = "auto"
 )
+
+// aiOn says intake is on at level: AI decides what a customer wrote (suggest: a person follows it;
+// auto: applied when sure enough), the rules nothing of it.
+func aiOn(level string) bool { return level == intakeSuggest || level == intakeAuto }
 
 // intakeLevel is the level of intake for a message, "" when it is no batch of intake: a scope the
 // type does not declare for intake, a person's replay, a team member's message.
@@ -181,7 +187,7 @@ func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWr
 		return result, err
 	}
 	var blocked bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM intake_gatherings WHERE workspace_id=$1 AND lane_key=$2 AND state='review')`,
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM intake_gatherings WHERE workspace_id=$1 AND lane_key=$2 AND state='review' AND review_reason<>'ai_suggests')`,
 		journal.channel.WorkspaceID, lane).Scan(&blocked); err != nil {
 		return result, fmt.Errorf("read gathering lane: %w", err)
 	}
@@ -455,6 +461,13 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 				WHERE workspace_id=$1 AND gathering_id=$2::uuid`, workspaceID, id, reviewReason); err != nil {
 				return struct{}{}, fmt.Errorf("queue gathering items: %w", err)
 			}
+			// At suggest every card waits for a person, and the next card of the lane gets its turn with AI:
+			// a suggestion waiting never holds up the next one.
+			if reviewReason == ReviewAISuggests {
+				if err := enqueueLaneTurn(ctx, tx, workspaceID, id, now); err != nil {
+					return struct{}{}, err
+				}
+			}
 		default:
 			return struct{}{}, fmt.Errorf("a gathering is not decided %q without a message", action)
 		}
@@ -475,23 +488,25 @@ func gatheringMissingOr(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	return otherwise
 }
 
-// DueGathering is a gathering past its time to be decided, with what the rules decided when it closed.
+// DueGathering is a gathering past its time to be decided; Off says its scope's intake was turned off
+// since it was held.
 type DueGathering struct {
-	WorkspaceID, ID, RulesAction, RulesRule, RulesTarget string
+	WorkspaceID, ID string
+	Off             bool
 }
 
 // DueGatherings lists, across workspaces, gatherings AI did not decide in time, oldest first.
 func (s *Store) DueGatherings(ctx context.Context, now time.Time, limit int) ([]DueGathering, error) {
 	var due []DueGathering
 	err := s.db.Privileged(ctx, database.PrivilegeIntakeDueClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,rules_action,rules_rule,COALESCE(rules_target::text,'') FROM intake_gatherings
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,ai_level(workspace_id,channel_id,scope,'intake') NOT IN ('suggest','auto') FROM intake_gatherings
 			WHERE state='deciding' AND decide_by<=$1 ORDER BY decide_by LIMIT $2`, now, limit)
 		if err != nil {
 			return err
 		}
 		due, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (DueGathering, error) {
 			var g DueGathering
-			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.RulesAction, &g.RulesRule, &g.RulesTarget)
+			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.Off)
 		})
 		return err
 	})

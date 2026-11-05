@@ -90,7 +90,8 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	if g.State != store.GatheringDeciding && g.State != store.GatheringReview && g.State != store.GatheringApplied {
 		return run.Record(ctx, func(pgx.Tx) error { return nil })
 	}
-	// Turned off since the card was queued: nothing reaches the model, and the card is the rules' now.
+	// Turned off since the card was queued: nothing reaches the model, and the sweep gives the card back to
+	// the rules.
 	if snap.Level != levelAuto && snap.Level != levelSuggest {
 		return &ai.TaskError{Code: ai.CodeAutomationOff, Cancelled: true}
 	}
@@ -190,12 +191,12 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 		waiting, err = store.RecordAIDecision(ctx, tx, workspaceID, gatheringID, input, s.now().UTC())
 		return err
 	})
-	if err != nil || !waiting || snap.Level != levelAuto {
+	if err != nil || !waiting {
 		return err
 	}
-	// At auto the card waited for AI; what it did not do, the rules do now.
-	err = s.applyRules(ctx, store.DueGathering{WorkspaceID: workspaceID, ID: gatheringID, RulesAction: g.Rules.Action, RulesRule: g.Rules.Rule, RulesTarget: deref(g.Rules.TargetConversationID)},
-		store.IntakeApply{Decider: store.DecidedByRules, Fallback: code != ""}, reviewReasonFor(reason))
+	// At auto the card waited for AI; what it did not do on its own, a person decides.
+	err = s.store.SetGatheringState(ctx, workspaceID, gatheringID, Review, reviewReasonFor(reason),
+		store.IntakeApply{Decider: store.DecidedByRules, Fallback: code != ""}, s.now().UTC())
 	if errors.Is(err, store.ErrGatheringDecided) {
 		return nil
 	}
@@ -259,6 +260,10 @@ func reviewReasonFor(notApplied string) string {
 		return "too_old"
 	case "error":
 		return store.ReviewAIUnavailable
+	case "level_suggest":
+		return store.ReviewAISuggests
+	case "target_changed":
+		return store.ReviewTargetChanged
 	}
 	return "ai_unsure"
 }

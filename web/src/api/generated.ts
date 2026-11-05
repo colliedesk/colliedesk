@@ -5027,13 +5027,13 @@ export interface components {
             /** Format: uuid */
             contact_id: string | null;
             /**
-             * @description applied: the rules decided, AI only suggests.
+             * @description applied: the rules decided and AI only suggested (cards from before intake at suggest held every card).
              * @enum {string}
              */
             state: "deciding" | "review" | "created" | "attached" | "ignored" | "applied" | "cancelled";
             /** @enum {string|null} */
-            review_reason: "no_command" | "ai_unsure" | "ai_unavailable" | "too_old" | "credential" | "target_changed" | "lane_blocked" | "requeued" | "gate_closed" | null;
-            /** @description What the channel's rules decided when it closed; what applies when AI does not decide in time. */
+            review_reason: "no_command" | "ai_unsure" | "ai_unavailable" | "too_old" | "credential" | "target_changed" | "lane_blocked" | "requeued" | "gate_closed" | "ai_suggests" | null;
+            /** @description What the channel's rules would decide when it closed, shown beside AI's suggestion; with intake on it applies only to a command. */
             rules: {
                 /** @enum {string} */
                 action: "create" | "attach" | "review" | "archive";
@@ -5059,7 +5059,7 @@ export interface components {
             decided_by_agent_id: string | null;
             /** @description Why a person set it aside, when they said. */
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
-            /** @description The rules decided because AI did not in time or failed. */
+            /** @description AI did not decide in time or failed, so the card waits for a person. */
             fallback: boolean;
             /** Format: date-time */
             opened_at: string;
@@ -5231,7 +5231,7 @@ export interface components {
                 corrected: number;
                 correction_rate: number | null;
             };
-            /** @description What the last days say: cards closed, how many AI would read at auto (the rules decided them only by default), and the average cost of a call. */
+            /** @description What the last days say: cards closed, how many AI would read (every card but a command's or a person's choice), and the average cost of a call. */
             estimate: {
                 days: number;
                 cards: number;

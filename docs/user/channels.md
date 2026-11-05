@@ -258,33 +258,33 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
 
 On a chat channel's scope that collects messages (its groups, on most chat types), what one customer says
 in one go is a **card**: messages close together are collected, each customer apart from the others even
-when they write in turn. The channel's rules decide each card as they always did: a command opens a
-conversation, a reply to a message continues its conversation (in a group, only a conversation that
-customer wrote in), and what the rules hold for a person waits in the queue. When AI intake runs by itself
-on the scope (**Auto**, [AI per channel](ai.md#what-ai-does-by-itself-per-channel)), a card the rules
-could only decide by default waits up to two minutes for AI, held like any held message, and so does a
-card the rules would add to the conversation the customer last wrote in only because it is the same group
-(the group says where they wrote, not what about: they may have moved on to another question). A card
-with a command or a reply to a message is decided by the rules at once. If AI does not decide in time, the
-rules' decision applies (the card says **fallback**; a resolved conversation it continues reopens), and
-nothing is ever lost.
+when they write in turn. With intake off, the channel's rules decide each card as they always did: a command
+opens a conversation, a reply to a message continues its conversation (in a group, only a conversation that
+customer wrote in), and what the rules hold for a person waits in the queue. With intake on
+([AI per channel](ai.md#what-ai-does-by-itself-per-channel)), the rules decide only a command (a cancel too);
+everything else a customer wrote is AI's to decide, whatever conversation the rules would have continued:
+
+- **Suggest**: every card waits in the queue with AI's suggestion, and a person decides it.
+- **Auto**: a card waits up to two minutes for AI, held like any held message. AI applies what it is sure
+  enough of (the scope's threshold, through an open gate); what it is not sure of, or does not answer in
+  time, waits in the queue with its suggestion (**AI was not sure**, **AI did not answer**). Nothing is
+  opened or joined on its own then, and nothing is ever lost.
+
 A card behind one of the same customer that waits for a person waits right after it, and goes back to
 be decided once that one is.
 
 AI reads one card of a customer at a time, in the order they were said. It sees what the customer wrote
 with the messages just before it in the same place and the conversations the card may join, with people
 named only "Customer A" or "Team 1", phone numbers, email addresses and account or ID numbers masked, and
-passwords and codes hidden (also a login and its password sent as two messages). For now AI never acts on
-its own, even at **Auto**: it says what it would do (open a conversation, add the card to one, or set it
-aside, how sure it is, and why) and the rules decide at once, without waiting the two minutes. Its
-suggestion shows on the card until a person decides. At **Suggest**, the rules decide as they always did and AI's suggestion shows on
-the card. When a person decides as AI suggested, the decision says it followed AI; otherwise that it
+passwords and codes hidden (also a login and its password sent as two messages). It says what it would do
+(open a conversation, add the card to one, or set it aside, how sure it is, and why); its suggestion shows
+on the card until a person decides. When a person decides as AI suggested, the decision says it followed AI; otherwise that it
 corrected it. A person who adds a card to a conversation that was merged into another adds it to the one it
 was merged into.
 
-A card names the chat place it was said in, what the rules decided and whether they had evidence (a
+A card names the chat place it was said in, what the rules would decide and whether they had evidence (a
 command, a reply to a message of a conversation, or the conversation the customer last wrote in from the
-same place: **match**) or decided by default. The last kind of match is still AI's to decide. While it waits, it lists
+same place: **match**) or decided by default. While it waits, it lists
 the conversations it may join without the reply going to someone else: in a group, the open or pending
 conversations of that group active in the last 72 hours; in a one-to-one chat, that customer's on the same
 channel; then the ones resolved within the reopen window (7 days unless the channel's intake settings say

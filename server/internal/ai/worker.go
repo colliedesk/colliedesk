@@ -512,8 +512,8 @@ func (w *Worker) finish(ctx context.Context, item claimedTask, state, code strin
 		if err != nil || tag.RowsAffected() == 0 || state == TaskDone {
 			return err
 		}
-		// An intake card AI will not decide (a limit, the feature off, a failure) is the rules' now, not
-		// when its time to wait runs out.
+		// An intake card AI will not decide (a limit, the feature off, a failure) goes to the sweep now, not
+		// when its time to wait runs out: a person decides it, or the rules when intake was turned off.
 		_, err = tx.Exec(ctx, `UPDATE intake_gatherings g SET decide_by=$3 FROM ai_tasks t
 			WHERE t.workspace_id=$1 AND t.id=$2 AND t.kind='intake' AND g.workspace_id=t.workspace_id AND g.id=t.gathering_id AND g.state='deciding' AND g.decide_by>$3`,
 			item.workspaceID, item.id, now)

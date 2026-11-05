@@ -9,7 +9,8 @@ What one customer writes in one go on such a scope is a **card** (see [Intake qu
 for how cards are collected and what the rules decide by themselves). A card waits in Review when:
 
 - a group message has no command (**No command**);
-- AI intake was not sure, did not answer in time, or may not decide this yet;
+- intake is at Suggest: every card waits here with AI's suggestion (**AI suggests, a person decides**);
+- at Auto, AI was not sure, did not answer in time, or may not decide this yet;
 - it is too old to decide alone, or its conversation changed meanwhile;
 - it holds a password or a one-time code, hidden from AI (the card shows it to people): ask the customer to
   change it;
@@ -59,7 +60,8 @@ that was decided, newest first, with what happened and **who decided**: **Rules 
 reply to a message, a known thread), **Rules · default** (what the scope does when nothing matched),
 **AI**, or the person. A card AI decided by itself also says how sure it was, the model it asked (or the
 fallback model that answered when that one failed), when, and the reason it gave (kept 90
-days). **Fallback** means AI did not decide in time and the rules did. A card set aside,
+days). **Fallback** on an older card means AI did not decide in time and the rules did; since intake
+sends such cards to Review instead, new cards no longer have it. A card set aside,
 by a person or AI, has **Put back in queue**: it returns to Waiting, and its earlier decisions stay in its
 history. A card that opened or joined a conversation links to it, with the code customers know it by (`CHD-2026-0008`, `#12`). AI's reason names the conversations it weighed by that code too.
 

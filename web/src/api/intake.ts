@@ -48,7 +48,7 @@ export const intakeAIDecisionSchema = z.object({
 export const intakeGatheringSchema = z.object({
   id: uuid, channel_id: uuid, scope: z.string(), thread_id: uuid.nullable(), lane_key: z.string(), contact_id: uuid.nullable(),
   state: z.enum(['deciding', 'review', 'created', 'attached', 'ignored', 'applied', 'cancelled']),
-  review_reason: z.enum(['no_command', 'ai_unsure', 'ai_unavailable', 'too_old', 'credential', 'target_changed', 'lane_blocked', 'requeued', 'gate_closed']).nullable(),
+  review_reason: z.enum(['no_command', 'ai_unsure', 'ai_unavailable', 'too_old', 'credential', 'target_changed', 'lane_blocked', 'requeued', 'gate_closed', 'ai_suggests']).nullable(),
   rules: z.object({ action: z.enum(['create', 'attach', 'review', 'archive']), rule: z.string(), basis: z.enum(['match', 'default']), target_conversation_id: uuid.nullable() }),
   conversation_id: uuid.nullable(), decided_by: deciderSchema.nullable(), decided_at: date.nullable(), decided_by_agent_id: uuid.nullable(),
   ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), opened_at: date, closed_at: date, decide_by: date.nullable(),

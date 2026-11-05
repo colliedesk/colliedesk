@@ -341,7 +341,7 @@ func (s *Store) IntakeReadinessOf(ctx context.Context, workspaceID, channelID, s
 		var micro *float64
 		if err := tx.QueryRow(ctx, `SELECT
 				(SELECT count(*) FROM intake_gatherings WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND closed_at>=$4),
-				(SELECT count(*) FROM intake_gatherings WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND closed_at>=$4 AND (rules_basis='default' OR rules_rule='thread_key')),
+				(SELECT count(*) FROM intake_gatherings WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND closed_at>=$4 AND rules_rule NOT IN ('command_open','command_reopen','command_cancel','into_conversation')),
 				(SELECT avg(cost_micro_usd)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='intake' AND status='ok' AND started_at>=$4 AND cost_micro_usd IS NOT NULL),
 				(SELECT avg(provider_cost)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='intake' AND status='ok' AND started_at>=$4 AND provider_cost IS NOT NULL)`,
 			workspaceID, channelID, scope, since).Scan(&readiness.Estimate.Cards, &readiness.Estimate.AICalls, &micro, &readiness.Estimate.CostPerCall.ProviderCost); err != nil {
