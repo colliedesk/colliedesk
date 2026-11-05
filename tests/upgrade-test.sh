@@ -86,7 +86,8 @@ else
       git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh"; } ||
     fail "cannot read install.sh of $previous_tag; set PREVIOUS_INSTALL_SH"
 fi
-sed -n "/^cat >\"\$TARGET_DIR\/compose.yaml\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
+# From 1.0.0 install.sh writes compose.yaml.next and then moves it over compose.yaml.
+sed -n "/^cat >\"\$TARGET_DIR\/compose\.yaml\(\.next\)\{0,1\}\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
 mkdir -p "$TMP/initdb"
 sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
 chmod 755 "$TMP/initdb/10-colliedesk-owner.sh"
