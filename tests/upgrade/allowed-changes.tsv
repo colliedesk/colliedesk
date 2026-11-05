@@ -25,3 +25,4 @@ agent_requests	status	20261102120000-roles.up.sql	Agent requests were removed: p
 agent_requests	decided_at	20261102120000-roles.up.sql	Agent requests were removed: pending ones close as expired at the upgrade
 agent_requests	reason	20261102120000-roles.up.sql	Agent requests were removed: pending ones say why they closed
 ai_drafts	*	20261102120000-roles.up.sql	Pending reply drafts of agent requests are copied in as written drafts so they stay on their conversation; the requests stay
+ai_retrieval_docs	*	20261105100000-kb-translations.up.sql	A derived index, rebuilt at will (docs/internals/ai-retrieval.md): the rows of draft translations go, because AI now reads a translation only while it is published, like an article; the translations themselves are kept
