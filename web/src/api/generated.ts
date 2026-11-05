@@ -937,7 +937,7 @@ export interface paths {
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
          *
-         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. A reply draft (`POST /api/v1/conversations/{id}/reply-drafts`) does not use it.
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`; a reply sent from a draft must also name the same `ai_draft_id` and `ai_draft_file_ids`. A reply draft (`POST /api/v1/conversations/{id}/reply-drafts`) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -3069,7 +3069,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The conversation's newest AI drafts (at most 20), newest first, with how each ended. */
+        /** @description A page of the conversation's drafts (the AI's and the written ones), newest first, with how each ended: `limit` of them (20 unless asked, at most 50). `next_before` names the last one when older drafts remain; send it as `before` for the next page. 400 when `before` is not a draft of this conversation. */
         get: operations["listAIDrafts"];
         put?: never;
         /** @description Asks for an AI draft of a reply, with an optional prompt (what the reply should say). The draft is written in the background (202, `status` queued); read it with `GET …/ai-drafts/{draftId}?wait=`. It uses the conversation (never its private notes), matching knowledge base articles and similar solved tickets, and is plain text a person edits and sends: the AI never sends. The person's earlier draft on the conversation is replaced. 409 `ai_feature_off` when reply drafts are off, 402 `ai_allowance_reached` when the server's provider spent this month's allowance, 429 `ai_drafts_rate_limited` past 30 drafts a minute in the workspace. */
@@ -3112,8 +3112,49 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Stops a draft still being written (`status` cancelled, which does not count as discarded: nobody saw it) or discards a ready one (`outcome` discarded); again on a draft already stopped or discarded it changes nothing. 409 `ai_draft_decided` once it was sent or replaced. */
+        /** @description Stops a draft still being written (`status` cancelled, which does not count as discarded: nobody saw it) or discards a ready one (`outcome` discarded); again on a draft already stopped or discarded it changes nothing. 409 `ai_draft_decided` once it was sent or replaced. A discarded written draft keeps its text and files and can be restored (`POST …/restore`). */
         post: operations["discardAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts/{draftId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Brings an earlier written draft back above the reply box (`source` written, `outcome` superseded, expired or discarded): it waits again with its text, copies and files, `restored_at` says when, and the draft of the same person and token that waited in its place becomes the earlier one (superseded). Restoring the draft that already waits changes nothing. 409 `ai_draft_not_restorable` for a draft that was sent, a draft the built-in AI wrote (its outcome feeds the team's AI numbers, so ask for a new one), or one whose text was erased (90 days after it ended). A repeat with the same Idempotency-Key answers the first answer. */
+        post: operations["restoreAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Streams a file of a reply draft (`files` of the draft) in the caller's workspace, as a download (`Content-Disposition: attachment`, `application/octet-stream`) like an attachment. Only the team reads it; the customer gets it only once a person sends the draft with it. */
+        get: operations["downloadAIDraftFile"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3465,7 +3506,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Leaves the words of a reply for a person to send: a ready draft (`source: written`) above the reply box, which a person sends, edits or discards like an AI draft. Calls no AI provider and works while AI drafts are off. A new one replaces the earlier draft of the same person and token. Without `messages:send` the copies may name only addresses already in the conversation (400 otherwise). It expires like an AI draft and goes when the conversation is resolved or closed. */
+        /**
+         * @description Leaves the words of a reply for a person to send: a ready draft (`source: written`) above the reply box, which a person sends, edits or discards like an AI draft. Calls no AI provider and works while AI drafts are off. A new one waits on top of the earlier draft of the same person and token, which becomes an earlier draft (`outcome` superseded): it stays readable with its files and comes back with `POST …/ai-drafts/{draftId}/restore`. Without `messages:send` the copies may name only addresses already in the conversation (400 otherwise). It expires like an AI draft and is discarded when the conversation is resolved or closed; an expired or discarded one can be restored too.
+         *
+         *     Send `multipart/form-data` (`text`, `cc` fields, then up to 10 `files`, 10 MiB together, like a message) to leave files with it. Only the team sees them (`files` of the draft, downloaded from `GET …/ai-drafts/{draftId}/files/{fileId}`); they reach the customer only when a person sends the draft, with the files they keep (`ai_draft_file_ids` of `POST …/messages`). The files count toward the workspace's storage while the draft holds them; they go when the draft is sent, and 90 days after it ended otherwise.
+         */
         post: operations["createReplyDraft"];
         delete?: never;
         options?: never;
@@ -6020,6 +6065,8 @@ export interface components {
                 /** @description The person, or the person behind the token. */
                 agent_name: string;
             };
+            /** @description Only on a written draft: the files left with it, which only the team sees until a person sends the draft (POST …/messages with ai_draft_id and ai_draft_file_ids). Empty once it was sent, and 90 days after it ended. */
+            files: components["schemas"]["AIDraftFile"][];
             /** @description Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled… */
             error_code: string | null;
             /** @description What the person asked for; erased 90 days after the draft ended. */
@@ -6060,6 +6107,23 @@ export interface components {
             ready_at: string | null;
             /** Format: date-time */
             decided_at: string | null;
+            /** @description Who sent, discarded or replaced it (a person's name); null when nobody did (it expired, or was discarded when the conversation was resolved or closed). */
+            decided_by_name: string | null;
+            /**
+             * Format: date-time
+             * @description When an earlier written draft was last brought back (POST …/restore).
+             */
+            restored_at: string | null;
+        };
+        AIDraftFile: {
+            /** Format: uuid */
+            id: string;
+            filename: string;
+            content_type: string;
+            /** @description Bytes. */
+            size: number;
+            /** Format: date-time */
+            created_at: string;
         };
         /** @description An article or a solved conversation an AI draft or suggestion read, named from the database, never by the model. */
         AISource: {
@@ -11759,6 +11823,8 @@ export interface operations {
                      * @description The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation's ready, undecided draft.
                      */
                     ai_draft_id?: string;
+                    /** @description With ai_draft_id: the files of that draft to send with the reply (`files` of the draft). Leave it out to send every file of the draft; an empty list sends none. An id that is not a file of that draft answers 400. The draft's files and any files sent with the reply count together toward the 10 files and 10 MiB of a message (413 past them). */
+                    ai_draft_file_ids?: string[];
                     /** @description Removed: answers 400. To leave a reply for a person to edit, send or discard, post it to `POST /api/v1/conversations/{id}/reply-drafts`. */
                     draft?: boolean;
                 };
@@ -11770,6 +11836,8 @@ export interface operations {
                     cc?: components["schemas"]["CopiedAddresses"];
                     /** Format: uuid */
                     ai_draft_id?: string;
+                    /** @description One field per file of the draft to send, before the files; leave the field out to send every file of the draft. Send `ai_draft_file_ids` once with an empty value to send none. */
+                    ai_draft_file_ids?: string[];
                     files?: string[];
                 };
             };
@@ -15991,7 +16059,11 @@ export interface operations {
     };
     listAIDrafts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The next_before of the page read before: lists the drafts older than it. */
+                before?: string;
+                limit?: number;
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -16008,9 +16080,15 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["AIDraft"][];
+                        /**
+                         * Format: uuid
+                         * @description The before of the next page; null on the last page.
+                         */
+                        next_before: string | null;
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -16105,6 +16183,69 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    restoreAIDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft, waiting again (also the answer to a repeat with the same Idempotency-Key) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    downloadAIDraftFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File bytes */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    /** @description Hex SHA-256 recorded when the file was stored */
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getAITriage: {
@@ -16987,6 +17128,12 @@ export interface operations {
                     text: string;
                     cc?: components["schemas"]["CopiedAddresses"];
                 };
+                "multipart/form-data": {
+                    /** @description The reply, in Markdown. */
+                    text: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                    files?: string[];
+                };
             };
         };
         responses: {
@@ -17013,7 +17160,17 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["AttachmentsTooLarge"];
             422: components["responses"]["IdempotencyKeyReused"];
+            /** @description The attachments volume is low on disk space; nothing was stored */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createProblemReport: {

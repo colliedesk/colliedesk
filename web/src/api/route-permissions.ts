@@ -36,6 +36,7 @@ export const routePermissions: ReadonlyArray<readonly [string, string]> = [
   ['/api/v1/conversations/{id}', 'conversations:read'],
   ['/api/v1/conversations/{id}/ai-drafts', 'ai_assist:read'],
   ['/api/v1/conversations/{id}/ai-drafts/{draftId}', 'ai_assist:read'],
+  ['/api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}', 'ai_assist:read'],
   ['/api/v1/conversations/{id}/ai-triage', 'ai_assist:read'],
   ['/api/v1/conversations/{id}/chat', 'messages:read'],
   ['/api/v1/conversations/{id}/fixes', 'autofix:read'],
