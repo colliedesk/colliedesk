@@ -42,15 +42,16 @@ is locked, and on self-hosted servers. See [export all your data](user/export.md
   those changes are lost.
 - **Nightly.** An encrypted archive of the attachment files, and an encrypted database dump as a
   second copy, also stored in another data centre in the EU. Attachment files are copied once a day.
-- **Restore drills.** We restore from these backups at least every 30 days and check the result.
-  Last drill: 2026-11-05.
+- **Restore drills.** We restore from these backups every week and check the result; never more
+  than 30 days apart. Last drill: 2026-11-05.
 
 ## Uptime
 
-Every paid Colliedesk Cloud plan has an uptime commitment of 99.9% in each calendar month. Uptime is
-measured by the checks on [status.colliedesk.com](https://status.colliedesk.com), which run from
-several regions outside the Cloud server. Service credits and support response targets are in the
-[Terms](https://colliedesk.com/terms#availability-and-service-level).
+Colliedesk Cloud is checked around the clock from several regions outside the Cloud server, and the
+result is public on [status.colliedesk.com](https://status.colliedesk.com): the app and API, help
+centers, incoming email and outgoing email, with 90 days of history and every incident. A written
+uptime commitment for paid plans will be added to the [Terms](https://colliedesk.com/terms); this
+page links it when it is published.
 
 ## Self-hosted servers
 
