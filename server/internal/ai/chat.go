@@ -291,6 +291,8 @@ type ChatTurnInput struct {
 	Question string
 	// ViewingArticle is the number of the article the end user reads, when they ask about it.
 	ViewingArticle int64
+	// Locale is the help center language the end user reads (one customers see), "" the primary one.
+	Locale string
 }
 
 // chatTurnStart is what the first transaction of a turn decided.
@@ -406,7 +408,7 @@ type chatOutcome struct {
 func (s *Service) answerChatTurn(ctx context.Context, workspaceID string, binding Binding, in ChatTurnInput, question string, start chatTurnStart, events ChatEvents) error {
 	outcome := chatOutcome{model: binding.Model}
 	prompt, err := s.ChatPrompt(ctx, binding, workspaceID, ChatPromptInput{WorkspaceName: in.Surface.WorkspaceName, Instructions: in.Surface.Instructions,
-		History: start.history, Question: question, ViewingArticleID: start.viewing})
+		History: start.history, Question: question, ViewingArticleID: start.viewing, Locale: in.Locale})
 	switch {
 	case err != nil:
 		outcome.status, outcome.errorCode = ChatFailed, "model_failed"

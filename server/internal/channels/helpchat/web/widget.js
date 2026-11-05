@@ -1,5 +1,6 @@
 /* The help center's AI chat on a company's own site: <script src="<help center>/chat/widget.js"
-   data-channel="<id>" async></script>. It asks the help center whether this site may show the chat
+   data-channel="<id>" data-lang="<locale>" async></script> (data-lang optional: a language the help center
+   shows, else its primary one). It asks the help center whether this site may show the chat
    (widget-config; anything but 200 draws nothing), then draws one button in a closed shadow root and opens
    the help center's chat page in a frame on the first press. It reads nothing of the page, sets no cookie
    on the site and sends nothing before that press. docs/user/help-chat.md. */
@@ -8,16 +9,19 @@
   var me = document.currentScript;
   if (!me || !me.src) return;
   var base = new URL('.', me.src);
-  var channel = me.getAttribute('data-channel');
+  var channel = me.getAttribute('data-channel'), lang = me.getAttribute('data-lang');
   var configURL = new URL('widget-config', base);
   var frameURL = new URL('../chat', base); frameURL.searchParams.set('embed', '1');
   if (channel) { configURL.searchParams.set('channel', channel); frameURL.searchParams.set('channel', channel); }
+  if (lang) configURL.searchParams.set('lang', lang);
   fetch(configURL.href, { credentials: 'omit' }).then(function (response) { return response.ok ? response.json() : null; }).then(function (c) {
     if (c) draw(c);
   }, function () {});
 
   function draw(c) {
-    var brand = c.brand, label = 'AI chat: ask ' + c.name;
+    // The labels and the chat come in the language the help center chose (c.lang).
+    var brand = c.brand, label = c.label || 'AI chat: ask ' + c.name, closeLabel = c.close_label || 'Close chat';
+    if (c.lang) frameURL.searchParams.set('lang', c.lang);
     var host = document.createElement('div');
     host.setAttribute('data-colliedesk-chat-root', '');
     var root = host.attachShadow({ mode: 'closed' });
@@ -55,7 +59,7 @@
         frame.addEventListener('load', function () { try { frame.contentWindow.focus(); } catch (e) {} });
         panel.appendChild(frame);
       }
-      panel.classList.add('o'); btn.setAttribute('aria-expanded', 'true'); btn.setAttribute('aria-label', 'Close chat'); icon(X);
+      panel.classList.add('o'); btn.setAttribute('aria-expanded', 'true'); btn.setAttribute('aria-label', closeLabel); icon(X);
       try { frame.contentWindow.focus(); } catch (e) {}
     }
     function close() { panel.classList.remove('o'); btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-label', label); icon(CHAT); btn.focus(); }

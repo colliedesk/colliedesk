@@ -73,8 +73,14 @@ func TestAIChatTurnSetupLatencyBudget(t *testing.T) {
 	setup := make([]time.Duration, 0, turns)
 	reads := make([]time.Duration, 0, turns)
 	word := queryString(t, pool, `SELECT substr(md5('1234'),1,6)`)
+	// Every other turn is a reader of the French pages (the fixture shows French, with 2,000
+	// translations, and hides German): the chat scores their language too and must keep the budget.
 	for i := 0; i <= turns; i++ {
-		req := newRequest(t, http.MethodPost, d.base+"/chat/turns", map[string]any{"question": fmt.Sprintf("How do I use %s with article %d?", word, i+1)}, "", nil)
+		path := d.base + "/chat/turns"
+		if i%2 == 1 {
+			path += "?lang=fr"
+		}
+		req := newRequest(t, http.MethodPost, path, map[string]any{"question": fmt.Sprintf("How do I use %s with article %d?", word, i+1)}, "", nil)
 		req.Host, req.RemoteAddr = d.host, fmt.Sprintf("198.51.101.%d:4000", i+1)
 		req.Header.Set("Origin", d.origin)
 		started := time.Now()

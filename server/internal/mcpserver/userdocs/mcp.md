@@ -127,6 +127,19 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `kb_media:create` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `kb_media:update` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `help_center:read` |
+| `colliedesk_help_center_languages_get` | Lists the help center's languages, which are shown to customers, and how many articles are translated, outdated and missing in each | `help_center:read` |
+| `colliedesk_help_center_languages_set` | Sets the help center's languages besides the primary one, and which of them customers see | `help_center:update` |
+| `colliedesk_kb_translations_list` | Lists the articles missing, outdated or translated in one language | `kb_articles:read` |
+| `colliedesk_kb_translations_trash` | Lists the translations in the trash | `kb_articles:read` |
+| `colliedesk_kb_translation_create` | Adds an article's version in another language of the help center | `kb_articles:create` |
+| `colliedesk_kb_translation_get` | Reads a translation with its text and the article it translates | `kb_articles:read` |
+| `colliedesk_kb_translation_update` | Changes, publishes or unpublishes a translation, or marks it up to date or outdated | `kb_articles:update` |
+| `colliedesk_kb_translation_delete` | Moves a translation to the trash for 30 days | `kb_articles:delete` |
+| `colliedesk_kb_translation_undelete` | Takes a translation out of the trash | `kb_articles:delete` |
+| `colliedesk_kb_translation_history` | Lists the versions of a translation | `kb_articles:read` |
+| `colliedesk_kb_translation_version_restore` | Makes an earlier version of a translation current again | `kb_articles:update` |
+| `colliedesk_kb_collection_translation_set` | Sets a collection's name and description in another language | `kb_articles:update` |
+| `colliedesk_kb_collection_translation_delete` | Removes a collection's name in one language | `kb_articles:update` |
 | `colliedesk_help_center_theme_get` | Reads the public help center's logo, colors, fonts, custom CSS and links | `help_center:read` |
 | `colliedesk_help_center_theme_check` | Checks a candidate brand, custom CSS and color contrast without saving it; can render a page preview | `help_center:read` |
 | `colliedesk_help_center_search_console_get` | Reads the Google and Bing Search Console verification tokens of the help center | `help_center:read` |

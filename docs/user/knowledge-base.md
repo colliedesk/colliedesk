@@ -289,9 +289,10 @@ an article by surprise. Save or undo your own changes first.
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published
-articles that fit a conversation by themselves, in every language an article has, and quote them;
-nobody has to sort the knowledge base for AI. A draft, an article in the trash and an internal note
-of a conversation are never read.
+articles that fit a conversation by themselves, in their own language and in each published
+[translation](#translations), and quote them; nobody has to sort the knowledge base for AI. A draft
+(of an article or of a translation), anything in the trash and an internal note of a conversation
+are never read.
 
 To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
 AI**. From then on drafts and suggestions skip it in every language; people and the help center
@@ -300,12 +301,68 @@ it again** undoes it. Neither changes the text, so an edit someone has open stil
 token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
 `kb_articles:update`).
 
+## Translations
+
+A translation is the same article in another language, not a new article: it has the article's
+number, collection and place, and its own title, text, address name, search title and description,
+status (draft or published) and [history](#history). Customers see a translation only while it is
+published, its article is published, and its language is shown.
+
+### Languages
+
+**Knowledge base → Languages** lists the help center's languages. The primary language is the one
+the articles are written in (set it with the help center's **Language** in
+[Help center settings](#help-center-settings)). Add another language with its code (`fr`, `de`,
+`pt-BR`); it starts **hidden**, so you can translate first and show it when it is ready. Tick
+**Shown to customers** to show it, untick it to hide it again; nothing is deleted either way. The
+arrows set the order of the language menu. A language that still holds translations or collection
+names, in the trash too, cannot be removed: hide it, or delete what is written in it first.
+
+Each language says how many articles are published, drafts, **not translated** and **outdated** in
+it. Select a count to list those articles; each opens its translation.
+
+### Translate an article
+
+Open an article: **Translations** in its sidebar lists every language with the translation's status,
+**Outdated** when the article changed since, or **Not translated**. Select a language to open the
+translation beside the original (side by side on a wide screen, one above the other on a phone).
+A new translation starts empty; **Start from the original text** copies the article's text to
+translate over it. **Save translation** keeps it as a draft; **Publish** puts it on the help center
+once the language is shown. Steps: open the article, select the language, write, Publish (4).
+
+### Outdated translations
+
+When the article's own title or text changes (an edit, a version restored, a newer import), its
+translations are marked **Outdated**; changing the article's collection, status or images does not.
+Open the translation, bring it up to date, tick **Mark as up to date with the original** and save,
+or select the same button without changing the text. **Mark as outdated** sets it back. Both are
+versions of the translation, so its history says who did it.
+
+### Collection names
+
+On a collection, **Names in other languages** sets its name and description in each language. A
+language without one shows the primary name. **Remove** takes it away; a name an import brought in
+comes back with the next run of that import.
+
+### History and trash
+
+**Version history** and **Delete translation** are on the translation's page. A deleted translation
+goes to the [trash](#trash) for 30 days with its history; the article stays. While it is there the
+article cannot get a new translation in that language: restore it instead.
+
+### Imported translations
+
+A [Freshdesk import](import-freshdesk.md#knowledge-base) brings every translation with its status,
+search title and description, the categories' and folders' names in each language, and the
+languages: shown when the Freshdesk portal showed them, hidden otherwise. An import never changes a
+language you already set, nor a translation someone edited in Colliedesk.
+
 ## Trash
 
 Select **Trash** at the top of the articles to see deleted articles and collections. Each shows who deleted it and how many days
 are left; after 30 days it is deleted for good, with its history. **Restore** brings it back as it
 was: a published article is published again. Restore a collection before the articles that were in
-it. Articles in the trash count toward the 2,000 articles a workspace can hold.
+it. Deleted translations are listed there too. Articles in the trash count toward the 2,000 articles a workspace can hold.
 
 ## Help center settings
 
@@ -434,6 +491,32 @@ of address names, `/c/billing/cards`; changing one is not redirected. Addresses 
 (`/support/solutions/articles/<id>-...`) lead to the imported pages on every one of these addresses;
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Email) changes every help center address, and old links stop working.
+
+### In other languages
+
+Each language you show (see [Languages](#languages)) has the same pages below its code:
+`<help center address>/fr/`, `/fr/a/12-<French address name>`, `/fr/c/billing` and `/fr/search`. The
+primary language keeps the addresses it always had; `/<primary code>/...` leads to them. A language's
+pages show only the articles published in it (with their collections' names in that language), and
+its search searches only its translations. An article not published in that language yet leads to
+the article in the primary language.
+
+- **Language menu.** The header of every page lists every language you show, in your order. Each
+  opens this page in that language, or that language's home where the page is not translated yet.
+  A language with nothing published yet has a home that says so and links the primary language;
+  search engines are told only about the pages that exist.
+- **Browser language.** A visitor who opens the help center's home page with a browser set to a
+  language you show (or a close one: `fr-CA` for `fr`) moves to that language's home. Other pages,
+  links and search engines are never moved; choosing the primary language in the menu keeps it.
+- **Words of the help center** (Search, Home, Updated, Previous…) are in the page's language for
+  English, French, German, Spanish, Italian, Portuguese (also of Brazil), Dutch, Japanese, Simplified
+  Chinese, Korean, Vietnamese, Polish, Swedish and Russian, and in English for any other; so is the
+  "Ask AI" link to the help chat. The chat window's own words are still in English. Editing them is
+  not possible yet.
+- **Old Freshdesk links in a language** (`/fr/support/solutions/articles/<id>`) lead to the
+  translation once it is published in that language, and to the article otherwise.
+- The [AI chat](ai-chat.md) on a page of a language answers from that language's published
+  translations and links their pages.
 
 ### Custom domain
 
@@ -578,12 +661,14 @@ domain, or `/help/<slug>` on a server without a help center domain). Everything 
 address, never the app's address or another workspace's:
 
 - Every page has a canonical link, `og:url` and an `hreflang` link for the help center's language
-  (and `x-default`). Every other address of a page, such as a trailing slash, `?page=1`, a tracking
+  (and `x-default`); a page that exists in other languages links each of them (`hreflang`), and
+  `x-default` is the primary language's. Every other address of a page, such as a trailing slash, `?page=1`, a tracking
   query (`?utm_source=…`), an old article slug or the slug host after a custom domain is active,
   answers **301** to the canonical address, so search engines never see the same page twice.
 - `robots.txt` (on a host of its own) allows crawlers and names the sitemap.
 - `sitemap.xml` lists the home page, every collection that shows something and every published
-  article with the date it last changed.
+  article with the date it last changed; with other languages shown, also each of their pages, every
+  page with its versions in the other languages.
 - `llms.txt` lists the published articles by collection, for AI assistants, each with a link to its
   Markdown.
 - Every article's address followed by `.md` (`/a/12-reset-your-password.md`) is the article as
@@ -672,6 +757,15 @@ no article uses and which have no alt text, and can name, describe or keep them
 the `kb_media:*` permissions below. Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
 An agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets
 its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
+An agent translates with the same permissions as articles: `colliedesk_help_center_languages_get`
+names the languages and what is missing or outdated in each, `colliedesk_kb_translations_list` lists
+those articles, `colliedesk_kb_translation_get` reads a translation and its original in one call,
+`colliedesk_kb_translation_create` and `colliedesk_kb_translation_update` write one (`outdated`
+false marks it up to date in the same call), and `_delete`, `_undelete`, `_history`,
+`_version_restore` and `colliedesk_kb_collection_translation_set` / `_delete` do the rest.
+`colliedesk_help_center_languages_set` adds, orders, shows and hides languages (`help_center:update`,
+and `kb_articles:publish` to show or hide one). Translating one missing article takes three calls:
+list, read the article, create.
 
 Each action needs its permission, and happens at once; the version names the token. Without it the
 call is refused and names what is missing ([Roles and permissions](roles-and-permissions.md)).
@@ -683,7 +777,8 @@ call is refused and names what is missing ([Roles and permissions](roles-and-per
 | Delete and restore from the trash | `kb_articles:delete` |
 | Anything that changes the public help center (publish, edit or trash a published article, a published collection) | `kb_articles:publish` as well |
 | Upload, name, replace, trash images and videos | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
-| Turn the help center on or off | `help_center:update` |
+| Turn the help center on or off, add or order its languages | `help_center:update` |
+| Show or hide a language | `help_center:update` and `kb_articles:publish` |
 | Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
 
 ## Limits
@@ -695,4 +790,4 @@ call is refused and names what is missing ([Roles and permissions](roles-and-per
   200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
-- Translations an import brings in are kept and exported, but not shown or edited yet.
+- 40 languages besides the primary one; one translation per article and language.

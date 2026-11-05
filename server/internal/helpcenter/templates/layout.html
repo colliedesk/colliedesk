@@ -21,10 +21,17 @@
 {{- with .Canonical}}
 <link rel="canonical" href="{{.}}">
 <meta property="og:url" content="{{.}}">
+{{- if $.Alternates}}
+{{- range $.Alternates}}
+<link rel="alternate" hreflang="{{.Lang}}" href="{{.URL}}">
+{{- end}}
+<link rel="alternate" hreflang="x-default" href="{{$.XDefault}}">
+{{- else}}
 {{- if $.Lang}}
 <link rel="alternate" hreflang="{{$.Lang}}" href="{{.}}">
 {{- end}}
 <link rel="alternate" hreflang="x-default" href="{{.}}">
+{{- end}}
 <meta property="og:type" content="website">
 <meta property="og:title" content="{{$.Title}}">
 {{- if $.SiteTitle}}
@@ -51,7 +58,7 @@
 {{- end}}
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main">{{.T.SkipToContent}}</a>
 {{- if .Home}}
 <header class="masthead">
 <div class="wrap masthead-row">
@@ -64,17 +71,20 @@
 {{- end}}
 {{- if not .HeroSearch}}
 <form class="search search-compact" role="search" action="{{.SearchURL}}" method="get">
-<label class="visually-hidden" for="q-top">Search articles</label>
-<input id="q-top" name="q" type="search" value="{{.Query}}" placeholder="Search articles" maxlength="200" autocomplete="off">
-<button type="submit"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="visually-hidden">Search</span></button>
+<label class="visually-hidden" for="q-top">{{.T.SearchArticles}}</label>
+<input id="q-top" name="q" type="search" value="{{.Query}}" placeholder="{{.T.SearchArticles}}" maxlength="200" autocomplete="off">
+<button type="submit"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="visually-hidden">{{.T.SearchButton}}</span></button>
 </form>
+{{- end}}
+{{- if .Languages}}
+<nav class="languages" aria-label="{{.T.Language}}"><ul>{{range .Languages}}<li>{{if .Current}}<a href="{{.URL}}" hreflang="{{.Lang}}" lang="{{.Lang}}" aria-current="page">{{.Name}}</a>{{else}}<a href="{{.URL}}" hreflang="{{.Lang}}" lang="{{.Lang}}">{{.Name}}</a>{{end}}</li>{{end}}</ul></nav>
 {{- end}}
 </div>
 </header>
 {{- end}}
 <main id="main" class="wrap">
 {{- if .Crumbs}}
-<nav class="crumbs" aria-label="Breadcrumb"><ol>{{range .Crumbs}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ol></nav>
+<nav class="crumbs" aria-label="{{.T.Breadcrumb}}"><ol>{{range .Crumbs}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ol></nav>
 {{- end}}
 {{template "content" .}}
 </main>
@@ -89,20 +99,19 @@
 </div></footer>
 {{- end}}
 {{- if .ChatBox}}
-<button type="button" class="ask-launch" id="ask-launch" aria-controls="chatbox" aria-expanded="false" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg><span class="label">Ask AI</span></button>
-<section class="chatbox" id="chatbox" aria-labelledby="chat-title" data-config="{{.BoxConfig}}" data-article-number="{{.ArticleNumber}}" data-article-title="{{.ArticleTitle}}"></section>
+<button type="button" class="ask-launch" id="ask-launch" aria-controls="chatbox" aria-expanded="false" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg><span class="label">{{if .AskLabel}}{{.AskLabel}}{{else}}Ask AI{{end}}</span></button>
+<section class="chatbox" id="chatbox" aria-labelledby="chat-title" data-config="{{.BoxConfig}}" data-text="{{.ChatText}}" data-article-number="{{.ArticleNumber}}" data-article-title="{{.ArticleTitle}}"></section>
 <script src="{{.Script}}" defer></script>
 {{- end}}
 </body>
 </html>
-{{define "count"}}{{if eq . 1}}1 article{{else}}{{.}} articles{{end}}{{end}}
 {{define "heroSearch"}}
 <form class="search search-hero" role="search" action="{{.SearchURL}}" method="get">
-<label class="hero-label" for="q">Search for an answer</label>
+<label class="hero-label" for="q">{{.T.SearchForAnswer}}</label>
 <div class="search-field">
 <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-<input id="q" name="q" type="search" value="{{.Query}}" placeholder="Describe your question" maxlength="200" autocomplete="off">
-<button type="submit">Search</button>
+<input id="q" name="q" type="search" value="{{.Query}}" placeholder="{{.T.DescribeQuestion}}" maxlength="200" autocomplete="off">
+<button type="submit">{{.T.SearchButton}}</button>
 </div>
 </form>
 {{end}}

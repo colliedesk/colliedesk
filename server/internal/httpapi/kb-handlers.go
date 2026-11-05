@@ -48,6 +48,14 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "The collection was not found.")
 	case errors.Is(err, domain.ErrKBImageNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The image was not found.")
+	case errors.Is(err, domain.ErrKBTranslationNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The article has no translation in that language outside the trash. GET /api/v1/kb/articles/{id} lists its translations; GET /api/v1/kb/translations/trash those in the trash.")
+	case errors.Is(err, domain.ErrKBTranslationVersionNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The translation has no version with that number.")
+	case errors.Is(err, domain.ErrKBTranslationExists):
+		writeError(response, http.StatusConflict, "translation_exists", "The article already has a translation in this language, perhaps in the trash. Change that one (PATCH), or restore it from the trash.")
+	case errors.Is(err, domain.ErrKBLanguageNotListed):
+		writeError(response, http.StatusBadRequest, "language_not_listed", "This language is not one of the help center's languages (or it is the primary language, the article's own). Add it with PUT /api/v1/help-center/languages first.")
 	default:
 		writeStoreError(response, err)
 	}
@@ -335,6 +343,9 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	addressKBArticle(home, &article.KBArticleSummary)
+	if !a.addressKBArticleTranslations(response, request, home, &article) {
+		return
+	}
 	drafts, err := a.ai.ArticleDraftsThisMonth(request.Context(), principal(request).Workspace.ID, article.ID)
 	if err != nil {
 		writeStoreError(response, err)
@@ -440,6 +451,9 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 			return nil, errAnswered
 		}
 		addressKBArticle(home, &article.KBArticleSummary)
+		if !a.addressKBArticleTranslations(response, request, home, &article) {
+			return nil, errAnswered
+		}
 		return article, nil
 	})
 }
@@ -484,6 +498,9 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	addressKBArticle(home, &article.KBArticleSummary)
+	if !a.addressKBArticleTranslations(response, request, home, &article) {
+		return
+	}
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -528,6 +545,9 @@ func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	addressKBArticle(home, &article.KBArticleSummary)
+	if !a.addressKBArticleTranslations(response, request, home, &article) {
+		return
+	}
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -551,6 +571,9 @@ func (a *API) setKBArticleAIExcluded(response http.ResponseWriter, request *http
 		return
 	}
 	addressKBArticle(home, &article.KBArticleSummary)
+	if !a.addressKBArticleTranslations(response, request, home, &article) {
+		return
+	}
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -606,6 +629,9 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 		return
 	}
 	addressKBArticle(home, &article.KBArticleSummary)
+	if !a.addressKBArticleTranslations(response, request, home, &article) {
+		return
+	}
 	writeJSON(response, http.StatusOK, article)
 }
 

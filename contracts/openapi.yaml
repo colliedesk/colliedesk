@@ -71,6 +71,7 @@ paths:
       - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
       - {name: embed, in: query, required: false, schema: {type: string, enum: ['1']}, description: 'The chat in a site''s frame (the widget): only the channel''s sites may frame it (frame-ancestors).'}
       - {name: t, in: query, required: false, schema: {type: string}, description: 'A one-time code from Open full chat: moves the frame''s chat to this page, then 303 to the page without it.'}
+      - {name: lang, in: query, required: false, schema: {type: string}, description: 'The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t.'}
     get:
       operationId: getHelpChatPage
       tags: [HelpCenterChat]
@@ -144,6 +145,7 @@ paths:
     servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
     parameters:
       - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: lang, in: query, required: false, schema: {type: string}, description: 'The script tag''s data-lang: a language the help center shows (any case); any other value, or none, is its primary language.'}
     get:
       operationId: getHelpChatWidgetConfig
       tags: [HelpCenterChat]
@@ -152,7 +154,8 @@ paths:
       security: []
       description: >
         What widget.js draws, for a site the channel lists (its Origin), with CORS for that origin alone. Any other site
-        gets the help center's 404 and no CORS header.
+        gets the help center's 404 and no CORS header. The button's labels are in the language it returns, which the
+        widget passes to the chat page (?lang).
       responses:
         '200':
           description: The chat's name, greeting, suggestions and the help center's brand colors
@@ -164,6 +167,7 @@ paths:
     servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
     parameters:
       - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: lang, in: query, required: false, schema: {type: string}, description: 'The frame''s language: one the help center shows (any case) is kept in the address it returns; any other value, or none, is the primary language.'}
     post:
       operationId: transferHelpChat
       tags: [HelpCenterChat]
@@ -244,6 +248,7 @@ paths:
     parameters:
       - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
       - {name: surface, in: query, required: false, schema: {type: string, enum: [help_center, article, widget]}, description: '`widget`: the chat is framed by a site, its cookie is partitioned.'}
+      - {name: lang, in: query, required: false, schema: {type: string}, description: 'The language of the page the question is asked on: one the help center shows (any case) answers from the articles published in it and links its pages; any other value, or none, is the primary language. The answer is in the language of the question either way.'}
     post:
       operationId: askHelpChat
       tags: [HelpCenterChat]
@@ -6057,6 +6062,49 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/collections/{id}/translations/{locale}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    put:
+      operationId: putKBCollectionTranslation
+      x-permission: kb_articles:update
+      description: >
+        Set a collection's name and description in another language of the help center (400
+        `language_not_listed` for one it does not list). The help center shows the primary name
+        where a language has none. Changes the help center's navigation, so it needs kb_articles:publish.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 200}
+                description: {type: string, maxLength: 2000}
+      responses:
+        '200':
+          description: The collection with its names
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteKBCollectionTranslation
+      x-permission: kb_articles:update
+      description: >
+        Remove a collection's name in one language: the help center shows its primary name there
+        again. PUT sets it again; a name an import brought in comes back with the next run of that
+        import.
+      responses:
+        '200':
+          description: The collection with its names
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/kb/order:
     put:
       operationId: setKBOrder
@@ -6354,6 +6402,260 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/translations:
+    get:
+      operationId: listKBLanguage
+      x-permission: kb_articles:read
+      description: >
+        The live articles as one language of the help center sees them, in the help center's order,
+        one page at a time: `state=missing` lists the articles without a translation in `locale`
+        (outside the trash), `outdated` those whose translation is marked outdated (the article's
+        title or text changed after it was last brought up to date), `translated` every article that
+        has one. Each item names its article, collection and translation, so one call says what to
+        translate next.
+      parameters:
+        - {name: locale, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+        - {name: state, in: query, required: true, schema: {type: string, enum: [missing, outdated, translated]}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: One page of the articles of that language
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBLanguageItem'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/translations/trash:
+    get:
+      operationId: listTrashedKBTranslations
+      x-permission: kb_articles:read
+      description: >
+        The translations deleted in the last 30 days, most recent first, with their article's title
+        and number, who deleted them and when each is deleted for good. Restore one with POST
+        /api/v1/kb/articles/{id}/translations/{locale}/restore.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Translations in the trash
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TrashedKBTranslation'}}
+                  next_cursor: {type: [string, 'null']}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/articles/{id}/translations:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: createKBTranslation
+      x-permission: kb_articles:create
+      description: >
+        Add the article's version in another language of the help center (`locale`, one listed in GET
+        /api/v1/help-center/languages; the primary language is the article itself). It is a draft
+        unless `status` is published, and up to date with the article as it is now. Without `slug`
+        one is made from the title. The article has at most one translation per language: 409
+        `translation_exists` when it has one, in the trash too (restore that one). 400
+        `language_not_listed` for a language the help center does not list. Publishing needs
+        kb_articles:publish. At most 64 KiB of JSON.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locale, title, body_md]
+              properties:
+                locale: {type: string, minLength: 2, maxLength: 35}
+                title: {type: string, minLength: 1, maxLength: 300}
+                slug: {type: string, minLength: 1, maxLength: 120}
+                body_md: {type: string, maxLength: 100000}
+                status: {$ref: '#/components/schemas/KBArticleStatus'}
+                seo_title: {type: string, maxLength: 120}
+                seo_description: {type: string, maxLength: 320}
+      responses:
+        '201':
+          description: The new translation
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '200':
+          description: The translation an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/translations/{locale}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    get:
+      operationId: getKBTranslation
+      x-permission: kb_articles:read
+      description: >
+        One translation with its text, and the article it translates as it is now (`original`), so a
+        translator reads both in one answer. It also finds a translation in the trash (`deleted_at`).
+      responses:
+        '200':
+          description: The translation
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateKBTranslation
+      x-permission: kb_articles:update
+      description: >
+        Change the title, slug, text, status, search title or meta description of a translation, or
+        mark it up to date with the article (`outdated: false`) or outdated again (`outdated: true`).
+        Send back the `updated_at` you read (409 `changed_elsewhere`). Every change is a version; a
+        change of the flag alone is kind `mark_current` or `mark_outdated`. Publishing it, or changing
+        a published one, needs kb_articles:publish. A translation in the trash is 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+                title: {type: string, minLength: 1, maxLength: 300}
+                slug: {type: string, minLength: 1, maxLength: 120}
+                body_md: {type: string, maxLength: 100000}
+                status: {$ref: '#/components/schemas/KBArticleStatus'}
+                seo_title: {type: string, maxLength: 120}
+                seo_description: {type: string, maxLength: 320}
+                outdated: {type: boolean}
+      responses:
+        '200':
+          description: The changed translation
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteKBTranslation
+      x-permission: kb_articles:delete
+      description: >
+        Move a translation to the trash: the help center stops showing it, and it can be restored for
+        30 days with its history. Send the `updated_at` you read (409 `changed_elsewhere`).
+      parameters:
+        - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '204': {description: Translation moved to the trash}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/translations/{locale}/restore:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    post:
+      operationId: restoreKBTranslation
+      x-permission: kb_articles:delete
+      description: >
+        Take a translation out of the trash as it was. Send its `updated_at` as the trash shows it
+        (409 `changed_elsewhere`); 404 when it is not in the trash.
+        A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: The restored translation
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/translations/{locale}/versions:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    get:
+      operationId: listKBTranslationVersions
+      x-permission: kb_articles:read
+      description: >
+        The versions of a translation, newest first, in pages, like an article's. A translation in the
+        trash keeps its history.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: before_version, in: query, schema: {type: integer, minimum: 1}}
+      responses:
+        '200':
+          description: Versions of the translation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_before_version]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBTranslationVersion'}}
+                  next_before_version: {type: [integer, 'null']}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+      - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+    post:
+      operationId: restoreKBTranslationVersion
+      x-permission: kb_articles:update
+      description: >
+        Make the title, slug, text and search fields of an earlier version of a translation current
+        again, as a new version; its status and outdated flag stay. Send back the `updated_at` you read
+        (409 `changed_elsewhere`).
+        A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: The translation with the restored text
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/images:
     post:
       operationId: uploadKBImage
@@ -7583,6 +7885,55 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '413': {$ref: '#/components/responses/WebhookTooLarge'}
+  /api/v1/help-center/languages:
+    get:
+      operationId: getHelpCenterLanguages
+      x-permission: help_center:read
+      description: >
+        The help center's languages: the primary one (the articles' own language, set with PUT
+        /api/v1/help-center `locale`) and the others, each shown to customers or hidden, with how many
+        articles are published, drafts, outdated and missing in it. `unlisted` names the languages
+        translations exist in that are neither (an import from an account with another primary
+        language): kept and editable, never shown.
+      responses:
+        '200':
+          description: The languages
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterLanguages'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putHelpCenterLanguages
+      x-permission: help_center:update
+      description: >
+        Set the languages besides the primary one, in the order the language menu lists them, each
+        `visible` to customers or hidden (a new language is hidden until shown). Showing or hiding a
+        language changes the public help center and needs kb_articles:publish too. Leaving out a
+        language that still holds a translation or a collection name (in the trash too) is 409
+        `language_in_use`: hide it instead, or delete what is written in it first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [languages]
+              properties:
+                languages:
+                  type: array
+                  maxItems: 40
+                  items:
+                    type: object
+                    required: [locale, visible]
+                    properties:
+                      locale: {type: string, minLength: 2, maxLength: 35}
+                      visible: {type: boolean}
+      responses:
+        '200':
+          description: The languages
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterLanguages'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/help-center/theme:
     get:
       operationId: getHelpCenterTheme
@@ -8957,11 +9308,14 @@ components:
         intake_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s intake decisions (or all automatic runs) are used up: the next UTC midnight.'}
     HelpChatWidgetConfig:
       type: object
-      required: [name, greeting, suggestions, brand]
+      required: [name, greeting, suggestions, brand, lang, label, close_label]
       properties:
         name: {type: string}
         greeting: {type: string}
         suggestions: {type: array, items: {type: string}}
+        lang: {type: string, description: 'The language the widget speaks: lang when the help center shows it, else its primary language.'}
+        label: {type: string, description: 'The button''s and the panel''s accessible name in lang, with the chat''s name ("AI chat: ask Acme").'}
+        close_label: {type: string, description: 'The button''s accessible name while the panel is open, in lang.'}
         brand:
           description: 'The help center''s brand accent (#rrggbb) and the color on it; null when its theme sets no color (the button is ink #171717).'
           oneOf:
@@ -10325,8 +10679,9 @@ components:
         position: {type: integer, minimum: 0, maximum: 1000000, description: 'Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name).'}
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at]
+      required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at, translations]
       properties:
+        translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
         parent_id: {type: [string, 'null'], format: uuid}
         name: {type: string}
@@ -10340,6 +10695,7 @@ components:
       type: object
       required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at, deleted_at, deleted_by, purges_at]
       properties:
+        translations: {type: array, items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
         parent_id: {type: [string, 'null'], format: uuid}
         name: {type: string}
@@ -10448,13 +10804,176 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/SavedReplyPerson'}
-    KBArticleTranslation:
+    KBTranslationChange:
       type: object
-      required: [locale, title, body_md, updated_at]
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at]
       properties:
+        version: {type: integer, minimum: 1}
+        kind:
+          type: string
+          enum: [create, edit, delete, restore, undelete, import, media_replace, mark_current, mark_outdated]
+          description: 'mark_current, mark_outdated: the translation was marked up to date with its article, or outdated, without other change.'
+        restored_from_version: {type: [integer, 'null']}
+        changed_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+    KBTranslationSummary:
+      type: object
+      required: [article_id, locale, title, slug, status, published_at, outdated, outdated_at, created_at, updated_at, in_trash, last_change, url]
+      properties:
+        article_id: {type: string, format: uuid}
         locale: {type: string}
         title: {type: string}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        published_at: {type: [string, 'null'], format: date-time}
+        outdated: {type: boolean, description: 'Set when the article''s title or text changed after the translation was last brought up to date.'}
+        outdated_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        in_trash: {type: boolean}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBTranslationChange'}
+        url: {type: string, description: 'Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article''s own page in the primary language, never an address that answers 404.'}
+    KBTranslationOriginal:
+      type: object
+      description: The article a translation translates, as it is now.
+      required: [id, number, locale, title, body_md, seo_title, seo_description, status, collection_id, collection_name, version, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: integer}
+        locale: {type: string, description: The help center's primary language.}
+        title: {type: string}
         body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        collection_id: {type: string, format: uuid}
+        collection_name: {type: string}
+        version: {type: integer, description: The article's newest version.}
+        updated_at: {type: string, format: date-time}
+    KBArticleTranslation:
+      type: object
+      required: [article_id, locale, title, slug, status, published_at, outdated, outdated_at, created_at, updated_at, in_trash, last_change, url, body_md, seo_title, seo_description, has_source_html, deleted_at, language_visible, original]
+      properties:
+        article_id: {type: string, format: uuid}
+        locale: {type: string}
+        title: {type: string}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        published_at: {type: [string, 'null'], format: date-time}
+        outdated: {type: boolean, description: 'Set when the article''s title or text changed after the translation was last brought up to date.'}
+        outdated_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        in_trash: {type: boolean}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBTranslationChange'}
+        url: {type: string, description: 'Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article''s own page in the primary language, never an address that answers 404.'}
+        body_md: {type: string}
+        seo_title: {type: string, maxLength: 120}
+        seo_description: {type: string, maxLength: 320}
+        has_source_html: {type: boolean}
+        deleted_at: {type: [string, 'null'], format: date-time}
+        language_visible: {type: boolean, description: Whether the help center shows this language to customers.}
+        original: {$ref: '#/components/schemas/KBTranslationOriginal'}
+        missing_media:
+          type: array
+          items: {type: string, format: uuid}
+    TrashedKBTranslation:
+      type: object
+      required: [article_id, locale, title, slug, status, published_at, outdated, outdated_at, created_at, updated_at, in_trash, last_change, url, article_title, article_number, deleted_at, deleted_by, purges_at]
+      properties:
+        article_id: {type: string, format: uuid}
+        locale: {type: string}
+        title: {type: string}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        published_at: {type: [string, 'null'], format: date-time}
+        outdated: {type: boolean, description: 'Set when the article''s title or text changed after the translation was last brought up to date.'}
+        outdated_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        in_trash: {type: boolean}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBTranslationChange'}
+        url: {type: string, description: 'Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article''s own page in the primary language, never an address that answers 404.'}
+        article_title: {type: string}
+        article_number: {type: integer}
+        deleted_at: {type: string, format: date-time}
+        deleted_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        purges_at: {type: string, format: date-time}
+    KBTranslationVersion:
+      type: object
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, seo_title, seo_description, status]
+      properties:
+        version: {type: integer, minimum: 1}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, mark_current, mark_outdated]}
+        restored_from_version: {type: [integer, 'null']}
+        changed_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        title: {type: string}
+        slug: {type: string}
+        body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+    KBLanguageItem:
+      type: object
+      required: [article_id, number, title, status, collection_id, collection_name, updated_at, translation]
+      properties:
+        article_id: {type: string, format: uuid}
+        number: {type: integer}
+        title: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        collection_id: {type: string, format: uuid}
+        collection_name: {type: string}
+        updated_at: {type: string, format: date-time}
+        translation:
+          description: Its translation in that language; null while it has none outside the trash.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBTranslationSummary'}
+    KBCollectionTranslation:
+      type: object
+      required: [locale, name, description, imported, updated_at]
+      properties:
+        locale: {type: string}
+        name: {type: string}
+        description: {type: string}
+        imported: {type: boolean, description: 'As an import wrote it; the next run of that import may update it. A person''s change clears it.'}
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
@@ -10483,8 +11002,8 @@ components:
         has_source_html: {type: boolean, description: An import kept the original HTML; it is in the workspace export and is never shown on the help center.}
         translations:
           type: array
-          description: Translations an import brought in. They are kept and exported; the help center does not show them yet.
-          items: {$ref: '#/components/schemas/KBArticleTranslation'}
+          description: Its versions in the help center's other languages (also those in the trash), without their text.
+          items: {$ref: '#/components/schemas/KBTranslationSummary'}
         deleted_at: {type: [string, 'null'], format: date-time, description: Set while the article is in the trash.}
         ai_exclusion:
           description: Null while AI may read the article (when it is published); set while it is excluded from AI.
@@ -10688,6 +11207,24 @@ components:
             leads to the workspace's desk). The older addresses
             redirect to the custom domain while it is active. Changing the workspace slug changes the
             slug addresses, and links to the old slug stop working.
+    HelpCenterLanguage:
+      type: object
+      required: [locale, visible, position, published, drafts, outdated, missing]
+      properties:
+        locale: {type: string}
+        visible: {type: boolean, description: Shown to customers.}
+        position: {type: integer}
+        published: {type: integer, description: Live articles with a published translation in it.}
+        drafts: {type: integer}
+        outdated: {type: integer}
+        missing: {type: integer, description: Live articles with no translation in it.}
+    HelpCenterLanguages:
+      type: object
+      required: [primary, languages, unlisted]
+      properties:
+        primary: {type: string}
+        languages: {type: array, items: {$ref: '#/components/schemas/HelpCenterLanguage'}}
+        unlisted: {type: array, items: {type: string}}
     HelpCenterDomain:
       type: object
       required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason, awaiting_payment, address_url, address_checked_at, address_error]

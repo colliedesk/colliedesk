@@ -20,8 +20,12 @@ import (
 // markdownSuffix ends the address of an article's Markdown.
 const markdownSuffix = ".md"
 
-// homeURL is the canonical address of the home page: the host's "/", or the path address itself.
+// homeURL is the canonical address of the home page: the host's "/", or the path address itself; in
+// another language, <address>/<locale>.
 func (v view) homeURL() string {
+	if v.lang != "" {
+		return v.rootAddress
+	}
 	if v.base == "" {
 		return v.address + "/"
 	}
@@ -91,30 +95,100 @@ func (s *Site) sitemap(response http.ResponseWriter, request *http.Request, v vi
 	if fresh(response, request, v.etag) {
 		return
 	}
-	_, collections, articles, err := s.indexed(request, v)
+	t, collections, articles, err := s.indexed(request, v)
 	if err != nil {
 		s.writeError(response, err)
 		return
 	}
+	// With other languages, every page lists its versions (hreflang) as search engines read them in a
+	// sitemap; a help center in one language keeps the plain list.
+	languages := len(v.site.Languages) > 0 && !v.site.Trial
+	var translations []domain.PublicKBTranslation
+	if languages {
+		if translations, err = s.config.Store.HelpCenterTranslationIndex(request.Context(), v.site.WorkspaceID); err != nil {
+			s.writeError(response, err)
+			return
+		}
+	}
 	var out bytes.Buffer
-	out.WriteString(xml.Header + `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
-	entry := func(location string, modified *time.Time) {
+	if languages {
+		out.WriteString(xml.Header + `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">` + "\n")
+	} else {
+		out.WriteString(xml.Header + `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+	}
+	type version struct{ lang, location string }
+	entry := func(location string, modified *time.Time, versions []version) {
 		out.WriteString("<url><loc>")
 		_ = xml.EscapeText(&out, []byte(location))
 		out.WriteString("</loc>")
 		if modified != nil {
 			out.WriteString("<lastmod>" + modified.UTC().Format(time.RFC3339) + "</lastmod>")
 		}
+		if len(versions) > 1 {
+			for _, each := range versions {
+				out.WriteString(`<xhtml:link rel="alternate" hreflang="`)
+				_ = xml.EscapeText(&out, []byte(each.lang))
+				out.WriteString(`" href="`)
+				_ = xml.EscapeText(&out, []byte(each.location))
+				out.WriteString(`"/>`)
+			}
+			out.WriteString(`<xhtml:link rel="alternate" hreflang="x-default" href="`)
+			_ = xml.EscapeText(&out, []byte(versions[0].location))
+			out.WriteString(`"/>`)
+		}
 		out.WriteString("</url>\n")
 	}
+	// all writes one page in each of its languages, each listing the others.
+	all := func(paths pagePaths, modified map[string]*time.Time) {
+		var versions []version
+		for _, lang := range append([]string{""}, v.site.Languages...) {
+			if path, ok := paths[lang]; ok {
+				other := v.in(lang)
+				location := other.rootAddress + path
+				if path == "" {
+					location = other.homeURL()
+				}
+				versions = append(versions, version{other.locale(), location})
+			}
+		}
+		for _, each := range versions {
+			lang := ""
+			if each.lang != v.site.Locale {
+				lang = each.lang
+			}
+			entry(each.location, modified[lang], versions)
+		}
+	}
 	if !v.site.Trial {
-		entry(v.homeURL(), nil)
+		homes := pagePaths{"": ""}
+		if languages {
+			for lang := range shownIn(t.roots) {
+				homes[lang] = ""
+			}
+		}
+		all(homes, nil)
 	}
 	for _, n := range collections {
-		entry(v.address+n.path(), nil)
+		paths := pagePaths{"": n.path()}
+		if languages {
+			for lang := range shownIn([]*node{n}) {
+				paths[lang] = n.path()
+			}
+		}
+		all(paths, nil)
+	}
+	byNumber := map[int64][]domain.PublicKBTranslation{}
+	for _, translation := range translations {
+		byNumber[translation.Number] = append(byNumber[translation.Number], translation)
 	}
 	for _, article := range articles {
-		entry(v.address+ArticlePath(article.Number, article.Slug), &article.UpdatedAt)
+		paths := pagePaths{"": ArticlePath(article.Number, article.Slug)}
+		modified := map[string]*time.Time{"": &article.UpdatedAt}
+		for _, translation := range byNumber[article.Number] {
+			paths[translation.Locale] = ArticlePath(article.Number, translation.Slug)
+			modified[translation.Locale] = &translation.UpdatedAt
+		}
+		all(paths, modified)
 	}
 	out.WriteString("</urlset>\n")
 	s.writeFile(response, request, v, "application/xml; charset=utf-8", out.Bytes())
@@ -183,6 +257,6 @@ func (s *Site) articleMarkdown(response http.ResponseWriter, request *http.Reque
 	text := htmlComment.ReplaceAllString(article.BodyMD, "")
 	text = apiMediaPath.ReplaceAllString(text, v.address+"/$1/$2")
 	body := "# " + strings.TrimSpace(strings.NewReplacer("\n", " ", "\r", " ").Replace(article.Title)) + "\n\n" + strings.TrimSpace(text) + "\n"
-	response.Header().Set("Link", "<"+v.address+ArticlePath(article.Number, article.Slug)+`>; rel="canonical"`)
+	response.Header().Set("Link", "<"+v.rootAddress+ArticlePath(article.Number, article.Slug)+`>; rel="canonical"`)
 	s.writeFile(response, request, v, "text/markdown; charset=utf-8", []byte(body))
 }

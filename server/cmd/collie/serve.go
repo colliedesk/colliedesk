@@ -266,7 +266,7 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 			slog.Error("purge knowledge base trash", "error", err)
 		} else if purged != (store.KBPurge{}) {
 			slog.Info("purged knowledge base articles and collections deleted more than 30 days ago, and unused images",
-				"articles", purged.Articles, "collections", purged.Collections, "images", purged.Images)
+				"articles", purged.Articles, "translations", purged.Translations, "collections", purged.Collections, "images", purged.Images)
 		}
 		if removed, err := data.SweepDraftFiles(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("sweep reply draft files", "error", err)

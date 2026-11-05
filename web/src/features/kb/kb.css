@@ -655,3 +655,47 @@ span.kb-article-open { opacity: 0.35; }
   .picker-strip { display: block; flex-basis: 100%; color: var(--text-2); font-size: var(--fs-label); }
   .picker .kb-dialog-foot > button { flex: 1 1 0; }
 }
+
+/* Languages and translations: the language list, the articles to translate in one, and the editor that
+   shows a translation beside its original. */
+.kb-languages-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: grid; align-content: start; gap: var(--space-4); }
+.kb-languages, .kb-language-articles { display: grid; gap: var(--space-3); max-width: 56rem; }
+.kb-language-primary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.kb-language-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.kb-language-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(10rem, 1.2fr) auto auto; align-items: center; gap: var(--space-3);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-2) var(--space-3); }
+.kb-language-name { display: grid; gap: 2px; min-width: 0; }
+.kb-language-name small { color: var(--text-3); }
+.kb-language-counts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.kb-language-counts [aria-pressed="true"] { font-weight: 600; text-decoration: underline; }
+.kb-language-counts [data-warn="true"], .kb-outdated { color: var(--pending); font-weight: 500; }
+.kb-language-visible { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.kb-language-actions { display: inline-flex; gap: var(--space-1); }
+.kb-language-add { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); }
+.kb-translations-box ul, .kb-translation-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.kb-translation-list li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.kb-translation-state { display: inline-flex; align-items: center; gap: var(--space-2); }
+.kb-translation-page { gap: var(--space-3); }
+.kb-translation-split { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.kb-translation-original, .kb-translation-own { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; min-width: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-3) var(--space-4); }
+.kb-translation-original { background: var(--surface-2, var(--surface-1)); }
+.kb-translation-original h2, .kb-translation-own h2 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
+.kb-translation-original-title { font-size: var(--fs-title, 1.125rem); }
+.kb-translation-own [role="tabpanel"] { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.kb-translation-scroll { flex: 1 1 auto; min-height: 8rem; overflow-y: auto; scrollbar-gutter: stable; }
+.kb-translation-body { width: 100%; min-height: 18rem; resize: vertical; font-family: var(--font-mono, monospace); }
+.kb-translation-more summary { cursor: pointer; color: var(--text-2); }
+.kb-outdated-note label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.kb-collection-name fieldset { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3); }
+@media (max-width: 44rem) {
+  /* The bar holds the way back, Publish, Save and the menu; the state goes on a line of its own. */
+  .kb-translation-page .kb-art-bar { flex-wrap: wrap; gap: var(--space-2); }
+  .kb-translation-page .kb-art-state { order: 3; flex-basis: 100%; }
+  .kb-language-row { grid-template-columns: 1fr; }
+  .kb-translation-split { grid-template-columns: 1fr; }
+  .kb-languages-scroll { overflow: visible; }
+}
+@media (max-width: 44rem) {
+  .kb-translation-page .kb-back { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

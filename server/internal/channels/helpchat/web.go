@@ -46,14 +46,20 @@ func Asset(name string) (File, bool) {
 	return file, ok
 }
 
-// Page is the chat page: the help center's look, whether a site frames it, and what chat.js needs (JSON).
+// Page is the chat page: the help center's look, the reader's language and the page's own words in it,
+// whether a site frames it, and what chat.js needs (JSON).
 type Page struct {
 	Look          channels.HelpCenterLook
+	Lang          string
 	Title         string
+	Words         PageWords
 	Embed         bool
 	Config        string
 	Script, Style string
 }
+
+// PageWords are the words the page shows before chat.js runs, or without it.
+type PageWords struct{ Skip, NeedsJS, SearchArticles, OrGoBackTo string }
 
 // RenderPage renders the chat page.
 func RenderPage(p Page) []byte {

@@ -11,6 +11,16 @@
     visualViewport.addEventListener('resize', vv); vv();
   }
 
+  /* ---------- the chat's words, in the language of the page around it (data-config text, or the
+     article box's data-text; helpcenter.ChatText on the server) ---------- */
+  var W = {}, LANG = document.documentElement.lang || 'en';
+  function word(key, vars) {
+    var s = W[key] || key;
+    if (vars) Object.keys(vars).forEach(function (k) { s = s.split('{' + k + '}').join(vars[k]); });
+    return s;
+  }
+  function num(n) { try { return n.toLocaleString(LANG); } catch (e) { return n.toLocaleString('en'); } }
+
   /* ---------- tiny DOM helpers ---------- */
   var SVGNS = 'http://www.w3.org/2000/svg';
   var ICONS = {
@@ -56,6 +66,10 @@
     var u = new URL(this.c.api + path, location.href);
     if (this.c.channel) u.searchParams.set('channel', this.c.channel);
     if (this.c.surface === 'embed') u.searchParams.set('surface', 'widget');
+    // The language the reader reads: the chat page's own ?lang, or the help center page around the box.
+    // The server keeps it only when it is a language the help center shows.
+    var lang = new URLSearchParams(location.search).get('lang') || (this.c.surface !== 'embed' ? document.documentElement.lang : '');
+    if (lang) u.searchParams.set('lang', lang);
     return u.href;
   };
   Api.prototype.call = function (method, path, body) {
@@ -63,6 +77,14 @@
     if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
     return fetch(this.url(path), init);
   };
+
+  // fullPage is the chat page in the language of the page around an article's box (the server keeps
+  // only a language the help center shows).
+  function fullPage(page) {
+    var u = new URL(page, location.href);
+    if (document.documentElement.lang) u.searchParams.set('lang', document.documentElement.lang);
+    return u.pathname + u.search;
+  }
 
   /* ---------- an answer's text: **bold**, lines and lists, [#n] markers, the hidden-contact sentence ---------- */
   var HIDDEN = '[contact details hidden — not in the articles]';
@@ -138,22 +160,22 @@
     var top = el('header', { 'class': 'chat-top' });
     function title(tag, text, id, short) {
       var name = short ? el('span', null, [el('span', { 'class': 't-long', text: text }), el('span', { 'class': 't-short', 'aria-hidden': 'true', text: short })]) : el('span', { text: text });
-      return el(tag, { 'class': 'chat-title', id: id }, [name, el('span', { 'class': 'ai-tag', text: 'AI', title: 'Answers are written by AI' })]);
+      return el(tag, { 'class': 'chat-title', id: id }, [name, el('span', { 'class': 'ai-tag', text: word('aiTag'), title: word('aiTagTitle') })]);
     }
     if (c.surface === 'page') {
-      top.appendChild(el('a', { 'class': 'icon-btn chat-back', href: c.home, 'aria-label': 'Back to help center', title: 'Back to help center' }, [icon('back')]));
-      top.appendChild(el('a', { 'class': 'brand', href: c.home, title: 'Back to help center' }, [c.logo ? el('img', { 'class': 'brand-logo', src: c.logo.url, alt: c.logo.alt, width: c.logo.width || null, height: c.logo.height || null }) : c.siteTitle]));
-      top.appendChild(title('h1', 'Ask ' + c.name));
-      this.personTop = el('button', { type: 'button', 'class': 'btn btn-quiet person', on: { click: function () { self.openHandoff(this); } } }, [icon('person'), el('span', { 'class': 'p-label', text: 'Talk to a person' })]);
+      top.appendChild(el('a', { 'class': 'icon-btn chat-back', href: c.home, 'aria-label': word('backToHelpCenter'), title: word('backToHelpCenter') }, [icon('back')]));
+      top.appendChild(el('a', { 'class': 'brand', href: c.home, title: word('backToHelpCenter') }, [c.logo ? el('img', { 'class': 'brand-logo', src: c.logo.url, alt: c.logo.alt, width: c.logo.width || null, height: c.logo.height || null }) : c.siteTitle]));
+      top.appendChild(title('h1', word('askName', { name: c.name })));
+      this.personTop = el('button', { type: 'button', 'class': 'btn btn-quiet person', on: { click: function () { self.openHandoff(this); } } }, [icon('person'), el('span', { 'class': 'p-label', text: word('talkToPerson') })]);
       top.appendChild(el('div', { 'class': 'top-actions' }, [this.personTop,
-        iconBtn('person', 'Talk to a person', function () { self.openHandoff(this); }, { 'class': 'icon-btn person-icon' }),
-        el('button', { type: 'button', 'class': 'btn new', 'aria-label': 'New chat', on: { click: function () { self.confirmNew(this); } } }, [icon('edit'), el('span', { 'class': 'label', text: 'New chat' })])]));
+        iconBtn('person', word('talkToPerson'), function () { self.openHandoff(this); }, { 'class': 'icon-btn person-icon' }),
+        el('button', { type: 'button', 'class': 'btn new', 'aria-label': word('newChat'), on: { click: function () { self.confirmNew(this); } } }, [icon('edit'), el('span', { 'class': 'label', text: word('newChat') })])]));
     } else {
-      top.appendChild(title(c.surface === 'embed' ? 'h1' : 'h2', c.surface === 'article' ? 'Ask about this article' : 'Ask ' + c.name, 'chat-title', c.surface === 'article' ? 'This article' : null));
-      top.appendChild(iconBtn('edit', 'New chat', function () { self.confirmNew(this); }));
-      if (c.surface === 'article') top.appendChild(el('a', { 'class': 'icon-btn', href: c.page, 'aria-label': 'Open in full chat', title: 'Open in full chat' }, [icon('expand')]));
-      else top.appendChild(iconBtn('open', 'Open full chat in a new tab', function () { self.openFull(); }));
-      top.appendChild(iconBtn('close', 'Close chat', function () { c.onClose && c.onClose(); }));
+      top.appendChild(title(c.surface === 'embed' ? 'h1' : 'h2', c.surface === 'article' ? word('askAboutArticle') : word('askName', { name: c.name }), 'chat-title', c.surface === 'article' ? word('thisArticle') : null));
+      top.appendChild(iconBtn('edit', word('newChat'), function () { self.confirmNew(this); }));
+      if (c.surface === 'article') top.appendChild(el('a', { 'class': 'icon-btn', href: fullPage(c.page), 'aria-label': word('openFullChat'), title: word('openFullChat') }, [icon('expand')]));
+      else top.appendChild(iconBtn('open', word('openFullChatTab'), function () { self.openFull(); }));
+      top.appendChild(iconBtn('close', word('closeChat'), function () { c.onClose && c.onClose(); }));
     }
     root.appendChild(top);
     if (c.surface === 'article') { this.chipRow = el('div', { 'class': 'chip-row' }); root.appendChild(this.chipRow); this.renderChip(); }
@@ -173,10 +195,10 @@
     var self = this; this.chipRow.textContent = '';
     if (!this.article) { this.chipRow.hidden = true; return; }
     this.chipRow.hidden = false;
-    this.chipRow.appendChild(el('span', { 'class': 'chip' }, [el('b', { text: 'Asking about:' }), el('span', { text: this.article.title, title: this.article.title }),
-      iconBtn('close', 'Stop asking about “' + this.article.title + '”', function () { self.article = null; self.renderChip(); self.input.focus(); self.say('Questions are no longer about this article.'); })]));
+    this.chipRow.appendChild(el('span', { 'class': 'chip' }, [el('b', { text: word('askingAbout') }), el('span', { text: this.article.title, title: this.article.title }),
+      iconBtn('close', word('stopAskingAbout', { title: this.article.title }), function () { self.article = null; self.renderChip(); self.input.focus(); self.say(word('noLongerAbout')); })]));
   };
-  Chat.prototype.placeholder = function () { return this.compact ? 'Ask a question' : 'Ask a question about ' + this.c.name; };
+  Chat.prototype.placeholder = function () { return this.compact ? word('askQuestion') : word('askQuestionAbout', { name: this.c.name }); };
   Chat.prototype.buildComposer = function () {
     var self = this; this.foot.textContent = '';
     var inner = el('div', { 'class': 'composer-in' });
@@ -184,12 +206,12 @@
     inner.appendChild(this.waitLine);
     var id = 'q-' + this.c.surface;
     this.input = el('textarea', { id: id, rows: '1', placeholder: this.placeholder(), 'aria-describedby': id + '-note ' + id + '-count', autocomplete: 'off', enterkeyhint: 'send' });
-    this.sendBtn = el('button', { type: 'submit', 'class': 'send', 'aria-label': 'Send question', disabled: true }, [icon('send')]);
+    this.sendBtn = el('button', { type: 'submit', 'class': 'send', 'aria-label': word('sendQuestion'), disabled: true }, [icon('send')]);
     this.form = el('form', { 'class': 'composer', on: { submit: function (e) { e.preventDefault(); self.submit(); } } },
-      [el('label', { 'for': id, 'class': 'visually-hidden', text: 'Your question' }), this.input, this.sendBtn]);
+      [el('label', { 'for': id, 'class': 'visually-hidden', text: word('yourQuestion') }), this.input, this.sendBtn]);
     inner.appendChild(this.form);
     this.count = el('span', { 'class': 'count', id: id + '-count', hidden: true });
-    var text = this.compact ? 'AI answers can be wrong. Kept on this browser for 30 days.' : 'AI answers from ' + this.c.name + '’s help articles and can be wrong. This chat is kept on this browser for 30 days.';
+    var text = this.compact ? word('noteShort') : word('noteLong', { name: this.c.name });
     inner.appendChild(el('div', { 'class': 'composer-meta' }, [el('p', { id: id + '-note', text: text }),
       el('button', { type: 'button', 'class': 'link person', text: this.personLabel(), on: { click: function () { self.openHandoff(this); } } }), this.count]));
     this.foot.appendChild(inner);
@@ -204,13 +226,13 @@
   Chat.prototype.onInput = function () {
     var n = this.input.value.length, over = n > LIMIT;
     this.count.hidden = n < COUNT_FROM;
-    this.count.textContent = n.toLocaleString('en') + ' / ' + LIMIT.toLocaleString('en');
+    this.count.textContent = num(n) + ' / ' + num(LIMIT);
     this.count.classList.toggle('over', over);
     this.form.classList.toggle('too-long', over);
     this.input.setAttribute('aria-invalid', over ? 'true' : 'false');
     if (!this.waiting) {
       this.waitLine.hidden = !over;
-      if (over) { this.waitLine.textContent = ''; this.waitLine.appendChild(icon('alert')); this.waitLine.appendChild(document.createTextNode('Shorten your question to 1,000 characters.')); }
+      if (over) { this.waitLine.textContent = ''; this.waitLine.appendChild(icon('alert')); this.waitLine.appendChild(document.createTextNode(word('shorten', { limit: num(LIMIT) }))); }
     }
     this.sendBtn.disabled = !this.input.value.trim() || over || this.busy || !!this.waiting || !!this.locked;
   };
@@ -222,18 +244,18 @@
   Chat.prototype.clear = function () { this.thread.textContent = ''; };
 
   Chat.prototype.welcome = function () {
-    var self = this, list = el('ul', { 'class': 'suggest', 'aria-label': 'Suggested questions' });
+    var self = this, list = el('ul', { 'class': 'suggest', 'aria-label': word('suggested') });
     (this.c.suggestions || []).forEach(function (s) { list.appendChild(el('li', null, [el('button', { type: 'button', text: s, on: { click: function () { self.ask(s); } } })])); });
     this.thread.appendChild(el('section', { 'class': 'welcome', 'aria-labelledby': 'w-' + this.c.surface }, [
-      el('h2', { id: 'w-' + this.c.surface, text: this.compact ? 'Ask ' + this.c.name : 'How can we help?' }),
-      el('p', { 'class': 'who' }, [el('span', { 'class': 'ai-tag', text: 'AI' }), 'AI assistant · answers from ' + this.c.name + '’s help articles']),
+      el('h2', { id: 'w-' + this.c.surface, text: this.compact ? word('askName', { name: this.c.name }) : word('howCanWeHelp') }),
+      el('p', { 'class': 'who' }, [el('span', { 'class': 'ai-tag', text: word('aiTag') }), word('assistant', { name: this.c.name })]),
       this.c.greeting ? el('p', { 'class': 'greet', text: this.c.greeting }) : null, (this.c.suggestions || []).length ? list : null]));
   };
 
   /* ---------- a turn ---------- */
   Chat.prototype.turnEl = function (q) {
-    var t = el('article', { 'class': 'turn', 'aria-label': 'Question and answer' });
-    t.appendChild(el('p', { 'class': 'q' }, [el('span', { 'class': 'visually-hidden', text: 'You asked: ' }), q]));
+    var t = el('article', { 'class': 'turn', 'aria-label': word('questionAndAnswer') });
+    t.appendChild(el('p', { 'class': 'q' }, [el('span', { 'class': 'visually-hidden', text: word('youAsked') + ' ' }), q]));
     var a = el('div', { 'class': 'a' }), body = el('div', { 'class': 'a-body' });
     a.appendChild(body); t.appendChild(a); this.thread.appendChild(t);
     return { t: t, a: a, body: body, q: q, w: new Writer(body), id: null };
@@ -245,32 +267,32 @@
     Array.prototype.slice.call(turn.body.querySelectorAll('.cite-wait')).forEach(function (cite) {
       var hit = nums[cite.getAttribute('data-number')];
       if (!hit) { cite.remove(); return; }
-      cite.replaceWith(el('a', { 'class': 'cite', href: hit.s.url, tabindex: '-1', target: self.c.surface === 'embed' ? '_blank' : null, 'aria-label': 'Source ' + hit.n + ': ' + hit.s.title, text: String(hit.n) }));
+      cite.replaceWith(el('a', { 'class': 'cite', href: hit.s.url, tabindex: '-1', target: self.c.surface === 'embed' ? '_blank' : null, 'aria-label': word('sourceOf', { n: hit.n, title: hit.s.title }), text: String(hit.n) }));
     });
     if (!sources.length) return;
     sources.forEach(function (s, i) {
       list.appendChild(el('li', null, [el('a', { 'class': 'tab', href: s.url, title: s.title, target: self.c.surface === 'embed' ? '_blank' : null }, [
         el('span', { 'class': 'cite', 'aria-hidden': 'true', text: String(i + 1) }), el('span', { 'class': 'tab-folder', text: s.folder }), el('span', { 'class': 'tab-title', text: s.title })])]));
     });
-    turn.a.appendChild(el('div', { 'class': 'sources' }, [el('h3', { 'class': 'sources-label', text: sources.length === 1 ? 'Source' : 'Sources' }), list]));
+    turn.a.appendChild(el('div', { 'class': 'sources' }, [el('h3', { 'class': 'sources-label', text: sources.length === 1 ? word('source') : word('sources') }), list]));
   };
   Chat.prototype.tools = function (turn, feedback) {
     var self = this, done = el('span', { 'class': 'done', role: 'status' });
-    var up = iconBtn('up', 'Helpful', null, { 'aria-pressed': String(feedback === 'helpful') });
-    var down = iconBtn('down', 'Not helpful', null, { 'aria-pressed': String(feedback === 'not_helpful') });
+    var up = iconBtn('up', word('helpful'), null, { 'aria-pressed': String(feedback === 'helpful') });
+    var down = iconBtn('down', word('notHelpful'), null, { 'aria-pressed': String(feedback === 'not_helpful') });
     function rate(btn, other, rating) {
       return function () {
         var on = btn.getAttribute('aria-pressed') !== 'true';
         btn.setAttribute('aria-pressed', String(on)); if (on) other.setAttribute('aria-pressed', 'false');
-        done.textContent = on ? 'Thanks for the feedback' : '';
+        done.textContent = on ? word('thanks') : '';
         self.api.call(on ? 'PUT' : 'DELETE', '/turns/' + encodeURIComponent(turn.id) + '/feedback', on ? { rating: rating } : undefined).catch(function () {});
       };
     }
     up.addEventListener('click', rate(up, down, 'helpful')); down.addEventListener('click', rate(down, up, 'not_helpful'));
-    var copy = iconBtn('copy', 'Copy answer', function () { try { navigator.clipboard.writeText(turn.w.plain()); } catch (e) {} done.textContent = 'Copied'; setTimeout(function () { done.textContent = ''; }, 2000); });
+    var copy = iconBtn('copy', word('copyAnswer'), function () { try { navigator.clipboard.writeText(turn.w.plain()); } catch (e) {} done.textContent = word('copied'); setTimeout(function () { done.textContent = ''; }, 2000); });
     turn.a.appendChild(el('div', { 'class': 'a-tools' }, turn.id ? [up, down, copy, done] : [copy, done]));
   };
-  Chat.prototype.personLabel = function () { return this.handed ? 'Message the team again' : 'Talk to a person'; };
+  Chat.prototype.personLabel = function () { return this.handed ? word('messageAgain') : word('talkToPerson'); };
   Chat.prototype.personBtn = function () { var self = this; return el('button', { type: 'button', 'class': 'btn', on: { click: function () { self.openHandoff(this); } } }, [icon('person'), this.personLabel()]); };
   // The end of an answer, streamed or read back.
   Chat.prototype.outcome = function (turn, status, sources, redacted, feedback) {
@@ -278,7 +300,7 @@
     if (status === 'over_limit') {
       var list = el('ul', { 'class': 'index' });
       sources.forEach(function (s) { list.appendChild(el('li', null, [el('a', { href: s.url, target: self.c.surface === 'embed' ? '_blank' : null }, [s.title, el('small', { text: s.folder })])])); });
-      var paused = note('', 'pause', 'AI answers are paused for now.', sources.length ? 'These articles match your question:' : 'You can still read the help articles.', null);
+      var paused = note('', 'pause', word('paused'), sources.length ? word('pausedMatches') : word('stillRead'), null);
       if (sources.length) paused.appendChild(list);
       paused.appendChild(el('div', { 'class': 'note-actions' }, [self.personBtn()]));
       turn.a.appendChild(paused);
@@ -286,15 +308,15 @@
     }
     this.finishSources(turn, sources);
     if (status === 'no_source' || redacted) {
-      turn.a.appendChild(note('note-inline', 'search', status === 'no_source' ? 'Couldn’t find this in the help articles.' : 'Some contact details were not in the articles.',
-        redacted ? 'The team can give you their contact details.' : '', [self.personBtn()]));
+      turn.a.appendChild(note('note-inline', 'search', status === 'no_source' ? word('notInArticles') : word('contactsMissing'),
+        redacted ? word('teamContacts') : '', [self.personBtn()]));
     }
     this.tools(turn, feedback);
   };
   Chat.prototype.failed = function (turn) {
     var self = this;
-    turn.a.appendChild(note('note-problem', 'alert', 'Something went wrong.', 'The answer did not finish.', [
-      el('button', { type: 'button', 'class': 'btn btn-primary', text: 'Try again', on: { click: function () { this.closest('.note').remove(); self.ask(turn.q); } } }), self.personBtn()], 'alert'));
+    turn.a.appendChild(note('note-problem', 'alert', word('wentWrong'), word('didNotFinish'), [
+      el('button', { type: 'button', 'class': 'btn btn-primary', text: word('tryAgain'), on: { click: function () { this.closest('.note').remove(); self.ask(turn.q); } } }), self.personBtn()], 'alert'));
     this.busy = false; this.onInput(); this.bottom();
   };
 
@@ -304,10 +326,10 @@
     if (this.busy || this.locked || !q) return;
     var welcome = this.thread.querySelector('.welcome'); if (welcome) welcome.hidden = true;
     var turn = this.turnEl(q);
-    var dots = el('div', { 'class': 'typing', role: 'img', 'aria-label': 'Answer on its way' }, [el('i'), el('i'), el('i')]);
+    var dots = el('div', { 'class': 'typing', role: 'img', 'aria-label': word('onItsWay') }, [el('i'), el('i'), el('i')]);
     turn.a.appendChild(dots);
     this.busy = true; this.input.value = ''; this.onInput(); this.bottom();
-    this.hush(); this.say('Answer on its way');
+    this.hush(); this.say(word('onItsWay'));
     var body = { question: q, surface: this.c.surface === 'article' ? 'article' : this.c.surface === 'embed' ? 'widget' : 'help_center' };
     if (this.article) body.viewing_article_number = this.article.number;
     var sources = [], ended = false;
@@ -321,9 +343,9 @@
     }
     this.api.call('POST', '/turns', body).then(function (response) {
       if (response.status === 404) { turn.t.remove(); self.busy = false; return self.unavailable(); }
-      if (response.status === 429) { back(note('', 'clock', 'Too many questions, wait a minute.', 'Your question was not sent. Ask it again when the timer ends.', null, 'status')); return self.wait(response.headers.get('Retry-After')); }
+      if (response.status === 429) { back(note('', 'clock', word('tooMany'), word('notSent'), null, 'status')); return self.wait(response.headers.get('Retry-After')); }
       if (response.status === 409) { turn.t.remove(); self.busy = false; return self.chatFull(); }
-      if (!response.ok || !response.body) return back(note('note-problem', 'alert', 'Couldn’t send.', 'Check your connection and try again. Your question is still in the box.', null, 'alert'));
+      if (!response.ok || !response.body) return back(note('note-problem', 'alert', word('couldNotSend'), word('checkConnection'), null, 'alert'));
       var reader = response.body.getReader(), decoder = new TextDecoder(), buffer = '';
       function handle(event) {
         if (event.type === 'turn') { turn.id = event.turn_id; return; }
@@ -341,7 +363,7 @@
           linkify(turn.body, event.links_allowed);
           self.outcome(turn, event.status, sources, event.redacted);
           self.busy = false; self.onInput(); self.bottom();
-          self.say(event.status === 'answered' ? 'Answer ready, ' + sources.length + (sources.length === 1 ? ' source.' : ' sources.') : event.status === 'over_limit' ? 'AI answers are paused.' : 'Answer ready. Couldn’t find this in the help articles.');
+          self.say(event.status === 'answered' ? (sources.length === 1 ? word('readyOne') : word('readyN', { n: sources.length })) : event.status === 'over_limit' ? word('pausedShort') : word('readyNotFound'));
         }
       }
       function pump() {
@@ -354,13 +376,13 @@
         });
       }
       return pump().catch(function () { if (!ended) self.reconnect(turn, dots); });
-    }, function () { back(note('note-problem', 'alert', 'Couldn’t send.', 'Check your connection and try again. Your question is still in the box.', null, 'alert')); });
+    }, function () { back(note('note-problem', 'alert', word('couldNotSend'), word('checkConnection'), null, 'alert')); });
   };
   // reconnect reads the stored answer back every 2 s for a minute once a stream breaks.
   Chat.prototype.reconnect = function (turn, dots) {
     var self = this, started = Date.now();
     if (dots && dots.parentNode) dots.remove();
-    var line = el('p', { 'class': 'status-line', role: 'status' }, [el('span', { 'class': 'spin', 'aria-hidden': 'true' }), 'Reconnecting…']);
+    var line = el('p', { 'class': 'status-line', role: 'status' }, [el('span', { 'class': 'spin', 'aria-hidden': 'true' }), word('reconnecting')]);
     turn.a.appendChild(line); this.bottom();
     function poll() {
       if (!turn.id || Date.now() - started > POLL_FOR) { line.remove(); return self.failed(turn); }
@@ -370,7 +392,7 @@
       }).then(function (stored) {
         if (stored.status === 'streaming') return setTimeout(poll, POLL_EVERY);
         line.remove(); turn.body.textContent = ''; turn.w = new Writer(turn.body);
-        self.drawStored(turn, stored); self.busy = false; self.onInput(); self.say('Reconnected. Answer ready.');
+        self.drawStored(turn, stored); self.busy = false; self.onInput(); self.say(word('reconnected'));
       }).catch(function () { setTimeout(poll, POLL_EVERY); });
     }
     setTimeout(poll, POLL_EVERY);
@@ -393,22 +415,22 @@
     this.waiting = true; this.waitLine.hidden = false;
     function tick() {
       self.waitLine.textContent = ''; self.waitLine.appendChild(icon('clock'));
-      self.waitLine.appendChild(document.createTextNode('You can ask again in ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0')));
-      if (left-- <= 0) { self.waiting = false; self.waitLine.hidden = true; self.onInput(); self.say('You can ask again.'); return; }
+      self.waitLine.appendChild(document.createTextNode(word('askAgainIn', { time: Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') })));
+      if (left-- <= 0) { self.waiting = false; self.waitLine.hidden = true; self.onInput(); self.say(word('askAgain')); return; }
       setTimeout(tick, 1000);
     }
     tick(); this.onInput();
   };
   Chat.prototype.unavailable = function () {
-    this.thread.appendChild(note('note-problem', 'pause', 'AI chat isn’t available right now.', 'You can still read the help articles.',
-      [el('a', { 'class': 'btn', href: this.c.home, text: 'Go to the help center' })], 'alert'));
-    this.lock('AI chat isn’t available right now');
+    this.thread.appendChild(note('note-problem', 'pause', word('unavailable'), word('stillRead'),
+      [el('a', { 'class': 'btn', href: this.c.home, text: word('goToHelpCenter') })], 'alert'));
+    this.lock(word('unavailable'));
   };
   Chat.prototype.chatFull = function () {
     var self = this;
-    this.thread.appendChild(note('', 'info', 'This chat is long.', 'Start a new chat to keep asking.',
-      [el('button', { type: 'button', 'class': 'btn btn-primary', on: { click: function () { self.confirmNew(this); } } }, [icon('edit'), 'New chat'])], 'status'));
-    this.lock('Start a new chat to keep asking');
+    this.thread.appendChild(note('', 'info', word('chatLong'), word('startNewToKeep'),
+      [el('button', { type: 'button', 'class': 'btn btn-primary', on: { click: function () { self.confirmNew(this); } } }, [icon('edit'), word('newChat')])], 'status'));
+    this.lock(word('startNewToKeep'));
   };
   Chat.prototype.history = function (turns) {
     var self = this;
@@ -419,12 +441,12 @@
     var self = this, n = session.turns.length, days = Math.max(1, Math.round(session.idle_hours / 24));
     var ghost = el('div', { 'class': 'ghost', 'aria-hidden': 'true' }, [el('i'), el('i'), el('i'), el('i')]);
     this.thread.appendChild(el('section', { 'class': 'resume', 'aria-labelledby': 'resume-' + this.c.surface }, [
-      el('h2', { id: 'resume-' + this.c.surface, text: 'Continue your previous chat?' }),
-      el('p', { text: n + (n === 1 ? ' question' : ' questions') + ' · last active ' + days + (days === 1 ? ' day' : ' days') + ' ago. It stays hidden until you continue.' }), ghost,
+      el('h2', { id: 'resume-' + this.c.surface, text: word('continueTitle') }),
+      el('p', { text: word('resume', { questions: n === 1 ? word('questionsOne') : word('questionsN', { n: n }), active: days === 1 ? word('activeOne') : word('activeN', { n: days }) }) }), ghost,
       el('div', { 'class': 'resume-actions' }, [
-        el('button', { type: 'button', 'class': 'btn btn-primary', text: 'Continue', on: { click: function () { self.clear(); self.unlock(); self.history(session.turns); self.bottom(); self.input.focus(); self.say('Previous chat opened.'); } } }),
-        el('button', { type: 'button', 'class': 'btn', text: 'New chat', on: { click: function () { self.startOver(); } } })])]));
-    this.lock('Choose Continue or New chat first');
+        el('button', { type: 'button', 'class': 'btn btn-primary', text: word('continue'), on: { click: function () { self.clear(); self.unlock(); self.history(session.turns); self.bottom(); self.input.focus(); self.say(word('previousOpened')); } } }),
+        el('button', { type: 'button', 'class': 'btn', text: word('newChat'), on: { click: function () { self.startOver(); } } })])]));
+    this.lock(word('chooseFirst'));
   };
   Chat.prototype.load = function () {
     var self = this;
@@ -442,15 +464,15 @@
     var self = this;
     this.api.call('POST', '/session/end').catch(function () {}).then(function () {
       self.clear(); self.handed = false; self.waiting = false; self.busy = false; self.locked = false;
-      self.buildComposer(); self.welcome(); self.input.focus(); self.say('New chat started.');
+      self.buildComposer(); self.welcome(); self.input.focus(); self.say(word('newStarted'));
     });
   };
   Chat.prototype.confirmNew = function (opener) {
     var self = this;
     var d = el('dialog', { 'class': 'confirm', 'aria-labelledby': 'cn-t', 'aria-describedby': 'cn-d' }, [
-      el('h2', { id: 'cn-t', text: 'Start a new chat?' }), el('p', { id: 'cn-d', text: 'This one will be cleared from this browser.' }),
-      el('div', { 'class': 'handoff-actions' }, [el('button', { type: 'button', 'class': 'btn', text: 'Cancel', on: { click: function () { d.close(); } } }),
-        el('button', { type: 'button', 'class': 'btn btn-primary', text: 'Start new chat', on: { click: function () { d.close(); self.startOver(); } } })])]);
+      el('h2', { id: 'cn-t', text: word('startNewTitle') }), el('p', { id: 'cn-d', text: word('clearedHere') }),
+      el('div', { 'class': 'handoff-actions' }, [el('button', { type: 'button', 'class': 'btn', text: word('cancel'), on: { click: function () { d.close(); } } }),
+        el('button', { type: 'button', 'class': 'btn btn-primary', text: word('startNew'), on: { click: function () { d.close(); self.startOver(); } } })])]);
     d.addEventListener('close', function () { d.remove(); if (document.contains(opener) && !self.root.contains(document.activeElement)) opener.focus(); });
     this.root.appendChild(d); d.showModal();
     d.querySelector('.btn').focus();
@@ -464,7 +486,7 @@
         // The chat moves to the new tab: this frame starts over.
         if (/[?&]t=/.test(to.url)) {
           self.clear(); self.welcome();
-          self.thread.appendChild(note('', 'info', 'This chat continues in the new tab.', '', null, 'status'));
+          self.thread.appendChild(note('', 'info', word('continuesInTab'), '', null, 'status'));
         }
       });
   };
@@ -480,32 +502,32 @@
     var text = el('textarea', { id: id + '-note', rows: '3', maxlength: '2000', 'aria-describedby': id + '-note-hint' });
     var err = el('p', { 'class': 'field-error', id: id + '-email-err', hidden: true });
     var formErr = el('div', { 'class': 'form-error', role: 'alert', hidden: true });
-    var hint = el('p', { 'class': 'field-hint', id: id + '-note-hint', text: '0 / 2,000' });
-    text.addEventListener('input', function () { hint.textContent = text.value.length.toLocaleString('en') + ' / 2,000'; });
-    var sendBtn = el('button', { type: 'submit', 'class': 'btn btn-primary', text: 'Send to ' + this.c.name });
+    var hint = el('p', { 'class': 'field-hint', id: id + '-note-hint', text: '0 / ' + num(2000) });
+    text.addEventListener('input', function () { hint.textContent = num(text.value.length) + ' / ' + num(2000); });
+    var sendBtn = el('button', { type: 'submit', 'class': 'btn btn-primary', text: word('sendTo', { name: this.c.name }) });
     function fieldError(message) { err.hidden = false; err.textContent = ''; err.appendChild(icon('alert')); err.appendChild(document.createTextNode(message)); email.setAttribute('aria-invalid', 'true'); email.focus(); }
     function formError(message) { formErr.hidden = false; formErr.textContent = ''; formErr.appendChild(icon('alert')); formErr.appendChild(document.createTextNode(message)); }
     var form = el('form', { 'class': 'handoff', novalidate: true, 'aria-labelledby': id + '-t', on: { submit: function (e) {
       e.preventDefault();
       var address = email.value.trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return fieldError('Enter an email address like name@example.com.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return fieldError(word('emailInvalid'));
       err.hidden = true; email.setAttribute('aria-invalid', 'false'); formErr.hidden = true;
-      sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
+      sendBtn.disabled = true; sendBtn.textContent = word('sending');
       self.api.call('POST', '/handoff', { email: address, name: name.value.trim() || undefined, note: text.value.trim() || undefined }).then(function (response) {
         if (response.status === 201) return response.json().then(function (sent) { self.sentEmail = address; self.sentName = name.value.trim(); self.closeHandoff(false); self.handedOff(sent); });
-        sendBtn.disabled = false; sendBtn.textContent = 'Send to ' + self.c.name;
-        if (response.status === 422) return fieldError('Enter an email address like name@example.com.');
-        if (response.status === 429) return formError('Too many requests, try again in a minute.');
-        formError('Couldn’t send. Try again in a moment.');
-      }, function () { sendBtn.disabled = false; sendBtn.textContent = 'Send to ' + self.c.name; formError('Couldn’t send. Check your connection and try again.'); });
+        sendBtn.disabled = false; sendBtn.textContent = word('sendTo', { name: self.c.name });
+        if (response.status === 422) return fieldError(word('emailInvalid'));
+        if (response.status === 429) return formError(word('tooManyRequests'));
+        formError(word('couldNotSendLater'));
+      }, function () { sendBtn.disabled = false; sendBtn.textContent = word('sendTo', { name: self.c.name }); formError(word('couldNotSendConnection')); });
     } } }, [
       el('h2', { id: id + '-t', text: this.personLabel() }),
-      el('p', { text: 'We send this chat to the ' + this.c.name + ' team with your note. You can keep asking the AI meanwhile.' }),
+      el('p', { text: word('handoffIntro', { name: this.c.name }) }),
       formErr,
-      el('div', { 'class': 'field' }, [el('label', { 'for': email.id, text: 'Email' }), email, err]),
-      el('div', { 'class': 'field' }, [el('label', { 'for': name.id }, ['Name ', el('span', { text: '(optional)' })]), name]),
-      el('div', { 'class': 'field' }, [el('label', { 'for': text.id }, ['Anything to add? ', el('span', { text: '(optional)' })]), text, hint]),
-      el('div', { 'class': 'handoff-actions' }, [el('button', { type: 'button', 'class': 'btn btn-quiet', text: 'Cancel', on: { click: function () { self.closeHandoff(true); } } }), sendBtn])]);
+      el('div', { 'class': 'field' }, [el('label', { 'for': email.id, text: word('email') }), email, err]),
+      el('div', { 'class': 'field' }, [el('label', { 'for': name.id }, [word('name') + ' ', el('span', { text: word('optional') })]), name]),
+      el('div', { 'class': 'field' }, [el('label', { 'for': text.id }, [word('anythingToAdd') + ' ', el('span', { text: word('optional') })]), text, hint]),
+      el('div', { 'class': 'handoff-actions' }, [el('button', { type: 'button', 'class': 'btn btn-quiet', text: word('cancel'), on: { click: function () { self.closeHandoff(true); } } }), sendBtn])]);
     form.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); self.closeHandoff(true); } });
     this.foot.textContent = ''; this.foot.appendChild(form); this.handoffOpen = true;
     email.focus();
@@ -516,9 +538,10 @@
   Chat.prototype.handedOff = function (sent) {
     this.handed = true; this.buildComposer(); this.onInput();
     var label = this.root.querySelector('.top-actions .p-label'); if (label) label.textContent = this.personLabel();
-    var message = this.c.trial ? 'Sent. ' + this.c.name + ' has your message.' : 'Sent. ' + this.c.name + ' will reply by email.';
+    var message = this.c.trial ? word('sentHas', { name: this.c.name }) : word('sentReply', { name: this.c.name });
+    var ref = word('reference').split('{ref}');
     this.thread.appendChild(el('div', { 'class': 'note note-ok', role: 'status' }, [icon('check'), el('p', null, [el('strong', { text: message }), ' ',
-      el('span', { 'class': 'more' }, ['Reference ', el('span', { 'class': 'ref', text: '#' + sent.reference }), '. You can keep asking here.'])])]));
+      el('span', { 'class': 'more' }, [ref[0], el('span', { 'class': 'ref', text: '#' + sent.reference }), ref[1] || ''])])]));
     this.bottom();
   };
 
@@ -528,6 +551,7 @@
   var page = document.getElementById('chat');
   if (page) {
     var c = config(page);
+    W = c.text || {};
     if (c.surface === 'embed') {
       // The site's frame: its × and Esc ask widget.js to close the panel; the message carries no data.
       c.onClose = function () { parent.postMessage({ colliedesk: 'close' }, '*'); };
@@ -545,6 +569,7 @@
   if (!launch || !box) return;
   var bc = config(box), wide = matchMedia('(min-width: 48rem)'), boxChat = null;
   bc.surface = 'article';
+  try { W = JSON.parse(box.getAttribute('data-text') || '{}'); } catch (e) { W = {}; }
   bc.article = { number: Number(box.getAttribute('data-article-number')), title: box.getAttribute('data-article-title') };
   var outside = [document.querySelector('.masthead'), document.getElementById('main'), document.querySelector('.foot'), document.querySelector('.skip')].filter(Boolean);
   function mode() {

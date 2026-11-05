@@ -71,7 +71,7 @@ func TestTheChatReadsExactlyTheHelpCenter(t *testing.T) {
 	if _, err := e.pool.Exec(context.Background(), `UPDATE kb_articles SET ai_excluded=true,ai_excluded_at=now() WHERE id=$1`, kept); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'vi','Thời gian giao hàng','Giao trong 2 ngày.')`,
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at) VALUES($1,$2,'vi','Thời gian giao hàng','Giao trong 2 ngày.','g','published',now())`,
 		e.a.id, ship); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestALargeKnowledgeBaseSendsTheBestExcerpts(t *testing.T) {
 	}
 	passport := kb.article(t, e.a, 9, "Passport renewal", "Renew your passport online in ten minutes.", "published", false, 1)
 	// A translation (not on the help center) that matches the question better than the article.
-	if _, err := e.pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'vi','Gia hạn hộ chiếu','Gia hạn hộ chiếu trực tuyến, bản dịch riêng.')`,
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at) VALUES($1,$2,'vi','Gia hạn hộ chiếu','Gia hạn hộ chiếu trực tuyến, bản dịch riêng.','g','published',now())`,
 		e.a.id, passport); err != nil {
 		t.Fatal(err)
 	}
@@ -193,13 +193,76 @@ func TestALargeKnowledgeBaseSendsTheBestExcerpts(t *testing.T) {
 	if _, ok := prompt.Articles[9]; !ok || !strings.Contains(last, "Renew your passport online") || strings.Contains(systemText(prompt.Request), "Renew your passport") {
 		t.Fatalf("articles=%v last=%.200q", prompt.Articles, last)
 	}
-	// Asked in the translation's words, the excerpt is still the article's own text.
+	// A reader of the primary pages is searched in the articles' own texts only (KBReader): a question in
+	// a hidden language's words never brings that translation's text.
 	prompt, err = e.service.ChatPrompt(context.Background(), chatBinding(e), e.a.id, ai.ChatPromptInput{WorkspaceName: "Acme", Question: "Gia hạn hộ chiếu trực tuyến?"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	last = prompt.Request.Messages[len(prompt.Request.Messages)-1].Text
-	if strings.Contains(last, "bản dịch riêng") || !strings.Contains(last, "Renew your passport online") {
+	if strings.Contains(last, "bản dịch riêng") {
 		t.Fatalf("translation excerpt: last=%.300q", last)
+	}
+	// Once the help center shows Vietnamese, a reader of it gets the translation as the excerpt.
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO help_center_languages(workspace_id,locale,visible) VALUES($1,'vi',true)`, e.a.id); err != nil {
+		t.Fatal(err)
+	}
+	prompt, err = e.service.ChatPrompt(context.Background(), chatBinding(e), e.a.id, ai.ChatPromptInput{WorkspaceName: "Acme", Question: "Gia hạn hộ chiếu trực tuyến?", Locale: "vi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	last = prompt.Request.Messages[len(prompt.Request.Messages)-1].Text
+	if !strings.Contains(last, "bản dịch riêng") || strings.Contains(last, "Renew your passport online") || prompt.Articles[9].Locale != "vi" {
+		t.Fatalf("Vietnamese excerpt: last=%.300q", last)
+	}
+}
+
+// A reader of a language the help center shows gets that language's published translations, whole or
+// as excerpts; a hidden language, a draft and another language never reach the prompt.
+func TestTheChatAnswersFromTheTranslationsOfTheReadersLanguage(t *testing.T) {
+	e := newEnv(t, nil)
+	kb := newKB(t, e, e.a)
+	ship := kb.article(t, e.a, 3, "Shipping times", "We ship in two days.", "published", false, 1)
+	other := kb.article(t, e.a, 4, "Returns", "Return within a month.", "published", false, 1)
+	ctx := context.Background()
+	for _, row := range []struct{ article, locale, title, body, status string }{
+		{ship, "fr", "Délais de livraison", "Nous expédions en deux jours.", "published"},
+		{other, "fr", "Retours", "brouillon secret", "draft"},
+		{ship, "de", "Lieferzeiten", "versteckte Sprache", "published"},
+	} {
+		if _, err := e.pool.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at)
+			VALUES($1,$2,$3,$4,$5,'s',$6,CASE WHEN $6='published' THEN now() END)`, e.a.id, row.article, row.locale, row.title, row.body, row.status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO help_center_languages(workspace_id,locale,visible) VALUES($1,'fr',true),($1,'de',false)`, e.a.id); err != nil {
+		t.Fatal(err)
+	}
+	french, err := e.service.ChatPrompt(ctx, chatBinding(e), e.a.id, ai.ChatPromptInput{WorkspaceName: "Acme", Question: "Livraison ?", Locale: "fr"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	system := systemText(french.Request)
+	if !french.Whole || !strings.Contains(system, "Nous expédions en deux jours.") || !strings.Contains(system, "Return within a month.") ||
+		strings.Contains(system, "brouillon") || strings.Contains(system, "versteckte") || strings.Contains(system, "We ship in two days.") {
+		t.Fatalf("French prompt = %.600q", system)
+	}
+	if french.Articles[3].Locale != "fr" || french.Articles[4].Locale != "" {
+		t.Fatalf("refs = %+v", french.Articles)
+	}
+	primary, err := e.service.ChatPrompt(ctx, chatBinding(e), e.a.id, ai.ChatPromptInput{WorkspaceName: "Acme", Question: "Shipping?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(primary.Fingerprint) == string(french.Fingerprint) || strings.Contains(systemText(primary.Request), "Nous expédions") {
+		t.Fatal("the primary prompt holds the French text, or shares its cache key")
+	}
+	// A hidden language is the primary one.
+	german, err := e.service.ChatPrompt(ctx, chatBinding(e), e.a.id, ai.ChatPromptInput{WorkspaceName: "Acme", Question: "Lieferung?", Locale: "de"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(systemText(german.Request), "versteckte") || !strings.Contains(systemText(german.Request), "We ship in two days.") {
+		t.Fatalf("hidden language prompt = %.400q", systemText(german.Request))
 	}
 }

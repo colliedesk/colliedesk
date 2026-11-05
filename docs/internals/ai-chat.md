@@ -142,6 +142,13 @@ pass the day's tenth).
 
 ## The prompt
 
+- **The reader's language** (`ChatPromptInput.Locale`, from the chat's `?lang` when it names a language
+  the help center shows): `store.ChatKBArticlesIn` gives each article published in that language in it,
+  with its collection's name in it, the others in their own; excerpts are swapped for that text the same
+  way, so a draft, a hidden language or another language's text never reaches the prompt. The
+  fingerprint grows only for a translated article, so the primary language's cache key did not change;
+  each language has its own cached prefix. Sources link `/<lang>/a/<number>` (help-center.md, Languages).
+
 Order, byte-stable before the turn (`ai/chat-context.go`):
 
 1. The fixed rules (`chatRules`; `TestTheChatRulesAreFixed` holds their hash): answer only from the

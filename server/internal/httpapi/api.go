@@ -822,6 +822,19 @@ func Routes() []Route {
 		{http.MethodPost, replyDraftsPath, auth.PermissionSession},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/restore", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/languages", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/languages", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/translations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/translations/trash", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/translations/{locale}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
 	}
 }
 

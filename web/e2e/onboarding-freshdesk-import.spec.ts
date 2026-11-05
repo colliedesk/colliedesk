@@ -227,23 +227,37 @@ test('freshdesk import: the knowledge base keeps its timestamps, drafts stay dra
     const articleURL = (item: Summary) => `${home}/a/${item.number}-${item.slug}`;
     expect(article.body_md).toContain(`[Reset your password](${articleURL(reset)})`);
     expect(article.body_md).not.toContain('acme.freshdesk.com');
-    const moves: Array<[string, number, string]> = [
-      ['/support/home', 301, home],
-      ['/support/solutions', 301, home],
-      ['/support/solutions/7001', 301, `${home}/c/help`],
-      ['/support/solutions/folders/7101', 301, `${home}/c/help/start`],
-      ['/support/solutions/articles/7201-getting-started-with-acme', 301, articleURL(started)],
-      ['/support/solutions/articles/7203-reset-your-password', 301, articleURL(reset)],
-      ['/support/solutions/articles/7202-coming-soon', 302, `${home}/search?q=coming+soon`],
-      ['/support/solutions/articles/9999-billing-faq', 302, `${home}/search?q=billing+faq`],
+    // Spanish is on the Freshdesk portal, so the help center shows it: an old address below /es/ leads
+    // to the Spanish page where one is published (7201 and its collections), else to the article's own
+    // page; /en/ is the primary language's.
+    const spanish = `${home}/es`;
+    const moves: Array<[string, number, string, string]> = [
+      ['/support/home', 301, home, spanish],
+      ['/support/solutions', 301, home, spanish],
+      ['/support/solutions/7001', 301, `${home}/c/help`, `${spanish}/c/help`],
+      ['/support/solutions/folders/7101', 301, `${home}/c/help/start`, `${spanish}/c/help/start`],
+      ['/support/solutions/articles/7201-getting-started-with-acme', 301, articleURL(started), `${spanish}/a/${started.number}-primeros-pasos-con-acme`],
+      ['/support/solutions/articles/7203-reset-your-password', 301, articleURL(reset), articleURL(reset)],
+      ['/support/solutions/articles/7202-coming-soon', 302, `${home}/search?q=coming+soon`, `${spanish}/search?q=coming+soon`],
+      ['/support/solutions/articles/9999-billing-faq', 302, `${home}/search?q=billing+faq`, `${spanish}/search?q=billing+faq`],
     ];
-    for (const [path, status, location] of moves) {
-      for (const prefix of ['', '/es']) {
+    for (const [path, status, location, inSpanish] of moves) {
+      for (const [prefix, want] of [['', location], ['/en', location], ['/es', inSpanish]]) {
         const response = await page.request.get(`${home}${prefix}${path}`, { maxRedirects: 0 });
+        if (prefix === '/en') {
+          // /en/ is the primary language's own path: it moves there first.
+          expect(response.status(), prefix + path).toBe(301);
+          expect(response.headers().location, prefix + path).toBe(`/help/${workspace.slug}${path}`);
+          continue;
+        }
         expect(response.status(), prefix + path).toBe(status);
-        expect(response.headers().location, prefix + path).toBe(location);
+        expect(response.headers().location, prefix + path).toBe(want);
       }
     }
+    // The Spanish translation is a page of its own, with the language menu.
+    await page.goto(`${spanish}/a/${started.number}-primeros-pasos-con-acme`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Primeros pasos con Acme' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Idioma' }).getByRole('link', { name: 'English' })).toHaveAttribute('href', articleURL(started).replace(baseURL, ''));
     // A visitor following an old Freshdesk article address lands on the new article.
     await page.goto(`${home}/es/support/solutions/articles/7203-reset-your-password`);
     await expect(page).toHaveURL(articleURL(reset));

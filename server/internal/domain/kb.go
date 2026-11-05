@@ -75,6 +75,8 @@ type KBCollection struct {
 	ArticleCount int       `json:"article_count"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Translations are its name and description in the help center's other languages.
+	Translations []KBCollectionTranslation `json:"translations"`
 }
 
 // TrashedKBCollection is a deleted collection, restorable until PurgesAt.
@@ -103,13 +105,142 @@ type KBArticleSummary struct {
 	URL string `json:"url"`
 }
 
-// KBArticleTranslation is a translation an import brought in; it is kept and exported, not rendered yet.
-type KBArticleTranslation struct {
-	Locale    string    `json:"locale"`
-	Title     string    `json:"title"`
-	BodyMD    string    `json:"body_md"`
+// KBTranslationSummary is one language version of an article without its text, as the article and
+// the lists of a language show it. Outdated is set when the article's own title or text changed after
+// the translation was last brought up to date.
+type KBTranslationSummary struct {
+	ArticleID   string           `json:"article_id"`
+	Locale      string           `json:"locale"`
+	Title       string           `json:"title"`
+	Slug        string           `json:"slug"`
+	Status      string           `json:"status"`
+	PublishedAt *time.Time       `json:"published_at"`
+	Outdated    bool             `json:"outdated"`
+	OutdatedAt  *time.Time       `json:"outdated_at"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
+	InTrash     bool             `json:"in_trash"`
+	LastChange  *KBArticleChange `json:"last_change"`
+	// URL is the public address in its language; the API fills it in.
+	URL string `json:"url"`
+}
+
+// KBTranslationOriginal is the article a translation translates, as it is now, so a translator (a
+// person or an AI agent) reads both in one answer.
+type KBTranslationOriginal struct {
+	ID             string `json:"id"`
+	Number         int64  `json:"number"`
+	Locale         string `json:"locale"`
+	Title          string `json:"title"`
+	BodyMD         string `json:"body_md"`
+	SEOTitle       string `json:"seo_title"`
+	SEODescription string `json:"seo_description"`
+	Status         string `json:"status"`
+	CollectionID   string `json:"collection_id"`
+	CollectionName string `json:"collection_name"`
+	// Version is the article's newest version: the text a translation marked up to date matches.
+	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// KBArticleTranslation is one language version of an article with its text.
+type KBArticleTranslation struct {
+	KBTranslationSummary
+	BodyMD         string     `json:"body_md"`
+	SEOTitle       string     `json:"seo_title"`
+	SEODescription string     `json:"seo_description"`
+	HasSourceHTML  bool       `json:"has_source_html"`
+	DeletedAt      *time.Time `json:"deleted_at"`
+	// LanguageVisible tells whether the help center shows this language to customers.
+	LanguageVisible bool                  `json:"language_visible"`
+	Original        KBTranslationOriginal `json:"original"`
+}
+
+// TrashedKBTranslation is a deleted translation, restorable until PurgesAt.
+type TrashedKBTranslation struct {
+	KBTranslationSummary
+	ArticleTitle  string            `json:"article_title"`
+	ArticleNumber int64             `json:"article_number"`
+	DeletedAt     time.Time         `json:"deleted_at"`
+	DeletedBy     *SavedReplyPerson `json:"deleted_by"`
+	PurgesAt      time.Time         `json:"purges_at"`
+}
+
+// KBTranslationVersion is one version of a translation with what it said after the change.
+type KBTranslationVersion struct {
+	KBArticleChange
+	Title          string `json:"title"`
+	Slug           string `json:"slug"`
+	BodyMD         string `json:"body_md"`
+	SEOTitle       string `json:"seo_title"`
+	SEODescription string `json:"seo_description"`
+	Status         string `json:"status"`
+}
+
+// KBLanguageItem is an article as the list of one language shows it: the article, and its translation
+// in that language (nil while it has none outside the trash).
+type KBLanguageItem struct {
+	ArticleID      string                `json:"article_id"`
+	Number         int64                 `json:"number"`
+	Title          string                `json:"title"`
+	Status         string                `json:"status"`
+	CollectionID   string                `json:"collection_id"`
+	CollectionName string                `json:"collection_name"`
+	UpdatedAt      time.Time             `json:"updated_at"`
+	Translation    *KBTranslationSummary `json:"translation"`
+}
+
+// Kinds of translation versions beyond the article's: marked up to date, or outdated, by hand.
+const (
+	KBTranslationMarkedCurrent  = "mark_current"
+	KBTranslationMarkedOutdated = "mark_outdated"
+)
+
+// States the list of one language selects.
+const (
+	KBLanguageMissing    = "missing"
+	KBLanguageOutdated   = "outdated"
+	KBLanguageTranslated = "translated"
+)
+
+// HelpCenterLanguage is a language of the help center besides its primary one, with what the
+// knowledge base holds in it. Visible is whether customers see it.
+type HelpCenterLanguage struct {
+	Locale    string `json:"locale"`
+	Visible   bool   `json:"visible"`
+	Position  int    `json:"position"`
+	Published int    `json:"published"`
+	Drafts    int    `json:"drafts"`
+	Outdated  int    `json:"outdated"`
+	Missing   int    `json:"missing"`
+}
+
+// HelpCenterLanguages are the help center's languages. Unlisted are the locales translations or
+// collection names exist in that are neither the primary language nor listed (an import from an
+// account with another primary language): they are kept and editable but never shown.
+type HelpCenterLanguages struct {
+	Primary   string               `json:"primary"`
+	Languages []HelpCenterLanguage `json:"languages"`
+	Unlisted  []string             `json:"unlisted"`
+}
+
+// HelpCenterLanguageInput is one language as an admin sets it.
+type HelpCenterLanguageInput struct {
+	Locale  string `json:"locale"`
+	Visible bool   `json:"visible"`
+}
+
+// KBCollectionTranslation is a collection's name and description in another language.
+type KBCollectionTranslation struct {
+	Locale      string    `json:"locale"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Imported    bool      `json:"imported"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// MaxHelpCenterLanguages bounds the languages of one help center besides the primary one.
+const MaxHelpCenterLanguages = 40
 
 // KBArticle is an article with its Markdown text.
 type KBArticle struct {
@@ -120,7 +251,7 @@ type KBArticle struct {
 	SEOTitle       string                 `json:"seo_title"`
 	SEODescription string                 `json:"seo_description"`
 	HasSourceHTML  bool                   `json:"has_source_html"`
-	Translations   []KBArticleTranslation `json:"translations"`
+	Translations   []KBTranslationSummary `json:"translations"`
 	DeletedAt      *time.Time             `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
@@ -177,6 +308,12 @@ var (
 	ErrKBArticleVersionNotFound = errors.New("knowledge base article version not found")
 	ErrKBCollectionNotFound     = errors.New("knowledge base collection not found")
 	ErrKBImageNotFound          = errors.New("knowledge base image not found")
+	ErrKBTranslationNotFound    = errors.New("knowledge base translation not found")
+	// ErrKBTranslationExists means the article has a translation in that language, perhaps in the trash.
+	ErrKBTranslationExists          = errors.New("the article already has a translation in this language")
+	ErrKBTranslationVersionNotFound = errors.New("knowledge base translation version not found")
+	// ErrKBLanguageNotListed means the language is not one of the help center's (or is its primary one).
+	ErrKBLanguageNotListed = errors.New("this language is not a language of the help center")
 	// ErrKBChanged means the row was saved by someone else after the client read it.
 	ErrKBChanged = errors.New("this was changed by someone else; reload to see their version")
 	// ErrKBDuplicateSlug means a sibling collection outside the trash has the slug.
@@ -323,6 +460,9 @@ type HelpCenterSite struct {
 	// CustomHost is the workspace's active custom domain, "" when it has none or is on its trial: the
 	// help center serves there and its other addresses redirect there.
 	CustomHost string
+	// Languages are the languages besides Locale that customers see, in menu order: each has its pages
+	// under /<locale>/.
+	Languages []string
 }
 
 // PublicKBCollection is a live collection as the help center lists it; Published counts its own
@@ -334,6 +474,9 @@ type PublicKBCollection struct {
 	Slug        string
 	Description string
 	Published   int
+	// PublishedIn counts the published articles it holds itself in each language shown ("" is the
+	// primary language).
+	PublishedIn map[string]int
 }
 
 // PublicKBArticle is a published article as the help center shows it. BodyMD is empty in lists;
@@ -351,6 +494,18 @@ type PublicKBArticle struct {
 	UpdatedAt                time.Time
 	// Videos are the library videos the text may show, read with the article page only.
 	Videos []PublicKBVideo
+	// Locale is the language read ("" the primary one); Alternates, read with the article page only,
+	// are its slug in every language it is published and shown in, "" the primary one.
+	Locale     string
+	Alternates map[string]string
+}
+
+// PublicKBTranslation is a published translation the help center shows, for sitemap.xml.
+type PublicKBTranslation struct {
+	Number    int64
+	Locale    string
+	Slug      string
+	UpdatedAt time.Time
 }
 
 // PublicKBVideo is a library video a published article's current text links, as its page shows it.

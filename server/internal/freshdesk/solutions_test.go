@@ -119,7 +119,7 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 	if fmt.Sprint(kb.Drafts) != "map[draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]" {
 		t.Fatalf("drafts = %v", kb.Drafts)
 	}
-	if strings.Join(kb.Languages, ",") != "es" || len(kb.Portals) != 0 || !report.Verification.KnowledgeBase.Verified {
+	if strings.Join(kb.Languages, ",") != "es,fr" || len(kb.Portals) != 0 || !report.Verification.KnowledgeBase.Verified {
 		t.Fatalf("languages=%v portals=%v verification=%+v", kb.Languages, kb.Portals, report.Verification.KnowledgeBase)
 	}
 	if warningIDs(report, "kb_folder_flattened") != "1111" || warningIDs(report, "kb_article_markup_dropped") != "106" {

@@ -33,6 +33,8 @@ export interface paths {
                 embed?: "1";
                 /** @description A one-time code from Open full chat: moves the frame's chat to this page, then 303 to the page without it. */
                 t?: string;
+                /** @description The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -113,12 +115,14 @@ export interface paths {
             query?: {
                 /** @description The help chat channel; its type's default when left out. */
                 channel?: string;
+                /** @description The script tag's data-lang: a language the help center shows (any case); any other value, or none, is its primary language. */
+                lang?: string;
             };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description What widget.js draws, for a site the channel lists (its Origin), with CORS for that origin alone. Any other site gets the help center's 404 and no CORS header. */
+        /** @description What widget.js draws, for a site the channel lists (its Origin), with CORS for that origin alone. Any other site gets the help center's 404 and no CORS header. The button's labels are in the language it returns, which the widget passes to the chat page (?lang). */
         get: operations["getHelpChatWidgetConfig"];
         put?: never;
         post?: never;
@@ -133,6 +137,8 @@ export interface paths {
             query?: {
                 /** @description The help chat channel; its type's default when left out. */
                 channel?: string;
+                /** @description The frame's language: one the help center shows (any case) is kept in the address it returns; any other value, or none, is the primary language. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -195,6 +201,8 @@ export interface paths {
                 channel?: string;
                 /** @description `widget`: the chat is framed by a site, its cookie is partitioned. */
                 surface?: "help_center" | "article" | "widget";
+                /** @description The language of the page the question is asked on: one the help center shows (any case) answers from the articles published in it and links its pages; any other value, or none, is the primary language. The answer is in the language of the question either way. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -3609,6 +3617,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/collections/{id}/translations/{locale}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Set a collection's name and description in another language of the help center (400 `language_not_listed` for one it does not list). The help center shows the primary name where a language has none. Changes the help center's navigation, so it needs kb_articles:publish. */
+        put: operations["putKBCollectionTranslation"];
+        post?: never;
+        /** @description Remove a collection's name in one language: the help center shows its primary name there again. PUT sets it again; a name an import brought in comes back with the next run of that import. */
+        delete: operations["deleteKBCollectionTranslation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/order": {
         parameters: {
             query?: never;
@@ -3754,6 +3783,142 @@ export interface paths {
         put?: never;
         /** @description Make the title, slug and text of an earlier version current again, as a new version; the status and collection stay as they are now, and nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere`). An article in the trash is 404. */
         post: operations["restoreKBArticleVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The live articles as one language of the help center sees them, in the help center's order, one page at a time: `state=missing` lists the articles without a translation in `locale` (outside the trash), `outdated` those whose translation is marked outdated (the article's title or text changed after it was last brought up to date), `translated` every article that has one. Each item names its article, collection and translation, so one call says what to translate next. */
+        get: operations["listKBLanguage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/translations/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The translations deleted in the last 30 days, most recent first, with their article's title and number, who deleted them and when each is deleted for good. Restore one with POST /api/v1/kb/articles/{id}/translations/{locale}/restore. */
+        get: operations["listTrashedKBTranslations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Add the article's version in another language of the help center (`locale`, one listed in GET /api/v1/help-center/languages; the primary language is the article itself). It is a draft unless `status` is published, and up to date with the article as it is now. Without `slug` one is made from the title. The article has at most one translation per language: 409 `translation_exists` when it has one, in the trash too (restore that one). 400 `language_not_listed` for a language the help center does not list. Publishing needs kb_articles:publish. At most 64 KiB of JSON. */
+        post: operations["createKBTranslation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        /** @description One translation with its text, and the article it translates as it is now (`original`), so a translator reads both in one answer. It also finds a translation in the trash (`deleted_at`). */
+        get: operations["getKBTranslation"];
+        put?: never;
+        post?: never;
+        /** @description Move a translation to the trash: the help center stops showing it, and it can be restored for 30 days with its history. Send the `updated_at` you read (409 `changed_elsewhere`). */
+        delete: operations["deleteKBTranslation"];
+        options?: never;
+        head?: never;
+        /** @description Change the title, slug, text, status, search title or meta description of a translation, or mark it up to date with the article (`outdated: false`) or outdated again (`outdated: true`). Send back the `updated_at` you read (409 `changed_elsewhere`). Every change is a version; a change of the flag alone is kind `mark_current` or `mark_outdated`. Publishing it, or changing a published one, needs kb_articles:publish. A translation in the trash is 404. */
+        patch: operations["updateKBTranslation"];
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take a translation out of the trash as it was. Send its `updated_at` as the trash shows it (409 `changed_elsewhere`); 404 when it is not in the trash. A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
+        post: operations["restoreKBTranslation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        /** @description The versions of a translation, newest first, in pages, like an article's. A translation in the trash keeps its history. */
+        get: operations["listKBTranslationVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Make the title, slug, text and search fields of an earlier version of a translation current again, as a new version; its status and outdated flag stay. Send back the `updated_at` you read (409 `changed_elsewhere`). A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
+        post: operations["restoreKBTranslationVersion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4500,6 +4665,24 @@ export interface paths {
         put?: never;
         /** @description Receives the Colliedesk GitHub App's events (installation, installation_repositories, repository, issues, issue_comment, pull_request). Authenticated by `X-Hub-Signature-256` (HMAC-SHA256 of the raw body with the App's webhook secret), not by a session; a missing or wrong signature is 401 and nothing is stored. A delivery (`X-GitHub-Delivery`) already applied answers `duplicate`. An event acts only in the workspace that owns the installation, and only on a repository connected there. Bodies over 5 MB are refused (413). */
         post: operations["receiveGitHubWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/languages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The help center's languages: the primary one (the articles' own language, set with PUT /api/v1/help-center `locale`) and the others, each shown to customers or hidden, with how many articles are published, drafts, outdated and missing in it. `unlisted` names the languages translations exist in that are neither (an import from an account with another primary language): kept and editable, never shown. */
+        get: operations["getHelpCenterLanguages"];
+        /** @description Set the languages besides the primary one, in the order the language menu lists them, each `visible` to customers or hidden (a new language is hidden until shown). Showing or hiding a language changes the public help center and needs kb_articles:publish too. Leaving out a language that still holds a translation or a collection name (in the trash too) is 409 `language_in_use`: hide it instead, or delete what is written in it first. */
+        put: operations["putHelpCenterLanguages"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5640,6 +5823,12 @@ export interface components {
             name: string;
             greeting: string;
             suggestions: string[];
+            /** @description The language the widget speaks: lang when the help center shows it, else its primary language. */
+            lang: string;
+            /** @description The button's and the panel's accessible name in lang, with the chat's name ("AI chat: ask Acme"). */
+            label: string;
+            /** @description The button's accessible name while the panel is open, in lang. */
+            close_label: string;
             /** @description The help center's brand accent (#rrggbb) and the color on it; null when its theme sets no color (the button is ink #171717). */
             brand: null | {
                 accent: string;
@@ -6969,6 +7158,8 @@ export interface components {
             position?: number;
         };
         KBCollection: {
+            /** @description Its name and description in the help center's other languages. */
+            translations: components["schemas"]["KBCollectionTranslation"][];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -6985,6 +7176,7 @@ export interface components {
             updated_at: string;
         };
         TrashedKBCollection: {
+            translations?: components["schemas"]["KBCollectionTranslation"][];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -7102,10 +7294,170 @@ export interface components {
             /** @description Who excluded it; null when that person was removed. */
             by: null | components["schemas"]["SavedReplyPerson"];
         };
-        KBArticleTranslation: {
+        KBTranslationChange: {
+            version: number;
+            /**
+             * @description mark_current, mark_outdated: the translation was marked up to date with its article, or outdated, without other change.
+             * @enum {string}
+             */
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated";
+            restored_from_version: number | null;
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /** Format: uuid */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        KBTranslationSummary: {
+            /** Format: uuid */
+            article_id: string;
+            locale: string;
+            title: string;
+            slug: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: date-time */
+            published_at: string | null;
+            /** @description Set when the article's title or text changed after the translation was last brought up to date. */
+            outdated: boolean;
+            /** Format: date-time */
+            outdated_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            in_trash: boolean;
+            last_change: null | components["schemas"]["KBTranslationChange"];
+            /** @description Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language, never an address that answers 404. */
+            url: string;
+        };
+        /** @description The article a translation translates, as it is now. */
+        KBTranslationOriginal: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            /** @description The help center's primary language. */
             locale: string;
             title: string;
             body_md: string;
+            seo_title: string;
+            seo_description: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: uuid */
+            collection_id: string;
+            collection_name: string;
+            /** @description The article's newest version. */
+            version: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        KBArticleTranslation: {
+            /** Format: uuid */
+            article_id: string;
+            locale: string;
+            title: string;
+            slug: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: date-time */
+            published_at: string | null;
+            /** @description Set when the article's title or text changed after the translation was last brought up to date. */
+            outdated: boolean;
+            /** Format: date-time */
+            outdated_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            in_trash: boolean;
+            last_change: null | components["schemas"]["KBTranslationChange"];
+            /** @description Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language, never an address that answers 404. */
+            url: string;
+            body_md: string;
+            seo_title: string;
+            seo_description: string;
+            has_source_html: boolean;
+            /** Format: date-time */
+            deleted_at: string | null;
+            /** @description Whether the help center shows this language to customers. */
+            language_visible: boolean;
+            original: components["schemas"]["KBTranslationOriginal"];
+            missing_media?: string[];
+        };
+        TrashedKBTranslation: {
+            /** Format: uuid */
+            article_id: string;
+            locale: string;
+            title: string;
+            slug: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: date-time */
+            published_at: string | null;
+            /** @description Set when the article's title or text changed after the translation was last brought up to date. */
+            outdated: boolean;
+            /** Format: date-time */
+            outdated_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            in_trash: boolean;
+            last_change: null | components["schemas"]["KBTranslationChange"];
+            /** @description Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language, never an address that answers 404. */
+            url: string;
+            article_title: string;
+            article_number: number;
+            /** Format: date-time */
+            deleted_at: string;
+            deleted_by: null | components["schemas"]["SavedReplyPerson"];
+            /** Format: date-time */
+            purges_at: string;
+        };
+        KBTranslationVersion: {
+            version: number;
+            /** @enum {string} */
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated";
+            restored_from_version: number | null;
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /** Format: uuid */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            title: string;
+            slug: string;
+            body_md: string;
+            seo_title: string;
+            seo_description: string;
+            status: components["schemas"]["KBArticleStatus"];
+        };
+        KBLanguageItem: {
+            /** Format: uuid */
+            article_id: string;
+            number: number;
+            title: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: uuid */
+            collection_id: string;
+            collection_name: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description Its translation in that language; null while it has none outside the trash. */
+            translation: null | components["schemas"]["KBTranslationSummary"];
+        };
+        KBCollectionTranslation: {
+            locale: string;
+            name: string;
+            description: string;
+            /** @description As an import wrote it; the next run of that import may update it. A person's change clears it. */
+            imported: boolean;
             /** Format: date-time */
             updated_at: string;
         };
@@ -7142,8 +7494,8 @@ export interface components {
             seo_description: string;
             /** @description An import kept the original HTML; it is in the workspace export and is never shown on the help center. */
             has_source_html: boolean;
-            /** @description Translations an import brought in. They are kept and exported; the help center does not show them yet. */
-            translations: components["schemas"]["KBArticleTranslation"][];
+            /** @description Its versions in the help center's other languages (also those in the trash), without their text. */
+            translations: components["schemas"]["KBTranslationSummary"][];
             /**
              * Format: date-time
              * @description Set while the article is in the trash.
@@ -7373,6 +7725,23 @@ export interface components {
              * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>/help` when the server sets that variable and the slug can be a host name (the root of that host leads to the workspace's desk). The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
              */
             url: string;
+        };
+        HelpCenterLanguage: {
+            locale: string;
+            /** @description Shown to customers. */
+            visible: boolean;
+            position: number;
+            /** @description Live articles with a published translation in it. */
+            published: number;
+            drafts: number;
+            outdated: number;
+            /** @description Live articles with no translation in it. */
+            missing: number;
+        };
+        HelpCenterLanguages: {
+            primary: string;
+            languages: components["schemas"]["HelpCenterLanguage"][];
+            unlisted: string[];
         };
         HelpCenterDomain: {
             /** @description The custom host name in ASCII (punycode) form; null when none is set. */
@@ -9763,6 +10132,8 @@ export interface operations {
                 embed?: "1";
                 /** @description A one-time code from Open full chat: moves the frame's chat to this page, then 303 to the page without it. */
                 t?: string;
+                /** @description The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -9911,6 +10282,8 @@ export interface operations {
             query?: {
                 /** @description The help chat channel; its type's default when left out. */
                 channel?: string;
+                /** @description The script tag's data-lang: a language the help center shows (any case); any other value, or none, is its primary language. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -9942,6 +10315,8 @@ export interface operations {
             query?: {
                 /** @description The help chat channel; its type's default when left out. */
                 channel?: string;
+                /** @description The frame's language: one the help center shows (any case) is kept in the address it returns; any other value, or none, is the primary language. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -10078,6 +10453,8 @@ export interface operations {
                 channel?: string;
                 /** @description `widget`: the chat is framed by a site, its cookie is partitioned. */
                 surface?: "help_center" | "article" | "widget";
+                /** @description The language of the page the question is asked on: one the help center shows (any case) answers from the articles published in it and links its pages; any other value, or none, is the primary language. The answer is in the language of the question either way. */
+                lang?: string;
             };
             header?: never;
             path?: never;
@@ -17442,6 +17819,66 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    putKBCollectionTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The collection with its names */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteKBCollectionTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The collection with its names */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     setKBOrder: {
         parameters: {
             query?: never;
@@ -17824,6 +18261,323 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listKBLanguage: {
+        parameters: {
+            query: {
+                locale: string;
+                state: "missing" | "outdated" | "translated";
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the articles of that language */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBLanguageItem"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listTrashedKBTranslations: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Translations in the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TrashedKBTranslation"][];
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createKBTranslation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    locale: string;
+                    title: string;
+                    slug?: string;
+                    body_md: string;
+                    status?: components["schemas"]["KBArticleStatus"];
+                    seo_title?: string;
+                    seo_description?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The translation an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            /** @description The new translation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getKBTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteKBTranslation: {
+        parameters: {
+            query: {
+                updated_at: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Translation moved to the trash */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateKBTranslation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                    title?: string;
+                    slug?: string;
+                    body_md?: string;
+                    status?: components["schemas"]["KBArticleStatus"];
+                    seo_title?: string;
+                    seo_description?: string;
+                    outdated?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The changed translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreKBTranslation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The restored translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listKBTranslationVersions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                before_version?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions of the translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBTranslationVersion"][];
+                        next_before_version: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    restoreKBTranslationVersion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The translation with the restored text */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     uploadKBImage: {
@@ -19557,6 +20311,60 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             413: components["responses"]["WebhookTooLarge"];
+        };
+    };
+    getHelpCenterLanguages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The languages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterLanguages"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterLanguages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    languages: {
+                        locale: string;
+                        visible: boolean;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description The languages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterLanguages"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     getHelpCenterTheme: {
