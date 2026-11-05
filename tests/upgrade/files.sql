@@ -3,7 +3,11 @@
 SELECT to_regclass('mail_image_cache') IS NOT NULL AS has_image_cache \gset
 SELECT to_regclass('kb_images') IS NOT NULL AS has_kb_images \gset
 SELECT to_regclass('kb_media') IS NOT NULL AS has_kb_media \gset
+SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'attachments' AND column_name = 'thumb_storage_key') AS has_attachment_thumbs \gset
 SELECT DISTINCT storage_key, 'colliedesk upgrade fixture: ' || filename FROM attachments ORDER BY 1;
+\if :has_attachment_thumbs
+SELECT DISTINCT thumb_storage_key, 'colliedesk upgrade fixture thumbnail: ' || filename FROM attachments WHERE thumb_storage_key <> '' ORDER BY 1;
+\endif
 \if :has_image_cache
 SELECT storage_key, 'colliedesk upgrade fixture image: ' || url_hash FROM mail_image_cache ORDER BY 1;
 \endif
