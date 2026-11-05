@@ -104,8 +104,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
   Every Priority value has a mark before its word, on the field and in its menu: red ↑ Urgent, grey ↑ High,
   a quiet dash for Normal, ↓ Low. The mark column has no gap (Linear marks every priority); list rows still hide Normal.
-- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
-  is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
+- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one line of links: what general
+  availability guarantees and, on Colliedesk Cloud, the status page) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the white collie head on the orange tile (see Logo).
 

@@ -142,20 +142,27 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
 
 ## Releases
 
-Colliedesk is **alpha**: releases are `v0.0.N`. Merging to `main` never makes a release, and
+Colliedesk is **generally available**: releases follow Semantic Versioning from `v1.0.0`. A breaking
+change to the API, the CLI or the export format needs a new major version; new features raise the
+minor version, fixes only the patch version. Merging to `main` never makes a release, and
 nothing makes one on a schedule. A release is cut only when Chính (`hiimchinh`) or Long
-(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk`, or they press
+(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk -f part=minor`
+(`patch` for fixes only, `major` for a breaking change; `minor` is the default), or they press
 Run workflow themselves (it needs write access to this repository). It
 releases the commit Colliedesk Cloud runs (`version` in `GET /api/v1/config`), never the head of
-`main`, as the next `v0.0.N`, and fails when Cloud runs nothing newer than the last release.
+`main`, as the next version for that part (`.github/scripts/release-next.sh`; the first release after
+the `v0.0.N` ones is `v1.0.0`), and fails when Cloud runs nothing newer than the last release.
 Release notes are generated from merged pull request titles, so write titles a user can read.
 A run that failed after creating its tag is finished by running Release again.
 `latest` follows the newest release.
-Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
-owner announces beta. Two gates refuse other tags: the repository tag ruleset
-`alpha-release-tags-only` (no bypass, so GitHub rejects the push even from an admin) and
-`.github/scripts/release-tag-check.sh` in `release.yml`. Never edit either one without the
-owner's announcement quoted in the PR or ruleset change.
+Never call a release, page or doc "alpha" or "beta", never tag another `0.x` version, and never tag a
+pre-release suffix. Two gates refuse other tags: the repository tag ruleset on `v*` tags (no bypass,
+so GitHub rejects the push even from an admin) and `.github/scripts/release-tag-check.sh` in
+`release.yml` (`tests/release-tag-test.sh`). Never edit either one without the owner's words quoted in
+the PR or ruleset change.
+[docs/general-availability.md](docs/general-availability.md) says what general availability
+guarantees (upgrades, export, Cloud backups, uptime, self-hosted installs). A change that makes one of
+its statements untrue updates that page in the same PR.
 
 ## Issues and the roadmap
 

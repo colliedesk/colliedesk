@@ -25,8 +25,11 @@ export const messages = {
   knowledge: 'Knowledge',
   helpCenter: 'Help center',
   signInTagline: 'The open-source helpdesk for small support teams leaving Freshdesk.',
-  // Colliedesk as a whole is alpha (owner decision); the sign-in page says so plainly.
-  signInAlpha: 'Colliedesk is alpha: any release may still change the interface.',
+  // The sign-in page links what general availability guarantees and, on Colliedesk Cloud, its status page.
+  gaGuarantees: 'What general availability guarantees',
+  gaGuaranteesURL: 'https://github.com/colliedesk/colliedesk/blob/main/docs/general-availability.md',
+  serviceStatus: 'Service status',
+  statusURL: 'https://status.colliedesk.com',
   signInFootnote: 'AGPL-3.0 · Self-host or Colliedesk Cloud',
   openSecureLink: 'Open your secure link',
   redeemExplanation: 'Colliedesk uses one-time links instead of passwords.',
