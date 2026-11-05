@@ -183,6 +183,45 @@ The public help center is in `help-center.md`.
   `help_center:update`. A call without the permission is 403 `permission_missing`.
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
+## Translations
+
+Migration `20261105100000-kb-translations`; code `store/kb-translations.go`, `httpapi/kb-translation-handlers.go`,
+MCP `catalog-kb-translations.go`. Product decision (2026-11-05): a translation is a language version of
+the same article, as Freshdesk does it, never an article of its own.
+
+- **One row per article and language** (`kb_article_translations`, key workspace, article, locale),
+  with its own slug, status, search fields, `outdated` flag and soft delete. The key stays, so a
+  translation in the trash blocks a new one in that language (`translation_exists`): restore it.
+- **Versions in a table of their own** (`kb_article_translation_versions`), append-only like
+  `kb_article_versions`. Not a `locale` column on the article's versions: every "newest version of the
+  article" read (import rerun and undo, `last_change`) would then see translation versions. The
+  migration gives every existing translation version 1 of kind `import`; a translation with no version
+  at all is treated as the import's (`KBTranslationImportedLast`).
+- **Languages.** The primary language is `help_centers.locale`; the others are `help_center_languages`
+  (visible false by default, so the upgrade adds every imported language hidden and changes nothing
+  public). Creating or publishing a translation needs a listed language other than the primary one;
+  a translation already in an unlisted language (an import from an account with another primary
+  language) stays readable, editable and deletable and is listed as `unlisted`. Dropping a language
+  that holds a translation or collection name (trash included) is refused (`language_in_use`), so a
+  translation is never left without its language by a settings change.
+- **Outdated is set in Go, not by a trigger.** `markKBTranslationsOutdated` runs in `changeKBArticle`
+  (edit, version restore) and `ReimportKBArticle`, comparing the title and text before and after. A
+  media replacement and an import's link rewrite change the article and its translations alike, so
+  they must not mark anything outdated; a trigger on `kb_articles` could not tell them apart. Clearing
+  is explicit (`PATCH outdated false`), recorded as `mark_current`, or with an edit in the same call.
+- **Publishing a translation needs `kb_articles:publish`** whenever it is or becomes published, like
+  an article. Marking it up to date or outdated alone does not change what customers read and does not.
+  Showing or hiding a language does (`HelpCenterLanguagesShownChange`).
+- **Media.** `linkKBMedia` already reads every translation's text, so images of a translation are
+  linked to the article and survive the purge; a media replacement records a `media_replace` version
+  of each translation it rewrote.
+- **Collection names** (`kb_collection_translations`) have no versions, like collections. `source_meta`
+  is set while a row is as an import wrote it; a person's write clears it. The import adds a missing
+  name back on every run and replaces only its own, so deleting an imported name is undone by the next
+  run (owner decision 2026-11-05), and undo removes only rows still the import's.
+- **Purge.** `PurgeKBTrash` deletes translations 30 days in the trash (`PrivilegeKBPurge`); versions
+  go by cascade, as do an article's translations with it.
+
 ## Editor (web app)
 
 - **Lazy, all of it, and the editor apart.** The first bundle carries only the rail link and the three
@@ -260,7 +299,12 @@ The public help center is in `help-center.md`.
   and sent back whole still saves; the save locks the `help_centers` row before the media rows, an
   order no other path reverses.
 - **A generated column cannot be copied in.** `restore-workspace.sh` skips columns with
-  `attgenerated` set; the database computes `kb_articles.search` again.
+  `attgenerated` set; the database computes `kb_articles.search` and `kb_article_translations.search` again.
+- **Write the article row lock first.** Every path that writes a translation locks the article's row
+  (`lockKBArticleRow`) before the translation's, as the import, the link rewrite and the media
+  replacement do; taking them the other way round deadlocks against an article save.
+- **A test that inserts a translation by SQL needs a slug** (NOT NULL since the translations migration)
+  and `status 'published'` if AI retrieval should read it.
 - **One file can back several rows.** Storage keys are content addresses, so an image and an attachment
   with the same bytes share a file, and so can a thumbnail or poster. `DiscardObject` checks
   `kb_media.storage_key`, `thumb_storage_key` and `poster_storage_key`; without that, deleting the

@@ -11,8 +11,23 @@ database.
 `ai_retrieval_docs` holds one row per source, derived and rebuilt at will:
 
 1. A published knowledge base article, once in its own language (`kb_locale` NULL) and once per
-   translation, unless an admin excluded it from AI (`kb_articles.ai_excluded`). Drafts and the trash
-   are never in it.
+   published translation outside the trash, unless an admin excluded it from AI
+   (`kb_articles.ai_excluded`). Drafts and the trash, of articles and of translations, are never in
+   it: a translation follows its article's rule (owner decision 2026-11-05). The translations
+   migration removed the rows of draft translations; the trigger on a translation's status or
+   `deleted_at` removes its row in the same transaction, and a search checks it again
+   (`aiReadableTranslation`). Help chat on the help center searches for its reader
+   (`AIRetrievalQuery.KBReader`): each article once, its row in the reader's language where it has
+   one, else its own, so a workspace with many languages costs a chat search no more than one
+   (`TestAIChatTurnSetupLatencyBudget` measures a French reader on 2,000 translations). The text sent
+   is read again through `store.ChatKBArticlesByIDIn` (one query, ai-chat.md, "The prompt"), which
+   also requires the language to be shown. Drafts and triage leave `KBReader` nil and search every
+   language. Retrieval itself does not check that a language is shown: its callers are reply drafts (a
+   draft is never sent by AI, `levelAllowed`) and triage (labels, never text to a customer), both read
+   by a person first, and the upgrade adds every imported language hidden, so a visibility check here
+   would take every imported translation away from drafts until an admin shows its language. A new
+   caller that answers a customer without a person must add it (owner rule 2026-11-05: what reaches a
+   customer is published, in a shown language).
 2. A resolved or closed conversation: its subject, its first customer message (1,800 characters at
    most) and its last public reply, 4,000 characters in all. Private notes are never read. The names and companies
    of that conversation's contact and of the contacts merged into it become `[customer]` and

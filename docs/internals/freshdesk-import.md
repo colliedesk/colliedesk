@@ -372,9 +372,37 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   (`<article>:<language>:<key>` for a translation); no `parent_source_id`, so the ticket reconcile
   queries, which group by parent, never see knowledge base rows. Translation images are linked to
   their article in `kb_article_media`, or the purge would delete them.
-- **Translations** go to `kb_article_translations` (kept and exported, not rendered); `source_meta`
-  says whether the language is in `portal_languages`. A 404 on a folder's translated list means
-  nothing there is translated.
+- **Translations** go to `kb_article_translations` as language versions of the article: `status` 2 is
+  published, anything else a draft (they reach customers only through a published article in a shown
+  language); `seo_data.meta_title` / `meta_description` become the search fields when they fit (a
+  longer one is left empty, never cut); tags stay in `source_meta` (articles have no tags column);
+  `source_meta` also says whether the language is in `portal_languages`. A 404 on a folder's
+  translated list means nothing there is translated. The API documents no "outdated" attribute, so
+  an imported translation is up to date; a reimported article whose text changed marks its
+  translations outdated, and a newer translation clears it.
+- **Rerun of a translation by its own history** (`PutKBArticleTranslation`): written while its newest
+  translation version is `import` (or it has none), otherwise kept and warned
+  `kb_translation_changed_in_both` (`knowledge_base.translations_changed_in_both`). The check runs
+  before any image is fetched and again under the article's row lock. This replaced "a newer Freshdesk
+  translation always replaces it" (owner decision 2026-11-05).
+- **Languages** (`importKBLanguages`, before collections): `AdoptImportedPrimaryLanguage` makes
+  `primary_language` the help center's while it lists no language and holds no article without
+  `source_meta` (none written in Colliedesk), else warns `kb_primary_language_differs`.
+  `ImportHelpCenterLanguages` adds each supported language not listed yet, visible when it is in
+  `portal_languages`; an existing row is never touched, so a rerun never undoes an admin's choice.
+  Ledger `kb_language` (source id the locale, meta `created`). A run that changed the primary language
+  records `kb_primary_language` (source id the new one, `meta.previous` the one it replaced); a later
+  run that finds it already set writes nothing, so the first record stays. Undo gives `previous` back
+  while `help_centers.locale` is still the import's and `previous` is not a listed language (a primary
+  language never is), else keeps it and says so (`kept_kb_primary_language`); the ledger row goes once
+  the locale is no longer the import's (`targetExists`).
+- **Collection names** (`listCollectionNames`): one GET per category and folder and language
+  (`/solutions/categories/{id}/{lang}`, `/solutions/folders/{id}/{lang}`; 404 means not translated), so
+  languages × (categories + folders) calls on top of the lists. A flattened folder's name is built from
+  the names of its path in that language, each falling back to the primary name. Written by
+  `ImportKBCollectionTranslation` after the collections (ledger `kb_collection_name`, id
+  `c<id>:<lang>` / `f<id>:<lang>`), counted in `knowledge_base.collection_names` and part of the
+  reconcile.
 - **Limits are checked before the first write** (`kbLimitProblems`): articles and collections of the
   workspace (trash included) plus the new ones against `domain.MaxKBArticles` and
   `MaxKBCollections`, and every title, name, description, locale and converted body (images counted at
@@ -397,7 +425,11 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   article Freshdesk no longer shows to everyone becomes a draft (a new import version,
   `kb_article_unpublished`); one changed in Colliedesk stays published with
   `kb_article_published_but_not_public`. A folder or portal change the other way never publishes an unchanged article.
-- **Undo** removes imported articles whose newest version is the import (`updated_at > created_at`
+- **Undo** keeps an article whose newest version is not the import's or that has a translation whose
+  newest version is not (a person's translation would go by cascade otherwise); removes from kept
+  articles the translations only the import wrote (`kb_translations`, kept ones in
+  `kept_kb_translations`), the collection names still the import's (`kb_collection_names`) and the
+  languages it added that hold nothing (`kb_languages`). It removes imported articles whose newest version is the import (`updated_at > created_at`
   cannot tell: the article carries Freshdesk's timestamps), then imported collections left with no
   article and no collection (deepest first), then images the import added (`meta.created`) that no
   article links, with their files. `targetExists` covers every `kb_*` entity, so a kept article keeps
@@ -454,12 +486,11 @@ Code: `solutions-links.go`, `solutions-link-targets.go`, `report-links.go`; the 
   kept. A collection link points at its slug path (`/c/billing/cards`): the help center has no address
   for a collection by id, so a later rename or move breaks the rewritten link (not redirected), while
   the old Freshdesk address keeps resolving through the ledger. Accepted and stated in the user doc.
-- **Translations** (`kb_article_translations`) follow their article: rewritten
-  (`RewriteImportedKBTranslationBody`, article row locked first, text compared) while the article's
-  newest version is `import`, listed `changed_in_colliedesk` otherwise. A person changes a translation
-  only through a media replacement, which records an article version, so the article's rule covers
-  it. The translation keeps Freshdesk's timestamps; a newer Freshdesk translation still replaces it
-  and the pass rewrites it again. Listed as entity `kb_translation`, id `<article id>:<locale>`.
+- **Translations** (`kb_article_translations`) by their own history: rewritten
+  (`RewriteImportedKBTranslationBody`, article row locked first, text compared) while the
+  translation's newest version is `import`, as a new `import` version; listed `changed_in_colliedesk`
+  otherwise, whatever happened to the article. The translation keeps Freshdesk's timestamps. Listed
+  as entity `kb_translation`, id `<article id>:<locale>`.
 - **Only content nobody changed.** An article only while its newest version is `import` and it is
   outside the trash; the article row is locked and its text compared with what was read
   (`RewriteImportedKBArticleBody`); the change is a new version of kind `import`, so undo and the
