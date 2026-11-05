@@ -563,6 +563,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/conversations/{id}/presence/{clientId}", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/attachments/{id}/thumbnail", auth.PermissionSession},
 		{http.MethodGet, mailimage.ProxyPath, auth.PermissionSession},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionSession},

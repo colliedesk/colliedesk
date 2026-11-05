@@ -2,16 +2,18 @@ package httpapi
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 )
 
 // downloadAttachment streams stored bytes as a download. Files come from
 // customers and other systems, so they are never rendered inline on the app
-// origin: the response is always application/octet-stream + attachment.
+// origin: the response is always application/octet-stream + attachment, with a
+// sandboxing Content-Security-Policy. The web app shows images, video and audio
+// through <img>, <video> and <audio>, which read the bytes without a page.
 func (a *API) downloadAttachment(response http.ResponseWriter, request *http.Request) {
 	workspaceID := principal(request).Workspace.ID
 	item, key, err := a.store.GetAttachment(request.Context(), workspaceID, request.PathValue("id"))
@@ -26,23 +28,13 @@ func (a *API) streamDownload(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return
 	}
-	body, err := a.config.Attachments.Open(request.Context(), key)
-	if err != nil {
-		log.Printf("attachment %s: open stored bytes: %v", id, err)
+	// A byte range is answered (206) so the web app's players read metadata and seek without the whole file.
+	response.Header().Set("X-Content-SHA256", sha256)
+	if !attachments.Serve(response, request, a.config.Attachments, attachments.Served{Key: key, ContentType: "application/octet-stream",
+		Size: size, ETag: sha256, Cache: "private, no-store", Disposition: contentDisposition(filename)}) {
+		response.Header().Del("X-Content-SHA256")
+		log.Printf("attachment %s: serve stored bytes", id)
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
-		return
-	}
-	defer body.Close()
-	header := response.Header()
-	header.Set("Content-Type", "application/octet-stream")
-	header.Set("Content-Disposition", contentDisposition(filename))
-	header.Set("Content-Length", strconv.FormatInt(size, 10))
-	header.Set("X-Content-Type-Options", "nosniff")
-	header.Set("X-Content-SHA256", sha256)
-	header.Set("Cache-Control", "private, no-store")
-	response.WriteHeader(http.StatusOK)
-	if _, err := io.Copy(response, body); err != nil {
-		log.Printf("attachment %s: stream: %v", id, err)
 	}
 }
 

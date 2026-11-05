@@ -170,6 +170,7 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/conversations/{id}/time-entries":                                    need(auth.PermConversationsRead),
 	"POST /api/v1/conversations/{id}/messages/{messageId}/retry":                     need(auth.PermMessagesSend),
 	"GET /api/v1/attachments/{id}":                                                   need(auth.PermMessagesRead),
+	"GET /api/v1/attachments/{id}/thumbnail":                                         need(auth.PermMessagesRead),
 	"GET /api/v1/contacts":                                                           need(auth.PermContactsRead),
 	"POST /api/v1/contacts":                                                          need(auth.PermContactsCreate),
 	"GET /api/v1/contacts/{id}":                                                      need(auth.PermContactsRead),
