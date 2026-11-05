@@ -69,7 +69,7 @@ export const channelsMessages = {
   intakeTurnAutoBack: 'Turn Auto back on',
   // Raising intake to Auto on a scope.
   intakeAutoTitle: (scope: string) => `Let AI decide on its own · ${scope}`,
-  intakeAutoLead: 'AI decides whether each message opens a conversation, joins one, or is not a request. When it is not sure, the rules apply and it leaves a suggestion in Review.',
+  intakeAutoLead: 'AI decides whether each message opens a conversation, joins one, or is not a request. When it is not sure, the message waits in Review with its suggestion for a person to decide.',
   intakeAutoOn: 'Turn on Auto',
   intakeReadinessFailed: 'What AI is ready for could not be loaded. Try again in a moment.',
   intakeAction: { create: 'Open a conversation', attach: 'Add to a conversation', ignore: 'Set aside' } as Record<'create' | 'attach' | 'ignore', string>,

@@ -221,7 +221,7 @@ Each feature has a level: what it does without anyone asking.
 |---|---|---|---|
 | Triage | Only when someone presses **Suggest** | Suggests for every new conversation | Applies the picked parts by itself (above), with **Undo** |
 | Reply drafts | Only **Draft with AI** | Writes a draft when a customer writes | Never: AI never sends |
-| Intake (chat channels only) | The channel's rules decide | The rules decide; AI leaves a suggestion for review | AI decides what is clear enough; otherwise the rules decide. Until a channel's own decisions show AI is ready, AI only suggests here too, and the rules decide at once |
+| Intake (chat channels only) | The channel's rules decide | Every message a customer wrote waits in Review with AI's suggestion; a person decides | AI applies what it is sure enough of (the scope's threshold); everything else waits in Review with its suggestion. Until a channel's own decisions show AI is ready for an action, that action waits in Review too |
 
 The workspace's level is **Default for channels** under each feature in **Settings → Built-in AI**. A
 channel can set its own level for a feature, and a chat channel for each of its scopes (one-to-one
@@ -287,8 +287,8 @@ decided like any other.
 
 At **Auto**, intake's AI opens, joins or sets aside a card by itself only for an action its labels show it
 gets right on that channel's scope (it never writes to the customer: a conversation it opens sends the
-channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card and the rules decide
-at once. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
+channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card, which waits
+for a person in Review. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
 otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
 the model intake runs and this server's prompt version (`collie intake-eval`, see
 [Score AI intake on your own cases](../self-host/intake-eval.md)). A decision nobody looked at counts for nothing: silence

@@ -8414,12 +8414,12 @@ components:
         thread_id: {type: [string, 'null'], format: uuid}
         lane_key: {type: string, description: 'The place and sender whose cards are decided one after the other.'}
         contact_id: {type: [string, 'null'], format: uuid}
-        state: {type: string, enum: [deciding, review, created, attached, ignored, applied, cancelled], description: 'applied: the rules decided, AI only suggests.'}
-        review_reason: {type: [string, 'null'], enum: [no_command, ai_unsure, ai_unavailable, too_old, credential, target_changed, lane_blocked, requeued, gate_closed, null]}
+        state: {type: string, enum: [deciding, review, created, attached, ignored, applied, cancelled], description: 'applied: the rules decided and AI only suggested (cards from before intake at suggest held every card).'}
+        review_reason: {type: [string, 'null'], enum: [no_command, ai_unsure, ai_unavailable, too_old, credential, target_changed, lane_blocked, requeued, gate_closed, ai_suggests, null]}
         rules:
           type: object
           required: [action, rule, basis, target_conversation_id]
-          description: What the channel's rules decided when it closed; what applies when AI does not decide in time.
+          description: What the channel's rules would decide when it closed, shown beside AI's suggestion; with intake on it applies only to a command.
           properties:
             action: {type: string, enum: [create, attach, review, archive]}
             rule: {type: string}
@@ -8430,7 +8430,7 @@ components:
         decided_at: {type: [string, 'null'], format: date-time}
         decided_by_agent_id: {type: [string, 'null'], format: uuid}
         ignore_reason: {anyOf: [{$ref: '#/components/schemas/IntakeIgnoreReason'}, {type: 'null'}], description: 'Why a person set it aside, when they said.'}
-        fallback: {type: boolean, description: The rules decided because AI did not in time or failed.}
+        fallback: {type: boolean, description: 'AI did not decide in time or failed, so the card waits for a person.'}
         opened_at: {type: string, format: date-time}
         closed_at: {type: string, format: date-time}
         decide_by: {type: [string, 'null'], format: date-time, description: Until when AI may decide it.}
@@ -8578,7 +8578,7 @@ components:
         estimate:
           type: object
           required: [days, cards, ai_calls, cost_per_call]
-          description: 'What the last days say: cards closed, how many AI would read at auto (the rules decided them only by default), and the average cost of a call.'
+          description: 'What the last days say: cards closed, how many AI would read (every card but a command''s or a person''s choice), and the average cost of a call.'
           properties:
             days: {type: integer}
             cards: {type: integer}

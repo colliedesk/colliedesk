@@ -543,7 +543,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	facts := rules.Facts{Commanded: commanded, CommandAction: command.Action, IntoConversation: request.IntoConversation, Replay: request.Replay,
 		CommandsOnly: scope.Mode == channels.ModeCommands, Flushing: request.Flushing, Review: channel.Settings.Review,
 		JoinOpen: scope.Unmatched == channels.UnmatchedJoinOpen, Notice: scope.Unmatched == channels.UnmatchedNotice}
-	// A batch of a chat's intake scope: AI may decide where the rules only have a default (auto).
+	// A batch of a chat's intake scope with intake on (suggest or auto): AI decides what a customer wrote,
+	// the rules only a command and a person's choice (rules.AIDecides).
 	level, err := intakeLevel(ctx, tx, channel, definition, in, request)
 	if err != nil {
 		return result, err
@@ -561,7 +562,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// What the rules decide before the thread is read: only keeping it or holding it for a person.
 	switch decision := rules.Decide(facts); decision.Action {
 	case rules.Archive:
-		if level == intakeAuto {
+		if aiOn(level) && rules.AIDecides(facts, decision) {
 			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
 		}
 		// Chatter of a scope that opens conversations only on a command is kept, not opened. A message a
@@ -589,15 +590,10 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 				return result, err
 			}
 		}
-		if level == intakeSuggest {
-			if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringApplied, decision: decision, decidedByRules: true}); err != nil {
-				return result, err
-			}
-		}
 		result.Status = channels.ResultArchived
 		return finish(result)
 	case rules.Review:
-		if level == intakeAuto {
+		if aiOn(level) && rules.AIDecides(facts, decision) {
 			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
 		}
 		// Collected messages that named no command wait for a person to decide what they are.
@@ -611,24 +607,17 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}); err != nil {
 			return held, err
 		}
-		id, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision})
-		if err != nil {
+		if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision}); err != nil {
 			return held, err
-		}
-		// A person decides; at suggest AI says what it would.
-		if level == intakeSuggest {
-			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
-				return held, err
-			}
 		}
 		return finish(held)
 	}
-	// At auto, what the rules decide only by default waits for intake, and nothing is created for it
-	// yet: the contact is found once the message is stored. A reopen command names the sender's own
+	// With intake on, what AI decides waits for it, and nothing is created for it yet: the contact is
+	// found once the message is stored. A reopen command names the sender's own
 	// conversation, which needs the contact first; it is a match, never held.
 	reopening := request.IntoConversation == "" && commanded && command.Action == channels.ActionReopen && in.Intent.Ref != ""
 	var contactID, legacyRef, priorStatus string
-	if level != intakeAuto || reopening {
+	if !aiOn(level) || reopening {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
 			return result, err
 		}
@@ -720,7 +709,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if request.Intake != nil {
 		decision = request.Intake.basisOf(decision, pending)
 	}
-	if level == intakeAuto && rules.AIDecides(facts, decision) {
+	if aiOn(level) && rules.AIDecides(facts, decision) {
 		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
 	}
 	if contactID == "" {
@@ -833,22 +822,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	if level != "" {
+		// What the rules decided: intake off, or a command or a person's choice.
 		decided := gathering{state: GatheringAttached, decision: decision, conversationID: conversationID, contactID: contactID, decidedByRules: true}
-		switch {
-		case level == intakeSuggest && rules.AIDecides(facts, decision):
-			// The rules applied; AI only suggests what it would have done.
-			decided.state = GatheringApplied
-		case result.Status == channels.ResultCreated:
+		if result.Status == channels.ResultCreated {
 			decided.state = GatheringCreated
 		}
-		id, err := recordGathering(ctx, tx, &journal, in, decided)
-		if err != nil {
+		if _, err := recordGathering(ctx, tx, &journal, in, decided); err != nil {
 			return result, err
-		}
-		if decided.state == GatheringApplied {
-			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
-				return result, err
-			}
 		}
 	}
 	if result.Status == channels.ResultCreated && legacyRef != "" {

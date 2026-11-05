@@ -10,7 +10,7 @@ export const levelName: Record<AILevel, string> = { off: 'Off', suggest: 'Sugges
 export const levelMeaning: Record<AISlotName, Partial<Record<AILevel, string>>> = {
   triage: { off: 'Only when someone presses Suggest', suggest: 'Suggests for each new conversation', auto: 'Applies the picked parts by itself, with Undo' },
   draft: { off: 'Only Draft with AI', suggest: 'Writes a draft when a customer writes; AI never sends' },
-  intake: { off: 'The channel’s rules decide', suggest: 'The rules decide; AI suggests in Review', auto: 'AI decides what is clear; otherwise the rules' },
+  intake: { off: 'The channel’s rules decide', suggest: 'AI suggests; a person decides in Review', auto: 'AI decides what it is sure of; a person the rest' },
   // The help center's chat is on or off; it has no level of its own.
   chat: {},
 };

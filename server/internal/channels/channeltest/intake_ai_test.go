@@ -71,9 +71,9 @@ func (d aiDesk) tasks(t *testing.T) string {
 	return d.one(t, `SELECT COALESCE(string_agg(state||COALESCE(':'||error_code,''),',' ORDER BY state||COALESCE(':'||error_code,'')),'') FROM ai_tasks WHERE workspace_id=$1 AND kind='intake'`)
 }
 
-// At auto with every gate closed, AI says what it would do and the rules decide at once, without waiting
-// for the card's time: the customer is never kept waiting for AI that may not act.
-func TestAtAutoWithTheGateClosedAISuggestsAndTheRulesApplyAtOnce(t *testing.T) {
+// At auto with every gate closed, AI says what it would do and the card waits for a person at once,
+// without waiting for its time.
+func TestAtAutoWithTheGateClosedTheCardWaitsForAPerson(t *testing.T) {
 	d := newAIDesk(t, nil)
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan Nguyen", Group: "g1", Text: "the stock export fails since this morning"})
@@ -83,11 +83,11 @@ func TestAtAutoWithTheGateClosedAISuggestsAndTheRulesApplyAtOnce(t *testing.T) {
 	}
 	d.answers(map[string]any{"action": "create", "subject": "Stock export fails", "confidence": 0.97})
 	d.runAI(t)
-	if got := d.gatherings(t); got != "created/create/new_thread/rules:1" {
-		t.Fatalf("gatherings = %s", got)
+	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "review/gate_closed/false" {
+		t.Fatalf("gathering = %s", got)
 	}
-	if got := d.one(t, `SELECT fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "false" {
-		t.Fatalf("fallback = %s", got)
+	if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); got != "0" {
+		t.Fatalf("conversations = %s", got)
 	}
 	if got := d.decisions(t); got != "create/gate_closed" {
 		t.Fatalf("decisions = %s", got)
@@ -132,8 +132,8 @@ func TestThroughAnOpenGateAISureEnoughDecidesTheCard(t *testing.T) {
 }
 
 // AI names a conversation that stopped being one the card may join while it thought (merged into another
-// customer's): nothing joins it, the rules decide the card, and AI's decision says the target changed.
-func TestAnAIDecisionWhoseConversationWentAwayIsLeftToTheRules(t *testing.T) {
+// customer's): nothing joins it, a person decides the card, and AI's decision says the target changed.
+func TestAnAIDecisionWhoseConversationWentAwayIsLeftToAPerson(t *testing.T) {
 	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
@@ -159,7 +159,7 @@ func TestAnAIDecisionWhoseConversationWentAwayIsLeftToTheRules(t *testing.T) {
 	if got := d.decisions(t); got != "create/applied,attach/target_changed" {
 		t.Fatalf("decisions = %s", got)
 	}
-	if got := d.gatherings(t); got != "created/create/new_thread/ai:1,created/create/new_thread/rules:1" {
+	if got := d.one(t, `SELECT string_agg(state||'/'||COALESCE(review_reason,'-'),',' ORDER BY closed_at) FROM intake_gatherings WHERE workspace_id=$1`); got != "created/-,review/target_changed" {
 		t.Fatalf("gatherings = %s", got)
 	}
 	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[]) AND kind='incoming'`,
@@ -168,8 +168,8 @@ func TestAnAIDecisionWhoseConversationWentAwayIsLeftToTheRules(t *testing.T) {
 	}
 }
 
-// Below its threshold AI only suggests, and the rules decide.
-func TestBelowItsThresholdAISuggests(t *testing.T) {
+// Below its threshold AI only suggests, and a person decides.
+func TestBelowItsThresholdTheCardWaitsForAPerson(t *testing.T) {
 	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
@@ -179,8 +179,12 @@ func TestBelowItsThresholdAISuggests(t *testing.T) {
 	if got := d.decisions(t); got != "ignore/below_threshold" {
 		t.Fatalf("decisions = %s", got)
 	}
-	if got := d.gatherings(t); got != "created/create/new_thread/rules:1" {
-		t.Fatalf("gatherings = %s", got)
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1`); got != "review/ai_unsure" {
+		t.Fatalf("gathering = %s", got)
+	}
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
+	if detail, err := d.store.IntakeGatheringByID(context.Background(), d.workspaceID, card, *d.clock); err != nil || detail.Suggestion == nil || detail.Suggestion.Action != "ignore" {
+		t.Fatalf("suggestion = %+v, %v", detail.Suggestion, err)
 	}
 }
 
@@ -215,7 +219,7 @@ func TestAPersonWhoDecidesWhileAIReadsWins(t *testing.T) {
 // One card of a lane is with AI at a time: the sender's next card waits for its turn, and gets it once the
 // card before it is decided.
 func TestOneCardOfALaneIsWithAIAtATime(t *testing.T) {
-	d := newAIDesk(t, nil)
+	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
 	d.flush(t)
@@ -229,13 +233,13 @@ func TestOneCardOfALaneIsWithAIAtATime(t *testing.T) {
 	if got := d.tasks(t); got != "queued,queued" {
 		t.Fatalf("tasks of two lanes = %s", got)
 	}
-	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.9}, map[string]any{"action": "create", "subject": "Scale", "confidence": 0.9})
+	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.99}, map[string]any{"action": "create", "subject": "Scale", "confidence": 0.99})
 	d.runAI(t)
 	// The first card decided, its sender's next card has its turn; the other lane still waits for the worker.
 	if got := d.tasks(t); got != "done,queued,queued" {
 		t.Fatalf("tasks after the first card = %s", got)
 	}
-	d.answers(map[string]any{"action": "create", "subject": "Printer", "confidence": 0.9})
+	d.answers(map[string]any{"action": "create", "subject": "Printer", "confidence": 0.99})
 	d.runAI(t)
 	d.runAI(t)
 	if got := d.tasks(t); got != "done,done,done" {
@@ -273,22 +277,18 @@ func TestALaneBlockedBehindAPersonGoesBackToAI(t *testing.T) {
 
 // A customer whose batch is held is the same person in the prompt as in the conversation they opened before.
 func TestAHeldCustomerIsTheSamePersonAsInTheirConversation(t *testing.T) {
-	d := newAIDesk(t, nil)
+	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
 	d.flush(t)
-	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.9})
+	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.99})
 	d.runAI(t)
-	// Without the thread's key the rules no longer know the next batch continues it: it is held for AI.
-	if _, err := d.pool.Exec(context.Background(), `DELETE FROM conversation_thread_keys WHERE workspace_id=$1`, d.workspaceID); err != nil {
-		t.Fatal(err)
-	}
 	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Name: "Lan", Group: "g1", Text: "still failing"})
 	d.flush(t)
 	if got := d.tasks(t); got != "done,queued" {
 		t.Fatalf("tasks = %s", got)
 	}
-	d.answers(map[string]any{"action": "attach", "target": "C1", "confidence": 0.9})
+	d.answers(map[string]any{"action": "attach", "target": "C1", "confidence": 0.99})
 	d.runAI(t)
 	requests := d.fake.Requests()
 	prompt := requests[len(requests)-1].Messages[0].Text
@@ -297,9 +297,9 @@ func TestAHeldCustomerIsTheSamePersonAsInTheirConversation(t *testing.T) {
 	}
 }
 
-// An answer naming a conversation it was not offered is asked once more; twice is an error, and the
-// rules decide.
-func TestAnUnknownConversationTwiceIsAnErrorAndTheRulesDecide(t *testing.T) {
+// An answer naming a conversation it was not offered is asked once more; twice is an error, and a
+// person decides.
+func TestAnUnknownConversationTwiceIsAnErrorAndAPersonDecides(t *testing.T) {
 	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
@@ -309,7 +309,7 @@ func TestAnUnknownConversationTwiceIsAnErrorAndTheRulesDecide(t *testing.T) {
 	if got := d.decisions(t); got != "review/error/target_invalid" {
 		t.Fatalf("decisions = %s", got)
 	}
-	if got := d.one(t, `SELECT state||'/'||decided_by||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "created/rules/true" {
+	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "review/ai_unavailable/true" {
 		t.Fatalf("gathering = %s", got)
 	}
 	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
@@ -339,19 +339,26 @@ func TestACredentialIsNeverAppliedByAI(t *testing.T) {
 	}
 }
 
-// At suggest the rules decide as they always did and AI's suggestion shows on the card.
-func TestAtSuggestTheCardShowsWhatAIWouldDo(t *testing.T) {
+// At suggest nothing is applied: every card a customer wrote waits for a person with AI's suggestion,
+// however sure AI is.
+func TestAtSuggestEveryCardWaitsForAPersonWithWhatAIWouldDo(t *testing.T) {
 	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "suggest")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
 	d.flush(t)
-	if got := d.gatherings(t); got != "applied/create/new_thread/rules:1" {
+	if got := d.gatherings(t); got != "deciding/create/new_thread/-:1" {
 		t.Fatalf("gatherings = %s", got)
 	}
 	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.99})
 	d.runAI(t)
 	if got := d.decisions(t); got != "create/level_suggest" {
 		t.Fatalf("decisions = %s", got)
+	}
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1`); got != "review/ai_suggests" {
+		t.Fatalf("gathering = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); got != "0" {
+		t.Fatalf("conversations = %s", got)
 	}
 	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
 	detail, err := d.store.IntakeGatheringByID(context.Background(), d.workspaceID, card, *d.clock)
@@ -360,8 +367,8 @@ func TestAtSuggestTheCardShowsWhatAIWouldDo(t *testing.T) {
 	}
 }
 
-// A card AI will not read (the day's intake is used) is the rules' at once.
-func TestACardAIWillNotReadIsTheRulesAtOnce(t *testing.T) {
+// A card AI will not read (the day's intake is used) waits for a person.
+func TestACardAIWillNotReadWaitsForAPerson(t *testing.T) {
 	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
 	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_automatic_limits(workspace_id,per_day,per_minute,intake_per_day) VALUES($1,300,30,0)
@@ -377,8 +384,8 @@ func TestACardAIWillNotReadIsTheRulesAtOnce(t *testing.T) {
 	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
 		t.Fatalf("sweep = %d, %v", n, err)
 	}
-	if got := d.gatherings(t); got != "created/create/new_thread/rules:1" {
-		t.Fatalf("gatherings = %s", got)
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1`); got != "review/ai_unavailable" {
+		t.Fatalf("gathering = %s", got)
 	}
 }
 
@@ -404,7 +411,7 @@ func TestIntakeStopsCallingAFailingModelForAWhile(t *testing.T) {
 		t.Fatalf("calls = %d", n)
 	}
 	if got := d.one(t, `SELECT count(*)::text FROM intake_gatherings WHERE workspace_id=$1 AND state='deciding' AND decide_by<=$2`, *d.clock); got != "6" {
-		t.Fatalf("cards handed to the rules = %s", got)
+		t.Fatalf("cards past their time = %s", got)
 	}
 	*d.clock = d.clock.Add(11 * time.Minute)
 	d.send(t, channeltest.LoopbackEvent{ID: "h-1", From: "h", Group: "g1", Text: "the printer is off"})
@@ -416,7 +423,8 @@ func TestIntakeStopsCallingAFailingModelForAWhile(t *testing.T) {
 	}
 }
 
-// A scope turned off after its card was queued sends nothing to the model; the card is the rules' at once.
+// A scope turned off after its card was queued sends nothing to the model; past its time the card waits
+// for a person.
 func TestAScopeTurnedOffSendsNothingToTheModel(t *testing.T) {
 	d := newAIDesk(t, intake.OpenGate)
 	d.intakeAt(t, "auto")
@@ -432,6 +440,38 @@ func TestAScopeTurnedOffSendsNothingToTheModel(t *testing.T) {
 	}
 	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
 		t.Fatalf("sweep = %d, %v", n, err)
+	}
+	// Intake off: the card is the rules' again, as they decide now.
+	if got := d.gatherings(t); got != "created/create/new_thread/rules:1" {
+		t.Fatalf("gatherings = %s", got)
+	}
+}
+
+// At suggest a card waiting with AI's suggestion holds up nothing: the sender's next card gets its turn
+// with AI, and both wait for a person with a suggestion.
+func TestAtSuggestEveryCardOfALaneGetsASuggestion(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "suggest")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "and the printer too"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.99}, map[string]any{"action": "create", "subject": "Printer", "confidence": 0.99})
+	d.runAI(t)
+	d.runAI(t)
+	if got := d.one(t, `SELECT string_agg(state||':'||review_reason,',' ORDER BY closed_at) FROM intake_gatherings WHERE workspace_id=$1`); got != "review:ai_suggests,review:ai_suggests" {
+		t.Fatalf("gatherings = %s", got)
+	}
+	if got := d.tasks(t); got != "done,done" {
+		t.Fatalf("tasks = %s", got)
+	}
+	// A card said while the others wait with their suggestions goes to AI too, not behind them.
+	d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Group: "g1", Text: "and the scale"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Scale", "confidence": 0.99})
+	d.runAI(t)
+	if got := d.one(t, `SELECT state||':'||review_reason FROM intake_gatherings WHERE workspace_id=$1 ORDER BY closed_at DESC LIMIT 1`); got != "review:ai_suggests" {
+		t.Fatalf("the third card = %s", got)
 	}
 }
 
@@ -798,11 +838,9 @@ func TestACardAIDecidedSaysHowSureWhyAndWhichModel(t *testing.T) {
 			t.Fatalf("same-model re-run to %s = %+v", last, got)
 		}
 	}
-	// A card the rules decided has none.
-	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Name: "Hoa", Group: "g1", Text: "hello"})
+	// A command the rules decided has none.
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Name: "Hoa", Group: "g1", Text: "report bug: the till is down"})
 	d.flush(t)
-	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.6})
-	d.runAI(t)
 	if got := decided(); got.AIDecision != nil {
 		t.Fatalf("decided by the rules = %+v", got)
 	}
