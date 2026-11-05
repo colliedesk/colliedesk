@@ -58,11 +58,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer, and who else has it open | `contacts:read`, `conversations:read`, `messages:read`, `team:read` |
 | `colliedesk_conversation_presence` | Shows the team that the agent is working on a conversation (as "your name via the token label", for 2 minutes), lists who else has it open and warns when someone has a reply not sent yet; `leave` takes it off the list | `conversations:read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `conversations:read`, `team:read` |
-| `colliedesk_attachment_get` | Reads an attachment: name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image (a preview of one over 2 MiB) | `messages:read` |
+| `colliedesk_attachment_get` | Reads an attachment, or a file of a reply draft (with `conversation_id` and `draft_id`): name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `ai_assist:read`, `messages:read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `conversations:update`, `tags:create`, `tags:read`, `team:read` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `conversations:update`, `tags:read`, `team:read` |
 | `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call) | `messages:note` |
-| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from. Cannot be undone | `conversations:read`, `messages:note`, `messages:read`, `messages:send`, `team:read` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from; without `ai_draft_file_ids` every file of that draft is sent. Cannot be undone | `conversations:read`, `messages:note`, `messages:read`, `messages:send`, `team:read` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `messages:send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `messages:send` |
 | `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Takes files (up to 10, 5 MiB a call). Cannot be undone | `messages:read`, `messages:send` |
@@ -147,7 +147,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_domain_get` | Reads the custom domain, its DNS records and the last check | `help_center:read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any token |
 | `colliedesk_docs_search` | Searches these user guides | any token |
-| `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself and carries no files | `ai_assist:create` |
+| `colliedesk_reply_draft` | Leaves a reply draft, with files if needed (up to 10, 5 MiB a call), that a person edits, sends or discards; never emails by itself. A new draft goes on top and the earlier one stays | `ai_assist:create` |
+| `colliedesk_reply_draft_restore` | Brings an earlier written draft (replaced, expired or discarded) back above the reply box, with its files | `ai_assist:create` |
 | `colliedesk_workspace_export` | Gives a one-time download link of a workspace export | `workspace:export` |
 | `colliedesk_billing_action` | Starts a plan checkout or opens the billing portal for the person to pay, or requests a Freshdesk data migration | `billing:manage` |
 | `colliedesk_email_channel_disconnect` | Disconnects the default email channel. Cannot be undone | `channels:manage_credentials` |
@@ -245,7 +246,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_message_move_undo` | Undoes a move of customer messages | `conversations:update` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `ai_assist:create` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `ai_assist:read` |
-| `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `ai_assist:read` |
+| `colliedesk_ai_drafts_list` | Lists a conversation's drafts in pages (`before`, `limit`), the AI's and the written ones, with their files; earlier written ones can be restored | `ai_assist:read` |
 | `colliedesk_ai_draft_discard` | Stops an AI draft being written or discards a ready one | `ai_assist:create` |
 | `colliedesk_ai_triage_get` | Shows a conversation's newest [AI triage suggestion](ai.md#triage-suggestions): tags, priority, assignee and a reason | `ai_assist:read` |
 | `colliedesk_ai_triage_create` | Asks for a triage suggestion again | `ai_assist:create` |

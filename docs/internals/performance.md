@@ -253,6 +253,22 @@ transaction: the state row, the current version's values, the products) and writ
 pool, and one idle connection held by `LISTEN colliedesk_config`. A request never waits on it: the handler
 swap is an atomic pointer, and settings read at each use are an atomic load.
 
+## Attachment thumbnail budget
+
+The timeline and the gallery's strip show a picture attachment as its thumbnail
+(`GET /api/v1/attachments/{id}/thumbnail`, at most 320 px), not the original: before it, a conversation
+with 12 phone photos downloaded tens of megabytes on every open, since the original is `private, no-store`.
+`TestAttachmentThumbnailLatencyBudget` makes the thumbnails of six 12-megapixel JPEGs (4000x3000, the first
+view of each) and reads a kept one 50 times. Making one must stay at or below 400 ms for the slowest of the
+six; reading a kept one at or below 20 ms p95. On 2026-11-05 on an Apple M4: made in 96 ms median, 101 ms
+slowest; read 4.7 ms p95. A thumbnail is made once, on its first view, and kept with the attachment
+(`attachments.thumb_storage_key`); a file that is no readable picture is recorded as having none, so it is
+not decoded again. Nothing waits for it before the screen is usable: the images load lazily after the
+timeline renders. Decoding shares the media package's 128 MiB budget with knowledge base thumbnails, so a
+12-megapixel photo (48 MB decoded) runs two at a time: the first view of a conversation with 12 new photos
+fills its thumbnails over about 0.6 s. A picture over the budget (above about 32 megapixels) gets none and
+shows its original. Do not widen either budget; make the decode cheaper instead.
+
 ## Web bundle budget
 
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` builds the bundle before running this gate; in CI it runs in the e2e job, after that job's Vite build of the same commit, and a failure fails CI like any other step.
