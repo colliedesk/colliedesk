@@ -63,7 +63,11 @@ Each decision has a basis: **match** (a command, a reference, a thread key: evid
 carries), **default** (what the scope does with a message that carries none), or **person** (a held
 message put in a conversation). The journal keeps both (`channel_inbound_events.decision_basis`,
 `decision_rule`); a duplicate, an echo, a channel off and a message still being collected keep none,
-since the frame handled them before the rules. An AI decider may only ever replace a default.
+since the frame handled them before the rules. An AI decider may replace a default, and a match that
+rests only on the place's thread key (`rules.AIDecides`): in a chat or group the key says where the
+customer wrote, not what about, so it would file every new question in their last conversation. A
+command, a reply to a message and a person's choice are never replaced. When AI does not decide, a
+thread key's batch is replayed through the rules as they stand now, as a default's is.
 
 1. The code is the table, not the design's: an open command whose thread key finds a conversation
    joins it; a reference the join policy refuses lets the next reference try, while a refused thread key
@@ -141,7 +145,7 @@ Email and web forms declare none, so their path gains no row and no query beyond
    store cannot import `ai`): `holdForIntake` and every conclusion of a card (`unblockLane`) ask for the
    lane's next turn, which goes to the oldest `deciding` card that never had a task, only while no card of
    the lane has one waiting or running and none waits for a person. At `suggest`, a card the rules applied
-   by default or held for a person gets a task of its own. `ai_tasks_intake_gathering` keeps one live task
+   by default or by the place's thread key alone (`rules.AIDecides`), or held for a person, gets a task of its own. `ai_tasks_intake_gathering` keeps one live task
    a card. The worker polls (5 s), so a card waits seconds for AI, never the request that brought it.
 2. **The prompt is built from a snapshot.** `store.IntakeSnapshotOf` reads the card, its scope's level and
    options, the workspace's consents, its items, 40 items of the place before it (the prompt shows 15; the

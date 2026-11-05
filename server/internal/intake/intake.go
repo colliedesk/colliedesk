@@ -230,16 +230,17 @@ func (s *Service) Sweep(ctx context.Context) (int, error) {
 	return applied, errors.Join(errs...)
 }
 
-// applyRules applies what the rules decided when a gathering closed: what they would open is replayed
-// through the rules as they stand now; what they would join joins it while it is still open, else a
+// applyRules applies what the rules decided when a gathering closed: what they would open, and what the
+// place's thread key would join, is replayed through the rules as they stand now (the key's conversation
+// reopens when resolved, as without AI); what else they would join joins it while it is still open, else a
 // person decides; what they would hold for a person goes to the queue; the chatter of a scope that opens
 // only on a command waits for a person with keptReason (AI was turned on so it is looked at).
 func (s *Service) applyRules(ctx context.Context, g store.DueGathering, apply store.IntakeApply, keptReason string) error {
-	switch g.RulesAction {
-	case rules.Create:
+	switch {
+	case g.RulesAction == rules.Create, g.RulesAction == rules.Attach && g.RulesRule == rules.ThreadKey:
 		_, err := s.pipeline.ApplyGathering(ctx, g.WorkspaceID, g.ID, "", apply)
 		return err
-	case rules.Attach:
+	case g.RulesAction == rules.Attach:
 		open, err := s.store.ConversationStillOpen(ctx, g.WorkspaceID, g.RulesTarget)
 		if err != nil {
 			return err
@@ -249,7 +250,7 @@ func (s *Service) applyRules(ctx context.Context, g store.DueGathering, apply st
 			return err
 		}
 		return s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, store.ReviewTargetChanged, apply, s.now().UTC())
-	case rules.Review:
+	case g.RulesAction == rules.Review:
 		return s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, store.ReviewNoCommand, apply, s.now().UTC())
 	}
 	return s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, keptReason, apply, s.now().UTC())

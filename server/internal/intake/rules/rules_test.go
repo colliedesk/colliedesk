@@ -63,3 +63,27 @@ func TestEachRuleDecidesWhatTheStoreDid(t *testing.T) {
 		}
 	}
 }
+
+// AI may decide where the rules decided by default, or only by the place's thread key; never where the
+// message named a command or a message of a conversation, or a person decided.
+func TestAIDecidesOnlyWhereTheRulesHadNoEvidenceButThePlace(t *testing.T) {
+	const c = "conversation-1"
+	cases := []struct {
+		name  string
+		facts rules.Facts
+		want  bool
+	}{
+		{"nothing matches", rules.Facts{}, true},
+		{"a thread key", rules.Facts{Thread: rules.Thread{ConversationID: c}}, true},
+		{"an open command whose thread key matches", rules.Facts{Commanded: true, CommandAction: "open", Thread: rules.Thread{ConversationID: c}}, false},
+		{"a reply to a message of a conversation", rules.Facts{Thread: rules.Thread{ConversationID: c, ByReference: true}}, false},
+		{"an open command", rules.Facts{Commanded: true, CommandAction: "open"}, false},
+		{"a cancel", rules.Facts{Cancel: true}, false},
+		{"a person's choice", rules.Facts{IntoConversation: c}, false},
+	}
+	for _, c := range cases {
+		if got := rules.AIDecides(c.facts, rules.Decide(c.facts)); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}

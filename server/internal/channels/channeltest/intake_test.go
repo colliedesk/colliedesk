@@ -127,6 +127,85 @@ func TestAtAutoWhatTheRulesDecideByDefaultWaitsForTheDecider(t *testing.T) {
 	}
 }
 
+// At auto, a sender's next batch in a group is AI's to decide even though the place's thread key finds
+// the conversation they wrote in last: the key says where they wrote, not what about, so a new question
+// can open its own conversation. When AI does not decide, the rules continue that conversation as they
+// would now, reopening it when it was resolved. At suggest, the rules continue it at once and AI says
+// what it would have done.
+func TestAtAutoAThreadKeyIsAIsToDecide(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	ctx := context.Background()
+	actor := store.ChannelActor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	first, err := d.intake().Decide(ctx, d.workspaceID, d.gatheringOf(t, "a"), intake.Decision{Action: intake.Create}, store.DecidedByAgent, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "how many boxes can I add to a crate?"})
+	d.flush(t)
+	held := d.gatheringOf(t, "a")
+	if got := d.one(t, `SELECT state||'/'||rules_action||'/'||rules_basis||'/'||rules_rule||'/'||(rules_target=$3::uuid)::text FROM intake_gatherings
+		WHERE workspace_id=$1 AND id=$2::uuid`, held, first.ConversationID); got != "deciding/attach/match/thread_key/true" {
+		t.Fatalf("a's next batch = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "1" {
+		t.Fatalf("messages while AI decides = %s", got)
+	}
+	second, err := d.intake().Decide(ctx, d.workspaceID, held, intake.Decision{Action: intake.Create}, store.DecidedByAI, store.ChannelActor{})
+	if err != nil || second.ConversationID == "" || second.ConversationID == first.ConversationID {
+		t.Fatalf("AI opens a new request = %+v, %v (first %s)", second, err, first.ConversationID)
+	}
+
+	// A command is evidence of its own: the rules decide it at once, whatever conversation the key finds.
+	d.send(t, channeltest.LoopbackEvent{ID: "a-c", From: "a", Group: "g1", Text: "report bug: the printer is down"})
+	d.flush(t)
+	if got := d.one(t, `SELECT state||'/'||rules_rule||'/'||decided_by FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "a")); got != "attached/thread_key/rules" {
+		t.Fatalf("a command at auto = %s", got)
+	}
+
+	// AI did not decide: the rules continue the conversation the key finds now, the newest one.
+	d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Group: "g1", Text: "twelve boxes?"})
+	d.flush(t)
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if n, err := d.intake().Sweep(ctx); err != nil || n != 1 {
+		t.Fatalf("sweep = %d, %v", n, err)
+	}
+	fallback := `SELECT g.state||'/'||g.decided_by||'/'||g.fallback::text||'/'||(g.conversation_id=$3::uuid)::text||'/'||e.decision_basis||':'||e.decision_rule
+		FROM intake_gatherings g JOIN channel_inbound_events e ON e.workspace_id=g.workspace_id AND e.gathering_id=g.id WHERE g.workspace_id=$1 AND g.id=$2::uuid`
+	if got := d.one(t, fallback, d.gatheringOf(t, "a"), second.ConversationID); got != "attached/rules/true/true/match:thread_key" {
+		t.Fatalf("fallback = %s", got)
+	}
+	// A resolved conversation the key finds is reopened by the fallback, as without AI.
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='resolved' WHERE workspace_id=$1 AND id=$2`, d.workspaceID, second.ConversationID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-4", From: "a", Group: "g1", Text: "it is still wrong"})
+	d.flush(t)
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if _, err := d.intake().Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, fallback, d.gatheringOf(t, "a"), second.ConversationID); got != "attached/rules/true/true/match:thread_key" {
+		t.Fatalf("fallback to a resolved conversation = %s", got)
+	}
+	if got := d.one(t, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2`, second.ConversationID); got != "open" {
+		t.Fatalf("status after the fallback = %s", got)
+	}
+
+	// At suggest the rules continue it at once, and AI is asked what it would have done.
+	d.intakeAt(t, "suggest")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-5", From: "a", Group: "g1", Text: "and the label printer?"})
+	d.flush(t)
+	suggested := d.gatheringOf(t, "a")
+	if got := d.one(t, `SELECT g.state||'/'||g.rules_rule||'/'||(g.conversation_id=$3::uuid)::text||'/'||
+			(SELECT count(*) FROM ai_tasks k WHERE k.workspace_id=g.workspace_id AND k.gathering_id=g.id AND k.kind='intake')::text
+		FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.id=$2::uuid`, suggested, second.ConversationID); got != "applied/thread_key/true/1" {
+		t.Fatalf("at suggest = %s", got)
+	}
+}
+
 func (d loopDesk) intake() *intake.Service {
 	return intake.New(d.store, d.pipeline, func() time.Time { return *d.clock })
 }

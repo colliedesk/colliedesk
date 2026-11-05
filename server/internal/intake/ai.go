@@ -194,7 +194,7 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 		return err
 	}
 	// At auto the card waited for AI; what it did not do, the rules do now.
-	err = s.applyRules(ctx, store.DueGathering{WorkspaceID: workspaceID, ID: gatheringID, RulesAction: g.Rules.Action, RulesTarget: deref(g.Rules.TargetConversationID)},
+	err = s.applyRules(ctx, store.DueGathering{WorkspaceID: workspaceID, ID: gatheringID, RulesAction: g.Rules.Action, RulesRule: g.Rules.Rule, RulesTarget: deref(g.Rules.TargetConversationID)},
 		store.IntakeApply{Decider: store.DecidedByRules, Fallback: code != ""}, reviewReasonFor(reason))
 	if errors.Is(err, store.ErrGatheringDecided) {
 		return nil
