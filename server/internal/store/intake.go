@@ -477,21 +477,21 @@ func gatheringMissingOr(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 
 // DueGathering is a gathering past its time to be decided, with what the rules decided when it closed.
 type DueGathering struct {
-	WorkspaceID, ID, RulesAction, RulesTarget string
+	WorkspaceID, ID, RulesAction, RulesRule, RulesTarget string
 }
 
 // DueGatherings lists, across workspaces, gatherings AI did not decide in time, oldest first.
 func (s *Store) DueGatherings(ctx context.Context, now time.Time, limit int) ([]DueGathering, error) {
 	var due []DueGathering
 	err := s.db.Privileged(ctx, database.PrivilegeIntakeDueClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,rules_action,COALESCE(rules_target::text,'') FROM intake_gatherings
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,rules_action,rules_rule,COALESCE(rules_target::text,'') FROM intake_gatherings
 			WHERE state='deciding' AND decide_by<=$1 ORDER BY decide_by LIMIT $2`, now, limit)
 		if err != nil {
 			return err
 		}
 		due, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (DueGathering, error) {
 			var g DueGathering
-			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.RulesAction, &g.RulesTarget)
+			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.RulesAction, &g.RulesRule, &g.RulesTarget)
 		})
 		return err
 	})

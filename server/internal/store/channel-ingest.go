@@ -720,7 +720,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if request.Intake != nil {
 		decision = request.Intake.basisOf(decision, pending)
 	}
-	if level == intakeAuto && decision.Basis == rules.Default {
+	if level == intakeAuto && rules.AIDecides(facts, decision) {
 		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
 	}
 	if contactID == "" {
@@ -835,7 +835,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if level != "" {
 		decided := gathering{state: GatheringAttached, decision: decision, conversationID: conversationID, contactID: contactID, decidedByRules: true}
 		switch {
-		case level == intakeSuggest && decision.Basis == rules.Default:
+		case level == intakeSuggest && rules.AIDecides(facts, decision):
 			// The rules applied; AI only suggests what it would have done.
 			decided.state = GatheringApplied
 		case result.Status == channels.ResultCreated:

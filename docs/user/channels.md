@@ -262,8 +262,12 @@ when they write in turn. The channel's rules decide each card as they always did
 conversation, a reply to a message continues its conversation (in a group, only a conversation that
 customer wrote in), and what the rules hold for a person waits in the queue. When AI intake runs by itself
 on the scope (**Auto**, [AI per channel](ai.md#what-ai-does-by-itself-per-channel)), a card the rules
-could only decide by default waits up to two minutes for AI, held like any held message; if AI does not
-decide in time, the rules' decision applies (the card says **fallback**), and nothing is ever lost.
+could only decide by default waits up to two minutes for AI, held like any held message, and so does a
+card the rules would add to the conversation the customer last wrote in only because it is the same group
+(the group says where they wrote, not what about: they may have moved on to another question). A card
+with a command or a reply to a message is decided by the rules at once. If AI does not decide in time, the
+rules' decision applies (the card says **fallback**; a resolved conversation it continues reopens), and
+nothing is ever lost.
 A card behind one of the same customer that waits for a person waits right after it, and goes back to
 be decided once that one is.
 
@@ -279,7 +283,8 @@ corrected it. A person who adds a card to a conversation that was merged into an
 was merged into.
 
 A card names the chat place it was said in, what the rules decided and whether they had evidence (a
-command, a reply to a message of a conversation: **match**) or decided by default. While it waits, it lists
+command, a reply to a message of a conversation, or the conversation the customer last wrote in from the
+same place: **match**) or decided by default. The last kind of match is still AI's to decide. While it waits, it lists
 the conversations it may join without the reply going to someone else: in a group, the open or pending
 conversations of that group active in the last 72 hours; in a one-to-one chat, that customer's on the same
 channel; then the ones resolved within the reopen window (7 days unless the channel's intake settings say
