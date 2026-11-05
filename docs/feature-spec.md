@@ -1,6 +1,6 @@
 # Colliedesk feature spec
 
-Status: v0.1 scope defined 2026-10-14; now released as alpha 0.0.x. Owner: HC Labs.
+Status: v0.1 scope defined 2026-10-14; generally available from release 1.0.0. Owner: HC Labs.
 
 ## Product
 
@@ -52,7 +52,7 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
    `docs/user/roles-and-permissions.md`); a role is a set of them, and a person holds one or more roles.
    `channels:inbound` marks channel routes authenticated by a channel secret instead of a session. A test
    enumerates every registered API route and fails if one has no declared permission.
-6. **Later.** Email magic link (with the email channel). **Cloud sign-in through Clerk** (alpha):
+6. **Later.** Email magic link (with the email channel). **Cloud sign-in through Clerk** (shipped):
    Clerk authenticates the account (Google, Microsoft, email, MFA; SAML when an enterprise needs it),
    then the Colliedesk server mints a one-time link that is redeemed for an ordinary Colliedesk session.
    Clerk never holds a Colliedesk session; self-hosted installs do not use Clerk at all; MCP clients sign in through OAuth authorization code + PKCE and receive either a
@@ -74,22 +74,22 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 
 | Area | Capability | Milestone |
 |---|---|---|
-| Workspaces | Multi-tenant; every row scoped by `workspace_id`; no cross-workspace reads; admin sets workspace IANA timezone, each agent may set an override (validated IANA names) | alpha |
-| Agents | Passwordless sign-in by one-time pairing/invite links (see Authentication), roles `admin` / `agent`, session list with revoke | alpha |
-| Contacts | Customer records (name, email), conversation history per contact | alpha (history view: beta) |
-| Conversations | Subject, status (open, pending, resolved, closed), priority, assignee, tags (agents create, rename and delete tags) | alpha |
-| Messages | Outgoing reply and private note; Markdown body; ordered timeline. Incoming messages arrive with the email channel | alpha |
-| Inbox views | Filter by status, assignee (me / unassigned / anyone), tag; text search on subject and body | alpha |
-| Email channel | Inbound via provider webhook, outbound SMTP/API, Message-ID threading, spoof and loop protection | alpha |
-| Freshdesk import | Tickets, replies, notes, attachments (checksummed), tags, contacts, reconcile report | alpha |
+| Workspaces | Multi-tenant; every row scoped by `workspace_id`; no cross-workspace reads; admin sets workspace IANA timezone, each agent may set an override (validated IANA names) | 1.0 |
+| Agents | Passwordless sign-in by one-time pairing/invite links (see Authentication), roles `admin` / `agent`, session list with revoke | 1.0 |
+| Contacts | Customer records (name, email), conversation history per contact | 1.0 |
+| Conversations | Subject, status (open, pending, resolved, closed), priority, assignee, tags (agents create, rename and delete tags) | 1.0 |
+| Messages | Outgoing reply and private note; Markdown body; ordered timeline. Incoming messages arrive with the email channel | 1.0 |
+| Inbox views | Filter by status, assignee (me / unassigned / anyone), tag; text search on subject and body | 1.0 |
+| Email channel | Inbound via provider webhook, outbound SMTP/API, Message-ID threading, spoof and loop protection | 1.0 |
+| Freshdesk import | Tickets, replies, notes, attachments (checksummed), tags, contacts, reconcile report | 1.0 |
 | AI included | Draft reply and triage from past replies and knowledge base; auto-answer repetitive tickets; usage metering | AI included |
-| Knowledge base | Articles, collections, media library, public help center, Freshdesk solutions import, article links in replies | alpha |
+| Knowledge base | Articles, collections, media library, public help center, Freshdesk solutions import, article links in replies | 1.0 |
 | Automation | Rules on conversation events (assign, tag, set status), macros (saved replies + actions) | later |
 | SLA | First-response and resolution targets, business hours, breach alerts | later |
 | Time tracking | Time entries per conversation, CSV export (MSP need) | later |
 | CSAT and reports | Rating after resolve; response/resolution times, volume per agent | later |
 | Live chat widget | Embeddable website chat into the same inbox | later |
-| MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP with tokens that hold the permissions their person chose: `/mcp` serves read and triage tools (`docs/user/mcp.md`); every inbox action available to them later | alpha (MCP read and triage tools), AI included (skills, drafts) |
+| MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP with tokens that hold the permissions their person chose: `/mcp` serves read and triage tools (`docs/user/mcp.md`); every inbox action available to them later | 1.0 (MCP read and triage tools), AI included (skills, drafts) |
 | Billing | 14-day free trial, then a Polar subscription; an expired workspace is locked (sign in, pay, export only) | cloud only |
 
 ## v0.1 acceptance

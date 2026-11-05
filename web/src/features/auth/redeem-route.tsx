@@ -75,8 +75,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   const appOrigin = config.data?.app_origin ?? '';
   // On a workspace's own host a new team cannot start here: sign-up and finding a workspace are on APP_ORIGIN.
   const findWorkspaceAt = config.data?.workspace_hosts && appOrigin !== '' && appOrigin !== window.location.origin ? `${appOrigin}/sign-in` : undefined;
+  const hostedCloud = cloudConfig?.enabled === true && config.data?.billing.enabled === true;
 
-  return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
+  return <RedeemPage token={token} cloudEnabled={cloudEnabled} hostedCloud={hostedCloud} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
     buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>

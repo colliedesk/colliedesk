@@ -22,10 +22,12 @@ interface RedeemPageProps {
   signedOut?: boolean;
   // trial is true for the website's "Start free trial" link; the page then greets a new team.
   trial?: boolean;
+  // hostedCloud is true on Colliedesk Cloud (cloud sign-in with billing), whose status page the page links.
+  hostedCloud?: boolean;
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false, trial = false,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false, trial = false, hostedCloud = false,
 }: RedeemPageProps) {
   const buyer = !token && cloudEnabled && buying !== undefined;
   // A new team can only start a trial where sign-up is on; a buy link wins, since the buyer pays at once.
@@ -35,7 +37,10 @@ export function RedeemPage({
       <div className="signin-brand">
         <div className="signin-brand-lockup"><LogoMark size={40} /><LogoWordmark /></div>
         <p className="signin-tagline">{messages.signInTagline}</p>
-        <p className="signin-status">{messages.signInAlpha}</p>
+        <p className="signin-status">
+          <a href={messages.gaGuaranteesURL} target="_blank" rel="noreferrer">{messages.gaGuarantees}</a>
+          {hostedCloud && <>{' · '}<a href={messages.statusURL} target="_blank" rel="noreferrer">{messages.serviceStatus}</a></>}
+        </p>
         <p className="signin-footnote">{messages.signInFootnote}</p>
       </div>
       <section className="redeem-panel">

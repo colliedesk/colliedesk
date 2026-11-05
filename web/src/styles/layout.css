@@ -96,6 +96,7 @@
 .signin-tagline { max-width: 26rem; font: 500 30px/1.12 var(--font-display); letter-spacing: -0.02em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-status { max-width: 26rem; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
+.signin-status a { color: var(--on-brand-panel); text-decoration: underline; text-underline-offset: 2px; }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }
 .signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
 .signin-split .redeem-panel .brand-lockup { display: none; }
