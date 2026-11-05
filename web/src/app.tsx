@@ -217,6 +217,28 @@ const articleRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute key={articleId} articleId={articleId} />} />;
   },
 });
+// The help center's languages, and the articles missing or outdated in one of them (in the address).
+const languagesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/languages',
+  validateSearch: (search: Record<string, unknown>): { locale?: string; state?: 'missing' | 'outdated' | 'translated' } => ({
+    ...(typeof search.locale === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(search.locale) ? { locale: search.locale } : {}),
+    ...(search.state === 'missing' || search.state === 'outdated' || search.state === 'translated' ? { state: search.state } : {}),
+  }),
+  component: function Languages() {
+    const search = languagesRoute.useSearch();
+    return <Part part={kbPart} failed={kbFailed} render={({ LanguagesRoute }) => <LanguagesRoute search={search} />} />;
+  },
+});
+// One language of an article, beside the original; it also starts a translation.
+const translationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/articles/$articleId/translations/$locale',
+  component: function Translation() {
+    const { articleId, locale } = translationRoute.useParams();
+    return <Part part={kbPart} failed={kbFailed} render={({ TranslationRoute }) => <TranslationRoute key={`${articleId}-${locale}`} articleId={articleId} locale={locale} />} />;
+  },
+});
 // While the chunk loads the page keeps its frame and title, so a slow network shows Settings at once and
 // nothing jumps when the sections arrive. A chunk that cannot load says so, with Reload page: a browser
 // keeps a failed import failed until the page loads again.
@@ -406,7 +428,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

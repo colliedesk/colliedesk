@@ -5,6 +5,7 @@ import { Icon } from './editor/icons';
 import type { IconName } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { mediaMessages } from './media-messages';
+import { translationMessages } from './translation-messages';
 import { useHolds } from '../../lib/permissions-context';
 
 // The pieces the knowledge base pages share: dialogs that are bottom sheets on a phone, menus, toasts.
@@ -166,7 +167,7 @@ export function KBToast({ text, undo, onUndo, onDismiss }: { text: string; undo?
 }
 
 interface HeadProps {
-  current: 'articles' | 'media';
+  current: 'articles' | 'media' | 'languages';
   heading: string;
   // articles counts the live articles, from the collections; the Media tab has no count the API gives.
   articles?: number;
@@ -184,6 +185,7 @@ export function KBHead({ current, heading, articles, actions }: HeadProps) {
         {holds('kb_articles:read') && <a href="/knowledge" aria-current={current === 'articles' ? 'page' : undefined}>
           {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>}
         {holds('kb_media:read') && <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>}
+        {holds('kb_articles:read') && holds('help_center:read') && <a href="/knowledge/languages" aria-current={current === 'languages' ? 'page' : undefined}>{translationMessages.languagesTab}</a>}
       </nav>
       {actions && <div className="kb-head-actions">{actions}</div>}
     </header>
