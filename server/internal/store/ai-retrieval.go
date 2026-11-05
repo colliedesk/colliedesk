@@ -155,10 +155,11 @@ const aiReadableArticle = `a.workspace_id=d.workspace_id AND a.id=d.kb_article_i
 const aiReadableTranslation = `(d.kb_locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=d.workspace_id
 	AND t.article_id=d.kb_article_id AND t.locale=d.kb_locale AND t.status='published' AND t.deleted_at IS NULL))`
 
-// aiPublishedTranslationOf is the check of a row of ai_retrieval_docs named by alias before it is
-// scored: an article's own text, or a translation that is published and outside the trash. A row an
-// older build left for a translation that is a draft now (the translations migration keeps the index
-// as it was) neither scores nor hides the article's other texts; the next build of the article drops it.
+// aiPublishedTranslationOf is the check of a row of ai_retrieval_docs named by alias: an article's own
+// text, or a translation that is published and outside the trash. A row an older build left for a
+// translation that is a draft now (the translations migration keeps the index as it was) neither hides
+// the article's own text from a reader of that language nor wins its article's place (the same check
+// on the scored rows, in best); the next build of the article drops it.
 func aiPublishedTranslationOf(alias string) string {
 	return `(` + alias + `.kb_locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=` + alias + `.workspace_id
 	AND t.article_id=` + alias + `.kb_article_id AND t.locale=` + alias + `.kb_locale AND t.status='published' AND t.deleted_at IS NULL))`
@@ -197,9 +198,11 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 			languages = ` AND (kb_locale = $4 OR (kb_locale IS NULL AND NOT EXISTS (SELECT 1 FROM ai_retrieval_docs o
 				WHERE o.workspace_id=$1 AND o.kb_article_id=ai_retrieval_docs.kb_article_id AND o.kb_locale=$4 AND ` + aiPublishedTranslationOf("o") + `)))`
 		}
-		kbSQL := `WITH ` + aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL`+
-			languages+` AND `+aiPublishedTranslationOf("ai_retrieval_docs")) + `,
-			best AS (SELECT DISTINCT ON (source) id, s FROM score ORDER BY source, s DESC, locale NULLS FIRST),
+		kbSQL := `WITH ` + aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL`+languages) + `,
+			best AS (SELECT DISTINCT ON (source) id, s FROM score
+				WHERE score.locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.article_id=score.source::uuid
+					AND t.locale=score.locale AND t.status='published' AND t.deleted_at IS NULL)
+				ORDER BY source, s DESC, locale NULLS FIRST),
 			top AS (SELECT id, s FROM best ORDER BY s DESC LIMIT $3 + ` + aiRecheckSlack + `)
 			SELECT d.kb_article_id::text, COALESCE(d.kb_locale, ''), a.number, d.title, d.body, top.s
 			FROM top JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=top.id JOIN kb_articles a ON ` + aiReadableArticle + `
