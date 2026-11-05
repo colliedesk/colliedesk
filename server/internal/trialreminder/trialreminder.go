@@ -1,5 +1,5 @@
 // Package trialreminder emails a workspace's admins as its free trial runs out: once three days before
-// the trial ends and once on the day it ends (the day in the workspace's timezone).
+// the trial ends and once on the day it ends (the day in each admin's timezone, else the workspace's).
 package trialreminder
 
 import (
@@ -120,17 +120,32 @@ func (s *Service) candidates(ctx context.Context, now time.Time) ([]string, erro
 	return ids, nil
 }
 
-type admin struct{ id, email string }
+// admin is one person who is reminded: the timezone they read the day and time in (their own, else the
+// workspace's) and the reminder that is due for them.
+type admin struct{ id, email, timezone, kind string }
 
 // reminder is what one workspace's pass found due: the admins this pass claimed.
 type reminder struct {
-	id, name, slug, timezone, kind string
-	trialEnd                       time.Time
-	admins                         []admin
+	id, name, slug string
+	trialEnd       time.Time
+	// stillMoving: the team signed up to leave its helpdesk and has not answered a real ticket here yet.
+	stillMoving bool
+	admins      []admin
 }
 
-// remind claims, for each admin of the workspace who has not had this reminder for this trial end, the
-// right to send it, then sends. The claim is committed first: two servers claiming at once cannot both win.
+// stillMovingSQL says whether the workspace signed up to leave its helpdesk and has no real reply yet.
+// A real reply is the usage definition (outgoing, written here, not a notice) to a contact who is not an
+// agent of the workspace: the answer to an admin's own test message does not count.
+const stillMovingSQL = `SELECT coalesce((SELECT o.goal='leave_helpdesk' FROM workspace_onboarding o WHERE o.workspace_id=$1), false)
+	AND NOT EXISTS (SELECT 1 FROM messages m
+		JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
+		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
+		WHERE m.workspace_id=$1 AND m.kind='outgoing' AND m.origin IS NULL AND m.notice_kind IS NULL
+		AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=$1 AND lower(a.email)=lower(ct.email)))`
+
+// remind claims, for each admin of the workspace who has not had the reminder now due for them for this
+// trial end, the right to send it, then sends. The claim is committed first: two servers claiming at once
+// cannot both win.
 func (s *Service) remind(ctx context.Context, workspaceID string, now time.Time) (int, error) {
 	var due *reminder
 	err := s.config.DB.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -139,27 +154,31 @@ func (s *Service) remind(ctx context.Context, workspaceID string, now time.Time)
 			return err
 		}
 		found := reminder{id: workspaceID, trialEnd: access.TrialEndsAt}
-		if err := tx.QueryRow(ctx, `SELECT name, slug, timezone FROM workspaces WHERE id=$1`, workspaceID).Scan(&found.name, &found.slug, &found.timezone); err != nil {
+		var workspaceZone string
+		if err := tx.QueryRow(ctx, `SELECT name, slug, timezone FROM workspaces WHERE id=$1`, workspaceID).Scan(&found.name, &found.slug, &workspaceZone); err != nil {
 			return err
 		}
-		if found.kind = dueKind(found.trialEnd, found.timezone, now); found.kind == "" {
-			return nil
+		if err := tx.QueryRow(ctx, stillMovingSQL, workspaceID).Scan(&found.stillMoving); err != nil {
+			return err
 		}
-		// Those who can choose a plan (billing:manage) are reminded.
-		rows, err := tx.Query(ctx, `SELECT a.id::text, lower(a.email) FROM agents a WHERE a.workspace_id=$1 AND `+store.HoldsPermission("$2")+` AND a.deactivated_at IS NULL ORDER BY 2`, workspaceID, "billing:manage")
+		// Those who can choose a plan (billing:manage) are reminded, each in their own timezone.
+		rows, err := tx.Query(ctx, `SELECT a.id::text, lower(a.email), coalesce(a.timezone_override, $3) FROM agents a WHERE a.workspace_id=$1 AND `+store.HoldsPermission("$2")+` AND a.deactivated_at IS NULL ORDER BY 2`, workspaceID, "billing:manage", workspaceZone)
 		if err != nil {
 			return err
 		}
 		admins, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (admin, error) {
 			var a admin
-			return a, row.Scan(&a.id, &a.email)
+			return a, row.Scan(&a.id, &a.email, &a.timezone)
 		})
 		if err != nil {
 			return err
 		}
 		for _, a := range admins {
+			if a.kind = dueKind(found.trialEnd, a.timezone, now); a.kind == "" {
+				continue
+			}
 			tag, err := tx.Exec(ctx, `INSERT INTO workspace_trial_reminders(workspace_id,agent_id,kind,trial_ends_at,status,updated_at) VALUES($1,$2,$3,$4,'claimed',$5)
-				ON CONFLICT DO NOTHING`, workspaceID, a.id, found.kind, found.trialEnd, now)
+				ON CONFLICT DO NOTHING`, workspaceID, a.id, a.kind, found.trialEnd, now)
 			if err != nil {
 				return err
 			}
@@ -187,7 +206,7 @@ func (s *Service) remind(ctx context.Context, workspaceID string, now time.Time)
 func (s *Service) send(ctx context.Context, due reminder, to admin, now time.Time) bool {
 	ctx = context.WithoutCancel(ctx)
 	status := "sent"
-	message, err := s.compose(due, to.email, now)
+	message, err := s.compose(due, to, now)
 	switch {
 	case err != nil:
 		s.config.Logger.Error("trial reminder cannot be composed", "workspace_id", due.id, "error", err)
@@ -212,11 +231,11 @@ func (s *Service) send(ctx context.Context, due reminder, to admin, now time.Tim
 func (s *Service) settle(ctx context.Context, due reminder, to admin, status string, now time.Time) {
 	err := s.config.DB.InWorkspace(ctx, due.id, func(tx pgx.Tx) error {
 		if status == "" {
-			_, err := tx.Exec(ctx, `DELETE FROM workspace_trial_reminders WHERE workspace_id=$1 AND agent_id=$2 AND kind=$3 AND trial_ends_at=$4`, due.id, to.id, due.kind, due.trialEnd)
+			_, err := tx.Exec(ctx, `DELETE FROM workspace_trial_reminders WHERE workspace_id=$1 AND agent_id=$2 AND kind=$3 AND trial_ends_at=$4`, due.id, to.id, to.kind, due.trialEnd)
 			return err
 		}
 		_, err := tx.Exec(ctx, `UPDATE workspace_trial_reminders SET status=$5, updated_at=$6 WHERE workspace_id=$1 AND agent_id=$2 AND kind=$3 AND trial_ends_at=$4`,
-			due.id, to.id, due.kind, due.trialEnd, status, now)
+			due.id, to.id, to.kind, due.trialEnd, status, now)
 		return err
 	})
 	if err != nil {
@@ -224,21 +243,21 @@ func (s *Service) settle(ctx context.Context, due reminder, to admin, status str
 	}
 }
 
-func (s *Service) compose(due reminder, to string, now time.Time) ([]byte, error) {
+func (s *Service) compose(due reminder, to admin, now time.Time) ([]byte, error) {
 	from := s.config.From
 	id, err := email.NewMessageID(from[strings.LastIndex(from, "@")+1:])
 	if err != nil {
 		return nil, err
 	}
 	billing := workspacehost.Origin(s.config.Origin, s.config.HelpCenterDomain, due.slug) + "/settings/billing"
-	subject, body := text(due.kind, due.name, due.trialEnd, due.timezone, billing)
-	return email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ReplyTo: s.config.ReplyTo, ToAddress: to, Subject: subject, Body: body,
+	subject, body := text(to.kind, due.name, due.trialEnd, to.timezone, billing, due.stillMoving)
+	return email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ReplyTo: s.config.ReplyTo, ToAddress: to.email, Subject: subject, Body: body,
 		MessageID: id, Date: now.Truncate(time.Second), Standalone: true})
 }
 
-// dueKind says which reminder the workspace is due at now, or "" for none. The three-day reminder is due
-// from three days before the trial ends; the last one from midnight at the start of the day it ends in the
-// workspace's timezone. Once the trial is over nothing is due.
+// dueKind says which reminder an admin is due at now, or "" for none. The three-day reminder is due from
+// three days before the trial ends; the last one from midnight at the start of the day it ends in the
+// admin's timezone. Once the trial is over nothing is due.
 func dueKind(trialEnd time.Time, timezone string, now time.Time) string {
 	if !now.Before(trialEnd) {
 		return ""
