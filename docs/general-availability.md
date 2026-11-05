@@ -36,11 +36,12 @@ is locked, and on self-hosted servers. See [export all your data](user/export.md
 
 ## Colliedesk Cloud backups
 
-- **Continuous.** Every change to the database is archived within a minute or two, encrypted, to
-  storage off the Cloud server in the EU (Germany). The recovery point is 5 minutes: if the server is lost, at
-  most the last 5 minutes of changes are lost.
-- **Nightly, a second copy.** An encrypted database dump and an encrypted archive of the attachments,
-  also stored off the Cloud server in the EU.
+- **Continuous.** Every change to the database (conversations, messages, contacts, the knowledge base,
+  settings) is archived within a minute or two, encrypted, to storage in another data centre in the EU
+  (Germany). The recovery point is 5 minutes: if the server is lost, at most the last 5 minutes of
+  those changes are lost.
+- **Nightly.** An encrypted archive of the attachment files, and an encrypted database dump as a
+  second copy, also stored in another data centre in the EU. Attachment files are copied once a day.
 - **Restore drills.** We restore from these backups at least every 30 days and check the result.
   Last drill: 2026-11-05.
 
@@ -49,7 +50,7 @@ is locked, and on self-hosted servers. See [export all your data](user/export.md
 Every paid Colliedesk Cloud plan has an uptime commitment of 99.9% in each calendar month. Uptime is
 measured by the checks on [status.colliedesk.com](https://status.colliedesk.com), which run from
 several regions outside the Cloud server. Service credits and support response targets are in the
-[Terms](https://colliedesk.com/terms).
+[Terms](https://colliedesk.com/terms#availability-and-service-level).
 
 ## Self-hosted servers
 
