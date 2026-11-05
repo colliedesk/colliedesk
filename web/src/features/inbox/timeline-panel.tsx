@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
@@ -8,6 +8,9 @@ import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
 import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
+import { mediaKind } from './media-kind';
+import type { GalleryItem } from './media-kind';
+import { mediaViewerPart } from './media-part';
 import { mayTell, noticesOf } from './status-tell';
 import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
@@ -105,6 +108,10 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
   const at = conversation?.last_status_change?.at;
   const next = at ? items.findIndex((item) => Date.parse(item.created_at) >= Date.parse(at)) : -1;
   const eventAt = !at ? -1 : next === -1 ? items.length : next;
+  const media = useMemo(() => galleryOf(items), [items]);
+  const [opened, setOpened] = useState<string | null>(null);
+  const openMedia = useCallback((attachmentId: string) => { mediaViewerPart.preload(); setOpened(attachmentId); }, []);
+  const closeMedia = useCallback(() => setOpened(null), []);
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -139,12 +146,13 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
           {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
-            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} />
+            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} onOpenMedia={openMedia} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
           {eventAt === items.length && event}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>
       </div>
+      {opened && <MediaGalleryAt items={items} media={media} attachmentId={opened} timezone={timezone} onClose={closeMedia} />}
     </section>
   );
 }
@@ -169,4 +177,36 @@ function StatusEvent({ conversation, timezone, canManageChannels }: { conversati
 function HeaderMark({ conversation, timezone }: { conversation: Conversation; timezone: string }) {
   const mark = slaMark(slaOf(conversation), timezone);
   return mark ? <span className={`sla-mark sla-${mark.tone}`} aria-label={mark.full} data-tip={mark.full}><ClockIcon />{mark.header}</span> : null;
+}
+
+// The pictures, videos and voice clips of a conversation in timeline order, as the timeline shows them: not the
+// stored raw email, and not an image embedded in a formatted email (it is part of that email, often a logo).
+function galleryOf(items: Message[]): GalleryItem[] {
+  return items.flatMap((item) => item.attachments
+    .filter((file) => file.id !== item.email?.original_attachment_id && !file.inline)
+    .flatMap((file) => {
+      const kind = mediaKind(file.content_type);
+      return kind ? [{ file, kind, sender: senderOf(item), at: item.created_at }] : [];
+    }));
+}
+
+function senderOf(item: Message) {
+  return item.author_name ?? item.email?.from ?? item.origin?.from ?? messages.someone;
+}
+
+// The gallery opens at the file pressed. An embedded image shown in the plain-text view is in no list: it opens alone.
+function MediaGalleryAt({ items, media, attachmentId, timezone, onClose }: { items: Message[]; media: GalleryItem[]; attachmentId: string; timezone: string; onClose: () => void }) {
+  let list = media;
+  let start = media.findIndex((entry) => entry.file.id === attachmentId);
+  if (start === -1) {
+    const owner = items.find((item) => item.attachments.some((file) => file.id === attachmentId));
+    const file = owner?.attachments.find((entry) => entry.id === attachmentId);
+    const kind = file && mediaKind(file.content_type);
+    if (!owner || !file || !kind) return null;
+    list = [{ file, kind, sender: senderOf(owner), at: owner.created_at }];
+    start = 0;
+  }
+  // Safari does not focus a button on a press: the gallery gives the focus back to the one that opened it by name.
+  const opener = `[data-media-open="${attachmentId}"]`;
+  return <Part part={mediaViewerPart} render={(viewer) => <viewer.MediaGallery items={list} start={start} timezone={timezone} onClose={onClose} opener={opener} />} />;
 }
