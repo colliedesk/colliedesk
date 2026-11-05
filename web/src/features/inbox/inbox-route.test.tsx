@@ -35,6 +35,10 @@ const views = vi.hoisted(() => ({
 }));
 vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
+// The drafts of the open conversation; a test sets what the server holds.
+const drafts = vi.hoisted(() => ({ list: vi.fn(async (_conversation: string, _before?: string): Promise<unknown> => ({ items: [], next_before: null })) }));
+vi.mock('./ai-draft-api', async (original) => ({ ...(await original<typeof import('./ai-draft-api')>()),
+  aiDraftApi: { list: drafts.list, get: vi.fn(), create: vi.fn(), discard: vi.fn(), restore: vi.fn() } }));
 beforeEach(() => testRouter.reset());
 
 const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
@@ -1254,4 +1258,46 @@ test('a role without messages:read is told why the messages are not shown, and n
   expect(api.messages).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: /Views/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+});
+
+// A written draft waiting on a conversation; outcome discarded is what resolving or closing makes of it.
+const writtenDraft = (conversationId: string, outcome: 'discarded' | null) => ({ id: '77777777-7777-4777-8777-777777777777', conversation_id: conversationId,
+  status: 'ready', source: 'written', cc: null, written_by: { token_label: 'Claude', agent_name: 'Alice' }, files: [], error_code: null, prompt: '',
+  text: 'Your refund is on its way.', missing_info: null, sources: [], warnings: [], model: null, outcome, similarity: null, sent_message_id: null,
+  requested_by_agent_id: null, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-14T00:00:00Z', ready_at: '2026-10-14T00:00:00Z',
+  decided_at: outcome ? '2026-10-14T01:00:00Z' : null, decided_by_name: null, restored_at: null });
+
+test('resolving a conversation takes its waiting draft away at once: it moves to Earlier drafts', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.updateConversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let resolved = false;
+  api.conversations.mockImplementation(async () => ({ items: [{ ...alpha, status: resolved ? 'resolved' : 'open' }], page: 1, page_size: 50 }));
+  api.updateConversation.mockImplementation(async () => { resolved = true; return { ...alpha, status: 'resolved' }; });
+  // The server discards the waiting draft when the conversation is resolved.
+  drafts.list.mockImplementation(async () => ({ items: [writtenDraft(alpha.id, resolved ? 'discarded' : null)], next_before: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('region', { name: /draft from claude/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
+  expect(await screen.findByText('Earlier drafts (1)')).toBeInTheDocument();
+});
+
+test('a bulk close takes the waiting draft of the open conversation away at once', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let closed = false;
+  api.conversations.mockImplementation(async () => ({ items: [{ ...alpha, status: closed ? 'closed' : 'open' }], page: 1, page_size: 50 }));
+  api.bulkUpdateConversations.mockReset();
+  api.bulkUpdateConversations.mockImplementation(async () => { closed = true; return { updated: 1 }; });
+  drafts.list.mockImplementation(async () => ({ items: [writtenDraft(alpha.id, closed ? 'discarded' : null)], next_before: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('region', { name: /draft from claude/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
 });

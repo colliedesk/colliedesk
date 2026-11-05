@@ -1660,7 +1660,8 @@ paths:
         Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a
         repeated request returns the message the first one created (200) instead of storing and sending it
         again. Keys belong to the workspace; the same key with another conversation, kind, body, author,
-        `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. A reply draft
+        `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`; a reply sent
+        from a draft must also name the same `ai_draft_id` and `ai_draft_file_ids`. A reply draft
         (`POST /api/v1/conversations/{id}/reply-drafts`) does not use it.
       parameters:
         - name: Idempotency-Key
@@ -1681,6 +1682,16 @@ paths:
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
                 seen_reply_number: {type: integer, minimum: 0, description: 'The newest reply number the sender had seen; 0 when there was none.'}
                 ai_draft_id: {type: string, format: uuid, description: 'The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation''s ready, undecided draft.'}
+                ai_draft_file_ids:
+                  type: array
+                  maxItems: 10
+                  uniqueItems: true
+                  items: {type: string, format: uuid}
+                  description: >-
+                    With ai_draft_id: the files of that draft to send with the reply (`files` of the draft).
+                    Leave it out to send every file of the draft; an empty list sends none. An id that is not
+                    a file of that draft answers 400. The draft's files and any files sent with the reply count
+                    together toward the 10 files and 10 MiB of a message (413 past them).
                 draft:
                   type: boolean
                   description: >-
@@ -1695,6 +1706,11 @@ paths:
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
                 ai_draft_id: {type: string, format: uuid}
+                ai_draft_file_ids:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: uuid}
+                  description: 'One field per file of the draft to send, before the files; leave the field out to send every file of the draft. Send `ai_draft_file_ids` once with an empty value to send none.'
                 files:
                   type: array
                   maxItems: 10
@@ -4986,7 +5002,14 @@ paths:
     get:
       operationId: listAIDrafts
       x-permission: ai_assist:read
-      description: The conversation's newest AI drafts (at most 20), newest first, with how each ended.
+      description: >
+        A page of the conversation's drafts (the AI's and the written ones), newest first, with how each
+        ended: `limit` of them (20 unless asked, at most 50). `next_before` names the last one when older
+        drafts remain; send it as `before` for the next page. 400 when `before` is not a draft of this
+        conversation.
+      parameters:
+        - {name: before, in: query, required: false, description: 'The next_before of the page read before: lists the drafts older than it.', schema: {type: string, format: uuid}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
       responses:
         '200':
           description: AI drafts
@@ -4994,9 +5017,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, next_before]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/AIDraft'}}
+                  next_before: {type: [string, 'null'], format: uuid, description: 'The before of the next page; null on the last page.'}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -5030,7 +5055,8 @@ paths:
       description: >
         Stops a draft still being written (`status` cancelled, which does not count as discarded: nobody
         saw it) or discards a ready one (`outcome` discarded); again on a draft already stopped or discarded
-        it changes nothing. 409 `ai_draft_decided` once it was sent or replaced.
+        it changes nothing. 409 `ai_draft_decided` once it was sent or replaced. A discarded written draft
+        keeps its text and files and can be restored (`POST …/restore`).
       responses:
         '200':
           description: The draft
@@ -5039,6 +5065,58 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/ai-drafts/{draftId}/restore:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: restoreAIDraft
+      x-permission: ai_assist:create
+      description: >
+        Brings an earlier written draft back above the reply box (`source` written, `outcome` superseded,
+        expired or discarded): it waits again with its text, copies and files, `restored_at` says when, and
+        the draft of the same person and token that waited in its place becomes the earlier one
+        (superseded). Restoring the draft that already waits changes nothing. 409
+        `ai_draft_not_restorable` for a draft that was sent, a draft the built-in AI wrote (its outcome
+        feeds the team's AI numbers, so ask for a new one), or one whose text was erased (90 days after it
+        ended). A repeat with the same Idempotency-Key answers the first answer.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The draft, waiting again (also the answer to a repeat with the same Idempotency-Key)
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraft'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: fileId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: downloadAIDraftFile
+      x-permission: ai_assist:read
+      description: >-
+        Streams a file of a reply draft (`files` of the draft) in the caller's workspace, as a download
+        (`Content-Disposition: attachment`, `application/octet-stream`) like an attachment. Only the team
+        reads it; the customer gets it only once a person sends the draft with it.
+      responses:
+        '200':
+          description: File bytes
+          headers:
+            Content-Disposition: {schema: {type: string}}
+            X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/conversations/{id}/ai-triage:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -5713,9 +5791,19 @@ paths:
       description: >
         Leaves the words of a reply for a person to send: a ready draft (`source: written`) above the reply
         box, which a person sends, edits or discards like an AI draft. Calls no AI provider and works while
-        AI drafts are off. A new one replaces the earlier draft of the same person and token. Without
-        `messages:send` the copies may name only addresses already in the conversation (400 otherwise).
-        It expires like an AI draft and goes when the conversation is resolved or closed.
+        AI drafts are off. A new one waits on top of the earlier draft of the same person and token, which
+        becomes an earlier draft (`outcome` superseded): it stays readable with its files and comes back with
+        `POST …/ai-drafts/{draftId}/restore`. Without `messages:send` the copies may name only addresses
+        already in the conversation (400 otherwise). It expires like an AI draft and is discarded when the
+        conversation is resolved or closed; an expired or discarded one can be restored too.
+
+
+        Send `multipart/form-data` (`text`, `cc` fields, then up to 10 `files`, 10 MiB together, like a
+        message) to leave files with it. Only the team sees them (`files` of the draft, downloaded from
+        `GET …/ai-drafts/{draftId}/files/{fileId}`); they reach the customer only when a person sends the
+        draft, with the files they keep (`ai_draft_file_ids` of `POST …/messages`). The files count toward
+        the workspace's storage while the draft holds them; they go when the draft is sent, and 90 days
+        after it ended otherwise.
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
@@ -5729,6 +5817,19 @@ paths:
               properties:
                 text: {type: string, minLength: 1, maxLength: 20000, description: 'The reply, in Markdown.'}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+          multipart/form-data:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 20000, description: 'The reply, in Markdown.'}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                files:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: binary}
+            encoding:
+              files: {contentType: application/octet-stream}
       responses:
         '201':
           description: The draft
@@ -5741,7 +5842,11 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '507':
+          description: The attachments volume is low on disk space; nothing was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/support/problem-reports:
     post:
       operationId: createProblemReport
@@ -9235,7 +9340,7 @@ components:
               provider_cost: {type: [number, 'null'], description: 'What the provider itself said the calls cost, in its own unit (OpenRouter: credits), never converted to dollars; null when it said nothing.'}
     AIDraft:
       type: object
-      required: [id, conversation_id, status, source, cc, written_by, error_code, prompt, text, missing_info, sources, warnings, model, outcome, similarity, sent_message_id, requested_by_agent_id, automatic, answers_message_id, reply_needed, created_at, ready_at, decided_at]
+      required: [id, conversation_id, status, source, cc, written_by, files, error_code, prompt, text, missing_info, sources, warnings, model, outcome, similarity, sent_message_id, requested_by_agent_id, automatic, answers_message_id, reply_needed, created_at, ready_at, decided_at, decided_by_name, restored_at]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -9251,6 +9356,10 @@ components:
               properties:
                 token_label: {type: ['string', 'null'], description: The agent token that wrote it; null when a person did.}
                 agent_name: {type: string, description: 'The person, or the person behind the token.'}
+        files:
+          type: array
+          description: 'Only on a written draft: the files left with it, which only the team sees until a person sends the draft (POST …/messages with ai_draft_id and ai_draft_file_ids). Empty once it was sent, and 90 days after it ended.'
+          items: {$ref: '#/components/schemas/AIDraftFile'}
         error_code: {type: [string, 'null'], description: 'Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled…'}
         prompt: {type: string, description: What the person asked for; erased 90 days after the draft ended.}
         text: {type: [string, 'null'], description: 'The draft, plain text; null until ready, and 90 days after it ended.'}
@@ -9279,6 +9388,17 @@ components:
         created_at: {type: string, format: date-time}
         ready_at: {type: [string, 'null'], format: date-time}
         decided_at: {type: [string, 'null'], format: date-time}
+        decided_by_name: {type: [string, 'null'], description: 'Who sent, discarded or replaced it (a person''s name); null when nobody did (it expired, or was discarded when the conversation was resolved or closed).'}
+        restored_at: {type: [string, 'null'], format: date-time, description: 'When an earlier written draft was last brought back (POST …/restore).'}
+    AIDraftFile:
+      type: object
+      required: [id, filename, content_type, size, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        filename: {type: string}
+        content_type: {type: string}
+        size: {type: integer, minimum: 0, description: Bytes.}
+        created_at: {type: string, format: date-time}
     AISource:
       type: object
       description: An article or a solved conversation an AI draft or suggestion read, named from the database, never by the model.

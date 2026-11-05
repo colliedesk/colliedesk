@@ -19,7 +19,7 @@ import { useSettleTargets, useSLARefresh } from './sla-refresh';
 import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
-import { aiDraftApi, waitingWritten } from './ai-draft-api';
+import { aiDraftApi, earlierWritten, waitingWritten } from './ai-draft-api';
 import { can } from '../../lib/can';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
@@ -182,6 +182,7 @@ export function InboxRoute() {
   // conversation whether or not AI drafts are on. The inbox filter "has a draft waiting" finds the others.
   const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
   const selectedDrafts = waitingWritten(drafts.data?.items);
+  const earlierDrafts = earlierWritten(drafts.data?.items);
   const [draftNotice, setDraftNotice] = useState<string>();
   const afterDraft = (conversationId: string) => {
     void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
@@ -263,8 +264,9 @@ export function InboxRoute() {
   };
   const agentId = me.data?.agent?.id;
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
-    onSuccess: (changed, { changes }) => {
-      if (changes.status) { track('conversation_status_changed', { to: changes.status }); settleTargets(); }
+    onSuccess: (changed, { conversationId, changes }) => {
+      // Resolving or closing discards the drafts that wait (a trigger on the server): read them again.
+      if (changes.status) { track('conversation_status_changed', { to: changes.status }); settleTargets(); void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] }); }
       if (changes.assignee_id) track('conversation_assigned', { to_self: changes.assignee_id === agentId });
       return keepOpened(changed);
     } });
@@ -272,6 +274,7 @@ export function InboxRoute() {
     onSuccess: (_result, { ids, changes }) => {
       const action = bulkActionOf(changes);
       if (action) track('bulk_action_applied', { action, count: ids.length });
+      if (changes.status) for (const id of ids) void client.invalidateQueries({ queryKey: ['ai-drafts', id] });
     },
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
@@ -353,7 +356,9 @@ export function InboxRoute() {
       // the draft waiting, shown in the timeline, to be read before sending again.
       const seen = timeline.data?.items.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0);
       try {
-        await api.createMessage(draft.conversation_id, 'outgoing', edit?.body ?? draft.text ?? '', [], edit?.cc ?? draft.cc ?? [], seen, draft.id);
+        // The draft's files go with it; edit.files names the ones the person kept when they dropped some.
+        await api.createMessage(draft.conversation_id, 'outgoing', edit?.body ?? draft.text ?? '', [], edit?.cc ?? draft.cc ?? [], seen, draft.id, undefined,
+          edit?.files);
       } catch (error) {
         if (!(error instanceof ReplyConflictError)) {
           setDraftNotice(messages.draftRefused(error instanceof Error ? error.message : undefined));
@@ -368,6 +373,13 @@ export function InboxRoute() {
       await afterDraft(draft.conversation_id);
     }}
     onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
+    earlierDrafts={earlierDrafts}
+    earlierDraftsNext={drafts.data?.next_before}
+    onLoadOlderDrafts={openID ? async (before) => {
+      const page = await aiDraftApi.list(openID, before);
+      return { drafts: earlierWritten(page.items), next: page.next_before };
+    } : undefined}
+    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); await afterDraft(draft.conversation_id); } : undefined}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
     // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
     onNewConversation={me.data && !(['messages:send', 'channels:read', 'contacts:read'] as const).every(reads) ? undefined : () => setStarting(true)} />

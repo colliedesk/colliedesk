@@ -936,19 +936,36 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	usage.Close()
 	drafts, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,requested_by_agent_id::text,requested_by_token_id::text,prompt,status,source,cc,text,missing_info,
-			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,automatic,answers_message_id::text,reply_needed,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at
-		FROM ai_drafts WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,automatic,answers_message_id::text,reply_needed,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at,
+			restored_at,restored_by_agent_id::text,
+			COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'filename',f.filename,'content_type',f.content_type,'size',f.size,'sha256',f.sha256,
+				'created_at',f.created_at,'key',f.storage_key) ORDER BY f.created_at,f.id) FROM ai_draft_files f WHERE f.workspace_id=d.workspace_id AND f.draft_id=d.id),'[]')
+		FROM ai_drafts d WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI drafts: %w", err)
 	}
 	defer drafts.Close()
 	for drafts.Next() {
 		var r export.AIDraft
-		var sources, warnings []byte
+		var sources, warnings, files []byte
 		if err := drafts.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Prompt, &r.Status, &r.Source, &r.CC, &r.Text, &r.MissingInfo,
-			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.Automatic, &r.AnswersMessageID, &r.ReplyNeeded, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt); err != nil {
+			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.Automatic, &r.AnswersMessageID, &r.ReplyNeeded, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt,
+			&r.RestoredAt, &r.RestoredByAgentID, &files); err != nil {
 			return fmt.Errorf("export AI drafts: %w", err)
 		}
+		var stored []struct {
+			export.AIDraftFile
+			Key string `json:"key"`
+		}
+		if err := json.Unmarshal(files, &stored); err != nil {
+			return fmt.Errorf("export AI draft files: %w", err)
+		}
+		r.Files = make([]export.AIDraftFile, 0, len(stored))
+		for _, file := range stored {
+			file.StorageKey, file.CreatedAt = file.Key, domain.UTC(file.CreatedAt)
+			r.Files = append(r.Files, file.AIDraftFile)
+		}
+		r.RestoredAt = domain.UTCOptional(r.RestoredAt)
 		r.Sources, r.Warnings = sources, warnings
 		r.CreatedAt, r.ReadyAt, r.DecidedAt, r.TextClearedAt = domain.UTC(r.CreatedAt), domain.UTCOptional(r.ReadyAt), domain.UTCOptional(r.DecidedAt), domain.UTCOptional(r.TextClearedAt)
 		if err := sink.AIDraft(r); err != nil {

@@ -828,6 +828,21 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .reply-draft-recipients { display: grid; gap: 2px; color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
 .reply-draft-copies { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; font-size: var(--fs-small); }
 .reply-draft-copies legend { margin-bottom: var(--space-1); color: var(--text-2); }
+/* A draft's files: each a download, with a box that keeps it on the reply. */
+.reply-draft-files { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; font-size: var(--fs-small); }
+.reply-draft-files legend { margin-bottom: var(--space-1); color: var(--text-2); }
+.reply-draft-files ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.reply-draft-files li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.reply-draft-files a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reply-draft-files .attachment-size { flex: none; }
+/* Earlier drafts: closed by default under the waiting one, each one click from coming back. */
+.earlier-drafts { margin: 0 var(--space-6) var(--space-2); font-size: var(--fs-small); }
+.earlier-drafts summary { color: var(--text-2); cursor: pointer; }
+.earlier-drafts > ul { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.earlier-draft { display: grid; gap: var(--space-1); border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
+.earlier-draft-ending { margin: 0; color: var(--text-3); }
+.earlier-draft .reply-draft-text { margin: 0; color: var(--text-2); }
+@media (max-width: 40rem) { .earlier-drafts { margin-inline: var(--space-3); } }
 .request-recipients { color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
 
 /* Report a problem. */

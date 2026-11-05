@@ -288,11 +288,13 @@ type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
 const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string, draftFiles?: string[]): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
   if (aiDraft) form.append('ai_draft_id', aiDraft);
+  // The draft's files the reply keeps; one empty field keeps none, no field keeps them all.
+  if (draftFiles) for (const id of draftFiles.length > 0 ? draftFiles : ['']) form.append('ai_draft_file_ids', id);
   // Before the files: a reply refused for a newer one stores none of them.
   if (seen !== undefined) form.append('seen_reply_number', String(seen));
   // The server reads the copied addresses before the files, so a refusal costs no upload.
@@ -418,10 +420,13 @@ export const api = {
   // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
   // aiDraft names the AI draft a reply was written from.
   // key names this submit (Idempotency-Key): a retry with the same key returns the message the first stored.
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string) =>
+  // draftFiles names the files of the draft (aiDraft) the reply keeps; left out, it keeps them all.
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string,
+    draftFiles?: string[]) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined,
-      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft)
-        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}) }) }),
+      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft, draftFiles)
+        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}),
+          ...(aiDraft && draftFiles ? { ai_draft_file_ids: draftFiles } : {}) }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string, key: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),

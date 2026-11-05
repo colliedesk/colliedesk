@@ -251,7 +251,21 @@ func (w *Writer) AIUsage(record AIUsage) error {
 	return w.record("ai-usage.ndjson", record)
 }
 
+// AIDraft writes a draft and copies its files into the archive under ai-drafts/<id>/.
 func (w *Writer) AIDraft(record AIDraft) error {
+	if err := w.open("ai-drafts.ndjson"); err != nil {
+		return err
+	}
+	if record.Files == nil {
+		record.Files = []AIDraftFile{}
+	}
+	for index := range record.Files {
+		file := &record.Files[index]
+		file.Path = fmt.Sprintf("ai-drafts/%s/%d-%s", record.ID, index, SanitizeFilename(file.Filename))
+		if err := w.spillFile(spillRecord{ID: file.ID, Key: file.StorageKey, Path: file.Path, Size: file.Size, SHA256: file.SHA256}); err != nil {
+			return err
+		}
+	}
 	return w.record("ai-drafts.ndjson", record)
 }
 

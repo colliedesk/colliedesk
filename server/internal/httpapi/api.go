@@ -820,6 +820,8 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/roles/{id}/restore", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/agents/{id}/roles", auth.PermissionSession},
 		{http.MethodPost, replyDraftsPath, auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}", auth.PermissionSession},
 	}
 }
 

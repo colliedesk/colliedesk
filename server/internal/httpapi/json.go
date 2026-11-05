@@ -11,8 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -68,6 +70,17 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	case errors.Is(err, domain.ErrAIDraftNotReady):
 		writeError(response, http.StatusConflict, "ai_draft_not_ready", "That AI draft is not ready to send from this conversation: it is still being written, or it was already sent, discarded or replaced. Send the reply without ai_draft_id, or ask for a new draft.")
+		return
+	case errors.Is(err, store.ErrDraftFileUnknown):
+		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_file_ids names a file that is not one of this draft's files. "+
+			"Read the draft's files (GET /api/v1/conversations/{id}/ai-drafts/{draftId}) and send only their ids, or leave ai_draft_file_ids out to send them all.")
+		return
+	case errors.Is(err, store.ErrReplyTooManyFiles):
+		writeError(response, http.StatusRequestEntityTooLarge, "attachments_too_many", "The draft's files and the files sent with the reply are more than "+
+			strconv.Itoa(attachments.MaxOutgoingFiles)+" files. Nothing was sent: keep fewer of the draft's files (ai_draft_file_ids).")
+		return
+	case errors.Is(err, store.ErrReplyFilesTooLarge):
+		writeError(response, http.StatusRequestEntityTooLarge, "attachments_too_large", tooLargeMessage+" The draft's files count too: keep fewer of them (ai_draft_file_ids).")
 		return
 	case errors.Is(err, domain.ErrLastAdmin):
 		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Give the Admin role to another active member first.")

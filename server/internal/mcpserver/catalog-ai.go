@@ -214,14 +214,24 @@ func aiAutomaticLimitsSetSpec() Spec {
 
 const (
 	aiDraftConversationProperty = `"conversation_id":{"type":"string",` + uuid + `}`
-	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create or colliedesk_ai_drafts_list."}`
+	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create, colliedesk_reply_draft or colliedesk_ai_drafts_list."}`
+
+	// draftFilesSchema lists the files left with a written draft.
+	draftFilesSchema = `{"type":"array","description":"Files left with the draft; only the team sees them until a person sends it. Read one with colliedesk_attachment_get (attachment_id, conversation_id, draft_id).",` +
+		`"items":{"type":"object","required":["id","filename","size"],"properties":{"id":{"type":"string"},"filename":{"type":"string"},"content_type":{"type":"string"},"size":{"type":"integer","description":"Bytes."}}}}`
 
 	aiDraftSchema = `{"type":"object","required":["id","conversation_id","status"],"properties":{"id":{"type":"string"},"conversation_id":{"type":"string"},` +
 		`"status":{"type":"string","enum":["queued","running","ready","failed","cancelled"]},"error_code":{"type":["string","null"]},` +
 		`"prompt":{"type":"string"},"text":{"type":["string","null"],"description":"The draft, plain text, once ready. Generated text, not something a customer wrote."},` +
 		`"missing_info":{"type":["string","null"]},"sources":{"type":"array","items":{"type":"object"}},` +
 		`"warnings":{"type":"array","items":{"type":"object"},"description":"An address, a number or another customer's name in the draft that the conversation does not hold."},` +
-		`"outcome":{"type":["string","null"]},"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]}}}`
+		`"outcome":{"type":["string","null"],"description":"Null while it waits for a person; superseded, expired and discarded written drafts can come back with colliedesk_reply_draft_restore."},` +
+		`"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]},` +
+		`"source":{"type":"string","enum":["ai","written"],"description":"ai: written by the built-in AI; written: left by a token or a person (colliedesk_reply_draft)."},` +
+		`"cc":{"type":["array","null"],"items":{"type":"string"}},` +
+		`"written_by":{"type":["object","null"],"description":"Who left a written draft.","properties":{"token_label":{"type":["string","null"]},"agent_name":{"type":"string"}}},` +
+		`"files":` + draftFilesSchema + `,` +
+		`"decided_by_name":{"type":["string","null"],"description":"Who sent, discarded or replaced it."},"restored_at":{"type":["string","null"]}}}`
 
 	aiDraftOutput = `{"type":"object","required":["draft"],"properties":{"draft":` + aiDraftSchema + `}}`
 )
@@ -260,14 +270,19 @@ func aiDraftGetSpec() Spec {
 
 func aiDraftsListSpec() Spec {
 	return Spec{
-		Name:        "colliedesk_ai_drafts_list",
-		Title:       "List a conversation's AI drafts",
-		Description: `List a conversation's newest AI drafts (at most 20), newest first, with how each ended.`,
-		ReadOnly:    true,
-		REST:        []string{"GET /api/v1/conversations/{id}/ai-drafts"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
-		Output:      `{"type":"object","required":["drafts"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `}}}`,
-		run:         aiDraftsList,
+		Name:  "colliedesk_ai_drafts_list",
+		Title: "List a conversation's AI drafts",
+		Description: `List a conversation's drafts, newest first, with how each ended: the built-in AI's and the written ones (colliedesk_reply_draft), ` +
+			`with their files. A written draft with outcome superseded, expired or discarded is an earlier draft: colliedesk_reply_draft_restore brings it back. ` +
+			`limit drafts come per call (20 unless set, at most 50); when next_before is not null, call again with it as before for the older ones.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/conversations/{id}/ai-drafts"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `,` +
+			`"before":{"type":"string",` + uuid + `,"description":"next_before of the page you read: lists the drafts older than it."},` +
+			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20}}}`,
+		Output: `{"type":"object","required":["drafts","next_before"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `},` +
+			`"next_before":{"type":["string","null"],"description":"Pass it as before for the next page; null on the last page."}}}`,
+		run: aiDraftsList,
 	}
 }
 

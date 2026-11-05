@@ -66,6 +66,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getForwardingConfirmation,
 		a.listRoles, a.createRole, a.getRole, a.updateRole, a.deleteRole, a.resetRole, a.restoreRole, a.setAgentRoles,
 		a.createReplyDraft,
+		a.restoreAIDraft, a.downloadAIDraftFile,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

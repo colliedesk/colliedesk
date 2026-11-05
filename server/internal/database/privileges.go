@@ -95,6 +95,10 @@ const (
 	// the least recently served while the cache is over its byte cap. Only keys and sizes leave the
 	// transaction; the stored bytes go through the scoped DiscardObject.
 	PrivilegeMailImageSweep Privilege = "mail-image-sweep"
+	// PrivilegeDraftFileSweep removes, in every workspace, the files of reply drafts that were sent,
+	// stopped, or whose text was erased. Only keys leave the transaction; the stored bytes go through the
+	// scoped DiscardObject.
+	PrivilegeDraftFileSweep Privilege = "draft-file-sweep"
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"

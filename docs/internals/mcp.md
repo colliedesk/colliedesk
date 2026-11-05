@@ -83,7 +83,10 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   needs a person in a browser (Gmail, Microsoft, GitHub consent, a fix's GitHub confirmation, billing
   checkout and portal) returns an address only the token's person can finish. `colliedesk_reply_draft`
   writes a draft card (`POST /conversations/{id}/reply-drafts`, `ai_assist:create`) for a person to
-  send. No tool creates a token: `POST /auth/tokens` is `PersonOnly`.
+  send, with files when it gets `files` (multipart, the same fields-then-files reader as a message).
+  `colliedesk_reply_draft_restore` brings an earlier written one back; a draft's file is read through
+  `colliedesk_attachment_get` with `draft_id` rather than a tool of its own. No tool creates a token:
+  `POST /auth/tokens` is `PersonOnly`.
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
   tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every
   other check runs first (assignee, unknown `remove_tags`, a tag in both lists, the conversation

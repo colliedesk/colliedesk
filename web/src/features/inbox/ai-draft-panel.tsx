@@ -66,8 +66,8 @@ export function AIDraftPanel({ conversationId, agentId, hasText, canManage = fal
   useEffect(() => {
     if (!current.data) return;
     const changed = current.data;
-    client.setQueryData<{ items: AIDraft[] }>(['ai-drafts', conversationId], (list) =>
-      list && { items: list.items.map((item) => (item.id === changed.id ? changed : item)) });
+    client.setQueryData<{ items: AIDraft[]; next_before: string | null }>(['ai-drafts', conversationId], (list) =>
+      list && { ...list, items: list.items.map((item) => (item.id === changed.id ? changed : item)) });
   }, [client, conversationId, current.data]);
   const busyWriting = writing(draft);
   useEffect(() => { onWriting?.(busyWriting); }, [busyWriting, onWriting]);

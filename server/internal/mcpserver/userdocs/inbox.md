@@ -260,6 +260,16 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - A reply draft an AI agent left (`colliedesk_reply_draft`) shows above the reply box with the
   token's name; you edit it, send it or discard it. Sending it is a reply like any other, so the same
   check applies.
+- A draft can carry files (up to 10, like a message). They are listed on the draft, each a download,
+  and only your team sees them. Each has a box that is ticked: untick a file to leave it out, and
+  **Send** sends the reply with the files still ticked. The customer receives a draft's files only
+  when someone sends the draft with them.
+- A new draft from the same agent goes on top. The ones before it stay under **Earlier drafts** below
+  the waiting draft, with how each ended (replaced by a newer draft, expired after a week, or
+  discarded, by whom or when the conversation was resolved or closed), their text and files.
+  **Bring back** puts one above the reply box again, files included; the draft that waited there moves
+  to **Earlier drafts**. **Show older drafts** loads the ones before. A sent draft does not come back,
+  and earlier drafts and their files go 90 days after they ended.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
 - **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.

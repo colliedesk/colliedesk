@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"time"
@@ -147,6 +148,8 @@ type Actor struct {
 	RequestID string
 	// AIDraftID is the AI draft a reply was written from; empty otherwise.
 	AIDraftID string
+	// AIDraftFileIDs are the files of that draft the reply carries; nil carries every one of them.
+	AIDraftFileIDs *[]string
 	// NoticeKind marks a reply the channel sends by itself (its received notice): no reply of the team.
 	NoticeKind string
 	// Via sends a notice through this chat channel, to the place the conversation's newest item of it is
@@ -215,17 +218,57 @@ func (s *Store) CreateReplyOnce(ctx context.Context, workspaceID, conversationID
 			return domain.Message{}, false, err
 		}
 	}
-	message, err = s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, files)
+	// The files of the draft the reply is sent from go with it, as attachments on the same bytes; the
+	// draft's own rows go in this transaction, so no file is counted twice.
+	var draftFiles []NewAttachment
+	var leftBehind []string
+	if kind == "outgoing" {
+		if draftFiles, leftBehind, err = draftFilesForReply(ctx, tx, workspaceID, conversationID, actor.AIDraftID, actor.AIDraftFileIDs, files); err != nil {
+			return domain.Message{}, false, err
+		}
+	} else if actor.AIDraftFileIDs != nil && len(*actor.AIDraftFileIDs) > 0 {
+		return domain.Message{}, false, ErrDraftFileUnknown
+	}
+	// The draft's rows go before the reply's attachment rows come: the storage cap then counts the kept
+	// files once. Their keys stay locked (VerifyObjects) until the commit, so no cleanup takes the bytes.
+	if kind == "outgoing" && actor.AIDraftID != "" && (len(draftFiles) > 0 || len(leftBehind) > 0) {
+		keys := slices.Clone(leftBehind)
+		for _, file := range draftFiles {
+			keys = append(keys, file.Object.Key)
+		}
+		if err := lockObjects(ctx, tx, keys); err != nil {
+			return domain.Message{}, false, err
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM ai_draft_files WHERE workspace_id=$1 AND draft_id::text=$2`, workspaceID, actor.AIDraftID); err != nil {
+			return domain.Message{}, false, fmt.Errorf("hand the draft's files to the reply: %w", err)
+		}
+	}
+	message, err = s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, append(slices.Clone(files), draftFiles...))
 	if err != nil {
 		return domain.Message{}, false, err
 	}
 	if key != "" {
-		if _, err := tx.Exec(ctx, `INSERT INTO message_idempotency_keys(workspace_id,key,message_id) VALUES($1,$2,$3)`, workspaceID, key, message.ID); err != nil {
+		var selection *draftSelection
+		if actor.AIDraftID != "" {
+			selection = &draftSelection{Draft: actor.AIDraftID, Pick: sortedPick(actor.AIDraftFileIDs), Files: []selectedFile{}}
+			for _, file := range draftFiles {
+				selection.Files = append(selection.Files, selectedFile{Name: file.Filename, Size: file.Object.Size, SHA256: file.Object.SHA256})
+			}
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO message_idempotency_keys(workspace_id,key,message_id,draft_selection) VALUES($1,$2,$3,$4)`,
+			workspaceID, key, message.ID, selection); err != nil {
 			return domain.Message{}, false, fmt.Errorf("remember message key: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Message{}, false, fmt.Errorf("commit message creation: %w", err)
+	}
+	// The draft's files the person left out go, unless another row still uses the same bytes. A failure
+	// keeps them: a stray file costs space, never data.
+	for _, key := range slices.Compact(slices.Sorted(slices.Values(leftBehind))) {
+		if err := s.DiscardObject(context.WithoutCancel(ctx), workspaceID, key); err != nil {
+			slog.Error("discard a draft file left out of the reply", "error", err)
+		}
 	}
 	return message, false, nil
 }
@@ -237,9 +280,10 @@ func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, 
 		return domain.Message{}, false, fmt.Errorf("lock message key: %w", err)
 	}
 	var messageID, existingConversation, existingKind, existingBody, author string
-	err := tx.QueryRow(ctx, `SELECT m.id::text,m.conversation_id::text,m.kind,m.body,COALESCE(m.author_agent_id::text,'')
+	var selection *draftSelection
+	err := tx.QueryRow(ctx, `SELECT m.id::text,m.conversation_id::text,m.kind,m.body,COALESCE(m.author_agent_id::text,''),k.draft_selection
 		FROM message_idempotency_keys k JOIN messages m ON m.workspace_id=k.workspace_id AND m.id=k.message_id
-		WHERE k.workspace_id=$1 AND k.key=$2`, workspaceID, key).Scan(&messageID, &existingConversation, &existingKind, &existingBody, &author)
+		WHERE k.workspace_id=$1 AND k.key=$2`, workspaceID, key).Scan(&messageID, &existingConversation, &existingKind, &existingBody, &author, &selection)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Message{}, false, nil
 	}
@@ -266,10 +310,56 @@ func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, 
 	for _, file := range message.Attachments {
 		stored = append(stored, fileIdentity{name: file.Filename, size: file.Size, sha256: file.SHA256})
 	}
+	// A reply sent from a draft also carries the draft's files, which a repeat no longer finds on the
+	// draft: the key remembers the draft, the files asked for and the ones that went, so a repeat must
+	// name the same draft and files, and upload the same files besides.
+	if selection != nil || actor.AIDraftID != "" {
+		if selection == nil || selection.Draft != actor.AIDraftID || !samePick(selection.Pick, actor.AIDraftFileIDs) {
+			return domain.Message{}, false, ErrIdempotencyKeyReused
+		}
+		for _, file := range selection.Files {
+			if index := slices.Index(stored, fileIdentity{name: file.Name, size: file.Size, sha256: file.SHA256}); index >= 0 {
+				stored = slices.Delete(stored, index, index+1)
+			}
+		}
+	}
 	if messageInputFingerprint(cc, sent) != messageInputFingerprint(message.CC, stored) {
 		return domain.Message{}, false, ErrIdempotencyKeyReused
 	}
 	return message, true, nil
+}
+
+// draftSelection is what a reply sent from a draft took from it, kept with its Idempotency-Key: the
+// draft, the files asked for (ai_draft_file_ids, sorted; nil for all of them) and the files that went.
+type draftSelection struct {
+	Draft string         `json:"draft"`
+	Pick  *[]string      `json:"pick"`
+	Files []selectedFile `json:"files"`
+}
+
+type selectedFile struct {
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
+func sortedPick(pick *[]string) *[]string {
+	if pick == nil {
+		return nil
+	}
+	sorted := slices.Sorted(slices.Values(*pick))
+	if sorted == nil {
+		sorted = []string{}
+	}
+	return &sorted
+}
+
+func samePick(stored, asked *[]string) bool {
+	asked = sortedPick(asked)
+	if stored == nil || asked == nil {
+		return stored == nil && asked == nil
+	}
+	return slices.Equal(*stored, *asked)
 }
 
 // fileIdentity is what makes two files of a message the same one: name, size and bytes.

@@ -25,16 +25,32 @@ func replyDraftSpec() Spec {
 		Title: "Draft a reply for a person to send",
 		Description: `Leave a reply draft on a conversation. Nothing reaches the customer: the draft shows above the reply box with your token's name, ` +
 			`and a person edits it, sends it or discards it. Use it when a person should check the words before they go out, or when you may not send. ` +
-			`A new draft replaces the one this token left there before. ` +
-			`A draft carries no files: a person attaches them when they send it. Without messages:send, cc may name only people already on the conversation.`,
+			`A new draft shows on top of the one this token left there before, which stays as an earlier draft: colliedesk_ai_drafts_list shows them and colliedesk_reply_draft_restore brings one back. ` +
+			`files leaves up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64), with the draft: only the team sees them, and they reach the customer only when a person sends the draft with them. ` +
+			`Without messages:send, cc may name only people already on the conversation.`,
 		REST: []string{"POST /api/v1/conversations/{id}/reply-drafts"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The reply text (Markdown)."},` +
-			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy when it is sent."}}}`,
-		Output: `{"type":"object","required":["draft","next"],"properties":{"draft":{"type":"object","required":["id","conversation_id","status"],"properties":{` +
-			`"id":{"type":"string"},"conversation_id":{"type":"string"},"status":{"type":"string"}}},"next":{"type":"string"}}}`,
+			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy when it is sent."},` + filesProperty + `}}`,
+		Output: `{"type":"object","required":["draft","next"],"properties":{"draft":{"type":"object","required":["id","conversation_id","status","files"],"properties":{` +
+			`"id":{"type":"string"},"conversation_id":{"type":"string"},"status":{"type":"string"},"files":` + draftFilesSchema + `}},"next":{"type":"string"}}}`,
 		run: replyDraft,
+	}
+}
+
+func replyDraftRestoreSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_reply_draft_restore",
+		Title: "Bring an earlier reply draft back",
+		Description: `Bring an earlier written reply draft back above the reply box, with its text, copies and files: one that a newer draft replaced (outcome superseded), ` +
+			`that expired, or that a person discarded (find them with colliedesk_ai_drafts_list). The draft of the same author that waited in its place becomes the earlier one; ` +
+			`nothing reaches the customer. A draft that was sent, a draft the built-in AI wrote, or one whose text was erased (90 days after it ended) cannot come back: write a new one with colliedesk_reply_draft.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/restore"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `}}`,
+		Output:     `{"type":"object","required":["draft","next"],"properties":{"draft":` + aiDraftSchema + `,"next":{"type":"string"}}}`,
+		run:        replyDraftRestore,
 	}
 }
 

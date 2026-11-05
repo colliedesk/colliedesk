@@ -50,6 +50,7 @@ func Catalog() []Spec {
 		helpCenterThemeGetSpec(), helpCenterThemeCheckSpec(), helpCenterSearchConsoleGetSpec(), helpCenterFreshdeskRedirectGetSpec(), helpCenterDomainGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(),
+		replyDraftRestoreSpec(),
 		workspaceExportSpec(), billingActionSpec(), emailChannelDisconnectSpec(),
 		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),

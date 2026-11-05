@@ -30,6 +30,7 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 		CC              []string        `json:"cc"`
 		SeenReplyNumber *int            `json:"seen_reply_number"`
 		AIDraftID       string          `json:"ai_draft_id"`
+		AIDraftFileIDs  *[]string       `json:"ai_draft_file_ids"`
 		Files           []inlineFileArg `json:"files"`
 	}](arguments)
 	if err != nil {
@@ -40,6 +41,9 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 	}
 	if args.SeenReplyNumber == nil {
 		return nil, &toolError{"Pass seen_reply_number: the latest_reply_number of colliedesk_conversation_get for this conversation. Nothing was sent."}
+	}
+	if args.AIDraftFileIDs != nil && args.AIDraftID == "" {
+		return nil, &toolError{"ai_draft_file_ids goes with ai_draft_id, the draft whose files the reply carries. Nothing was sent."}
 	}
 	files, err := decodeFiles(args.Files)
 	if err != nil {
@@ -56,6 +60,15 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 		if args.AIDraftID != "" {
 			fields = append(fields, [2]string{"ai_draft_id", args.AIDraftID})
 		}
+		if args.AIDraftFileIDs != nil {
+			// One field per file kept; one empty field keeps none.
+			if len(*args.AIDraftFileIDs) == 0 {
+				fields = append(fields, [2]string{"ai_draft_file_ids", ""})
+			}
+			for _, id := range *args.AIDraftFileIDs {
+				fields = append(fields, [2]string{"ai_draft_file_ids", id})
+			}
+		}
 		contentType, form := messageForm(fields, files)
 		err = c.rest.sendBytes(c.ctx, c.token, http.MethodPost, path, contentType, nil, form, &created)
 	} else {
@@ -65,6 +78,9 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 		}
 		if args.AIDraftID != "" {
 			request["ai_draft_id"] = args.AIDraftID
+		}
+		if args.AIDraftFileIDs != nil {
+			request["ai_draft_file_ids"] = *args.AIDraftFileIDs
 		}
 		err = c.rest.do(c.ctx, c.token, http.MethodPost, path, nil, request, &created)
 	}

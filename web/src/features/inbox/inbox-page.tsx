@@ -13,7 +13,7 @@ import { InboxFilters } from './inbox-filters';
 import type { InboxQuery } from '../../lib/inbox-query';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
-import { ReplyDraftCard } from './reply-draft-card';
+import { EarlierDrafts, ReplyDraftCard } from './reply-draft-card';
 import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
@@ -104,6 +104,10 @@ interface InboxPageProps {
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
   // Reply drafts AI agents left on the selected conversation, and the conversations that have one.
   replyDrafts?: AIDraft[];
+  // Written drafts a newer one replaced, or that expired or were discarded: they can come back.
+  earlierDrafts?: AIDraft[];
+  earlierDraftsNext?: string | null;
+  onLoadOlderDrafts?: (before: string) => Promise<{ drafts: AIDraft[]; next: string | null }>;
   draftConversationIds?: ReadonlySet<string>;
   // viewers are the others who have a conversation open now, by conversation id.
   viewers?: ReadonlyMap<string, ConversationViewer[]>;
@@ -114,6 +118,7 @@ interface InboxPageProps {
   onReplyEdited?: () => void;
   onSendDraft?: (draft: AIDraft, edit?: DraftEdit) => Promise<unknown>;
   onDiscardDraft?: (draft: AIDraft) => Promise<unknown>;
+  onRestoreDraft?: (draft: AIDraft) => Promise<unknown>;
   // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
   contactMatches?: ReactNode;
   onNewConversation?: () => void;
@@ -139,7 +144,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -262,6 +267,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
+        <EarlierDrafts key={selected?.id} drafts={earlierDrafts} timezone={timezone} onRestore={onRestoreDraft} nextBefore={earlierDraftsNext} onLoadOlder={onLoadOlderDrafts} />
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={draftKey ?? selected?.id} disabled={!selected} noReplies={noReplies} draftKey={draftKey} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
