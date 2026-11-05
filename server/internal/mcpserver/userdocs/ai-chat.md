@@ -17,7 +17,10 @@ Both must be on. Off, the chat pages answer `404`, as a help center that is off.
 ## What the AI reads and says
 
 1. **Your published articles**, the ones the help center shows, except those marked **Keep away from
-   AI**. Drafts, articles in the trash and translations are never read. With no published article the
+   AI**. On a page of another [language you show](knowledge-base.md#in-other-languages), each article
+   published in that language is read in it (and its sources link that language's pages); the others
+   in their own language. Drafts, articles and translations in the trash, and languages you hide are
+   never read. With no published article the
    chat says it cannot find an answer and offers **Talk to a person**.
 2. It answers in the language of the question, cites the articles it used, and says so when the
    articles do not answer the question. It never makes up a price, an address or a link: an email

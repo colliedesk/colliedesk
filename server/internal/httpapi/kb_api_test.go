@@ -511,7 +511,7 @@ func TestExportCarriesTheWholeKnowledgeBaseAndNoOtherWorkspace(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET source_html='<p>original</p>', source_meta='{"freshdesk_id": 7}' WHERE id=$1`, article.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) SELECT workspace_id,id,'de','Exportierte Anleitung','Text' FROM kb_articles WHERE id=$1`, article.ID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug) SELECT workspace_id,id,'de','Exportierte Anleitung','Text','e' FROM kb_articles WHERE id=$1`, article.ID); err != nil {
 		t.Fatal(err)
 	}
 	rivalCollection := kbCollection(t, api, rival, map[string]any{"name": "Rival guides"})

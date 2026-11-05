@@ -52,6 +52,12 @@ func ArticlePath(number int64, articleSlug string) string {
 	return "/a/" + strconv.FormatInt(number, 10) + "-" + url.PathEscape(articleSlug)
 }
 
+// TranslationPath is the address of an article's version in another language below its help
+// center's address: the language, then the article's path with the translation's own slug.
+func TranslationPath(locale string, number int64, translationSlug string) string {
+	return "/" + url.PathEscape(locale) + ArticlePath(number, translationSlug)
+}
+
 // CollectionPath is a collection's path below its help center's address: /c/ and the slugs of the
 // collections from the top down to it (a slug is unique only among siblings).
 func CollectionPath(slugs []string) string {

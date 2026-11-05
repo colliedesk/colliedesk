@@ -1,5 +1,5 @@
 {
-  "settings": {"primary_language": "en", "supported_languages": ["es"], "portal_languages": ["es"]},
+  "settings": {"primary_language": "en", "supported_languages": ["es", "fr"], "portal_languages": ["es"]},
   "categories": [
     {"id": 1, "name": "Getting started", "description": "First steps", "created_at": "2023-01-02T08:00:00Z", "updated_at": "2023-02-02T08:00:00Z"},
     {"id": 2, "name": "Billing", "description": null, "created_at": "2023-01-03T08:00:00Z", "updated_at": "2023-01-03T08:00:00Z"}
@@ -65,9 +65,16 @@
     "es": {
       "11": [
         {"id": 101, "type": 1, "category_id": 1, "folder_id": 11, "agent_id": 101, "title": "Restablecer la contraseña", "status": 2,
-         "description": "<p>Abra <b>Ajustes</b>.</p>", "description_text": "Abra Ajustes.", "tags": [], "seo_data": {},
+         "description": "<p>Abra <b>Ajustes</b>.</p>", "description_text": "Abra Ajustes.", "tags": ["clave"], "seo_data": {"meta_title": "Contraseña", "meta_description": "Cómo restablecerla"},
          "hits": 2, "thumbs_up": 0, "thumbs_down": 0, "created_at": "2023-03-10T10:00:00Z", "updated_at": "2023-03-11T10:00:00Z"}
       ]
+    }
+  },
+  "names": {
+    "es": {
+      "c1": {"name": "Primeros pasos", "description": "Los primeros pasos", "updated_at": "2023-02-02T08:00:00Z"},
+      "f11": {"name": "Conceptos básicos", "description": null, "updated_at": "2023-02-02T08:00:00Z"},
+      "f1111": {"name": "Profundo", "description": null, "updated_at": "2023-02-02T08:00:00Z"}
     }
   }
 }

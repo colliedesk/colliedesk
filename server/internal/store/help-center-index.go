@@ -25,3 +25,25 @@ func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID string) ([]doma
 	}
 	return articles, nil
 }
+
+// HelpCenterTranslationIndex returns every published translation of a published article in a language
+// customers see, by article number and language: what sitemap.xml adds to HelpCenterIndex.
+func (s *Store) HelpCenterTranslationIndex(ctx context.Context, workspaceID string) ([]domain.PublicKBTranslation, error) {
+	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBTranslation, error) {
+		rows, err := tx.Query(ctx, `SELECT a.number, t.locale, t.slug, t.updated_at FROM kb_articles a`+shownTranslation(`t.locale`)+`
+			WHERE `+publishedKBArticle+` ORDER BY a.number, hl.position, t.locale`, workspaceID)
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.PublicKBTranslation, error) {
+			var item domain.PublicKBTranslation
+			err := row.Scan(&item.Number, &item.Locale, &item.Slug, &item.UpdatedAt)
+			item.UpdatedAt = domain.UTC(item.UpdatedAt)
+			return item, err
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list help center translation index: %w", err)
+	}
+	return items, nil
+}

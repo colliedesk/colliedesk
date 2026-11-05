@@ -2,6 +2,7 @@ package freshdesk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"strings"
@@ -39,6 +40,19 @@ type UndoResult struct {
 	KBCollections  int      `json:"kb_collections"`
 	KBImages       int      `json:"kb_images"`
 	KeptKBArticles []string `json:"kept_kb_articles"`
+	// KBTranslations counts the imported translations removed from articles that stay; KBCollectionNames
+	// the collection names in other languages; KBLanguages the help center languages the import added
+	// that hold nothing any more. KeptKBTranslations ("<article>:<language>") were changed in Colliedesk
+	// and stay, with their article.
+	KBTranslations     int      `json:"kb_translations"`
+	KBCollectionNames  int      `json:"kb_collection_names"`
+	KBLanguages        int      `json:"kb_languages"`
+	KeptKBTranslations []string `json:"kept_kb_translations"`
+	// KBPrimaryLanguage is the primary language undo gave the help center back (the one it had before
+	// the import made the source's its own); KeptKBPrimaryLanguage the one it left because a person
+	// changed it since, or the old one is now another language of the help center.
+	KBPrimaryLanguage     string `json:"kb_primary_language,omitempty"`
+	KeptKBPrimaryLanguage string `json:"kept_kb_primary_language,omitempty"`
 	// KeptKBImages counts imported images no article shows any more that stay because a person kept
 	// them in the media library.
 	KeptKBImages int `json:"kept_kb_images"`
@@ -62,6 +76,10 @@ const targetExists = `CASE i.entity
 	WHEN 'kb_article' THEN EXISTS(SELECT 1 FROM kb_articles x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'kb_translation' THEN EXISTS(SELECT 1 FROM kb_article_translations x WHERE x.workspace_id=i.workspace_id AND x.article_id=i.target_id
 		AND x.locale=split_part(i.source_id,':',2))
+	WHEN 'kb_collection_name' THEN EXISTS(SELECT 1 FROM kb_collection_translations x WHERE x.workspace_id=i.workspace_id AND x.collection_id=i.target_id
+		AND x.locale=split_part(i.source_id,':',2))
+	WHEN 'kb_primary_language' THEN EXISTS(SELECT 1 FROM help_centers x WHERE x.workspace_id=i.workspace_id AND x.locale=i.source_id)
+	WHEN 'kb_language' THEN EXISTS(SELECT 1 FROM help_center_languages x WHERE x.workspace_id=i.workspace_id AND x.locale=i.source_id)
 	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'chat' THEN EXISTS(SELECT 1 FROM channel_threads x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'chat_item' THEN EXISTS(SELECT 1 FROM channel_thread_items x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
@@ -79,19 +97,27 @@ func (u UndoResult) Markdown() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Freshdesk import undone\n\n- Source: %s\n- Conversations removed: %d\n- Contacts removed: %d\n- Tags removed: %d\n- Saved replies removed: %d\n- Stored files removed: %d\n",
 		u.Source, u.Conversations, u.Contacts, u.Tags, u.SavedReplies, u.Files)
-	fmt.Fprintf(&b, "- Knowledge base removed: %d articles, %d collections, %d images\n", u.KBArticles, u.KBCollections, u.KBImages)
+	fmt.Fprintf(&b, "- Knowledge base removed: %d articles, %d collections, %d images, %d translations of kept articles, %d collection names, %d languages\n",
+		u.KBArticles, u.KBCollections, u.KBImages, u.KBTranslations, u.KBCollectionNames, u.KBLanguages)
 	kept := []struct {
 		what string
 		ids  []string
 	}{
 		{"Conversations kept because they have messages written after the import (Freshdesk ticket ids)", u.KeptConversationTickets},
 		{"Saved replies kept because an agent edited them (Freshdesk canned response ids)", u.KeptSavedReplies},
-		{"Articles kept because they were changed in Colliedesk (Freshdesk article ids)", u.KeptKBArticles},
+		{"Articles kept because they or one of their translations were changed in Colliedesk (Freshdesk article ids)", u.KeptKBArticles},
+		{"Translations kept because they were changed in Colliedesk (Freshdesk article id:language)", u.KeptKBTranslations},
 	}
 	for _, item := range kept {
 		if len(item.ids) > 0 {
 			fmt.Fprintf(&b, "- %s: %s\n", item.what, strings.Join(item.ids, ", "))
 		}
+	}
+	if u.KBPrimaryLanguage != "" {
+		fmt.Fprintf(&b, "- Help center primary language given back: %s\n", u.KBPrimaryLanguage)
+	}
+	if u.KeptKBPrimaryLanguage != "" {
+		fmt.Fprintf(&b, "- Primary language kept as %s: it changed since the import, or the earlier one is now another language of the help center; change it in Settings, Help center\n", u.KeptKBPrimaryLanguage)
 	}
 	if u.KeptKBImages > 0 {
 		fmt.Fprintf(&b, "- Images kept because a person kept them in the media library: %d\n", u.KeptKBImages)
@@ -113,7 +139,8 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	// Undo usually follows an import within minutes, before autovacuum has analyzed the rows it
 	// wrote; with stale statistics the keep query below took 37 s for a 300-ticket import.
 	if err := db.RefreshStatistics(ctx, "import_items", "conversations", "messages", "attachments", "contacts", "tags", "conversation_tags", "time_entries", "saved_replies",
-		"kb_articles", "kb_article_versions", "kb_collections", "kb_media", "kb_article_media", "kb_article_translations"); err != nil {
+		"kb_articles", "kb_article_versions", "kb_collections", "kb_media", "kb_article_media", "kb_article_translations",
+		"kb_article_translation_versions", "kb_collection_translations", "help_center_languages"); err != nil {
 		return UndoResult{}, err
 	}
 	tx, err := db.BeginWorkspace(ctx, workspaceID)
@@ -173,7 +200,7 @@ func undoSource(ctx context.Context, tx pgx.Tx, workspaceID, requested string) (
 }
 
 func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoResult, []string, error) {
-	result := UndoResult{Source: source, KeptConversationTickets: []string{}, KeptSavedReplies: []string{}, KeptKBArticles: []string{}}
+	result := UndoResult{Source: source, KeptConversationTickets: []string{}, KeptSavedReplies: []string{}, KeptKBArticles: []string{}, KeptKBTranslations: []string{}}
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN conversations c ON c.workspace_id=i.workspace_id AND c.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket' AND EXISTS (
 			SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND NOT EXISTS (
@@ -284,9 +311,13 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 // no article links and nobody kept in the library. It returns the storage keys of the images removed
 // and of their thumbnails.
 func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source string, result *UndoResult) ([]string, error) {
+	// A translation is the import's while its newest version is (one with no version predates versions).
+	const translationChanged = `COALESCE((SELECT w.kind FROM kb_article_translation_versions w WHERE w.workspace_id=t.workspace_id AND w.article_id=t.article_id
+		AND w.locale=t.locale ORDER BY w.version DESC LIMIT 1), 'import') <> 'import'`
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article'
-			AND (SELECT v.kind FROM kb_article_versions v WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id ORDER BY v.version DESC LIMIT 1) <> 'import'
+			AND ((SELECT v.kind FROM kb_article_versions v WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id ORDER BY v.version DESC LIMIT 1) <> 'import'
+				OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND `+translationChanged+`))
 		ORDER BY length(i.source_id),i.source_id`, workspaceID, source)
 	if err != nil {
 		return nil, fmt.Errorf("find knowledge base articles to keep: %w", err)
@@ -300,6 +331,30 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 		return nil, fmt.Errorf("undo knowledge base articles: %w", err)
 	}
 	result.KBArticles = int(tag.RowsAffected())
+	// The articles that stay keep the translations a person changed, and lose those only the import wrote.
+	rows, err = tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN kb_article_translations t ON t.workspace_id=i.workspace_id AND t.article_id=i.target_id
+			AND t.locale=split_part(i.source_id,':',2)
+		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_translation' AND `+translationChanged+`
+		ORDER BY length(i.source_id),i.source_id`, workspaceID, source)
+	if err != nil {
+		return nil, fmt.Errorf("find knowledge base translations to keep: %w", err)
+	}
+	if result.KeptKBTranslations, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+		return nil, fmt.Errorf("find knowledge base translations to keep: %w", err)
+	}
+	tag, err = tx.Exec(ctx, `DELETE FROM kb_article_translations t USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_translation'
+		AND t.workspace_id=i.workspace_id AND t.article_id=i.target_id AND t.locale=split_part(i.source_id,':',2) AND NOT (`+translationChanged+`)`, workspaceID, source)
+	if err != nil {
+		return nil, fmt.Errorf("undo knowledge base translations: %w", err)
+	}
+	result.KBTranslations = int(tag.RowsAffected())
+	// Names a person set again (source_meta cleared) stay.
+	tag, err = tx.Exec(ctx, `DELETE FROM kb_collection_translations t USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_collection_name'
+		AND t.workspace_id=i.workspace_id AND t.collection_id=i.target_id AND t.locale=split_part(i.source_id,':',2) AND t.source_meta IS NOT NULL`, workspaceID, source)
+	if err != nil {
+		return nil, fmt.Errorf("undo knowledge base collection names: %w", err)
+	}
+	result.KBCollectionNames = int(tag.RowsAffected())
 	// Deepest first: a collection goes once the collections in it went.
 	for range domain.MaxKBDepth {
 		tag, err := tx.Exec(ctx, `DELETE FROM kb_collections c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity IN ('kb_category','kb_folder')
@@ -335,7 +390,42 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 	}); err != nil {
 		return nil, fmt.Errorf("undo knowledge base images: %w", err)
 	}
-	if result.KBArticles+result.KBCollections+result.KBImages > 0 {
+	// The languages the import added go once nothing is written in them.
+	tag, err = tx.Exec(ctx, `DELETE FROM help_center_languages l USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_language'
+		AND (i.meta->>'created')::boolean AND l.workspace_id=i.workspace_id AND l.locale=i.source_id
+		AND NOT EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=l.workspace_id AND t.locale=l.locale)
+		AND NOT EXISTS (SELECT 1 FROM kb_collection_translations t WHERE t.workspace_id=l.workspace_id AND t.locale=l.locale)`, workspaceID, source)
+	if err != nil {
+		return nil, fmt.Errorf("undo help center languages: %w", err)
+	}
+	result.KBLanguages = int(tag.RowsAffected())
+	// The primary language the import set goes back to the one before, while it is still the import's
+	// and the earlier one is not now another language of the help center (a primary language never is).
+	// After the languages the import added are gone: the earlier one is often one the source supports too.
+	var set, previous, current string
+	err = tx.QueryRow(ctx, `SELECT i.source_id, i.meta->>'previous', COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')
+		FROM import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_primary_language' AND COALESCE(i.meta->>'previous','') <> ''
+		ORDER BY i.updated_at DESC LIMIT 1`, workspaceID, source).Scan(&set, &previous, &current)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, fmt.Errorf("read the primary language the import set: %w", err)
+	default:
+		var listed bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND lower(locale)=lower($2))`, workspaceID, previous).Scan(&listed); err != nil {
+			return nil, fmt.Errorf("read the help center languages: %w", err)
+		}
+		if current == set && !listed {
+			if _, err := tx.Exec(ctx, `UPDATE help_centers SET locale=$2, content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1`,
+				workspaceID, previous); err != nil {
+				return nil, fmt.Errorf("give back the primary language: %w", err)
+			}
+			result.KBPrimaryLanguage = previous
+		} else {
+			result.KeptKBPrimaryLanguage = current
+		}
+	}
+	if result.KBArticles+result.KBCollections+result.KBImages+result.KBTranslations+result.KBCollectionNames+result.KBLanguages > 0 {
 		// A help center page cached under the old content version is stale now.
 		if _, err := tx.Exec(ctx, `UPDATE help_centers SET content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1`, workspaceID); err != nil {
 			return nil, fmt.Errorf("bump knowledge base version: %w", err)

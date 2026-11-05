@@ -429,6 +429,19 @@ type KBCollection struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DeletedAt        *time.Time      `json:"deleted_at"`
 	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	// Translations are its name and description in the help center's other languages; source_meta is
+	// set while a name is as an import wrote it.
+	Translations []KBCollectionTranslation `json:"translations"`
+}
+
+// KBCollectionTranslation is a collection's name and description in one language.
+type KBCollectionTranslation struct {
+	Locale      string          `json:"locale"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	SourceMeta  json.RawMessage `json:"source_meta"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // KBArticle is a knowledge base article in Markdown, also in the trash. SourceHTML is the original HTML
@@ -478,16 +491,56 @@ type KBArticleVersion struct {
 	CreatedAt           time.Time `json:"created_at"`
 }
 
-// KBArticleTranslation is a translation of an article an import brought in.
+// KBArticleTranslation is an article's version in another language, also in the trash. Outdated is
+// set while the article's own words changed since it was last brought up to date.
 type KBArticleTranslation struct {
-	ArticleID  string          `json:"article_id"`
-	Locale     string          `json:"locale"`
-	Title      string          `json:"title"`
-	BodyMD     string          `json:"body_md"`
-	SourceMeta json.RawMessage `json:"source_meta"`
-	SourceHTML *string         `json:"source_html"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
+	ArticleID        string          `json:"article_id"`
+	Locale           string          `json:"locale"`
+	Title            string          `json:"title"`
+	Slug             string          `json:"slug"`
+	BodyMD           string          `json:"body_md"`
+	Status           string          `json:"status"`
+	PublishedAt      *time.Time      `json:"published_at"`
+	SEOTitle         string          `json:"seo_title"`
+	SEODescription   string          `json:"seo_description"`
+	Outdated         bool            `json:"outdated"`
+	OutdatedAt       *time.Time      `json:"outdated_at"`
+	AuthorAgentID    *string         `json:"author_agent_id"`
+	SourceMeta       json.RawMessage `json:"source_meta"`
+	SourceHTML       *string         `json:"source_html"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+}
+
+// KBArticleTranslationVersion is one version of a translation, as KBArticleVersion is of an article.
+type KBArticleTranslationVersion struct {
+	ArticleID           string    `json:"article_id"`
+	Locale              string    `json:"locale"`
+	Version             int       `json:"version"`
+	Kind                string    `json:"kind"`
+	RestoredFromVersion *int      `json:"restored_from_version"`
+	Title               string    `json:"title"`
+	Slug                string    `json:"slug"`
+	BodyMD              string    `json:"body_md"`
+	SEOTitle            string    `json:"seo_title"`
+	SEODescription      string    `json:"seo_description"`
+	Status              string    `json:"status"`
+	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
+	TokenID             *string   `json:"token_id"`
+	TokenLabel          *string   `json:"token_label"`
+	AgentRequestID      *string   `json:"agent_request_id"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// HelpCenterLanguage is a language of the help center besides its primary one.
+type HelpCenterLanguage struct {
+	Locale    string    `json:"locale"`
+	Visible   bool      `json:"visible"`
+	Position  int       `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // KBImage is an image of the knowledge base library; its bytes are the file at Path. Name and Alt are
@@ -562,28 +615,30 @@ type KBMediaReplacement struct {
 // HelpCenter is the public help center's settings, its theme and the knowledge base counters. A null
 // theme field is the default look; the logo and favicon are kb-images.ndjson ids.
 type HelpCenter struct {
-	Enabled           bool      `json:"enabled"`
-	Title             string    `json:"title"`
-	Locale            string    `json:"locale"`
-	ContentVersion    int64     `json:"content_version"`
-	LastArticleNumber int64     `json:"last_article_number"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	LogoMediaID       *string   `json:"logo_media_id"`
-	FaviconMediaID    *string   `json:"favicon_media_id"`
-	LogoAlt           string    `json:"logo_alt"`
-	LinkbackURL       *string   `json:"linkback_url"`
-	ContactURL        *string   `json:"contact_url"`
-	ContactPhone      *string   `json:"contact_phone"`
-	ColorPrimary      *string   `json:"color_primary"`
-	ColorHeader       *string   `json:"color_header"`
-	ColorHeaderText   *string   `json:"color_header_text"`
-	ColorBackground   *string   `json:"color_background"`
-	ColorText         *string   `json:"color_text"`
-	ColorLink         *string   `json:"color_link"`
-	ColorFooter       *string   `json:"color_footer"`
-	BodyFont          *string   `json:"body_font"`
-	HeadingFont       *string   `json:"heading_font"`
-	CustomCSS         string    `json:"custom_css"`
+	Enabled bool   `json:"enabled"`
+	Title   string `json:"title"`
+	// Locale is the primary language; Languages the others, each shown to customers or not.
+	Locale            string               `json:"locale"`
+	Languages         []HelpCenterLanguage `json:"languages"`
+	ContentVersion    int64                `json:"content_version"`
+	LastArticleNumber int64                `json:"last_article_number"`
+	UpdatedAt         time.Time            `json:"updated_at"`
+	LogoMediaID       *string              `json:"logo_media_id"`
+	FaviconMediaID    *string              `json:"favicon_media_id"`
+	LogoAlt           string               `json:"logo_alt"`
+	LinkbackURL       *string              `json:"linkback_url"`
+	ContactURL        *string              `json:"contact_url"`
+	ContactPhone      *string              `json:"contact_phone"`
+	ColorPrimary      *string              `json:"color_primary"`
+	ColorHeader       *string              `json:"color_header"`
+	ColorHeaderText   *string              `json:"color_header_text"`
+	ColorBackground   *string              `json:"color_background"`
+	ColorText         *string              `json:"color_text"`
+	ColorLink         *string              `json:"color_link"`
+	ColorFooter       *string              `json:"color_footer"`
+	BodyFont          *string              `json:"body_font"`
+	HeadingFont       *string              `json:"heading_font"`
+	CustomCSS         string               `json:"custom_css"`
 	// GoogleSiteVerification and BingSiteVerification are the Search Console tokens (null when none).
 	GoogleSiteVerification *string `json:"google_site_verification"`
 	BingSiteVerification   *string `json:"bing_site_verification"`
@@ -1205,6 +1260,7 @@ type Sink interface {
 	KBArticle(KBArticle) error
 	KBArticleVersion(KBArticleVersion) error
 	KBArticleTranslation(KBArticleTranslation) error
+	KBArticleTranslationVersion(KBArticleTranslationVersion) error
 	KBImage(KBImage) error
 	KBVideo(KBVideo) error
 	KBMediaReplacement(KBMediaReplacement) error

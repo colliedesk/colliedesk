@@ -64,7 +64,7 @@ func (v view) articleData(article domain.PublicKBArticle, canonical, description
 	if utf8.RuneCountInString(headline) > headlineChars {
 		headline = string([]rune(headline)[:headlineChars-1]) + "…"
 	}
-	fields := map[string]any{"headline": headline, "url": canonical, "mainEntityOfPage": canonical, "inLanguage": v.site.Locale,
+	fields := map[string]any{"headline": headline, "url": canonical, "mainEntityOfPage": canonical, "inLanguage": v.locale(),
 		"dateModified": article.UpdatedAt.UTC().Format(time.RFC3339), "publisher": map[string]any{"@type": "Organization", "name": v.title()}}
 	if description != "" {
 		fields["description"] = description

@@ -61,6 +61,8 @@ type ChatArticleRef struct {
 	Version int
 	Title   string
 	Folder  string
+	// Locale is the language the article was given in ("" its own).
+	Locale string
 }
 
 // ChatHistoryTurn is an earlier turn of the chat as the AI saw it.
@@ -80,6 +82,9 @@ type ChatPromptInput struct {
 	Question     string
 	// ViewingArticleID is the article the end user is reading, when they ask about it.
 	ViewingArticleID string
+	// Locale is the help center language the end user reads, "" the primary one: an article with a
+	// published translation in it that customers see is given in that language, the others in their own.
+	Locale string
 }
 
 // ChatPrompt is the request for one turn and what the answer may cite.
@@ -120,7 +125,12 @@ func chatWholeLimit(model string) int64 {
 func chatFingerprint(articles []store.ChatKBArticle) []byte {
 	sum := sha256.New()
 	for _, a := range articles {
-		fmt.Fprintf(sum, "%s\x00%d\x00%d\x00%s\x00%s\x01", a.ID, a.Number, a.Version, a.Title, a.Folder)
+		fmt.Fprintf(sum, "%s\x00%d\x00%d\x00%s\x00%s", a.ID, a.Number, a.Version, a.Title, a.Folder)
+		// A translation adds its language and version; an article in its own language is named as before.
+		if a.Locale != "" {
+			fmt.Fprintf(sum, "\x00%s\x00%s", a.Locale, a.TextKey)
+		}
+		sum.Write([]byte{1})
 	}
 	return sum.Sum(nil)
 }
@@ -162,7 +172,7 @@ func chatQuestion(question string) string {
 }
 
 func refOf(a store.ChatKBArticle) ChatArticleRef {
-	return ChatArticleRef{ID: a.ID, Number: a.Number, Version: a.Version, Title: a.Title, Folder: a.Folder}
+	return ChatArticleRef{ID: a.ID, Number: a.Number, Version: a.Version, Title: a.Title, Folder: a.Folder, Locale: a.Locale}
 }
 
 // chatSnapshot is what the server knows of a set of articles for a model.
@@ -180,7 +190,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	var viewing *store.ChatKBArticle
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var err error
-		if articles, err = store.ChatKBArticles(ctx, tx, workspaceID, false); err != nil {
+		if articles, err = store.ChatKBArticlesIn(ctx, tx, workspaceID, false, in.Locale); err != nil {
 			return err
 		}
 		err = tx.QueryRow(ctx, `SELECT kb_tokens,system_tokens,whole FROM ai_chat_kb_snapshots WHERE workspace_id=$1 AND fingerprint=$2 AND model=$3`,
@@ -190,7 +200,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 			return err
 		}
 		if in.ViewingArticleID != "" && isUUID(in.ViewingArticleID) {
-			article, found, err := store.ChatKBArticleByID(ctx, tx, workspaceID, in.ViewingArticleID)
+			article, found, err := store.ChatKBArticleByIDIn(ctx, tx, workspaceID, in.ViewingArticleID, in.Locale)
 			if found {
 				viewing = &article
 			}
@@ -206,7 +216,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	workspace := aiprovider.SystemPart{Text: chatWorkspaceBlock(in.WorkspaceName, in.Instructions)}
 	systemTokens := aiprovider.EstimateTokens(aiprovider.Request{SystemParts: []aiprovider.SystemPart{rules, workspace}})
 	if !snapshot.found {
-		if snapshot, err = s.measureChatKB(ctx, binding, workspaceID, articles, prompt.Fingerprint, systemTokens); err != nil {
+		if snapshot, err = s.measureChatKB(ctx, binding, workspaceID, in.Locale, articles, prompt.Fingerprint, systemTokens); err != nil {
 			return ChatPrompt{}, err
 		}
 	}
@@ -216,7 +226,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	if prompt.Whole {
 		err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 			var err error
-			articles, err = store.ChatKBArticles(ctx, tx, workspaceID, true)
+			articles, err = store.ChatKBArticlesIn(ctx, tx, workspaceID, true, in.Locale)
 			return err
 		})
 		if err != nil {
@@ -238,7 +248,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	}
 	excerptTokens := int64(0)
 	if !prompt.Whole && len(articles) > 0 {
-		excerpts, sent, refs, err := s.chatExcerpts(ctx, workspaceID, in.Question, viewing, articles)
+		excerpts, sent, refs, err := s.chatExcerpts(ctx, workspaceID, in.Locale, in.Question, viewing, articles)
 		if err != nil {
 			return ChatPrompt{}, err
 		}
@@ -296,7 +306,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 // measureChatKB sizes a set of articles for a model the first time they meet: a set far too large is
 // never read; one that may fit is counted by the provider's tokenizer (or bytes ÷ 3), and the answer
 // is kept by fingerprint and model.
-func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceID string, articles []store.ChatKBArticle, fingerprint []byte, systemTokens int64) (chatSnapshot, error) {
+func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceID, locale string, articles []store.ChatKBArticle, fingerprint []byte, systemTokens int64) (chatSnapshot, error) {
 	bytes := 0
 	for _, a := range articles {
 		bytes += a.Size + len(a.Title) + len(a.Folder) + 60
@@ -307,7 +317,7 @@ func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceI
 		var full []store.ChatKBArticle
 		err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 			var err error
-			full, err = store.ChatKBArticles(ctx, tx, workspaceID, true)
+			full, err = store.ChatKBArticlesIn(ctx, tx, workspaceID, true, locale)
 			return err
 		})
 		if err != nil {
@@ -335,7 +345,7 @@ func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceI
 
 // chatExcerpts are the best matching articles of a knowledge base too large to send whole, the
 // article being read first, up to chatExcerptTokens.
-func (s *Service) chatExcerpts(ctx context.Context, workspaceID, question string, viewing *store.ChatKBArticle, articles []store.ChatKBArticle) (string, string, map[int64]ChatArticleRef, error) {
+func (s *Service) chatExcerpts(ctx context.Context, workspaceID, locale, question string, viewing *store.ChatKBArticle, articles []store.ChatKBArticle) (string, string, map[int64]ChatArticleRef, error) {
 	refs := map[int64]ChatArticleRef{}
 	known := make(map[string]store.ChatKBArticle, len(articles))
 	for _, a := range articles {
@@ -348,23 +358,37 @@ func (s *Service) chatExcerpts(ctx context.Context, workspaceID, question string
 			text = viewing.Title + " " + question
 		}
 		var err error
-		docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles})
+		// Only the text this reader gets of each article is scored: its translation in the reader's
+		// language, else its own (locale is a shown language or "").
+		docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles, KBReader: &locale})
 		if err != nil {
 			return err
 		}
-		// The search may match an article by a translation, which the help center does not show: the
-		// excerpt is always the article's own text.
+		// The search may match an article in any of its languages: the excerpt is always the text the
+		// end user's language gets (chatKBSelect): its published translation customers see, or the
+		// article's own text. A draft, a hidden language or another language's text is never sent.
+		var swap []int
+		var ids []string
 		for i, doc := range docs {
-			if doc.Kind != store.AIRetrievedKBArticle || doc.KBLocale == "" {
+			if doc.Kind != store.AIRetrievedKBArticle {
 				continue
 			}
-			original, found, err := store.ChatKBArticleByID(ctx, tx, workspaceID, doc.KBArticleID)
-			if err != nil {
-				return err
+			if a, ok := known[doc.KBArticleID]; ok && doc.KBLocale == a.Locale {
+				continue
 			}
-			docs[i].Text, docs[i].KBLocale = "", ""
-			if found {
-				docs[i].Text = original.Body
+			swap = append(swap, i)
+			ids = append(ids, doc.KBArticleID)
+		}
+		// One read for all of them, not one per article.
+		shown, err := store.ChatKBArticlesByIDIn(ctx, tx, workspaceID, ids, locale)
+		if err != nil {
+			return err
+		}
+		for _, i := range swap {
+			a, found := shown[docs[i].KBArticleID]
+			docs[i].Text, docs[i].KBLocale = a.Body, a.Locale
+			if !found {
+				docs[i].Text, docs[i].KBLocale = "", ""
 			}
 		}
 		return nil

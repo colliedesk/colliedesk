@@ -62,19 +62,7 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 			article.AIExclusion.By = &domain.SavedReplyPerson{AgentID: excludedBy, Name: *excludedByName}
 		}
 	}
-	rows, err := tx.Query(ctx, `SELECT locale,title,body_md,updated_at FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 ORDER BY locale`, workspaceID, id)
-	if err != nil {
-		return article, err
-	}
-	article.Translations, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBArticleTranslation, error) {
-		var translation domain.KBArticleTranslation
-		err := row.Scan(&translation.Locale, &translation.Title, &translation.BodyMD, &translation.UpdatedAt)
-		translation.UpdatedAt = domain.UTC(translation.UpdatedAt)
-		return translation, err
-	})
-	if article.Translations == nil {
-		article.Translations = []domain.KBArticleTranslation{}
-	}
+	article.Translations, err = listKBArticleTranslations(ctx, tx, workspaceID, id)
 	return article, err
 }
 
@@ -503,7 +491,15 @@ func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor A
 		if err := kbLiveAndCurrent(ctx, tx, `kb_articles`, workspaceID, id, seen, domain.ErrKBArticleNotFound); err != nil {
 			return domain.KBArticle{}, err
 		}
+		var wasTitle, wasBody string
+		if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
+			return domain.KBArticle{}, err
+		}
 		if err := write(tx); err != nil {
+			return domain.KBArticle{}, err
+		}
+		// An edit or a restore of the article's own words leaves its translations behind.
+		if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {

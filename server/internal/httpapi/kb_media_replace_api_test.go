@@ -35,8 +35,8 @@ func TestKBMediaReplaceRewritesEveryArticleAndUndoes(t *testing.T) {
 	replacement := uploadKBMedia(t, api, admin, pngImage(91), nil)
 	shows := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Shows it", "status": "published", "body_md": "Before ![a](" + old.URL + ") after"})
 	translated := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Translated", "body_md": "No image here"})
-	if _, err := pool.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md)
-		SELECT workspace_id,id,'de','Übersetzt','![b](/api/v1/kb/images/'||$2||')' FROM kb_articles WHERE id=$1`, translated.ID, strings.ToUpper(old.ID)); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug)
+		SELECT workspace_id,id,'de','Übersetzt','![b](/api/v1/kb/images/'||$2||')','u' FROM kb_articles WHERE id=$1`, translated.ID, strings.ToUpper(old.ID)); err != nil {
 		t.Fatal(err)
 	}
 	// A save links what the translation shows.

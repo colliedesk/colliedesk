@@ -55,11 +55,14 @@ func kbSavepoint[T any](ctx context.Context, tx pgx.Tx, write func(pgx.Tx) (T, e
 }
 
 const kbCollectionColumns = `c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,
-	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.created_at,c.updated_at`
+	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.created_at,c.updated_at,
+	COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'imported',t.source_meta IS NOT NULL,
+		'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY t.locale)
+		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb)`
 
 func kbCollectionTargets(collection *domain.KBCollection) []any {
 	return []any{&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Position,
-		&collection.ArticleCount, &collection.CreatedAt, &collection.UpdatedAt}
+		&collection.ArticleCount, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations}
 }
 
 func scanKBCollection(row pgx.Row) (domain.KBCollection, error) {
@@ -433,7 +436,8 @@ func (s *Store) UndeleteKBCollection(ctx context.Context, workspaceID string, ac
 // kbErrors are the refusals the API maps; anything else is wrapped as a store failure.
 var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNotFound, domain.ErrKBCollectionNotFound, domain.ErrKBImageNotFound, domain.ErrKBMediaNotFound, domain.ErrKBMediaBatchNotFound, domain.ErrKBMediaUploadNotFound, domain.ErrKBMediaUploadLimit, domain.ErrKBMediaUploadIncomplete,
 	domain.ErrKBChanged, domain.ErrKBDuplicateSlug, domain.ErrKBCollectionNotEmpty, domain.ErrKBParentInTrash, domain.ErrKBCollectionInTrash,
-	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit, domain.ErrKBMediaLimit}
+	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit, domain.ErrKBMediaLimit,
+	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed}
 
 func kbError(what string, err error) error {
 	if err == nil {

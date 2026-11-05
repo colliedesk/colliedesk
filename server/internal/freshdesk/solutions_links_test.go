@@ -421,15 +421,27 @@ func TestImportPointsLinksInTranslationsAtTheHelpCenter(t *testing.T) {
 }
 
 // Once a person changes the article, its translations are left and listed too.
-func TestImportLeavesTheTranslationsOfAChangedArticleAndListsThem(t *testing.T) {
+// A translation has its own history: an edit of its article does not stop its links from being
+// rewritten, an edit of the translation does.
+func TestImportLeavesTheLinksOfATranslationAPersonChangedAndListsThem(t *testing.T) {
 	changed := newImportEnv(t).withTranslationLinks()
 	changed.linkRun(t)
 	article := changed.kbArticles(t, changed.workspaceID)["101"]
 	changed.editArticle(t, article.ID, article.Body+"\n\nEdited here.")
+	ctx := context.Background()
+	kbStore := store.New(changed.pool)
+	translation, err := kbStore.GetKBTranslation(ctx, changed.workspaceID, article.ID, "es")
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := translation.Title + " (editado)"
+	if _, err := kbStore.UpdateKBTranslation(ctx, changed.workspaceID, store.Actor{}, article.ID, "es", translation.UpdatedAt, store.KBTranslationChange{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
 	changed.setHelpCenter(t, true)
 	second := changed.linkRun(t)
 	if body := changed.translationBody(t, "101", "es"); !strings.Contains(body, changed.fake.api.URL+"/es/support/solutions/articles/104-use-the-api") {
-		t.Errorf("the translation of a changed article was rewritten: %q", body)
+		t.Errorf("the translation a person changed was rewritten: %q", body)
 	}
 	left := 0
 	for _, link := range second.Links.Left {

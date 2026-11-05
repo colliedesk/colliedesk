@@ -96,7 +96,24 @@ func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) 
 			SELECT id, true, name, 1, $1, now() FROM workspaces WHERE name LIKE 'KB Budget %'`, domain.MaxKBArticles); err != nil {
 			t.Fatal(err)
 		}
-		if err := exec(`ANALYZE kb_articles; ANALYZE kb_article_versions; ANALYZE kb_collections; ANALYZE help_centers`); err != nil {
+		// Workspace A's help center also shows French: every article translated (the published ones
+		// published), its collections named, German listed and hidden. Its pages then pay for languages
+		// at the cap: the hreflang of every page, the multilingual sitemap and the French pages.
+		if err := exec(`WITH w AS (SELECT id FROM workspaces WHERE name='KB Budget A')
+			INSERT INTO help_center_languages(workspace_id,locale,visible,position) SELECT id,v.l,v.shown,v.p FROM w, (VALUES ('fr',true,1),('de',false,2)) v(l,shown,p)`); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec(`INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,slug,body_md,status,published_at)
+			SELECT a.workspace_id,a.id,'fr','Article fr '||a.number,'article-fr-'||a.number,left('fr '||a.body_md,100000),a.status,a.published_at
+			FROM kb_articles a JOIN workspaces w ON w.id=a.workspace_id WHERE w.name='KB Budget A'`); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec(`INSERT INTO kb_collection_translations(workspace_id,collection_id,locale,name)
+			SELECT c.workspace_id,c.id,'fr',c.name||' fr' FROM kb_collections c JOIN workspaces w ON w.id=c.workspace_id WHERE w.name='KB Budget A'`); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec(`ANALYZE kb_articles; ANALYZE kb_article_versions; ANALYZE kb_collections; ANALYZE help_centers; ANALYZE kb_article_translations;
+			ANALYZE kb_collection_translations; ANALYZE help_center_languages`); err != nil {
 			t.Fatal(err)
 		}
 		seedKBMediaBudget(t, exec)

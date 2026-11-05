@@ -39,27 +39,24 @@ func RewriteImportedKBArticleBody(ctx context.Context, tx pgx.Tx, workspaceID, i
 	return true, addKBArticleVersion(ctx, tx, workspaceID, id, Actor{}, domain.KBArticleImported, nil)
 }
 
-// RewriteImportedKBTranslationBody replaces the text of one translation of an imported article with
-// body when its text is still was and the article is outside the trash with the import's version as
-// its newest: translations follow their article's rule, since every change a person makes to them
-// (a media replacement) records an article version. The article row is locked first, as on every
-// path that writes a translation. The translation keeps its timestamps: they are the source's.
+// RewriteImportedKBTranslationBody replaces the text of one translation with body when its text is
+// still was, it is outside the trash and its own newest version is the import's, as a new version of
+// kind import (a person's edit, restore or delete of the translation stops it). The article row is
+// locked first, as on every path that writes a translation. The translation keeps its timestamps:
+// they are the source's.
 func RewriteImportedKBTranslationBody(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale, was, body string) (bool, error) {
 	if err := domain.CheckKBBody(body); err != nil {
 		return false, err
 	}
-	var live bool
-	err := tx.QueryRow(ctx, `SELECT deleted_at IS NULL FROM kb_articles WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, articleID).Scan(&live)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if err := lockKBArticleRow(ctx, tx, workspaceID, articleID); errors.Is(err, domain.ErrKBArticleNotFound) {
 		return false, nil
-	}
-	if err != nil || !live {
+	} else if err != nil {
 		return false, err
 	}
-	if _, imported, err := KBArticleImportedLast(ctx, tx, workspaceID, articleID); err != nil || !imported {
+	if _, imported, err := KBTranslationImportedLast(ctx, tx, workspaceID, articleID, locale); err != nil || !imported {
 		return false, err
 	}
-	tag, err := tx.Exec(ctx, `UPDATE kb_article_translations SET body_md=$5 WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 AND body_md=$4`,
+	tag, err := tx.Exec(ctx, `UPDATE kb_article_translations SET body_md=$5 WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 AND body_md=$4 AND deleted_at IS NULL`,
 		workspaceID, articleID, locale, was, body)
 	if err != nil {
 		return false, fmt.Errorf("rewrite imported knowledge base translation: %w", err)
@@ -67,7 +64,7 @@ func RewriteImportedKBTranslationBody(ctx context.Context, tx pgx.Tx, workspaceI
 	if tag.RowsAffected() == 0 {
 		return false, nil
 	}
-	return true, bumpKB(ctx, tx, workspaceID)
+	return true, addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, Actor{}, domain.KBArticleImported, nil)
 }
 
 // RewriteImportedSavedReplyBody replaces the text of an imported saved reply with body when its text

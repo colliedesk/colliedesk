@@ -1,11 +1,11 @@
 {{define "content"}}
 <section class="hero hero-search">
-<h1 class="hero-title">Search</h1>
+<h1 class="hero-title">{{.T.Search}}</h1>
 {{template "heroSearch" .}}
 </section>
 {{- if .Searched}}
 <section aria-labelledby="results">
-<h2 id="results" class="section-label">{{if .Results}}{{len .Results}} {{if eq (len .Results) 1}}result{{else}}results{{end}} for “{{.Query}}”{{else}}No results for “{{.Query}}”{{end}}</h2>
+<h2 id="results" class="section-label">{{.ResultsLabel}}</h2>
 {{- if .Results}}
 <ol class="results">
 {{- range .Results}}
@@ -17,7 +17,7 @@
 {{- end}}
 </ol>
 {{- else}}
-<p class="empty">Try fewer words, another spelling, or <a href="{{.Home}}">browse the topics</a>.</p>
+<p class="empty">{{.T.TryFewer}} <a href="{{.Home}}">{{.T.BrowseTopics}}</a>.</p>
 {{- end}}
 </section>
 {{- end}}

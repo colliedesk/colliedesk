@@ -70,7 +70,7 @@ func TestAIRetrievalFindsPublishedArticlesWithoutAccentsAndInEveryLanguage(t *te
 	login := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Đăng nhập bằng Google", "body_md": "Bấm nút Google để đăng nhập.", "status": "published"})
 	kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Đăng nhập nháp", "body_md": "Bài nháp về đăng nhập.", "status": "draft"})
 	refund := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Refunds", "body_md": "We refund within five days.", "status": "published"})
-	if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'de','Rückerstattung','Wir erstatten innerhalb von fünf Tagen.')`,
+	if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at) VALUES($1,$2,'de','Rückerstattung','Wir erstatten innerhalb von fünf Tagen.','r','published',now())`,
 		workspace, refund.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +86,22 @@ func TestAIRetrievalFindsPublishedArticlesWithoutAccentsAndInEveryLanguage(t *te
 	german := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "Rückerstattung bitte", KBLimit: 5})
 	if len(german) == 0 || german[0].KBArticleID != refund.ID || german[0].KBLocale != "de" || !strings.Contains(german[0].Text, "fünf Tagen") {
 		t.Fatalf("German query = %+v, want the German translation of the refund article", german)
+	}
+	// A search for one reader scores each article once, in the text that reader gets: the German reader
+	// the German translation, a French reader (no French text) and the primary reader the own text.
+	reader := func(locale string) []store.AIRetrievedDoc {
+		return aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "refund Rückerstattung", KBLimit: 5, KBReader: &locale})
+	}
+	for locale, want := range map[string]string{"": "", "fr": "", "de": "de"} {
+		var found []string
+		for _, doc := range reader(locale) {
+			if doc.KBArticleID == refund.ID {
+				found = append(found, doc.KBLocale)
+			}
+		}
+		if len(found) != 1 || found[0] != want {
+			t.Errorf("reader %q found the refund article as %q, want once as %q", locale, found, want)
+		}
 	}
 	// One article fills one place, in its best language.
 	both := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "refund Rückerstattung", KBLimit: 5})
@@ -289,7 +305,7 @@ func TestAIRetrievalNeverReturnsAnotherWorkspacesText(t *testing.T) {
 	for _, side := range []struct{ token, workspace, word string }{{adminA, a, "printer"}, {adminB, b, canary + " printer"}} {
 		collection := kbCollection(t, api, side.token, map[string]any{"name": "Help"}).ID
 		article := kbArticle(t, api, side.token, map[string]any{"collection_id": collection, "title": "Article " + side.word, "body_md": side.word, "status": "published"})
-		if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'fr',$3,$3)`,
+		if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at) VALUES($1,$2,'fr',$3,$3,'t','published',now())`,
 			side.workspace, article.ID, "Traduction "+side.word); err != nil {
 			t.Fatal(err)
 		}
@@ -324,7 +340,7 @@ func TestExcludingAnArticleFromAIIsAVersionThatKeepsTheTextAndCanBeUndone(t *tes
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Help"}).ID
 	bigKB(t, api, admin, collection)
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Internal refund rules", "body_md": "Refunds above 100 need approval.", "status": "published"})
-	if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'de','Erstattung','Erstattung Regeln')`,
+	if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at) VALUES($1,$2,'de','Erstattung','Erstattung Regeln','e','published',now())`,
 		workspace, article.ID); err != nil {
 		t.Fatal(err)
 	}

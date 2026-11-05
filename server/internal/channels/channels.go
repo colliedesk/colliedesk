@@ -473,6 +473,9 @@ type HelpCenter struct {
 	NotFound func(response http.ResponseWriter)
 	// Look is how the help center's own pages look, for a page of the type to look the same.
 	Look HelpCenterLook
+	// Languages are the languages besides the primary one that customers see; their pages are below
+	// <Base>/<locale>.
+	Languages []string
 }
 
 // HelpCenterLook is a help center's frame as its pages show it: language, title, address of its home

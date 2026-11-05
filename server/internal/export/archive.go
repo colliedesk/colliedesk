@@ -30,7 +30,7 @@ const (
 // Record files in archive order. A record of an earlier file after a later one is a programming
 // error, because a ZIP entry is written in one piece.
 var recordFiles = []string{"agents.ndjson", "roles.ndjson", "agent-roles.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
-	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
+	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-article-translation-versions.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson", "import-items.ndjson",
 	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-source-consents.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "ai-chat-sessions.ndjson", "results-baselines.ndjson", "ai-automatic-limits.ndjson", "response-targets.ndjson", "migration-requests.ndjson",
 	"autofix-installations.ndjson", "autofix-repos.ndjson", "autofix-connectors.ndjson", "fixes.ndjson", "fix-events.ndjson",
@@ -39,7 +39,7 @@ var recordFiles = []string{"agents.ndjson", "roles.ndjson", "agent-roles.ndjson"
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "roles.ndjson": "roles", "agent-roles.ndjson": "agent_roles", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
-	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people", "import-items.ndjson": "import_items",
+	"kb-article-translations.ndjson": "kb_article_translations", "kb-article-translation-versions.ndjson": "kb_article_translation_versions", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people", "import-items.ndjson": "import_items",
 	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-source-consents.ndjson": "ai_source_consents", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "ai-chat-sessions.ndjson": "ai_chat_sessions", "results-baselines.ndjson": "results_baselines", "ai-automatic-limits.ndjson": "ai_automatic_limits", "response-targets.ndjson": "response_targets", "migration-requests.ndjson": "migration_requests",
 	"autofix-installations.ndjson": "autofix_installations", "autofix-repos.ndjson": "autofix_repos", "autofix-connectors.ndjson": "autofix_connectors", "fixes.ndjson": "fixes", "fix-events.ndjson": "fix_events",
 	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-ai-levels.ndjson": "channel_ai_levels", "channel-inbound-events.ndjson": "channel_inbound_events", "channel-threads.ndjson": "channel_threads", "channel-thread-items.ndjson": "channel_thread_items", "channel-senders.ndjson": "channel_senders", "number-series.ndjson": "conversation_number_series", "conversation-thread-items.ndjson": "conversation_thread_items", "conversation-thread-keys.ndjson": "conversation_thread_keys", "intake-gatherings.ndjson": "intake_gatherings", "intake-decisions.ndjson": "intake_decisions", "intake-eval-runs.ndjson": "intake_eval_runs", "message-moves.ndjson": "message_moves",
@@ -88,7 +88,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 		zip: zip.NewWriter(out), out: out, opener: opener, workspaceID: workspaceID,
 		exportedAt: exportedAt.UTC(), current: -1,
 		counts: map[string]int{"agents": 0, "roles": 0, "agent_roles": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
-			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0, "status_changes": 0},
+			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_article_translation_versions": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0, "status_changes": 0},
 	}
 }
 
@@ -130,6 +130,9 @@ func (w *Writer) KBArticleVersion(record KBArticleVersion) error {
 }
 func (w *Writer) KBArticleTranslation(record KBArticleTranslation) error {
 	return w.record("kb-article-translations.ndjson", record)
+}
+func (w *Writer) KBArticleTranslationVersion(record KBArticleTranslationVersion) error {
+	return w.record("kb-article-translation-versions.ndjson", record)
 }
 func (w *Writer) KBMediaReplacement(record KBMediaReplacement) error {
 	return w.record("kb-media-replacements.ndjson", record)

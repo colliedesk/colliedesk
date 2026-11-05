@@ -96,6 +96,16 @@ func (r *run) kbLimitProblems(ctx context.Context) ([]string, error) {
 			add("translation %s: %s", key, err.Error())
 		}
 	}
+	for key, languages := range kb.names {
+		for language, name := range languages {
+			if _, err := domain.CleanKBText("name", name.Name, domain.MaxKBCollectionName); err != nil {
+				add("%s name %s: %s", language, key, err.Error())
+			}
+			if err := domain.CheckKBDescription(deref(name.Description)); err != nil {
+				add("%s description %s: %s", language, key, err.Error())
+			}
+		}
+	}
 	// Images the ledger does not hold yet, at most one item each in the media library (the same bytes
 	// give one item, so the import may take fewer).
 	newImages := 0
@@ -194,7 +204,7 @@ func (r *run) sizeKnowledgeBase(ctx context.Context) (int64, error) {
 func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []string) error {
 	kb := r.kb
 	count := KnowledgeBaseCount{Published: []string{}, Drafts: map[string][]string{}, Languages: []string{}, Portals: []int64{}, Notes: []string{},
-		ChangedInBoth: []string{}, Unpublished: []string{}, DeletedInColliedesk: []string{}, Refused: r.kbRefused}
+		ChangedInBoth: []string{}, TranslationsChangedInBoth: []string{}, LanguagesAdded: []string{}, Unpublished: []string{}, DeletedInColliedesk: []string{}, Refused: r.kbRefused}
 	if count.Refused == nil {
 		count.Refused = []string{}
 	}
@@ -220,6 +230,8 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	if state := r.kbState; state != nil {
 		count.ChangedInBoth, count.DeletedInColliedesk = uniqueSorted(state.changedInBoth), uniqueSorted(state.gone)
 		count.Unpublished = uniqueSorted(state.unpublished)
+		count.TranslationsChangedInBoth = uniqueSorted(state.translationsChangedInBoth)
+		count.LanguagesAdded = append(count.LanguagesAdded, state.languagesAdded...)
 	}
 	count.Languages = append(count.Languages, kb.languages...)
 	if portals := kb.portals(); portals != nil {
@@ -265,7 +277,14 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 		translationKeys = append(translationKeys, strconv.FormatInt(translation.ID, 10)+":"+translation.language)
 		images += len(r.inlineImages(translation.Description))
 	}
-	articleKeys, translationKeys = uniqueSorted(articleKeys), uniqueSorted(translationKeys)
+	var nameKeys []string
+	for key, languages := range kb.names {
+		for language := range languages {
+			nameKeys = append(nameKeys, key+":"+language)
+		}
+	}
+	articleKeys, translationKeys, nameKeys = uniqueSorted(articleKeys), uniqueSorted(translationKeys), uniqueSorted(nameKeys)
+	count.CollectionNames.Source = len(nameKeys)
 	count.Published = uniqueSorted(count.Published)
 	for reason, ids := range count.Drafts {
 		count.Drafts[reason] = uniqueSorted(ids)
@@ -274,7 +293,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	count.Articles.Source, count.Translations.Source = len(articleKeys), len(translationKeys)
 	if r.opts.DryRun {
 		count.Images.Source = images
-	} else if err := r.countKBLedger(ctx, report, &count, collectionKeys, articleKeys, translationKeys); err != nil {
+	} else if err := r.countKBLedger(ctx, report, &count, collectionKeys, articleKeys, translationKeys, nameKeys); err != nil {
 		return err
 	}
 
@@ -290,14 +309,14 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 }
 
 // countKBLedger fills the imported and failed counts from the ledger and adds its failures.
-func (r *run) countKBLedger(ctx context.Context, report *Report, count *KnowledgeBaseCount, collections map[string][]string, articles, translations []string) error {
+func (r *run) countKBLedger(ctx context.Context, report *Report, count *KnowledgeBaseCount, collections map[string][]string, articles, translations, names []string) error {
 	return r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT entity,source_id,status,error FROM import_items WHERE workspace_id=$1 AND source=$2 AND (
 				(entity=$3 AND source_id=ANY($4)) OR (entity=$5 AND source_id=ANY($6)) OR (entity=$7 AND source_id=ANY($8))
-				OR (entity=$9 AND source_id=ANY($10)) OR (entity=$11 AND split_part(source_id,':',1)=ANY($8)))
+				OR (entity=$9 AND source_id=ANY($10)) OR (entity=$11 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$12 AND source_id=ANY($13)))
 			ORDER BY entity,length(source_id),source_id`, r.workspaceID, r.ledger.source,
 			entityKBCategory, collections[entityKBCategory], entityKBFolder, collections[entityKBFolder], entityKBArticle, articles,
-			entityKBTranslation, translations, entityKBImage)
+			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names)
 		if err != nil {
 			return fmt.Errorf("reconcile knowledge base: %w", err)
 		}
@@ -314,6 +333,8 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 				addStatus(&count.Articles, status)
 			case entityKBTranslation:
 				addStatus(&count.Translations, status)
+			case entityKBCollectionName:
+				addStatus(&count.CollectionNames, status)
 			case entityKBImage:
 				count.Images.Source++
 				addStatus(&count.Images.EntityCount, status)
@@ -331,4 +352,5 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 }
 
 // kbStatsTables are the knowledge base tables an undo reads.
-var kbStatsTables = []string{"kb_articles", "kb_article_versions", "kb_collections", "kb_media", "kb_article_media", "kb_article_translations"}
+var kbStatsTables = []string{"kb_articles", "kb_article_versions", "kb_collections", "kb_media", "kb_article_media", "kb_article_translations",
+	"kb_article_translation_versions", "kb_collection_translations", "help_center_languages"}

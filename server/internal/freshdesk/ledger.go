@@ -60,6 +60,9 @@ type ticketMeta struct {
 	TimeEntries     int   `json:"time_entries"`
 	// InlineImages counts the distinct Freshdesk-hosted images in the ticket's message HTML.
 	InlineImages int `json:"inline_images,omitempty"`
+	// Previous is the help center's primary language before the import made the source's its own
+	// (entity kb_primary_language); undo gives it back.
+	Previous string `json:"previous,omitempty"`
 }
 
 type ledgerEntry struct {

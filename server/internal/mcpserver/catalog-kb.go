@@ -44,13 +44,15 @@ const (
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
 		`"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
 		`"ai_exclusion":{"type":["object","null"],"description":"Set while AI may not read the article (colliedesk_kb_article_ai_exclude); null while it may.","required":["at","by"],"properties":{"at":{"type":"string"},"by":{"type":["string","null"]}}},` +
-		`"translations":{"type":"array","description":"Locales of translations an import brought in; the help center does not show them yet.","items":{"type":"string"}}}}`
+		`"translations":{"type":"array","description":"Its versions in the help center's other languages, without their text (in the trash too). Read one with colliedesk_kb_translation_get.","items":` + kbTranslationSummarySchema + `}}}`
 
 	kbArticleOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchema + `}}`
 
 	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at"],"properties":{` +
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
-		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"}}}`
+		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
+		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
+		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}}}}`
 
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 

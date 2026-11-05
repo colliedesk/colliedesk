@@ -638,8 +638,11 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 // exportKB writes the whole knowledge base: collections and articles in the trash too, every version,
 // translation and image, and the help center settings. Articles carry the original HTML an import kept.
 func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,parent_id::text,name,slug,description,position,source_meta,created_at,updated_at,deleted_at,deleted_by_agent_id::text
-		FROM kb_collections WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
+			COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'source_meta',t.source_meta,
+				'created_at',to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
+				ORDER BY t.locale) FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id), '[]'::jsonb)
+		FROM kb_collections c WHERE c.workspace_id=$1 ORDER BY c.id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base collections: %w", err)
 	}
@@ -647,7 +650,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var record export.KBCollection
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &meta,
-			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID, &record.Translations); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base collections: %w", err)
 		}
@@ -715,7 +718,8 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,title,body_md,source_meta,source_html,created_at,updated_at
+	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,title,slug,body_md,status,published_at,seo_title,seo_description,outdated,outdated_at,author_agent_id::text,
+			source_meta,source_html,created_at,updated_at,deleted_at,deleted_by_agent_id::text
 		FROM kb_article_translations WHERE workspace_id=$1 ORDER BY article_id,locale`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base translations: %w", err)
@@ -723,18 +727,43 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBArticleTranslation
 		var meta []byte
-		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Title, &record.BodyMD, &meta, &record.SourceHTML, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Title, &record.Slug, &record.BodyMD, &record.Status, &record.PublishedAt, &record.SEOTitle, &record.SEODescription,
+			&record.Outdated, &record.OutdatedAt, &record.AuthorAgentID, &meta, &record.SourceHTML, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base translations: %w", err)
 		}
 		record.SourceMeta = meta
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		record.PublishedAt, record.OutdatedAt, record.DeletedAt = domain.UTCOptional(record.PublishedAt), domain.UTCOptional(record.OutdatedAt), domain.UTCOptional(record.DeletedAt)
 		if err := sink.KBArticleTranslation(record); err != nil {
 			rows.Close()
 			return err
 		}
 	}
 	if err := rowsError("export knowledge base translations", rows); err != nil {
+		return err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,status,
+			changed_by_agent_id::text,token_id::text,token_label,agent_request_id::text,created_at
+		FROM kb_article_translation_versions WHERE workspace_id=$1 ORDER BY article_id,locale,version`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base translation versions: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBArticleTranslationVersion
+		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Version, &record.Kind, &record.RestoredFromVersion, &record.Title, &record.Slug, &record.BodyMD,
+			&record.SEOTitle, &record.SEODescription, &record.Status, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.CreatedAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base translation versions: %w", err)
+		}
+		record.CreatedAt = domain.UTC(record.CreatedAt)
+		if err := sink.KBArticleTranslationVersion(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base translation versions", rows); err != nil {
 		return err
 	}
 
@@ -825,6 +854,22 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	center.UpdatedAt = domain.UTC(center.UpdatedAt)
 	center.CustomDomainVerifiedAt = domain.UTCOptional(center.CustomDomainVerifiedAt)
+	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 ORDER BY position,locale`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export help center languages: %w", err)
+	}
+	center.Languages, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.HelpCenterLanguage, error) {
+		var language export.HelpCenterLanguage
+		err := row.Scan(&language.Locale, &language.Visible, &language.Position, &language.CreatedAt, &language.UpdatedAt)
+		language.CreatedAt, language.UpdatedAt = domain.UTC(language.CreatedAt), domain.UTC(language.UpdatedAt)
+		return language, err
+	})
+	if err != nil {
+		return fmt.Errorf("export help center languages: %w", err)
+	}
+	if center.Languages == nil {
+		center.Languages = []export.HelpCenterLanguage{}
+	}
 	return sink.HelpCenter(center)
 }
 
