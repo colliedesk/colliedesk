@@ -263,6 +263,28 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    the id: losing the metric is better than refusing a reply. `DraftOutcomes` counts them for #100.
 6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
    average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
+7. **Written drafts keep their history and files.** A written draft (`source='written'`) supersedes the
+   earlier one of the same agent and token, which stays. `RestoreDraft` reopens that same row
+   (`outcome` back to null, `ready_at` and `restored_at` now, `restored_by_agent_id`) and supersedes the
+   one that waited: a copy would change the id an agent holds and count the files twice. Superseded,
+   expired and discarded written drafts come back (discard is not a one-way door, the resolve trigger
+   included); sent ones, AI ones (their outcome feeds `DraftOutcomes` and Results) and erased ones do
+   not (`ai_draft_not_restorable`). Writing and restoring take one advisory lock per author
+   (workspace, conversation, agent, token) before they supersede, so racing calls leave exactly one
+   draft waiting; a partial unique index was not used because older data may break it.
+8. **A draft's files.** `ai_draft_files` rows reference attachment objects, so `DiscardObject` keeps
+   their bytes, and a trigger counts their size toward the workspace's storage while the row exists.
+   The send that names `ai_draft_id` copies the kept files (`ai_draft_file_ids`, nil = all) into
+   attachment rows on the same keys and deletes the draft's rows in the same transaction, so nothing
+   is counted twice; the left-out keys go through `DiscardObject` after the commit. Rows of a sent,
+   cancelled or erased draft go in the daily `SweepDraftFiles`; the Freshdesk undo adds the keys of
+   undone conversations' drafts to its orphans. The file ids must be the draft's own (400 otherwise),
+   and the draft's files plus the reply's uploads stay within one message (10 files, 10 MiB).
+   The draft's rows are gone after the send, so the Idempotency-Key row keeps `draft_selection` (the
+   draft, the files asked for, the files that went); a repeat that differs is `idempotency_key_reused`.
+9. **The list is paged.** `GET …/ai-drafts` takes `before` (the `next_before` of the page read, a
+   draft id) and `limit` (20, at most 50), ordered by `(created_at, id)` descending, so every earlier
+   draft that still holds files can be reached.
 
 ## Triage suggestions
 
