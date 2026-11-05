@@ -143,14 +143,24 @@ type attachmentOut struct {
 
 func attachmentGet(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		AttachmentID string `json:"attachment_id"`
-		Image        *bool  `json:"image"`
+		AttachmentID   string `json:"attachment_id"`
+		ConversationID string `json:"conversation_id"`
+		DraftID        string `json:"draft_id"`
+		Image          *bool  `json:"image"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
+	path := "/api/v1/attachments/" + url.PathEscape(args.AttachmentID)
 	c.notFound = "No attachment " + args.AttachmentID + " in this workspace. Use an attachment id from colliedesk_conversation_get."
-	header, body, err := c.download("/api/v1/attachments/"+url.PathEscape(args.AttachmentID), attachmentImageLimit+1)
+	if (args.ConversationID == "") != (args.DraftID == "") {
+		return nil, &toolError{"A draft's file needs both conversation_id and draft_id; an attachment of a message needs neither."}
+	}
+	if args.DraftID != "" {
+		path = aiDraftsPath(args.ConversationID, "/"+url.PathEscape(args.DraftID)+"/files/"+url.PathEscape(args.AttachmentID))
+		c.notFound = "No file " + args.AttachmentID + " on that draft in this workspace. The draft's files are in colliedesk_ai_drafts_list; a sent draft's files are the reply's attachments."
+	}
+	header, body, err := c.download(path, attachmentImageLimit+1)
 	if err != nil {
 		return nil, err
 	}

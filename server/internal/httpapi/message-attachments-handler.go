@@ -54,8 +54,12 @@ type messageFields struct {
 	contactName, contactEmail string
 	// seen is the seen_reply_number field: the latest reply the sender had seen; nil when not sent.
 	seen *int
-	// aiDraft is the ai_draft_id field: the AI draft the reply was written from.
-	aiDraft string
+	// aiDraft is the ai_draft_id field: the AI draft the reply was written from; draftFiles the
+	// ai_draft_file_ids fields, the files of that draft the reply carries (nil: all of them).
+	aiDraft    string
+	draftFiles *[]string
+	// draft is set for a reply draft (POST …/reply-drafts): fields text and cc, then files.
+	draft bool
 }
 
 // newContact is the customer the fields add, or nil when they name a contact of the workspace.
@@ -67,6 +71,12 @@ func (f messageFields) newContact() *store.NewContact {
 }
 
 func (f messageFields) validate() error {
+	if f.draft {
+		if strings.TrimSpace(f.body) == "" {
+			return &uploadError{http.StatusBadRequest, "invalid_request", "Send text, the reply (Markdown), and cc when it copies someone."}
+		}
+		return nil
+	}
 	if f.opening {
 		added := f.newContact()
 		if (f.contactID == "") == (added == nil) || strings.TrimSpace(f.subject) == "" || strings.TrimSpace(f.body) == "" {
@@ -141,7 +151,7 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writePermissionMissing(response, request, identity, need)
 		return
 	}
-	actor.AIDraftID = fields.aiDraft
+	actor.AIDraftID, actor.AIDraftFileIDs = fields.aiDraft, fields.draftFiles
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)
@@ -280,8 +290,10 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 		if err != nil {
 			return fields, nil, invalidUpload(err)
 		}
+		message := !fields.opening && !fields.draft
 		switch name := part.FormName(); {
-		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening, name == "ai_draft_id" && !fields.opening,
+		case name == "kind" && message, name == "body" && !fields.draft, name == "text" && fields.draft, name == "cc", name == "seen_reply_number" && message,
+			name == "ai_draft_id" && message, name == "ai_draft_file_ids" && message,
 			fields.opening && (name == "contact_id" || name == "subject" || name == "channel_id" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
@@ -300,10 +312,18 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				fields.contactName = text
 			case "contact_email":
 				fields.contactEmail = text
-			case "body":
+			case "body", "text":
 				fields.body = text
 			case "ai_draft_id":
 				fields.aiDraft = text
+			case "ai_draft_file_ids":
+				// Each field names one file; a field sent empty keeps none of them.
+				if fields.draftFiles == nil {
+					fields.draftFiles = &[]string{}
+				}
+				if text = strings.TrimSpace(text); text != "" {
+					*fields.draftFiles = append(*fields.draftFiles, text)
+				}
 			case "seen_reply_number":
 				seen, err := strconv.Atoi(text)
 				if err != nil {
@@ -319,16 +339,24 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 		case name == "files" && part.FileName() != "":
 			// Fields come first, so a refusal that does not depend on the bytes is given before reading any.
 			if !admitted {
-				if err := fields.validate(); err != nil && fields.opening {
+				if err := fields.validate(); err != nil && fields.draft {
+					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send text before the files."}
+				} else if err != nil && fields.opening {
 					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send contact_id, subject and body before the files."}
 				} else if err != nil {
 					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind and body before the files."}
 				}
-				cc, refusal := a.cleanCC(ctx, workspaceID, fields.kind, fields.cc)
+				// A draft's copies are checked as a reply's; its files are admitted as a note's (only the
+				// storage cap): nothing goes out until a person sends it.
+				ccKind, admitAs := fields.kind, fields.kind
+				if fields.draft {
+					ccKind, admitAs = "outgoing", "note"
+				}
+				cc, refusal := a.cleanCC(ctx, workspaceID, ccKind, fields.cc)
 				if refusal != nil {
 					return fields, nil, refusal
 				}
-				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.channelID, fields.kind, cc); err != nil {
+				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.channelID, admitAs, cc); err != nil {
 					return fields, nil, err
 				}
 				// A reply that would be refused for a newer one is refused before its files are stored.
@@ -351,6 +379,9 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			}
 			*stored = append(*stored, store.NewAttachment{Filename: cleanFilename(part.FileName()), ContentType: cleanContentType(part.Header.Get("Content-Type")), Object: object})
 		default:
+			if fields.draft {
+				return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send text, cc and files only; every file needs a filename."}
+			}
 			if fields.opening {
 				return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send contact_id (or contact_name and contact_email), subject, body, channel_id, cc and files only; every file needs a filename."}
 			}

@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"mime"
 	"net/http"
@@ -37,9 +38,10 @@ func forThePerson(c *call, what string) string {
 
 func replyDraft(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ConversationID string   `json:"conversation_id"`
-		Body           string   `json:"body"`
-		CC             []string `json:"cc"`
+		ConversationID string          `json:"conversation_id"`
+		Body           string          `json:"body"`
+		CC             []string        `json:"cc"`
+		Files          []inlineFileArg `json:"files"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -47,21 +49,57 @@ func replyDraft(c *call, arguments map[string]any) (any, error) {
 	if strings.TrimSpace(args.Body) == "" {
 		return nil, &toolError{"The draft is empty. Write the reply text in body."}
 	}
+	files, err := decodeFiles(args.Files)
+	if err != nil {
+		return nil, err
+	}
 	c.notFound = notFoundConversation(args.ConversationID)
-	body := map[string]any{"text": args.Body}
-	if len(args.CC) > 0 {
-		body["cc"] = args.CC
-	}
+	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/reply-drafts"
 	var draft struct {
-		ID             string `json:"id"`
-		ConversationID string `json:"conversation_id"`
-		Status         string `json:"status"`
+		ID             string             `json:"id"`
+		ConversationID string             `json:"conversation_id"`
+		Status         string             `json:"status"`
+		Files          []attachmentRowOut `json:"files"`
 	}
-	if err := c.send(http.MethodPost, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/reply-drafts", body, &draft); err != nil {
+	if len(files) > 0 {
+		fields := [][2]string{{"text", args.Body}}
+		for _, address := range args.CC {
+			fields = append(fields, [2]string{"cc", address})
+		}
+		contentType, form := messageForm(fields, files)
+		err = c.sendBytes(http.MethodPost, path, contentType, nil, form, &draft)
+	} else {
+		body := map[string]any{"text": args.Body}
+		if len(args.CC) > 0 {
+			body["cc"] = args.CC
+		}
+		err = c.send(http.MethodPost, path, body, &draft)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if draft.Files == nil {
+		draft.Files = []attachmentRowOut{}
+	}
+	next := "Nothing reached the customer. A person sees the draft above the reply box and sends, edits or discards it."
+	if len(draft.Files) > 0 {
+		next += " Its files go with the reply only if the person keeps them."
+	}
+	return map[string]any{"draft": draft, "next": next}, nil
+}
+
+func replyDraftRestore(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiDraftArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiDraftNotFound
+	var draft json.RawMessage
+	if err := c.send(http.MethodPost, aiDraftsPath(args.ConversationID, "/"+url.PathEscape(args.DraftID)+"/restore"), nil, &draft); err != nil {
 		return nil, err
 	}
 	return map[string]any{"draft": draft,
-		"next": "Nothing reached the customer. A person sees the draft above the reply box and sends, edits or discards it."}, nil
+		"next": "The draft waits above the reply box again, with its files; nothing reached the customer. A person sends, edits or discards it."}, nil
 }
 
 func workspaceExport(c *call, arguments map[string]any) (any, error) {

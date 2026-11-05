@@ -843,6 +843,24 @@ type AIDraft struct {
 	DecidedAt        *time.Time      `json:"decided_at"`
 	DecidedByAgentID *string         `json:"decided_by_agent_id"`
 	TextClearedAt    *time.Time      `json:"text_cleared_at"`
+	// RestoredAt and RestoredByAgentID say when and by whom an earlier written draft was brought back.
+	RestoredAt        *time.Time `json:"restored_at"`
+	RestoredByAgentID *string    `json:"restored_by_agent_id"`
+	// Files are the files left with a written draft, copied under ai-drafts/<id>/ (Path); empty once it
+	// was sent (the reply's attachments hold the ones sent) or 90 days after it ended.
+	Files []AIDraftFile `json:"files"`
+}
+
+// AIDraftFile is one file of a written draft, its bytes at Path in the archive.
+type AIDraftFile struct {
+	ID          string    `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	Size        int64     `json:"size"`
+	SHA256      string    `json:"sha256"`
+	CreatedAt   time.Time `json:"created_at"`
+	Path        string    `json:"path"`
+	StorageKey  string    `json:"-"`
 }
 
 // ResultsBaseline is the baseline the results page measures against (docs/user/results.md): the import

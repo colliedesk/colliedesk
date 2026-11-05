@@ -268,6 +268,11 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 			slog.Info("purged knowledge base articles and collections deleted more than 30 days ago, and unused images",
 				"articles", purged.Articles, "collections", purged.Collections, "images", purged.Images)
 		}
+		if removed, err := data.SweepDraftFiles(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("sweep reply draft files", "error", err)
+		} else if removed > 0 {
+			slog.Info("removed the files of reply drafts that were sent, stopped or ended more than 90 days ago", "count", removed)
+		}
 		backfillKBMedia(ctx, data)
 		select {
 		case <-ctx.Done():

@@ -16,7 +16,8 @@ func replySendSpec() Spec {
 			`Pass seen_reply_number, the latest_reply_number of the colliedesk_conversation_get you read: when someone replied since, nothing is sent and the error shows their reply; read the conversation again before you send. ` +
 			`When a team member has a reply to this customer open and not sent yet, the result carries a warning; say so to the user. ` +
 			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); they are emailed with the reply. ` +
-			`Pass ai_draft_id when the reply is written from an AI draft (colliedesk_ai_draft_get), so the draft records how close the reply stayed to it; a draft that is not this conversation's ready one is refused and nothing is sent. `,
+			`Pass ai_draft_id when the reply is written from a draft (colliedesk_ai_draft_get, colliedesk_ai_drafts_list), so the draft records how close the reply stayed to it; a draft that is not this conversation's ready one is refused and nothing is sent. ` +
+			`Without ai_draft_file_ids, every file of that draft is sent with the reply; ai_draft_file_ids names the ones to send (an empty list sends none). The draft's files and files count together toward 10 files and 10 MiB. `,
 		Destructive: true,
 		BodyNeeds:   []string{"messages:send"},
 		REST:        []string{"POST /api/v1/conversations/{id}/messages", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/agents", "GET /api/v1/inbox/activity"},
@@ -25,7 +26,8 @@ func replySendSpec() Spec {
 			`"seen_reply_number":{"type":"integer","minimum":0,"description":"latest_reply_number from the colliedesk_conversation_get you based this reply on."},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The reply text (Markdown)."},` +
 			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10. The customer is always the recipient."},` +
-			`"ai_draft_id":{"type":"string",` + uuid + `,"description":"The AI draft this reply was written from. Send token only."},` + filesProperty + `}}`,
+			`"ai_draft_id":{"type":"string",` + uuid + `,"description":"The draft this reply was written from. Send token only."},` +
+			`"ai_draft_file_ids":{"type":"array","maxItems":10,"uniqueItems":true,"items":{"type":"string",` + uuid + `},"description":"With ai_draft_id: the ids of the draft's files to send (files of the draft). Leave it out to send every file of the draft; [] sends none."},` + filesProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","message"],"properties":{"conversation_id":{"type":"string"},"message":{"type":"object",` +
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
 			`"attachments":` + attachmentsSchema + `,"delivery":{"type":"string","description":"queued, sent or failed; absent when the reply is not emailed (no email channel)."},` +

@@ -4,23 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 // replyDraftsPath is where a reply is left for a person to send (a written draft above the reply box).
 const replyDraftsPath = "/api/v1/conversations/{id}/reply-drafts"
 
 const (
-	createRoleOperation       = "role"
-	resetRoleOperation        = "role_reset"
-	restoreRoleOperation      = "role_restore"
-	createReplyDraftOperation = "reply_draft"
+	createRoleOperation        = "role"
+	resetRoleOperation         = "role_reset"
+	restoreRoleOperation       = "role_restore"
+	createReplyDraftOperation  = "reply_draft"
+	restoreReplyDraftOperation = "reply_draft_restore"
 )
 
 func (a *API) listRoles(response http.ResponseWriter, request *http.Request) {
@@ -174,8 +178,12 @@ func (a *API) setAgentRoles(response http.ResponseWriter, request *http.Request)
 
 // createReplyDraft leaves the words of a reply for a person to send: a written draft above the reply box.
 // Without messages:send the copies may name only people already on the conversation, so a draft cannot
-// slip a new address past the person who sends it.
+// slip a new address past the person who sends it. multipart/form-data leaves files with it.
 func (a *API) createReplyDraft(response http.ResponseWriter, request *http.Request) {
+	if mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err == nil && mediaType == "multipart/form-data" {
+		a.createReplyDraftWithFiles(response, request)
+		return
+	}
 	var input struct {
 		Text string   `json:"text"`
 		CC   []string `json:"cc"`
@@ -185,12 +193,19 @@ func (a *API) createReplyDraft(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	who := principal(request)
-	conversationID := request.PathValue("id")
-	if _, err := a.store.GetConversation(request.Context(), who.Workspace.ID, conversationID); err != nil {
+	if _, err := a.store.GetConversation(request.Context(), who.Workspace.ID, request.PathValue("id")); err != nil {
 		writeStoreError(response, err)
 		return
 	}
-	cc, refusal := a.cleanCC(request.Context(), who.Workspace.ID, "outgoing", input.CC)
+	a.writeReplyDraft(response, request, input.Text, input.CC, nil, nil)
+}
+
+// writeReplyDraft checks the copies and writes the draft once per Idempotency-Key, with files already
+// stored; kept is called once the draft holds them.
+func (a *API) writeReplyDraft(response http.ResponseWriter, request *http.Request, text string, copies []string, files []store.NewAttachment, kept func()) {
+	who := principal(request)
+	conversationID := request.PathValue("id")
+	cc, refusal := a.cleanCC(request.Context(), who.Workspace.ID, "outgoing", copies)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)
 		return
@@ -209,15 +224,98 @@ func (a *API) createReplyDraft(response http.ResponseWriter, request *http.Reque
 			}
 		}
 	}
-	key := append([]string{conversationID, input.Text}, cc...)
+	key := append([]string{conversationID, text}, cc...)
+	for _, file := range files {
+		key = append(key, "file", file.Filename, file.Object.SHA256)
+	}
+	var attach func(tx pgx.Tx, draftID string) error
+	if len(files) > 0 {
+		attach = func(tx pgx.Tx, draftID string) error {
+			return a.store.InsertDraftFiles(request.Context(), tx, who.Workspace.ID, draftID, files)
+		}
+	}
 	a.createOnce(response, request, createReplyDraftOperation, key, func(ctx context.Context) (any, error) {
-		draft, err := a.ai.CreateWrittenDraft(ctx, who.Workspace.ID, aiActor(request), conversationID, input.Text, cc)
+		draft, err := a.ai.CreateWrittenDraft(ctx, who.Workspace.ID, aiActor(request), conversationID, text, cc, attach)
+		if errors.Is(err, store.ErrObjectMissing) {
+			writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the draft was saved. Nothing was saved; try again.")
+			return nil, errAnswered
+		}
+		if err != nil {
+			if writePlanLimit(response, err) {
+				return nil, errAnswered
+			}
+			writeAIError(response, err)
+			return nil, errAnswered
+		}
+		if kept != nil {
+			kept()
+		}
+		return draft, nil
+	})
+}
+
+// createReplyDraftWithFiles handles POST …/reply-drafts as multipart/form-data: fields text and cc,
+// then up to 10 files (10 MiB together, as a message). The files stream to storage first; the draft and
+// its file rows are written in one transaction, and whatever fails leaves nothing behind.
+func (a *API) createReplyDraftWithFiles(response http.ResponseWriter, request *http.Request) {
+	who := principal(request)
+	workspaceID, conversationID := who.Workspace.ID, request.PathValue("id")
+	// A conversation of another workspace is refused before a byte is stored.
+	if _, err := a.store.GetConversation(request.Context(), workspaceID, conversationID); err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	timeout := a.config.UploadTimeout
+	if timeout <= 0 {
+		timeout = defaultUploadTimeout
+	}
+	_ = http.NewResponseController(response).SetReadDeadline(time.Now().Add(timeout)) //nolint:errcheck // unsupported writers have no deadline to set
+	request.Body = http.MaxBytesReader(response, request.Body, attachments.MaxOutgoingBytes+multipartOverhead)
+	reader, err := request.MultipartReader()
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send text, the reply (Markdown), and cc when it copies someone.")
+		return
+	}
+	var stored []store.NewAttachment
+	defer func() { a.discardUnreferenced(context.WithoutCancel(request.Context()), workspaceID, stored) }()
+	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, conversationID, messageFields{draft: true, kind: "note"}, &stored)
+	if err != nil {
+		a.writeUploadError(response, err)
+		return
+	}
+	if err := fields.validate(); err != nil {
+		a.writeUploadError(response, err)
+		return
+	}
+	// A repeat of one request answers the draft the first one wrote; its own copies of the files stay
+	// unreferenced and are discarded.
+	a.writeReplyDraft(response, request, fields.body, fields.cc, files, func() { stored = nil })
+}
+
+// restoreAIDraft brings an earlier written draft back above the reply box.
+// A repeat under the same Idempotency-Key answers the first answer, so a press repeated after another
+// draft was written does not bring the earlier one back over it again.
+func (a *API) restoreAIDraft(response http.ResponseWriter, request *http.Request) {
+	conversationID, draftID := request.PathValue("id"), request.PathValue("draftId")
+	a.runOnce(response, request, http.StatusOK, restoreReplyDraftOperation, []string{conversationID, draftID}, func(ctx context.Context) (any, error) {
+		draft, err := a.ai.RestoreDraft(ctx, principal(request).Workspace.ID, aiActor(request), conversationID, draftID)
 		if err != nil {
 			writeAIError(response, err)
 			return nil, errAnswered
 		}
 		return draft, nil
 	})
+}
+
+// downloadAIDraftFile streams a file of a reply draft as a download, like an attachment.
+func (a *API) downloadAIDraftFile(response http.ResponseWriter, request *http.Request) {
+	workspaceID := principal(request).Workspace.ID
+	file, err := a.store.GetDraftFile(request.Context(), workspaceID, request.PathValue("id"), request.PathValue("draftId"), request.PathValue("fileId"))
+	if err != nil && !errors.Is(err, store.ErrDraftFileNotFound) {
+		writeStoreError(response, err)
+		return
+	}
+	a.streamDownload(response, request, err == nil, workspaceID, file.ID, file.Filename, file.Size, file.SHA256, file.Key)
 }
 
 // agentRequestsRemoved answers the workspace realm of the two decision routes that remain for the

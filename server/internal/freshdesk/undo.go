@@ -236,6 +236,18 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	if orphanCandidates, err = pgx.CollectRows(keys, pgx.RowTo[string]); err != nil {
 		return result, nil, fmt.Errorf("list stored files: %w", err)
 	}
+	// The files of reply drafts on those conversations go with them too.
+	draftKeys, err := tx.Query(ctx, `SELECT DISTINCT f.storage_key FROM ai_draft_files f JOIN ai_drafts d ON d.workspace_id=f.workspace_id AND d.id=f.draft_id
+		JOIN import_items i ON i.workspace_id=d.workspace_id AND i.target_id=d.conversation_id AND i.entity='ticket'
+		WHERE f.workspace_id=$1 AND i.source=$2`, workspaceID, source)
+	if err != nil {
+		return result, nil, fmt.Errorf("list stored draft files: %w", err)
+	}
+	draftFiles, err := pgx.CollectRows(draftKeys, pgx.RowTo[string])
+	if err != nil {
+		return result, nil, fmt.Errorf("list stored draft files: %w", err)
+	}
+	orphanCandidates = append(orphanCandidates, draftFiles...)
 	for _, step := range steps {
 		tag, err := tx.Exec(ctx, step.sql, step.args...)
 		if err != nil {
@@ -255,6 +267,7 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	for _, key := range orphanCandidates {
 		var used bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_key=$1)
+			OR EXISTS(SELECT 1 FROM ai_draft_files WHERE storage_key=$1)
 			OR EXISTS(SELECT 1 FROM kb_media WHERE storage_key=$1 OR thumb_storage_key=$1 OR poster_storage_key=$1)`, key).Scan(&used); err != nil {
 			return result, nil, fmt.Errorf("check stored file: %w", err)
 		}

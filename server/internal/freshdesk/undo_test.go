@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -74,5 +76,35 @@ func TestUndoWithoutAnImportFails(t *testing.T) {
 	_, err := freshdesk.Undo(context.Background(), env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"})
 	if !errors.Is(err, freshdesk.ErrNoImport) {
 		t.Fatalf("error = %v, want ErrNoImport", err)
+	}
+}
+
+// A reply draft left on an imported ticket goes with the undo, and so do the bytes of its files.
+func TestUndoRemovesTheFilesOfDraftsOnUndoneTickets(t *testing.T) {
+	env := newImportEnv(t)
+	ctx := context.Background()
+	env.mustRun(t)
+	conversation := env.target(t, "ticket", "1")
+	object, err := env.storage.Put(ctx, env.workspaceID, strings.NewReader("draft-only bytes"), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var draft string
+	if err := env.pool.QueryRow(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,status,source,text,ready_at) VALUES($1,$2,'ready','written','Draft',now()) RETURNING id::text`,
+		env.workspaceID, conversation).Scan(&draft); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.pool.Exec(ctx, `INSERT INTO ai_draft_files(workspace_id,draft_id,filename,content_type,size,sha256,storage_key) VALUES($1,$2,'plan.txt','text/plain',$3,$4,$5)`,
+		env.workspaceID, draft, object.Size, object.SHA256, object.Key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := freshdesk.Undo(ctx, env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := env.count(t, "ai_draft_files"); n != 0 {
+		t.Fatalf("draft files left after undo = %d", n)
+	}
+	if err := attachments.Exists(ctx, env.storage, object.Key); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the draft's stored file after undo: %v, want it gone", err)
 	}
 }

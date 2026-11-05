@@ -359,10 +359,12 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/ai/chat/preview":    need(auth.PermAIAssistCreate),
 	"PUT /api/v1/ai/automatic-limits": need(auth.PermAISettingsUpdate),
 	// An AI draft never reaches a customer: a person edits and sends it, like a note.
-	"POST /api/v1/conversations/{id}/ai-drafts":                   need(auth.PermAIAssistCreate),
-	"GET /api/v1/conversations/{id}/ai-drafts":                    need(auth.PermAIAssistRead),
-	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":          need(auth.PermAIAssistRead),
-	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard": need(auth.PermAIAssistCreate),
+	"POST /api/v1/conversations/{id}/ai-drafts":                         need(auth.PermAIAssistCreate),
+	"GET /api/v1/conversations/{id}/ai-drafts":                          need(auth.PermAIAssistRead),
+	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":                need(auth.PermAIAssistRead),
+	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard":       need(auth.PermAIAssistCreate),
+	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/restore":       need(auth.PermAIAssistCreate),
+	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}": need(auth.PermAIAssistRead),
 	// A triage suggestion changes nothing until accepted; accepting changes tags, priority and assignee,
 	// like PATCH /api/v1/conversations/{id} (draft).
 	"GET /api/v1/conversations/{id}/ai-triage":                         need(auth.PermAIAssistRead),

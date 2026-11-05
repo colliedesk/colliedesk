@@ -137,6 +137,8 @@ type aiDraftArguments struct {
 	DraftID        string `json:"draft_id"`
 	Prompt         string `json:"prompt"`
 	Wait           int    `json:"wait"`
+	Before         string `json:"before"`
+	Limit          int    `json:"limit"`
 }
 
 func aiDraftsPath(conversationID, rest string) string {
@@ -178,15 +180,23 @@ func aiDraftsList(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	var list struct {
-		Items []json.RawMessage `json:"items"`
+		Items      []json.RawMessage `json:"items"`
+		NextBefore *string           `json:"next_before"`
 	}
-	if err := c.get(aiDraftsPath(args.ConversationID, ""), nil, &list); err != nil {
+	query := url.Values{}
+	if args.Before != "" {
+		query.Set("before", args.Before)
+	}
+	if args.Limit > 0 {
+		query.Set("limit", strconv.Itoa(args.Limit))
+	}
+	if err := c.get(aiDraftsPath(args.ConversationID, ""), query, &list); err != nil {
 		return nil, err
 	}
 	if list.Items == nil {
 		list.Items = []json.RawMessage{}
 	}
-	return map[string]any{"drafts": list.Items}, nil
+	return map[string]any{"drafts": list.Items, "next_before": list.NextBefore}, nil
 }
 
 func aiDraftDiscard(c *call, arguments map[string]any) (any, error) {
