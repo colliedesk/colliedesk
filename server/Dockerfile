@@ -14,7 +14,7 @@ RUN corepack pnpm build:web
 
 # Alpine only builds the static binary (CGO_ENABLED=0). Its pull is 75 MB against 302 MB for
 # bookworm, whose pull took about 25 seconds in CI while the Go stage waited for it.
-FROM golang:1.27-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS go-modules
+FROM golang:1.27-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS go-modules
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
