@@ -201,7 +201,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_provider_check` | Runs a check of an AI provider | `ai_settings:update` |
 | `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `ai_settings:update` |
 | `colliedesk_ai_slot_set` | Sets an AI feature: its provider and model, on or off, and what it does by itself by default | `ai_settings:update` |
-| `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and what is left of the included AI | `billing:read` |
+| `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and the AI credits used and left | `billing:read` |
 | `colliedesk_ai_automatic_limits_set` | Changes how many automatic AI runs a workspace allows a day and a minute | `ai_settings:update` |
 | `colliedesk_ai_chat_usage_get` | Shows a month of the help center's AI chat against its limits | `billing:read` |
 | `colliedesk_ai_chat_sessions_list` | Lists end users' chats with the help center's AI | `messages:read` |

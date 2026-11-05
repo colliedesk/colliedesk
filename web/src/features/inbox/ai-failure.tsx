@@ -4,7 +4,7 @@ import { PlanLimitError } from '../../api/client';
 
 const text = { openSettings: 'Open AI settings', askAdmin: 'Ask an admin to check Settings → Built-in AI.' };
 
-// Failures a setting causes: the provider's key or credit, the included AI, the feature turned off.
+// Failures a setting causes: the provider's key or credit, the AI credits, the feature turned off.
 const settingsCodes = ['auth', 'permission', 'quota_exhausted', 'model_not_found', 'ai_allowance_reached', 'feature_off', 'ai_feature_off'];
 
 // isSettingsFailure says whether a setting causes the failure, so trying again fails the same way.
@@ -16,7 +16,7 @@ export function isSettingsFailure(code: string | null): boolean {
 export function refusalCode(error: unknown): string | null {
   const detail = (error as { detail?: { code?: unknown } } | null)?.detail;
   if (typeof detail?.code === 'string') return detail.code;
-  // A 402 carries no detail: the included AI is used up.
+  // A 402 carries no detail: the AI credits are used up.
   return error instanceof PlanLimitError ? 'ai_allowance_reached' : null;
 }
 

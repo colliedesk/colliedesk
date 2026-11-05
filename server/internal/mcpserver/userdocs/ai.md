@@ -133,7 +133,7 @@ Colliedesk keeps how each draft ended (sent nearly as written, sent edited, disc
 expired), so a team can see whether drafts help, and an article's **Used by AI** box says how many
 drafts used it this month. A reply sent from a draft says so on the timeline: **from an AI draft, sent as written** or
 **from an AI draft, edited**. A draft that failed says why, with **Try again** (the same prompt) and,
-when a setting is the cause (the provider's key or credit, the included AI), the way to Settings → Built-in AI.
+when a setting is the cause (the provider's key or credit, the AI credits), the way to Settings → Built-in AI.
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 
@@ -142,7 +142,7 @@ minute are asked for in a workspace.
 Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, set **Default
 for channels** to **Suggest** (or do it on one channel, in its **AI** tab). A dialog says first what it
 would have meant in the last 30 days (how many customer messages, about what a draft costs, and how
-much of the included AI it may use, or that your own key is billed). It is **Off** until an admin
+many of the AI credits it may use, or that your own key is billed). It is **Off** until an admin
 picks Suggest, and goes back to Off when drafts turn off or move to another provider; it stays Off until
 an admin picks Suggest again.
 
@@ -162,8 +162,7 @@ every draft starts folded to one line with its buttons, so the conversation stay
 folds an open one.
 
 Automatic drafts stop at 100 a day (UTC; admins change it in **Automatic runs**), at 5 per
-conversation in 24 hours, and, on the server's provider, once they used half of the month's included
-AI: the other half stays for drafts people ask for and for triage. Paused, the conversation and
+conversation in 24 hours, and, on the server's provider, once they used half of the AI credits: the other half stays for drafts people ask for and for triage. Paused, the conversation and
 Settings say until when; **Draft with AI** keeps working. Restoring a workspace from a backup turns
 the automatic mode off.
 
@@ -186,7 +185,7 @@ all** (or **Accept the rest**) takes what is left, and **Dismiss** drops it. Tag
 removed, and anything accepted is changed back like any other change. **Suggest again** asks by
 hand. When the automatic limit below is reached, the card says automatic suggestions are paused
 until the next midnight UTC (shown in your timezone) and **Suggest now** still asks for one. A
-failure says why and what to do next, for example to open **Settings → Built-in AI** when the included AI is
+failure says why and what to do next, for example to open **Settings → Built-in AI** when the AI credits are
 used up.
 
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
@@ -340,11 +339,16 @@ as another model does.
    them (`intake_per_day`), so a busy group cannot spend the day's triage and drafts. Past the daily
    limit automatic suggestions wait until 00:00 UTC; what an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
    (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.
-2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
-   included in your plan). When it is used up, features on the server's provider stop until the first
-   day of the next month (UTC), and Settings says so; your own providers keep working. **Settings → Built-in AI →
-   Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
-   the same time never spend more than is left; the last few cents of a month can stay unused.
+2. **AI credits.** The server's provider can come with credits (on Colliedesk Cloud, included in your
+   plan; a trial has a number of its own for the whole trial). One credit is one result:
+   a reply draft, a triage suggestion or an intake decision, whatever the model costs. A retry of the same
+   task, or intake trying its fallback model, uses one credit; a call that fails uses none; the help
+   center's [AI chat](ai-chat.md) and the checks of a provider use none. A call that is running holds its
+   credit, so calls running at the same time never pass what is left. Credits start again on the first
+   day of the next month (UTC); a trial's do not start again before the trial ends. **Settings → Built-in
+   AI** shows "N of M credits used" and the day they start again. When they are used up, drafts, triage and
+   intake on the server's provider pause and Settings says the two ways on: add your own provider (no fee,
+   no limit), or wait until that day. Your own providers keep working and use no credits.
 
 3. **AI chat.** The help center's [AI chat](ai-chat.md) has limits of its own and never uses the
    included AI above, so customers asking questions cannot stop your team's drafts and suggestions.

@@ -2962,7 +2962,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Needs `billing:read`. */
+        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the workspace's AI credits on the server's provider when the server sets them. Needs `billing:read`. */
         get: operations["getAIUsage"];
         put?: never;
         post?: never;
@@ -3072,7 +3072,7 @@ export interface paths {
         /** @description The conversation's newest AI drafts (at most 20), newest first, with how each ended. */
         get: operations["listAIDrafts"];
         put?: never;
-        /** @description Asks for an AI draft of a reply, with an optional prompt (what the reply should say). The draft is written in the background (202, `status` queued); read it with `GET …/ai-drafts/{draftId}?wait=`. It uses the conversation (never its private notes), matching knowledge base articles and similar solved tickets, and is plain text a person edits and sends: the AI never sends. The person's earlier draft on the conversation is replaced. 409 `ai_feature_off` when reply drafts are off, 402 `ai_allowance_reached` when the server's provider spent this month's allowance, 429 `ai_drafts_rate_limited` past 30 drafts a minute in the workspace. */
+        /** @description Asks for an AI draft of a reply, with an optional prompt (what the reply should say). The draft is written in the background (202, `status` queued); read it with `GET …/ai-drafts/{draftId}?wait=`. It uses the conversation (never its private notes), matching knowledge base articles and similar solved tickets, and is plain text a person edits and sends: the AI never sends. The person's earlier draft on the conversation is replaced. 409 `ai_feature_off` when reply drafts are off, 402 `ai_allowance_reached` when the workspace's AI credits are used up, 429 `ai_drafts_rate_limited` past 30 drafts a minute in the workspace. */
         post: operations["createAIDraft"];
         delete?: never;
         options?: never;
@@ -5579,7 +5579,7 @@ export interface components {
             drafts_paused_until: string | null;
             /**
              * Format: date-time
-             * @description When automatic drafts spent half of this month's allowance of the server's provider: the next month. The other half stays for drafts people ask for and for triage.
+             * @description When automatic drafts used half of the workspace's credits on the server's provider: when the credits start again. The other half stays for drafts people ask for and for triage.
              */
             drafts_reserved_until: string | null;
             /** @description Intake decisions in a UTC day, counted inside per_day, so a busy group cannot spend the day's triage and drafts. */
@@ -5778,16 +5778,15 @@ export interface components {
             history_cut_at: string | null;
             transcript: components["schemas"]["AIChatTurn"][];
         };
+        /** @description The workspace's AI credits on the server's provider. One reply draft, triage suggestion or intake decision uses one credit, whatever the model costs; a failed call uses none. The help center's AI chat has limits of its own, and the workspace's own providers use no credit. */
         AIAllowance: {
-            /** @description About how many reply drafts what is left pays for, at the workspace's average cost of a draft over 30 days (before its first, a typical one); null when no price is known. */
-            drafts_left: number | null;
-            /** @description This month's allowance of the server's provider, in millionths of a US dollar. */
-            limit_micro_usd: number;
-            /** @description Spent so far; calls still running are not counted yet. */
-            used_micro_usd: number;
+            /** @description Credits the workspace gets: each UTC calendar month, or for the whole trial when the server gives a trial its own number. */
+            limit_credits: number;
+            /** @description Credits used, calls still running included. */
+            used_credits: number;
             /**
              * Format: date-time
-             * @description The first instant of the next UTC month.
+             * @description When the credits start again: the first instant of the next UTC month, or the end of a trial that has its own number.
              */
             resets_at: string;
         };
@@ -6177,7 +6176,7 @@ export interface components {
             /** @description True when the operator lets workspace providers use private addresses and plain http. */
             allow_private_base_urls: boolean;
             automatic: components["schemas"]["AIAutomaticLimits"];
-            /** @description This month's allowance of the server's provider; null when the server sets none. */
+            /** @description The workspace's AI credits on the server's provider; null when the server sets none. */
             allowance: components["schemas"]["AIAllowance"] | null;
             /** @description What a draft for every customer message would have meant in the last 30 days: the customer messages (imports left out), and a draft's cost on the server's provider (the workspace's average, or a typical one at the server's prices); null without a price. */
             auto_draft_estimate: {

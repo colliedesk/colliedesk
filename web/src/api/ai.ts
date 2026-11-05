@@ -48,8 +48,7 @@ export const aiAutomaticSchema = z.object({
   intake_per_day: z.number().int(), intake_today: z.number().int(), intake_paused_until: nullableDate,
 }) satisfies z.ZodType<Generated<'AIAutomaticLimits'>>;
 const aiAllowanceSchema = z.object({
-  limit_micro_usd: z.number().int(), used_micro_usd: z.number().int(), resets_at: z.string().datetime(),
-  drafts_left: z.number().int().nullable(),
+  limit_credits: z.number().int(), used_credits: z.number().int(), resets_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'AIAllowance'>>;
 export const aiUsageSchema = z.object({
   month: z.string(), allowance: aiAllowanceSchema.nullable(),

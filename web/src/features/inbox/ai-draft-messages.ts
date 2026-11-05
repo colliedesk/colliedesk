@@ -35,7 +35,7 @@ const failures: Record<string, string> = {
   too_long: 'The draft ran past its length. Ask for a shorter reply.',
   empty_answer: 'The model returned no reply. Try again.',
   restored: 'This draft was lost when the workspace was restored. Ask for a new one.',
-  ai_allowance_reached: 'This month’s included AI is used up. An admin can add your own provider in Settings → Built-in AI.',
+  ai_allowance_reached: 'The AI credits are used up. An admin can add your own provider in Settings → Built-in AI (no fee, no limit), or wait until the credits start again.',
   feature_off: 'Reply drafts were turned off. An admin turns them on in Settings → Built-in AI.',
   auth: 'The AI provider refused its key. An admin can change it in Settings → Built-in AI.',
   quota_exhausted: 'The AI provider account is out of credit. An admin can check it in Settings → Built-in AI.',

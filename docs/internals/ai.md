@@ -198,7 +198,7 @@ leaves no row. No prompt or answer is stored.
 
 Handlers register per kind (`Worker.Handle`); a task without one fails (`no_handler`).
 
-## Automatic limits and the allowance
+## Automatic limits and the credits
 
 Automatic tasks count against `ai_automatic_limits` (default 300 a UTC day, 30 a minute) when they
 first start; tasks count, not calls, so retries use no more. An advisory lock per workspace serializes
@@ -218,22 +218,30 @@ provider drops it, and a new one lowers intake's channel levels as another model
 
 `ai_usage.cost_micro_usd` is computed when a call of the server's provider finishes, per hop at the
 served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,
-and a log line), and stored: a price change never rewrites history. `Metered` sums the month (UTC) and
-refuses a server call once the allowance (`AI_SERVER_MONTHLY_ALLOWANCE`; on the cloud per active agent,
-another amount for a trial) cannot pay for the call, before writing a usage row: no call, no row.
+and a log line), and stored: a price change never rewrites history. It is information only.
 
-A call holds its most possible cost while it runs (`reserved_micro_usd`: its text at one token per 3
-bytes, plus 500 for a schema, and all of `MaxOutput`, at the model's price or the highest declared).
-The check and the hold are one step under a per-workspace advisory lock, and the month's sum counts
-running calls at their hold and finished ones at their cost. Without the hold, calls started at once
-(several workers or servers) each saw the same balance and could pass it by what they all cost
-together, with no bound (`TestCallsRunningAtOnceNeverPassTheAllowance`). Now the allowance is passed
-only when a call costs more than its hold: a refusal fallback answering with an extra hop.
+The server's provider is bounded in credits (`AI_SERVER_MONTHLY_CREDITS`), not dollars: a dollar limit
+made the same draft cost a different share of the allowance each day and could not be told to a customer.
+`Service.credits` counts distinct results in `ai_usage`: `COALESCE(task_id, id)`, `billed_to='server'`,
+status `ok` (used) or `started` (held), features other than `chat` and `check`. So a retry or intake's
+fallback model (same task) is one credit and a failed call none. A trial counts from `trial_ends_at -
+TrialLength` to `trial_ends_at`, everyone else from the first of the UTC month. The check and the hold are
+one step under a per-workspace advisory lock; a call whose task already has a credit passes at zero.
+Without the lock, calls started at once each saw the same balance and passed the limit
+(`TestCallsRunningAtOnceNeverPassTheCredits`).
 
-A call that does not fit only because running calls hold the room (`ErrAllowanceHeld`: it would fit
-once they give it back) is not a spent allowance: its task goes back to the queue for 5 s, uncounted,
-for at most 10 minutes from when it was queued; a hold left by a dead process goes when the sweep
-closes its row. Only a call that would not fit with nothing running fails `ai_allowance_reached`.
+A call that does not fit only because running calls hold the room (`ErrAllowanceHeld`) is not a spent
+allowance: its task goes back to the queue for 5 s, uncounted, for at most 10 minutes from when it was
+queued; a hold left by a dead process goes when the sweep closes its row. Only a call with no credit left
+even once the running ones are done fails `ai_allowance_reached` (`AllowanceReachedError` carries the day
+the credits start again for the 402 message).
+
+Trap: the old dollar setting must never be read as credits (10 dollars would be 10 credits). It stays a
+registry key (`ai.server.monthly_allowance`) only so an operator can unset what the database holds.
+`ServerProviderFromEnv` must not refuse it: a refused value rejects the whole configuration version,
+the server falls back to the last good one (which holds the same key) and then to defaults, dropping
+SMTP, billing and the provider. Instead it sets `LegacyAllowance` (a startup warning) and, without
+`AI_SERVER_MONTHLY_CREDITS`, an allowance of 0 credits.
 
 ## Reply drafts
 
@@ -253,7 +261,7 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    `ai_drafts.sources` cannot use an index under row-level security (non-leakproof operator).
 4. **Refused before queueing.** `POST` answers 409 `ai_feature_off`, 402 `ai_allowance_reached` and 429
    `ai_drafts_rate_limited` (30 a minute in a workspace, under an advisory lock) at once: a looping
-   token must not fill the queue or a workspace's own key, which no allowance bounds.
+   token must not fill the queue or a workspace's own key, which no credits bound.
 5. **How it ended.** A reply that names `ai_draft_id` locks the draft (this conversation's, ready,
    undecided) before the insert, so another workspace's or conversation's id never reaches the
    foreign key, and records `sent_unchanged` (word similarity ≥ 0.9) or `sent_edited`. A reply sent
@@ -261,9 +269,6 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    discards (trigger); the worker's sweep expires a ready draft after 7 days and erases text and prompt
    90 days after a draft ended. A web client whose draft went meanwhile sends the reply again without
    the id: losing the metric is better than refusing a reply. `DraftOutcomes` counts them for #100.
-6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
-   average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
-
 ## Triage suggestions
 
 1. **Queued by a trigger.** `ai_triage_on_first_message` (AFTER INSERT ON messages) queues an automatic
@@ -340,7 +345,7 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    without a call when the mode went off (`automation_off`), the conversation closed, someone replied
    since (`answered`), the day's automatic drafts are used (`draft_limit`, `draft_per_day`), the
    conversation had 5 in 24 hours (`conversation_cap`), or on the server's provider automatic drafts
-   spent half of the month's allowance, counting what running calls hold (`allowance_reserved`).
+   used half of the credits, counting running ones (`allowance_reserved`).
    Triage is claimed before drafts among automatic tasks.
 3. **People first.** `CreateDraft` cancels the waiting automatic draft and supersedes a ready one;
    automatic drafts never touch a person's. The model also says `reply_needed`, kept for automatic

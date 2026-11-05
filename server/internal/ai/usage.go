@@ -43,8 +43,8 @@ func (s *Service) ParseMonth(value string) (time.Time, error) {
 	return month.UTC(), nil
 }
 
-// Usage sums the workspace's calls of the month starting at month, with the allowance when it is the
-// current month and the server sets one.
+// Usage sums the workspace's calls of the month starting at month, with the credits when it is the
+// current month and the server sets them.
 func (s *Service) Usage(ctx context.Context, workspaceID string, month time.Time) (Usage, error) {
 	usage := Usage{Month: month.Format("2006-01"), Rows: []UsageRow{}}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -67,12 +67,12 @@ func (s *Service) Usage(ctx context.Context, workspaceID string, month time.Time
 		if !month.Equal(monthStart(s.now())) {
 			return nil
 		}
-		left, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
+		c, limited, err := s.credits(ctx, tx, workspaceID)
 		if err != nil || !limited {
 			return err
 		}
-		usage.Allowance, err = s.allowanceView(ctx, tx, workspaceID, left, limit, month.AddDate(0, 1, 0))
-		return err
+		usage.Allowance = c.view()
+		return nil
 	})
 	if usage.Rows == nil {
 		usage.Rows = []UsageRow{}

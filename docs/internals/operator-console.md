@@ -128,7 +128,7 @@ waits for every generation's). Config-independent loops (daily sweep, AI retriev
 the reloader) run at process level (`process.Go`); `TestServeStartsWorkersOnlyThroughAGenerationOrTheProcess`
 fails on a bare `go` statement elsewhere in serve. The environment is imported only at process start.
 
-AI prices and the monthly allowance, retention and telemetry apply by re-serve, not at once: the AI
+AI prices and the monthly credits, retention and telemetry apply by re-serve, not at once: the AI
 service and the retention sweeper take them at construction. A few seconds later than "hot", but correct.
 
 ## Guards and trials
@@ -196,7 +196,7 @@ settings it rides with).
   support address is a hosted address (under `hosted_mail.domain`, also after a new slug renamed it; its
   setup reads it); new workspaces get none.
 - **Billing off is limits off, not the cloud off.** `generation` and `httpapi.New` read
-  `billing.Enabled() && !off`, for plan limits, retention, Founding and the AI allowance; the Polar client
+  `billing.Enabled() && !off`, for plan limits, retention, Founding and the AI credits; the Polar client
   stays (its webhook keeps subscriptions in step). `hostedCloud()`, telemetry's realm and the console's
   `path_mode` severity read the configured settings, so a switch never changes what the server is.
 - **Cloud sign-in off keeps the console's own verifier** (`operatorCloud`): only the app's exchange and

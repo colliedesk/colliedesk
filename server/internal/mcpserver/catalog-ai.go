@@ -182,12 +182,12 @@ func aiUsageGetSpec() Spec {
 		Title: "Show AI usage",
 		Description: `Show one UTC month of the workspace's AI calls per feature and provider: calls, failed and automatic calls, tokens in and out, ` +
 			`what the server's provider spent in micro-dollars, and provider_cost: what the provider itself reported, in its own unit (OpenRouter: credits, not dollars), ` +
-			`with this month's allowance when the server sets one. No prompt or answer is ever stored.`,
+			`with the workspace's AI credits when the server sets them (allowance: limit_credits, used_credits, resets_at; one credit is one draft, triage suggestion or intake decision on the server's provider). No prompt or answer is ever stored.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/ai/usage"},
 		Input:    `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
 		Output: `{"type":"object","required":["usage"],"properties":{"usage":{"type":"object","required":["month","rows"],"properties":{"month":{"type":"string"},` +
-			`"allowance":{"type":["object","null"]},"rows":{"type":"array","items":{"type":"object"}}}}}}`,
+			`"allowance":{"type":["object","null"],"description":"AI credits on the server's provider: limit_credits, used_credits and resets_at (when they start again); null when the server sets no limit."},"rows":{"type":"array","items":{"type":"object"}}}}}}`,
 		run: aiUsageGet,
 	}
 }
@@ -233,7 +233,7 @@ func aiDraftCreateSpec() Spec {
 		Description: `Ask the workspace's AI provider for a draft of a reply to a conversation, with an optional prompt (what the reply should say). ` +
 			`It is written in the background from the conversation (never its private notes), matching knowledge base articles and similar solved tickets; ` +
 			`poll colliedesk_ai_draft_get with wait. The draft is never sent: a person (or colliedesk_reply_send with ai_draft_id) sends a reply. ` +
-			`Fails with ai_feature_off when reply drafts are off, ai_allowance_reached when the included AI is used up.`,
+			`Fails with ai_feature_off when reply drafts are off, ai_allowance_reached when the AI credits are used up (the error names the day they start again; adding the workspace's own provider needs no credits).`,
 
 		REST: []string{"POST /api/v1/conversations/{id}/ai-drafts"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `,` +

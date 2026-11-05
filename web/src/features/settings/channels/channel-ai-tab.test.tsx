@@ -270,7 +270,7 @@ test('a scope lowered because the provider changed says that', async () => {
   expect(await screen.findByText(/Auto was lowered to Suggest on Oct 24, 2026: intake moved to another provider/)).toBeInTheDocument();
 });
 
-test('the estimate is in the provider\'s own credits, or a share of the included AI on Colliedesk AI', async () => {
+test('the estimate is in the provider\'s own credits, or a share of the AI credits on Colliedesk AI', async () => {
   aiApi.readiness.mockResolvedValue({ ...readiness(), estimate: { days: 30, cards: 420, ai_calls: 180, cost_per_call: { micro_usd: null, provider_cost: 0.0004 } } });
   const { unmount } = view();
   fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
@@ -278,10 +278,10 @@ test('the estimate is in the provider\'s own credits, or a share of the included
   unmount();
   aiApi.readiness.mockResolvedValue(readiness());
   aiApi.settings.mockResolvedValue({ ...settings(), slots: [slot('triage'), slot('draft'), { ...slot('intake'), source: 'server', provider_id: null }],
-    allowance: { limit_micro_usd: 5_000_000, used_micro_usd: 0, period_start: '2026-10-01T00:00:00Z', period_end: '2026-11-01T00:00:00Z' } } as unknown as AISettings);
+    allowance: { limit_credits: 1000, used_credits: 0, resets_at: '2026-11-01T00:00:00Z' } } as unknown as AISettings);
   view();
   fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
-  expect(await screen.findByText(/about \$0.22, 4% of the AI included each month/)).toBeInTheDocument();
+  expect(await screen.findByText(/about 180 credits, 18% of the AI credits each month/)).toBeInTheDocument();
 });
 
 test('a scope that follows the default shows its settings read-only and says how to set its own', async () => {

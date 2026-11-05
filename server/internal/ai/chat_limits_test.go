@@ -12,7 +12,7 @@ import (
 func chatServer() *ai.ServerProvider {
 	return &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "server-key",
 		Models: map[string][]string{ai.SlotDraft: {"claude-haiku-5-5"}, ai.SlotChat: {"claude-haiku-5-5"}},
-		Prices: map[string]ai.Price{"claude-haiku-5-5": {Input: 0.1, Output: 0.5}}, Allowance: &ai.Allowance{PerWorkspace: 0.01}}
+		Prices: map[string]ai.Price{"claude-haiku-5-5": {Input: 0.1, Output: 0.5}}, Allowance: &ai.Allowance{PerWorkspace: 1}}
 }
 
 // The chat has its own money: with the team's included AI used up it still answers, and what it
@@ -25,7 +25,7 @@ func TestTheChatNeverSpendsTheTeamsAllowance(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, err := e.service.Settings(ctx, e.a.id)
-	if err != nil || before.Allowance == nil || before.Allowance.UsedMicroUSD != 20000 {
+	if err != nil || before.Allowance == nil || before.Allowance.UsedCredits != 1 {
 		t.Fatalf("allowance = %+v %v", before.Allowance, err)
 	}
 	call := ai.Call{WorkspaceID: e.a.id, Feature: ai.FeatureChat, BilledTo: ai.BilledToServer, Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI"}
@@ -36,8 +36,8 @@ func TestTheChatNeverSpendsTheTeamsAllowance(t *testing.T) {
 		t.Fatalf("a chat with the included AI used up: %v", err)
 	}
 	after, err := e.service.Settings(ctx, e.a.id)
-	if err != nil || after.Allowance.UsedMicroUSD != before.Allowance.UsedMicroUSD {
-		t.Fatalf("the chat moved the allowance: %d → %d", before.Allowance.UsedMicroUSD, after.Allowance.UsedMicroUSD)
+	if err != nil || after.Allowance.UsedCredits != before.Allowance.UsedCredits {
+		t.Fatalf("the chat moved the allowance: %d → %d", before.Allowance.UsedCredits, after.Allowance.UsedCredits)
 	}
 	if n := e.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1 AND feature='chat' AND cost_micro_usd>0`, e.a.id); n != 1 {
 		t.Fatalf("priced chat rows = %d", n)

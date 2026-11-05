@@ -423,7 +423,7 @@ func (w *Worker) admit(ctx context.Context, item claimedTask, task Task) (string
 
 // admitAutomaticDraft decides whether an automatic draft is still worth its call, and may be paid for:
 // the automatic mode still on, nobody replied since, the conversation open, under the day's and the
-// conversation's automatic drafts, and (on the server's provider) under half of the allowance.
+// conversation's automatic drafts, and (on the server's provider) under half of the credits.
 // automaticDraftWanted is the part of admitAutomaticDraft a try again asks too: the mode still on,
 // the conversation open, nobody replied since.
 func (s *Service) automaticDraftWanted(ctx context.Context, tx pgx.Tx, workspaceID string, task Task) (string, error) {
@@ -465,7 +465,7 @@ func (s *Service) admitAutomaticDraft(ctx context.Context, tx pgx.Tx, workspaceI
 		return CodeConversationCap, nil
 	}
 	if server {
-		reserved, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
+		reserved, _, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
 		if err != nil || reserved {
 			return CodeAllowanceReserved, err
 		}

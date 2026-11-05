@@ -207,9 +207,9 @@ func (s *Service) CreateDraft(ctx context.Context, workspaceID string, actor Act
 			return err
 		}
 		if binding.call.BilledTo == BilledToServer {
-			// The same rule as the call itself, for a typical draft: refused only when it could not fit
-			// even once the calls still running give back what they hold.
-			if err := s.typicalCallFits(ctx, tx, workspaceID, binding.Model, typicalDraftInput, draftMaxOutput); err != nil {
+			// The same rule as the call itself: refused only when no credit is left even once the calls
+			// still running give theirs back.
+			if err := s.creditsLeft(ctx, tx, workspaceID); err != nil {
 				return err
 			}
 		}

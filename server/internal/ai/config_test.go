@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func getenv(values map[string]string) func(string) string {
@@ -75,5 +76,83 @@ func TestCachePricesLeftOutAreSharesOfTheInputPrice(t *testing.T) {
 		if math.Abs(got.CacheRead-price.CacheRead) > 1e-9 || math.Abs(got.CacheWrite-price.CacheWrite) > 1e-9 || got.Input != price.Input || got.Output != price.Output {
 			t.Errorf("%s = %+v, want %+v", model, got, price)
 		}
+	}
+}
+
+// The server's provider is bounded in credits: one reply draft or one triage suggestion is one credit.
+// A workspace gets its credits each month, and a trial its own number for the whole trial.
+func TestMonthlyCreditsFromEnv(t *testing.T) {
+	base := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5"}
+	with := func(credits string) map[string]string {
+		values := map[string]string{"AI_SERVER_MONTHLY_CREDITS": credits}
+		for key, value := range base {
+			values[key] = value
+		}
+		return values
+	}
+	for value, want := range map[string]ai.Allowance{
+		"1000":                      {PerWorkspace: 1000},
+		"1000,trial=500":            {PerWorkspace: 1000, Trial: 500},
+		"workspace=1000, trial=500": {PerWorkspace: 1000, Trial: 500},
+	} {
+		server, err := ai.ServerProviderFromEnv(getenv(with(value)))
+		if err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+		if server.Allowance == nil || *server.Allowance != want {
+			t.Fatalf("%q = %+v, want %+v", value, server.Allowance, want)
+		}
+	}
+	// Credits need no prices: no model is priced here.
+	if server, err := ai.ServerProviderFromEnv(getenv(base)); err != nil || server.Allowance != nil {
+		t.Fatalf("without credits: %+v %v, want no limit", server, err)
+	}
+	for _, value := range []string{"ten", "1000.5", "-1", "agent=3,trial=2", "1000,trial=x"} {
+		if _, err := ai.ServerProviderFromEnv(getenv(with(value))); err == nil || !strings.Contains(err.Error(), "ai.server.monthly_credits") {
+			t.Fatalf("%q: %v, want an error naming ai.server.monthly_credits", value, err)
+		}
+	}
+}
+
+// A dollar amount left in the old setting must never be read as credits: the server stops and names the new one.
+// A stored dollar value must not stop the configuration from loading (that would drop every other
+// setting with it), and must never be read as credits: the server's provider gets no credits until
+// AI_SERVER_MONTHLY_CREDITS is set.
+func TestTheOldDollarAllowanceAloneGivesNoCreditsAndIsFlagged(t *testing.T) {
+	values := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5",
+		"AI_SERVER_MONTHLY_ALLOWANCE": "10"}
+	server, err := ai.ServerProviderFromEnv(getenv(values))
+	if err != nil {
+		t.Fatalf("error = %v, want the configuration to load", err)
+	}
+	if !server.LegacyAllowance {
+		t.Fatal("LegacyAllowance = false, want the old setting flagged")
+	}
+	if server.Allowance == nil {
+		t.Fatal("Allowance = nil (no limit), want 0 credits")
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTrial}); got != 0 {
+		t.Fatalf("trial credits = %d, want 0", got)
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTeam}); got != 0 {
+		t.Fatalf("plan credits = %d, want 0", got)
+	}
+}
+
+func TestTheCreditsSettingWinsOverTheOldDollarAllowance(t *testing.T) {
+	values := map[string]string{"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "k", "AI_SERVER_MODELS": "draft=claude-haiku-5-5",
+		"AI_SERVER_MONTHLY_ALLOWANCE": "10", "AI_SERVER_MONTHLY_CREDITS": "1000,trial=500"}
+	server, err := ai.ServerProviderFromEnv(getenv(values))
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if !server.LegacyAllowance {
+		t.Fatal("LegacyAllowance = false, want the old setting flagged so the operator removes it")
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTeam}); got != 1000 {
+		t.Fatalf("plan credits = %d, want 1000", got)
+	}
+	if got := server.Allowance.For(domain.Access{Plan: domain.PlanTrial}); got != 500 {
+		t.Fatalf("trial credits = %d, want 500", got)
 	}
 }

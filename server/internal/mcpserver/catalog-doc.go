@@ -199,7 +199,7 @@ var toolDocs = map[string]string{
 	"colliedesk_channel_ai_set":                      "Sets what an AI feature does by itself on a channel or a scope",
 	"colliedesk_ai_source_consent_set":               "Lets AI intake send images, a contact's profile or an integration's data",
 	"colliedesk_ai_source_consent_remove":            "Stops AI intake sending a kind of extra data",
-	"colliedesk_ai_usage_get":                        "Shows a month of AI usage per feature and provider, and what is left of the included AI",
+	"colliedesk_ai_usage_get":                        "Shows a month of AI usage per feature and provider, and the AI credits used and left",
 	"colliedesk_ai_chat_usage_get":                   "Shows a month of the help center's AI chat against its limits",
 	"colliedesk_ai_chat_sessions_list":               "Lists end users' chats with the help center's AI",
 	"colliedesk_ai_chat_session_get":                 "Reads one AI chat's transcript with the articles each answer cited",

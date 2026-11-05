@@ -60,6 +60,9 @@ var keys = []Key{
 	{Name: "ai.server.models", Env: "AI_SERVER_MODELS", Group: GroupAI, Import: "ai-server"},
 	{Name: "ai.server.label", Env: "AI_SERVER_LABEL", Default: "Server provider", Group: GroupAI, Import: "ai-server"},
 	{Name: "ai.server.prices", Env: "AI_SERVER_PRICES", Group: GroupAI, Import: "ai-server"},
+	{Name: "ai.server.monthly_credits", Env: "AI_SERVER_MONTHLY_CREDITS", Group: GroupAI, Import: "ai-server"},
+	// The dollar allowance before credits. Still a key so an operator can remove what the database holds;
+	// while it holds a value the AI settings are refused, so a dollar amount is never read as credits.
 	{Name: "ai.server.monthly_allowance", Env: "AI_SERVER_MONTHLY_ALLOWANCE", Group: GroupAI, Import: "ai-server"},
 
 	{Name: "smtp.host", Env: "SMTP_HOST", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardReenterSecret}, Reenter: "smtp.password"},

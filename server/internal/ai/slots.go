@@ -166,12 +166,10 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 			WHERE workspace_id=$1 AND auto_applied_at>$2`, workspaceID, s.now().Add(-30*24*time.Hour)).Scan(&settings.AutoTriage.Applied, &settings.AutoTriage.Undone); err != nil {
 			return err
 		}
-		if left, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID); err != nil {
+		if c, limited, err := s.credits(ctx, tx, workspaceID); err != nil {
 			return err
 		} else if limited {
-			if settings.Allowance, err = s.allowanceView(ctx, tx, workspaceID, left, limit, monthStart(s.now()).AddDate(0, 1, 0)); err != nil {
-				return err
-			}
+			settings.Allowance = c.view()
 		}
 		events, err := tx.Query(ctx, `SELECT e.id::text,e.kind,e.actor_agent_id::text,COALESCE(NULLIF(a.display_name,''),a.email),e.actor_token_id IS NOT NULL,
 				e.provider_id::text,e.provider_label,e.slot,e.detail,e.created_at

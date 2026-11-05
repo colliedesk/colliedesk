@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -291,5 +292,45 @@ func TestACheckRefusedForItsModelNamesTheModel(t *testing.T) {
 	wantResponse(t, response, http.StatusUnprocessableEntity, "ai_check_failed")
 	if !strings.Contains(response.Body.String(), `has no model \"claude-3-haiku-20240307\"`) || !strings.Contains(response.Body.String(), "Tick another model first") {
 		t.Fatalf("body = %s, want the refused model named and the way on", response.Body.String())
+	}
+}
+
+// Used-up credits refuse a draft before anything is queued, and the answer says the two ways on.
+func TestUsedUpCreditsRefuseADraftAndSayHowToGoOn(t *testing.T) {
+	desk := newAIDesk(t, func(config *httpapi.Config) {
+		config.AI.Server = &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "server-secret",
+			Models: map[string][]string{ai.SlotDraft: {"claude-sonnet-5-5"}}, Allowance: &ai.Allowance{PerWorkspace: 1}}
+	})
+	if response := request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "server", "enabled": true}, desk.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("turn drafts on: %d %s", response.Code, response.Body.String())
+	}
+	if _, err := desk.pool.Exec(context.Background(), `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,started_at,finished_at)
+		VALUES($1,'triage','server','anthropic','Colliedesk AI','claude-sonnet-5-5','ok',now(),now())`, desk.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	settings := request(t, desk.api, http.MethodGet, "/api/v1/ai", nil, desk.adminA, nil)
+	if !strings.Contains(settings.Body.String(), `"limit_credits":1,"used_credits":1`) {
+		t.Fatalf("settings = %s", settings.Body.String())
+	}
+	contact := create(t, desk.api, desk.adminA, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@credits.example"})
+	conversation := create(t, desk.api, desk.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer jam"})
+	response := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-drafts", map[string]any{"prompt": ""}, desk.adminA, nil)
+	wantResponse(t, response, http.StatusPaymentRequired, "ai_allowance_reached")
+	if body := response.Body.String(); !strings.Contains(body, "credits") || !strings.Contains(body, "your own provider") || strings.Contains(body, "larger plan") {
+		t.Fatalf("refusal = %s, want the credits named and the two ways on", body)
+	}
+	// The answer names the day the credits start again: the first of next month, UTC.
+	now := time.Now().UTC()
+	reset := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC).Format("2 January 2006")
+	if !strings.Contains(response.Body.String(), reset) {
+		t.Fatalf("refusal = %s, want the reset date %q", response.Body.String(), reset)
+	}
+	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_tasks WHERE workspace_id=$1`, desk.workspaceA); n != "0" {
+		t.Fatalf("%s tasks queued", n)
+	}
+	// The other workspace keeps its own credits.
+	settingsB := request(t, desk.api, http.MethodGet, "/api/v1/ai", nil, desk.adminB, nil)
+	if !strings.Contains(settingsB.Body.String(), `"limit_credits":1,"used_credits":0`) {
+		t.Fatalf("B's settings = %s", settingsB.Body.String())
 	}
 }

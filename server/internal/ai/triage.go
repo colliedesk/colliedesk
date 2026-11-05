@@ -175,12 +175,8 @@ func (s *Service) CreateTriage(ctx context.Context, workspaceID string, actor Ac
 			return err
 		}
 		if binding.call.BilledTo == BilledToServer {
-			left, _, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
-			if err != nil {
+			if err := s.creditsLeft(ctx, tx, workspaceID); err != nil {
 				return err
-			}
-			if limited && left <= 0 {
-				return ErrAllowanceReached
 			}
 		}
 		if err := s.underMinuteCap(ctx, tx, workspaceID, now); err != nil {

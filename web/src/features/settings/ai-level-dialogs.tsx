@@ -34,17 +34,17 @@ export function AutoDraftDialog({ slot, settings, onClose, onTurnOn }: { slot: A
   const each = estimate.draft_cost_micro_usd;
   const allowance = settings.allowance;
   const provider = settings.providers.find((item) => item.id === slot.provider_id);
-  const half = allowance ? Math.floor(allowance.limit_micro_usd / 2) : null;
+  const half = allowance ? Math.floor(allowance.limit_credits / 2) : null;
   return (
     <Dialog title={m.autoDraftConfirmTitle} help={m.autoDraftConfirmLead} onClose={onClose} onSubmit={onTurnOn}
       footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
       <dl className="ai-estimate">
         <div><dt>{m.estLast30}</dt><dd>{m.estMessages(estimate.customer_messages)}</dd></div>
-        {each !== null && <div><dt>{m.estAbout}</dt><dd>{m.estMonth(money(each * estimate.customer_messages), money(each))}</dd></div>}
-        {server && allowance && <div><dt>{m.estPlan}</dt><dd>{m.estPlanMonth(money(allowance.limit_micro_usd))}</dd></div>}
+        {!server && each !== null && <div><dt>{m.estAbout}</dt><dd>{m.estMonth(money(each * estimate.customer_messages), money(each))}</dd></div>}
+        {server && allowance && <div><dt>{m.estPlan}</dt><dd>{m.estPlanMonth(allowance.limit_credits)}</dd></div>}
         {!server && <div><dt>{m.estAtMost}</dt><dd>{m.estAtMostDay(perDay)}</dd></div>}
       </dl>
-      {server && half !== null ? <p className="ai-estimate-note"><b>{m.estHalf(money(half), each ? Math.floor(half / each) : null)}</b>{m.estHalfRest}</p>
+      {server && half !== null ? <p className="ai-estimate-note"><b>{m.estHalf(half)}</b>{m.estHalfRest}</p>
         : !server && <p className="ai-estimate-note"><b>{m.estByo(provider?.label ?? '')}</b>{m.estByoRest}</p>}
       <ul className="ai-facts">{m.autoDraftFacts(perDay).map((fact) => <li key={fact}>{fact}</li>)}</ul>
       <p><a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#write-a-draft-when-a-customer-writes" target="_blank" rel="noopener noreferrer">{m.estHow}</a></p>

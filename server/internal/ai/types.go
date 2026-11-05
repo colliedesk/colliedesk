@@ -131,8 +131,8 @@ type Settings struct {
 	ProviderLimit        int  `json:"provider_limit"`
 	CanStoreKeys         bool `json:"can_store_keys"`
 	AllowPrivateBaseURLs bool `json:"allow_private_base_urls"`
-	// Automatic is the workspace's automatic limits and today's use; Allowance what the server's
-	// provider may still spend this month, null when the server sets no allowance.
+	// Automatic is the workspace's automatic limits and today's use; Allowance the workspace's credits on the server's
+	// provider, null when the server sets none.
 	Automatic AutomaticLimits `json:"automatic"`
 	Allowance *AllowanceView  `json:"allowance"`
 	// AutoTriage counts the suggestions AI applied by itself in the last 30 days, and how many of those
@@ -161,14 +161,13 @@ type AutoTriageStats struct {
 	Undone  int `json:"undone"`
 }
 
-// AllowanceView is this month's allowance of the server's provider, in micro-dollars.
+// AllowanceView is the workspace's credits on the server's provider: one reply draft, triage suggestion
+// or intake decision uses one. ResetsAt is when they start again: the first of the next month (UTC), or
+// the end of a trial that has its own number.
 type AllowanceView struct {
-	LimitMicroUSD int64     `json:"limit_micro_usd"`
-	UsedMicroUSD  int64     `json:"used_micro_usd"`
-	ResetsAt      time.Time `json:"resets_at"`
-	// DraftsLeft is about how many reply drafts what is left pays for, at the workspace's own average
-	// cost of a draft over 30 days or, before its first, a typical one; nil when no price is known.
-	DraftsLeft *int64 `json:"drafts_left"`
+	LimitCredits int64     `json:"limit_credits"`
+	UsedCredits  int64     `json:"used_credits"`
+	ResetsAt     time.Time `json:"resets_at"`
 }
 
 // Actor is who changes the settings: the agent, and the token's session when a token did.
