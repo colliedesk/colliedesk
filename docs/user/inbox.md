@@ -279,7 +279,23 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   holds the **Send** button and sends nothing until you remove a file. A file you sent stays on the
   message. A reply emails its files to the contact; a private note and its files never leave your team.
 - Attachments appear under their message with name and size. Select a file name to download it.
-  Files always download; they are never opened inside Colliedesk.
+- **Pictures, videos and voice clips** show on the timeline itself, for customer messages, replies and
+  private notes alike. Colliedesk goes by the file's type as it was received, not by its name, so a
+  photo from a chat app named `image-1` shows too. A picture is a small thumbnail (a few kilobytes,
+  made from the photo the first time someone views it); the gallery shows the original; a video and a voice clip
+  get a player with play and pause, a bar to move through it, the time, volume, speed (1×, 1.25×,
+  1.5×, 2×, 0.75×) and, for a video, full screen. With the player focused, `k` or Space plays and
+  pauses, `m` mutes and `f` goes full screen; the arrow keys move the bar or the volume. Nothing loads
+  until it is near the screen, and a video or voice clip is not downloaded whole before you play it.
+- Select a picture (or the expand button of a player) to open the **gallery** (a clip playing on the
+  timeline stops): every picture, video
+  and voice clip of the conversation in timeline order, with its position (3 / 7), its name, who sent
+  it and when, a **Download** button and a strip of all of them. **Previous** and **Next**, the arrow
+  keys or a swipe move through it; **Escape** or **Close** closes it. Pictures embedded in a formatted
+  email are part of that email and are not in the gallery.
+- Every other file, and a picture or clip the browser cannot show (an SVG drawing, a HEIC photo, a
+  voice clip in a format the browser does not play), stays a row to download. Files are never opened
+  as a page inside Colliedesk.
 
 **Start a new conversation**
 - Select **New conversation** next to the inbox title.

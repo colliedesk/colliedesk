@@ -5,7 +5,10 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
-import { LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
+import { DownloadIcon, LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
+import { attachmentURL, mediaKind, thumbnailURL } from './media-kind';
+import type { MediaKind } from './media-kind';
+import { mediaViewerPart } from './media-part';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 import { MarkdownBody } from './markdown-body';
@@ -23,6 +26,8 @@ interface MessageItemProps {
   note?: ReactNode;
   // channelName is the conversation's channel, the author of a notice it sent by itself (named even once removed).
   channelName?: string;
+  // onOpenMedia opens the conversation's gallery at a picture, video or voice clip of this message.
+  onOpenMedia?: (attachmentId: string) => void;
 }
 
 export function MessageItem(props: MessageItemProps) {
@@ -48,7 +53,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName, onOpenMedia }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -93,7 +98,7 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
       {showHTML && item.body_html
         ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
         : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.body} />}</div>}
-      {files.length > 0 && <AttachmentList items={files} />}
+      {files.length > 0 && <AttachmentList items={files} onOpenMedia={onOpenMedia} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
@@ -160,15 +165,54 @@ function OriginLine({ origin }: { origin: MessageOrigin }) {
   );
 }
 
-function AttachmentList({ items }: { items: Attachment[] }) {
+// AttachmentList shows each file the way it is read: a picture as a thumbnail, a video or a voice clip in a
+// player, by the media type the server stored (never the name). Every other file, and media a browser cannot
+// draw or play, is a row to download. Each keeps a link to the original file.
+function AttachmentList({ items, onOpenMedia }: { items: Attachment[]; onOpenMedia?: (attachmentId: string) => void }) {
   return (
     <ul className="message-attachments" aria-label={messages.attachments}>
-      {items.map((file) => (
-        <li key={file.id}>
-          <PaperclipIcon /><a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
-          <span className="attachment-size">{formatBytes(file.size)}</span>
-        </li>
-      ))}
+      {items.map((file) => <AttachmentRow key={file.id} file={file} onOpenMedia={onOpenMedia} />)}
     </ul>
   );
+}
+
+function AttachmentRow({ file, onOpenMedia }: { file: Attachment; onOpenMedia?: (attachmentId: string) => void }) {
+  const kind = mediaKind(file.content_type);
+  const [broken, setBroken] = useState(false);
+  // A picture shows its thumbnail; without one (a type the server cannot read) the original; then the row.
+  const [original, setOriginal] = useState(false);
+  const url = attachmentURL(file.id);
+  if (!kind || broken) {
+    return (
+      <li>
+        <PaperclipIcon /><a href={url} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
+        <span className="attachment-size">{formatBytes(file.size)}</span>
+        {broken && kind !== 'image' && <span className="attachment-note">{messages.mediaNotPlayable}</span>}
+      </li>
+    );
+  }
+  const open = onOpenMedia ? () => onOpenMedia(file.id) : undefined;
+  const picture = <img src={original ? url : thumbnailURL(file.id)} alt="" loading="lazy" decoding="async" onError={() => (original ? setBroken(true) : setOriginal(true))} />;
+  return (
+    <li className={`media-tile media-tile-${kind}`}>
+      {kind === 'image'
+        ? open ? <button type="button" className="media-thumb" aria-label={messages.openMedia(file.filename)} data-media-open={file.id} onClick={open}>{picture}</button>
+          : <span className="media-thumb">{picture}</span>
+        : <InlinePlayer kind={kind} src={url} title={file.filename} openerId={file.id} onExpand={open} onError={() => setBroken(true)} />}
+      <span className="media-caption">
+        <a href={url} download={file.filename} title={messages.downloadAttachment(file.filename)}><DownloadIcon />{file.filename}</a>
+        <span className="attachment-size">{formatBytes(file.size)}</span>
+      </span>
+    </li>
+  );
+}
+
+// The player is in its own chunk; until it is there an empty frame of the player's size holds its place, so the
+// timeline does not jump. A chunk that cannot load leaves the download row.
+function InlinePlayer({ kind, src, title, openerId, onExpand, onError }: { kind: Exclude<MediaKind, 'image'>; src: string; title: string; openerId: string; onExpand?: () => void; onError: () => void }) {
+  const part = mediaViewerPart.use();
+  if (part.status === 'error') return null;
+  if (part.status === 'loading') return <div className={`media-slot media-slot-${kind}`} aria-busy="true" />;
+  const { MediaPlayer } = part.module;
+  return <MediaPlayer kind={kind} src={src} title={title} lazy openerId={openerId} onExpand={onExpand} onError={onError} />;
 }

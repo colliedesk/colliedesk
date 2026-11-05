@@ -126,8 +126,10 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   (`http.DetectContentType`), never the name or stored type, so an SVG (scriptable text) is never an
   image. Text in an image cannot be put under `untrusted_customer_content`: it is one more injection
   channel, so the description says so and `image: false` leaves the picture out. Anything else (PDF,
-  archive, larger image) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the
-  server. The file name is customer text even on a team note, because a team member often forwards a
+  archive) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the server. A larger
+  image comes back as its thumbnail (`GET /attachments/{id}/thumbnail`, at most 320 px, the one the
+  web app shows), with a hint that it is a preview; a picture the server cannot read keeps the old
+  hint and no image. The file name is customer text even on a team note, because a team member often forwards a
   customer's file. `conversation_get` lists attachment ids and sizes.
 - **Files go in as base64, at most 5 MiB a call.** MCP here is remote HTTP only, so a file reaches a
   tool as base64 in the arguments. `note_add`, `reply_send` and `conversation_start` decode `files`,

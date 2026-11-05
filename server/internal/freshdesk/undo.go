@@ -254,9 +254,11 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 			AND NOT EXISTS (SELECT 1 FROM conversation_tags ct WHERE ct.workspace_id=t.workspace_id AND ct.tag_id=t.id)`, []any{workspaceID, source}},
 	}
 	var orphanCandidates []string
-	keys, err := tx.Query(ctx, `SELECT DISTINCT a.storage_key FROM attachments a JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
+	// The files of the import's tickets and the thumbnails the web app made of them.
+	keys, err := tx.Query(ctx, `SELECT DISTINCT k.key FROM attachments a JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
 		JOIN import_items i ON i.workspace_id=m.workspace_id AND i.target_id=m.conversation_id AND i.entity='ticket'
-		WHERE a.workspace_id=$1 AND i.source=$2`, workspaceID, source)
+		CROSS JOIN LATERAL (VALUES (a.storage_key), (NULLIF(a.thumb_storage_key,''))) AS k(key)
+		WHERE a.workspace_id=$1 AND i.source=$2 AND k.key IS NOT NULL`, workspaceID, source)
 	if err != nil {
 		return result, nil, fmt.Errorf("list stored files: %w", err)
 	}
@@ -293,7 +295,7 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	var orphans []string
 	for _, key := range orphanCandidates {
 		var used bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_key=$1)
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_key=$1 OR thumb_storage_key=$1)
 			OR EXISTS(SELECT 1 FROM ai_draft_files WHERE storage_key=$1)
 			OR EXISTS(SELECT 1 FROM kb_media WHERE storage_key=$1 OR thumb_storage_key=$1 OR poster_storage_key=$1)`, key).Scan(&used); err != nil {
 			return result, nil, fmt.Errorf("check stored file: %w", err)

@@ -8,6 +8,7 @@ export const routePermissions: ReadonlyArray<readonly [string, string]> = [
   ['/api/v1/ai/chat/usage', 'billing:read'],
   ['/api/v1/ai/usage', 'billing:read'],
   ['/api/v1/attachments/{id}', 'messages:read'],
+  ['/api/v1/attachments/{id}/thumbnail', 'messages:read'],
   ['/api/v1/auth/invites', 'team:read'],
   ['/api/v1/autofix/fixes', 'autofix:read'],
   ['/api/v1/autofix/fixes/{id}', 'autofix:read'],

@@ -250,6 +250,8 @@ export const messages = {
   ticketType: (type: string) => `Type: ${type}`,
   dueAt: 'Due',
   downloadAttachment: (filename: string) => `Download ${filename}`,
+  openMedia: (filename: string) => `Open ${filename}`,
+  mediaNotPlayable: 'Cannot be played here: download it to open it.',
   priority: 'Priority',
   properties: 'Properties',
   signedInAs: 'Signed in as',

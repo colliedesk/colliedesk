@@ -3,6 +3,7 @@ import { beforeAll, expect, test, vi } from 'vitest';
 import type { Conversation, Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
+import { mediaViewerPart } from './media-part';
 
 const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null };
@@ -24,6 +25,8 @@ const note: Message = { ...base, id: '55555555-5555-4555-8555-555555555555', kin
 beforeAll(async () => {
   presenceViewPart.preload();
   await import('./presence-view');
+  mediaViewerPart.preload();
+  await import('./media-viewer');
 });
 
 test('shows the sender, a verification warning and attachments that were not imported', () => {
@@ -292,4 +295,22 @@ test('a notice the channel sent by itself is written by the channel, named even 
   unmount();
   render(<TimelinePanel conversation={conversation(true)} items={[notice]} timezone="UTC" />);
   expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
+});
+
+// A press on a picture opens every picture, video and voice clip of the conversation, in timeline order.
+test('a press on a picture opens the gallery of all media in the conversation, at that picture', async () => {
+  const media = (id: string, filename: string, content_type: string, message_id: string) => ({ id, message_id, filename, content_type, size: 1000, sha256: 'a'.repeat(64), inline: false, created_at: base.created_at });
+  const first: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'incoming', author_name: 'Đào Toàn', body: 'Look',
+    attachments: [media('i1', 'image-1', 'image/jpeg', '6'), media('p1', 'terms.pdf', 'application/pdf', '6')] };
+  const second: Message = { ...base, id: '77777777-7777-4777-8777-777777777777', kind: 'note', author_name: 'Mai', body: 'Same here', created_at: '2026-10-14T01:00:00Z',
+    attachments: [media('v1', 'clip', 'video/mp4', '7'), media('i2', 'image-2', 'image/png', '7')] };
+  render(<TimelinePanel items={[first, second]} timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open image-2' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('3 / 3')).toBeInTheDocument();
+  expect(within(dialog).getByText(/Mai/)).toBeInTheDocument();
+  const strip = within(dialog).getByRole('list', { name: 'All media in this conversation' });
+  expect(within(strip).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['image-1', 'clip', 'image-2']);
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });

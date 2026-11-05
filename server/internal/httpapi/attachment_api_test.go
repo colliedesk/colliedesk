@@ -135,3 +135,48 @@ func TestSingleMessageResponsesIncludeTheirAttachments(t *testing.T) {
 		t.Fatalf("retry response status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+// The web app shows image, video and audio attachments in the timeline: a player reads the metadata and seeks
+// with byte ranges, and the answer stays a download that nothing in the file can run in.
+func TestAttachmentDownloadAnswersAByteRangeAndStaysADownload(t *testing.T) {
+	api, service, pool, storage := testAPIWithStorage(t)
+	token := createSession(t, api, service, "Range Desk", "admin@range.example.com")
+	other := createSession(t, api, service, "Range Other", "admin@range-other.example.com")
+	contactID := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "R", "email": "r@range.example.com"})
+	conversationID := create(t, api, token, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Clip"})
+	messageID := create(t, api, token, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "note", "body": "x"})
+	attachmentID := seedAttachment(t, pool, storage, token, api, messageID, "clip.mp4", "0123456789abcdef")
+
+	ranged := newRequest(t, http.MethodGet, "/api/v1/attachments/"+attachmentID, nil, token, nil)
+	ranged.Header.Set("Range", "bytes=4-7")
+	part := serve(api, ranged)
+	if part.Code != http.StatusPartialContent || part.Body.String() != "4567" {
+		t.Fatalf("range status=%d body=%q", part.Code, part.Body.String())
+	}
+	h := part.Header()
+	if h.Get("Content-Range") != "bytes 4-7/16" || h.Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("range headers: %v", h)
+	}
+	if h.Get("Content-Type") != "application/octet-stream" || h.Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.HasPrefix(h.Get("Content-Disposition"), "attachment;") || h.Get("Cache-Control") != "private, no-store" ||
+		!strings.Contains(h.Get("Content-Security-Policy"), "sandbox") {
+		t.Fatalf("a range must keep the download headers: %v", h)
+	}
+
+	whole := request(t, api, http.MethodGet, "/api/v1/attachments/"+attachmentID, nil, token, nil)
+	if whole.Code != http.StatusOK || whole.Body.String() != "0123456789abcdef" || whole.Header().Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("whole status=%d body=%q headers=%v", whole.Code, whole.Body.String(), whole.Header())
+	}
+
+	past := newRequest(t, http.MethodGet, "/api/v1/attachments/"+attachmentID, nil, token, nil)
+	past.Header.Set("Range", "bytes=100-")
+	if response := serve(api, past); response.Code != http.StatusRequestedRangeNotSatisfiable {
+		t.Fatalf("range past the end status=%d", response.Code)
+	}
+
+	foreign := newRequest(t, http.MethodGet, "/api/v1/attachments/"+attachmentID, nil, other, nil)
+	foreign.Header.Set("Range", "bytes=0-3")
+	if response := serve(api, foreign); response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "0123") {
+		t.Fatalf("another workspace's range: status=%d body=%q", response.Code, response.Body.String())
+	}
+}

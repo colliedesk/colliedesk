@@ -1881,8 +1881,27 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Streams the stored bytes of an attachment in the caller's workspace. Always served as a download (`Content-Disposition: attachment`) with `application/octet-stream`; the original media type is in the attachment metadata on the message. */
+        /** @description Streams the stored bytes of an attachment in the caller's workspace. Always served as a download (`Content-Disposition: attachment`) with `application/octet-stream`; the original media type is in the attachment metadata on the message. A single byte `Range` is answered with 206 and that part only (`Accept-Ranges: bytes`), so the web app's image, video and audio players read a file's metadata and seek without downloading all of it. */
         get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/{id}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description A small picture of an image attachment in the caller's workspace, at most 320 pixels on its longest side and turned the way its EXIF orientation says: what the web app shows on the timeline and in the gallery's strip, a few kilobytes instead of the original. The server reads the file's bytes (PNG, JPEG, GIF or WebP, never the name or the declared type), makes the thumbnail on the first request and keeps it with the file; a file it cannot read answers 404 `no_thumbnail` every time after. The answer is an image the server encoded, served with a sandboxing Content-Security-Policy and `private, no-store` like the file itself. The original stays at GET /api/v1/attachments/{id}. */
+        get: operations["getAttachmentThumbnail"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13902,7 +13921,10 @@ export interface operations {
     downloadAttachment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description One byte range, for example bytes=0-1023. */
+                Range?: string;
+            };
             path: {
                 id: components["parameters"]["ID"];
             };
@@ -13913,6 +13935,28 @@ export interface operations {
             /** @description Attachment bytes */
             200: {
                 headers: {
+                    /** @description bytes */
+                    "Accept-Ranges"?: string;
+                    "Content-Disposition"?: string;
+                    /** @description default-src 'none'; sandbox */
+                    "Content-Security-Policy"?: string;
+                    /** @description The quoted SHA-256 of the file */
+                    ETag?: string;
+                    /** @description Hex SHA-256 recorded when the file was stored */
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description The requested byte range of the attachment, with the same download headers */
+            206: {
+                headers: {
+                    /** @description bytes */
+                    "Accept-Ranges"?: string;
+                    /** @description bytes first-last/size */
+                    "Content-Range"?: string;
                     "Content-Disposition"?: string;
                     /** @description Hex SHA-256 recorded when the file was stored */
                     "X-Content-SHA256"?: string;
@@ -13922,8 +13966,57 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            /** @description Not modified (If-None-Match matched the ETag, the file's SHA-256) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            /** @description The range starts past the end of the file; `Content-Range` names the size */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAttachmentThumbnail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The thumbnail */
+            200: {
+                headers: {
+                    /** @description private, no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Error code `not_found`: no such attachment in the workspace. Error code `no_thumbnail`: the file is no picture the server can read (an SVG, a HEIC photo, a PDF, broken bytes, or a picture too large to decode); show or download the original instead. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getMailImage: {

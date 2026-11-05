@@ -174,10 +174,17 @@ func attachmentGet(c *call, arguments map[string]any) (any, error) {
 	out.DetectedType, _, _ = strings.Cut(http.DetectContentType(body), ";")
 	if shownImageTypes[out.DetectedType] {
 		switch {
-		case len(body) > attachmentImageLimit || int64(len(body)) < out.Size:
-			out.Hint = "This image is larger than " + attachmentImageLimitWords + ", the most a call shows. Open it in the web app to see it."
 		case args.Image != nil && !*args.Image:
 			out.Hint = "image was false, so the picture is left out."
+		case len(body) > attachmentImageLimit || int64(len(body)) < out.Size:
+			// The web app's thumbnail of the picture stands in for it: a preview the model can still look at.
+			out.Hint = "This image is larger than " + attachmentImageLimitWords + ", the most a call shows. Open it in the web app to see it."
+			if _, preview, err := c.rest.download(c.ctx, c.token, "/api/v1/attachments/"+url.PathEscape(args.AttachmentID)+"/thumbnail", attachmentImageLimit); err == nil {
+				out.IsImage = true
+				out.Hint = "This image is larger than " + attachmentImageLimitWords + ", the most a call shows: this is a preview of at most 320 pixels. Open it in the web app to see it whole."
+				previewType, _, _ := strings.Cut(http.DetectContentType(preview), ";")
+				return &imageResult{Data: preview, MIMEType: previewType, Meta: out}, nil
+			}
 		default:
 			out.IsImage = true
 			return &imageResult{Data: body, MIMEType: out.DetectedType, Meta: out}, nil

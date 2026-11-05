@@ -3038,18 +3038,68 @@ paths:
       description: >-
         Streams the stored bytes of an attachment in the caller's workspace. Always served as a
         download (`Content-Disposition: attachment`) with `application/octet-stream`; the original
-        media type is in the attachment metadata on the message.
+        media type is in the attachment metadata on the message. A single byte `Range` is answered
+        with 206 and that part only (`Accept-Ranges: bytes`), so the web app's image, video and audio
+        players read a file's metadata and seek without downloading all of it.
+      parameters:
+        - {name: Range, in: header, required: false, schema: {type: string}, description: 'One byte range, for example bytes=0-1023.'}
       responses:
         '200':
           description: Attachment bytes
           headers:
+            Accept-Ranges: {schema: {type: string}, description: bytes}
+            Content-Disposition: {schema: {type: string}}
+            Content-Security-Policy: {schema: {type: string}, description: "default-src 'none'; sandbox"}
+            ETag: {schema: {type: string}, description: The quoted SHA-256 of the file}
+            X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '206':
+          description: The requested byte range of the attachment, with the same download headers
+          headers:
+            Accept-Ranges: {schema: {type: string}, description: bytes}
+            Content-Range: {schema: {type: string}, description: 'bytes first-last/size'}
             Content-Disposition: {schema: {type: string}}
             X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
           content:
             application/octet-stream:
               schema: {type: string, format: binary}
+        '304': {description: 'Not modified (If-None-Match matched the ETag, the file''s SHA-256)'}
+        '416':
+          description: The range starts past the end of the file; `Content-Range` names the size
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/attachments/{id}/thumbnail:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getAttachmentThumbnail
+      x-permission: messages:read
+      description: >-
+        A small picture of an image attachment in the caller's workspace, at most 320 pixels on its longest
+        side and turned the way its EXIF orientation says: what the web app shows on the timeline and in the
+        gallery's strip, a few kilobytes instead of the original. The server reads the file's bytes (PNG,
+        JPEG, GIF or WebP, never the name or the declared type), makes the thumbnail on the first request and
+        keeps it with the file; a file it cannot read answers 404 `no_thumbnail` every time after. The
+        answer is an image the server encoded, served with a sandboxing Content-Security-Policy and
+        `private, no-store` like the file itself. The original stays at GET /api/v1/attachments/{id}.
+      responses:
+        '200':
+          description: The thumbnail
+          headers:
+            Cache-Control: {schema: {type: string}, description: 'private, no-store'}
+          content:
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404':
+          description: >-
+            Error code `not_found`: no such attachment in the workspace. Error code `no_thumbnail`: the file is
+            no picture the server can read (an SVG, a HEIC photo, a PDF, broken bytes, or a picture too large
+            to decode); show or download the original instead.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
   /api/v1/mail-image:
     get:
       operationId: getMailImage
