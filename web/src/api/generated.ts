@@ -462,7 +462,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description The person's **Allow** on the consent page: a grant for the app in the workspace of the caller's session (one grant per sign-in; none replaces another) and the address that takes its one-time code back to the app. The grant acts with everything the person holds, read on every call, limited like the session it was allowed from; it lists in `GET /api/v1/auth/sessions` with `token.kind` `oauth` and `app`, and `DELETE /api/v1/auth/sessions/{id}` disconnects it. People only: an agent token or a grant gets 403 `person_only`. `Origin` must be this page's origin (403 `csrf_rejected`) for every caller. A request the app got wrong (not `code`, no S256 challenge, another resource) is answered 200 with a `redirect_to` that carries the OAuth error back to the app. */
+        /** @description The person's **Allow** on the consent page: a grant for the app in the workspace of the caller's session (one grant per sign-in; none replaces another) and the address that takes its one-time code back to the app. The grant acts with everything the person holds, read on every call, limited like the session it was allowed from; it lists in `GET /api/v1/auth/sessions` with `token.kind` `oauth` and `app`, and `DELETE /api/v1/auth/sessions/{id}` disconnects it. People only: an agent token or a grant gets 403 `person_only`. `Origin` must be this page's origin (403 `csrf_rejected`) for every caller. A request the app got wrong (not `code`, no S256 challenge, another resource) is answered 200 with a `redirect_to` that carries the OAuth error back to the app. The code is in the first answer only: a repeat of the same press (Idempotency-Key) answers a `redirect_to` that tells the app to start again. */
         post: operations["allowOAuthClient"];
         delete?: never;
         options?: never;
@@ -11055,7 +11055,10 @@ export interface operations {
     allowOAuthClient: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -11094,6 +11097,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listInvites: {

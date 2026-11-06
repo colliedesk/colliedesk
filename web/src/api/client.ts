@@ -379,7 +379,9 @@ export const api = {
   describeOAuthClient: (client_id: string, redirect_uri: string) =>
     request(`/api/v1/oauth/client?${new URLSearchParams({ client_id, redirect_uri }).toString()}`, oauthClientSchema),
   // Allow on the consent page: the address that takes the app's one-time code back to it.
-  allowOAuthClient: (input: RequestBody<'allowOAuthClient'>) => request('/api/v1/oauth/authorize', oauthAllowedSchema, { method: 'POST', body: json<'allowOAuthClient'>(input) }),
+  // key names one press: a retry of it never makes a second grant.
+  allowOAuthClient: (input: RequestBody<'allowOAuthClient'>, key: string) => request('/api/v1/oauth/authorize', oauthAllowedSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'allowOAuthClient'>(input) }),
   setupProgress: () => request('/api/v1/workspace/setup', setupProgressSchema),
   setSetupGuideHidden: (hidden: RequestBody<'setSetupGuideHidden'>['hidden']) => request('/api/v1/agents/me/setup-guide', setupGuideHiddenSchema, { method: 'PUT', body: json<'setSetupGuideHidden'>({ hidden }) }),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),

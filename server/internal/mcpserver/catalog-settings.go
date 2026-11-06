@@ -17,7 +17,9 @@ const (
 		`"token":{"type":["object","null"],"description":"null for a person's sign-in. kind role (follows the role named in role), custom (a list picked when it was made) legacy (made before roles) or oauth (an AI app connected with OAuth: label is the app, it has what its person holds); given is what it was given; stopped says why a role token does nothing now.",` +
 		`"properties":{"kind":{"type":"string","enum":["role","custom","legacy","oauth"]},"role":{"type":["string","null"]},"given":{"type":"array","items":{"type":"string"}},"legacy_tier":{"type":"string"},"stopped":{"type":"string"}}},` +
 		`"permissions":{"type":"array","items":{"type":"string"},"description":"What an agent token was given (resource:action); empty for a person's sign-in"},` +
-		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"}}}`
+		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"},` +
+		`"app":{"type":"object","description":"Only for an AI app connected with OAuth (label is its name): the browser it was allowed from, when, and whether it must sign in again (disconnected or expired).",` +
+		`"properties":{"user_agent":{"type":"string"},"connected_at":{"type":"string"},"needs_reconnecting":{"type":"boolean"}}}}}`
 
 	// emailChannelInput names one email channel of several; without it a tool acts on the default one.
 	emailChannelInput  = `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"One email channel of several, from colliedesk_channels_list. Leave out for the default one (is_default in colliedesk_channels_list)."}}}`

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -343,13 +344,20 @@ func (a *API) allowOAuth(response http.ResponseWriter, request *http.Request) {
 		refuse("invalid_target", "Colliedesk issues tokens only for its MCP address "+resources[0]+".")
 		return
 	}
-	code, err := a.auth.AllowOAuth(request.Context(), who, auth.OAuthGrantRequest{ClientID: client.ID, ClientName: client.Name, RedirectURI: input.RedirectURI,
-		CodeChallenge: input.CodeChallenge, Resource: resource, UserAgent: request.Header.Get("User-Agent")})
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusOK, map[string]string{"redirect_to": a.oauthRedirect(redirect, url.Values{"code": {code}, "state": {input.State}})})
+	// The code is in this answer once; a repeat of the same press (Idempotency-Key) never sees it again
+	// and sends the app an error that says to start again, since the code is stored only as a hash.
+	response.Header().Set("Cache-Control", "no-store")
+	a.runOnce(response, request, http.StatusOK, allowOAuthOperation, []string{client.ID, input.RedirectURI, input.CodeChallenge, input.State, resource},
+		func(ctx context.Context) (any, error) {
+			code, err := a.auth.AllowOAuth(ctx, who, auth.OAuthGrantRequest{ClientID: client.ID, ClientName: client.Name, RedirectURI: input.RedirectURI,
+				CodeChallenge: input.CodeChallenge, Resource: resource, UserAgent: request.Header.Get("User-Agent")})
+			if err != nil {
+				return nil, err
+			}
+			repeat := a.oauthRedirect(redirect, url.Values{"error": {"server_error"}, "error_description": {"This Allow was already answered. Start connecting again from the app."}, "state": {input.State}})
+			return shownOnce{shown: map[string]string{"redirect_to": a.oauthRedirect(redirect, url.Values{"code": {code}, "state": {input.State}})},
+				kept: map[string]string{"redirect_to": repeat}}, nil
+		})
 }
 
 // oauthRedirect is the app's redirect address with the answer added to its query, and iss (RFC 9207).

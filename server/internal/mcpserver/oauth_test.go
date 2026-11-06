@@ -95,5 +95,13 @@ func TestMCPNamesItsProtectedResourceMetadataAndTakesAnOAuthAccessToken(t *testi
 	if kind := e.ok(session, "colliedesk_whoami", nil)["token"].(map[string]any)["kind"]; kind != "oauth" {
 		t.Fatalf("whoami token kind=%v, want oauth", kind)
 	}
-	e.ok(session, "colliedesk_sessions_list", nil)
+	listed := false
+	for _, row := range e.ok(session, "colliedesk_sessions_list", nil)["sessions"].([]any) {
+		if app, ok := row.(map[string]any)["app"].(map[string]any); ok && app["needs_reconnecting"] == false && row.(map[string]any)["this_token"] == true {
+			listed = true
+		}
+	}
+	if !listed {
+		t.Fatal("colliedesk_sessions_list does not show the app's own connection with its app details")
+	}
 }

@@ -48,7 +48,7 @@ export function OAuthConsent({ request, here }: OAuthConsentProps) {
   const app = useQuery({ queryKey: ['oauth-client', request.client_id, request.redirect_uri], queryFn: () => api.describeOAuthClient(request.client_id, request.redirect_uri), retry: false });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  const allow = useMutation({ mutationFn: () => api.allowOAuthClient(request), onSuccess: ({ redirect_to }) => leaveTo(redirect_to) });
+  const allow = useMutation({ mutationFn: () => api.allowOAuthClient(request, crypto.randomUUID()), onSuccess: ({ redirect_to }) => leaveTo(redirect_to) });
   const issuer = config.data?.app_origin || window.location.origin;
   const cloud = config.data?.cloud_sign_in.enabled === true;
   const signInAddress = `${issuer}/sign-in?${new URLSearchParams({ next: here }).toString()}`;

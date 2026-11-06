@@ -612,7 +612,11 @@ paths:
         and `app`, and `DELETE /api/v1/auth/sessions/{id}` disconnects it. People only: an agent token or a
         grant gets 403 `person_only`. `Origin` must be this page's origin (403 `csrf_rejected`) for every
         caller. A request the app got wrong (not `code`, no S256 challenge, another resource) is answered
-        200 with a `redirect_to` that carries the OAuth error back to the app.
+        200 with a `redirect_to` that carries the OAuth error back to the app. The code is in the first
+        answer only: a repeat of the same press (Idempotency-Key) answers a `redirect_to` that tells the app
+        to start again.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -645,6 +649,8 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/auth/invites:
     get:
       operationId: listInvites

@@ -36,7 +36,7 @@ test('a signed-in person sees the app, the workspace and themselves, and Allow t
   expect(screen.getByText('After your answer you go back to localhost.')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
   await waitFor(() => expect(leaveTo).toHaveBeenCalledWith('http://localhost:4567/callback?code=cdk_oac_1&state=st'));
-  expect(api.allowOAuthClient).toHaveBeenCalledWith(expect.objectContaining({ client_id: 'cdk_client_x', code_challenge_method: 'S256', state: 'st' }));
+  expect(api.allowOAuthClient).toHaveBeenCalledWith(expect.objectContaining({ client_id: 'cdk_client_x', code_challenge_method: 'S256', state: 'st' }), expect.any(String));
 });
 
 test('Cancel sends the app access_denied with its state, on the redirect the server confirmed', async () => {

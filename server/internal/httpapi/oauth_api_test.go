@@ -599,3 +599,30 @@ func TestARoleChangeAppliesToTheAppAtOnce(t *testing.T) {
 		t.Fatalf("the app still works with what the person holds: status=%d", status)
 	}
 }
+
+// A repeat of one press of Allow (the same Idempotency-Key) makes nothing new and never shows the code
+// again: the app is told to start again.
+func TestARepeatedAllowNeverShowsTheCodeAgain(t *testing.T) {
+	f := newOAuthFixture(t)
+	admin := createSession(t, f.api, f.service, "OAuth Repeat", "admin@repeat.example.com")
+	clientID := f.register(t, "Claude", oauthRedirect)
+	_, challenge := pkce(t)
+	press := func() *httptest.ResponseRecorder {
+		req := newRequest(t, http.MethodPost, "/api/v1/oauth/authorize", map[string]any{"client_id": clientID, "redirect_uri": oauthRedirect, "response_type": "code",
+			"code_challenge": challenge, "code_challenge_method": "S256", "state": "xyz"}, admin, nil)
+		req.Header.Set("Origin", testOrigin)
+		req.Header.Set("Idempotency-Key", "allow-press-1")
+		return serve(f.api, req)
+	}
+	if first := redirectParams(t, press()); first.Get("code") == "" {
+		t.Fatalf("first press answered %v, want a code", first)
+	}
+	again := redirectParams(t, press())
+	if again.Get("code") != "" || again.Get("error") != "server_error" || again.Get("state") != "xyz" {
+		t.Fatalf("repeat answered %v, want no code and an error for the app", again)
+	}
+	var grants int
+	if err := f.pool.QueryRow(context.Background(), `SELECT count(*) FROM sessions WHERE scope='oauth'`).Scan(&grants); err != nil || grants != 1 {
+		t.Fatalf("%d grants after a repeated press (err %v), want 1", grants, err)
+	}
+}
