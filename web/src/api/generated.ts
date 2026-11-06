@@ -436,6 +436,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/oauth/client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The AI app a consent page (`/oauth/authorize`) shows before the person allows it: its name, and whether `redirect_uri` is one of its own. The app is known by dynamic client registration (`POST /oauth/register`, the client id is signed by this server) or by a client ID metadata document (an https `client_id` the server fetches, guarded: public addresses only, no redirect, 64 KiB, 5 s). Only after a 200 may the page send the browser to `redirect_uri` (with the code, or `error=access_denied` on Cancel). 400 `invalid_client` or `invalid_redirect_uri` says to start connecting again from the app. */
+        get: operations["describeOAuthClient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description The person's **Allow** on the consent page: a grant for the app in the workspace of the caller's session (one grant per sign-in; none replaces another) and the address that takes its one-time code back to the app. The grant acts with everything the person holds, read on every call, limited like the session it was allowed from; it lists in `GET /api/v1/auth/sessions` with `token.kind` `oauth` and `app`, and `DELETE /api/v1/auth/sessions/{id}` disconnects it. People only: an agent token or a grant gets 403 `person_only`. `Origin` must be this page's origin (403 `csrf_rejected`) for every caller. A request the app got wrong (not `code`, no S256 challenge, another resource) is answered 200 with a `redirect_to` that carries the OAuth error back to the app. The code is in the first answer only: a repeat of the same press (Idempotency-Key) answers a `redirect_to` that tells the app to start again. */
+        post: operations["allowOAuthClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/invites": {
         parameters: {
             query?: never;
@@ -6737,10 +6771,10 @@ export interface components {
         /** @description What an agent token was given. Its effective permissions are these, limited to what its person holds now. */
         TokenGrant: {
             /**
-             * @description role: follows one of its person's roles; custom: a fixed list chosen at creation; legacy: created before roles.
+             * @description role: follows one of its person's roles; custom: a fixed list chosen at creation; legacy: created before roles; oauth: an AI app connected with OAuth, which has everything its person holds now (role: the role it is limited to, like the session that allowed it).
              * @enum {string}
              */
-            kind: "role" | "custom" | "legacy";
+            kind: "role" | "custom" | "legacy" | "oauth";
             role: null | components["schemas"]["RoleRef"];
             /** @description For kind role: false while its person does not hold every permission of the role (the token is stopped until they do; giving them the role does it). A token may follow a role its person does not hold, such as an admin's token that follows Agent. True otherwise. */
             role_held: boolean;
@@ -7031,6 +7065,30 @@ export interface components {
             expires_at: string;
             /** Format: date-time */
             revoked_at: string | null;
+            /** @description The AI app an OAuth grant connected (token.kind oauth); null for a person's session and an API token. */
+            app?: null | components["schemas"]["ConnectedApp"];
+        };
+        ConnectedApp: {
+            /** @description The app's OAuth client id: a client ID metadata document's https address, or one this server signed at registration. */
+            client_id: string;
+            /** @description The browser the person allowed the app from; no IP address is kept. */
+            user_agent: string;
+            /** Format: date-time */
+            connected_at: string;
+            /** @description Disconnected, revoked or expired: the app signs in again (each app's steps are in the docs). */
+            needs_reconnecting: boolean;
+        };
+        OAuthClient: {
+            client_id: string;
+            /** @description The name the app gave itself (at most 80 characters). */
+            name: string;
+            redirect_uri: string;
+            /** @description Where the browser returns after the decision: the redirect's host, or its scheme for a desktop app. */
+            host: string;
+            /** @description The host that published the app's client ID metadata document (its https client_id); empty for an app known by registration. The consent page names it. */
+            client_host: string;
+            /** @description The client ID metadata document is on a known AI vendor's host (claude.ai, anthropic.com, chatgpt.com, openai.com, cursor.com, or a subdomain), so the name is theirs. False for a registration and any other host: the app named itself. */
+            verified: boolean;
         };
         Invite: {
             /** Format: uuid */
@@ -10990,6 +11048,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentToken"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    describeOAuthClient: {
+        parameters: {
+            query: {
+                client_id: string;
+                redirect_uri: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The app and the redirect it may use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthClient"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    allowOAuthClient: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    client_id: string;
+                    redirect_uri: string;
+                    /** @description code */
+                    response_type?: string;
+                    /** @description PKCE S256 challenge, 43 to 128 characters. */
+                    code_challenge?: string;
+                    /** @description S256 */
+                    code_challenge_method?: string;
+                    state?: string;
+                    /** @description RFC 8707: this server's /mcp address (APP_ORIGIN's, or the workspace's own host's); default APP_ORIGIN's. */
+                    resource?: string;
+                    /** @description Ignored: the grant has what the person holds. */
+                    scope?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Where the browser goes next, the app's redirect with `code`, `state` and `iss` (or `error`). */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        redirect_to: string;
+                    };
                 };
             };
             400: components["responses"]["BadRequest"];

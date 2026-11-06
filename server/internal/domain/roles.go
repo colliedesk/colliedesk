@@ -80,6 +80,8 @@ const (
 	TokenKindRole   = "role"
 	TokenKindCustom = "custom"
 	TokenKindLegacy = "legacy"
+	// TokenKindOAuth is an AI app's OAuth grant: it acts with everything its person holds now.
+	TokenKindOAuth = "oauth"
 )
 
 // Errors of roles; the API maps each to its own code.

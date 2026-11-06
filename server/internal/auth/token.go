@@ -50,11 +50,48 @@ func tokenHash(token string) []byte {
 	return hash[:]
 }
 
+// The credentials of an OAuth grant: the one-time authorization code, the access token an AI app sends
+// to /mcp and the refresh token it trades for the next pair. They share one hash domain of their own, so
+// an older image (plain SHA-256 of every bearer) finds none of them, and a code or a refresh token sent as
+// a bearer is refused by its prefix.
+const (
+	oauthCodePrefix    = "cdk_oac_"
+	oauthAccessPrefix  = "cdk_oat_"
+	oauthRefreshPrefix = "cdk_ort_"
+	// oauthGrantPrefix names the random value whose hash fills sessions.token_hash of a grant; nobody
+	// ever receives it.
+	oauthGrantPrefix     = "cdk_oag_"
+	oauthTokenHashDomain = "colliedesk-oauth\x00"
+)
+
 // credentialHash is the stored form of any bearer a client presents.
 func credentialHash(token string) []byte {
-	if !strings.HasPrefix(token, agentTokenPrefix) {
-		return tokenHash(token)
+	switch {
+	case strings.HasPrefix(token, agentTokenPrefix):
+		hash := sha256.Sum256([]byte(agentTokenHashDomain + token))
+		return hash[:]
+	case isOAuthCredential(token):
+		hash := sha256.Sum256([]byte(oauthTokenHashDomain + token))
+		return hash[:]
 	}
-	hash := sha256.Sum256([]byte(agentTokenHashDomain + token))
-	return hash[:]
+	return tokenHash(token)
+}
+
+func isOAuthCredential(token string) bool {
+	for _, prefix := range []string{oauthCodePrefix, oauthAccessPrefix, oauthRefreshPrefix, oauthGrantPrefix} {
+		if strings.HasPrefix(token, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// newOAuthCredential returns a raw credential with prefix and the hash to store for it.
+func newOAuthCredential(prefix string) (string, []byte, error) {
+	random, err := randomToken()
+	if err != nil {
+		return "", nil, err
+	}
+	token := prefix + random
+	return token, credentialHash(token), nil
 }

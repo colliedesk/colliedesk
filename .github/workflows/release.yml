@@ -10,7 +10,8 @@ name: Release
 # The image is rebuilt with the tag stamped as its version, booted, then published as X.Y.Z, X.Y
 # and (for the highest release) latest. Release notes come from the merged pull request titles.
 # The release also carries the client collie, the Claude Desktop extension and SHA256SUMS, with
-# build provenance (.github/scripts/client-assets.txt).
+# build provenance (.github/scripts/client-assets.txt). Last, the release is listed in the official
+# MCP Registry from server.json (.github/scripts/mcp-registry-publish.sh).
 on:
   push:
     tags: ['v*']
@@ -235,3 +236,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.target.outputs.tag }}
         run: gh release upload "$TAG" "$RUNNER_TEMP"/client/* --clobber
+      # The MCP Registry lists each release from server.json; GitHub OIDC (id-token: write above)
+      # proves the io.github.colliedesk namespace. A run that finishes an earlier one skips it.
+      - name: List the release in the MCP Registry
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: sh .github/scripts/mcp-registry-publish.sh "$TAG"

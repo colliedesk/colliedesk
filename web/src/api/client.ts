@@ -11,7 +11,7 @@ import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
-  inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
+  inviteCreatedSchema, inviteListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
@@ -375,6 +375,13 @@ export const api = {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   }),
   me: () => request('/api/v1/auth/me', meSchema),
+  // The AI app a consent page shows, and whether redirect_uri is its own (only then may the page go there).
+  describeOAuthClient: (client_id: string, redirect_uri: string) =>
+    request(`/api/v1/oauth/client?${new URLSearchParams({ client_id, redirect_uri }).toString()}`, oauthClientSchema),
+  // Allow on the consent page: the address that takes the app's one-time code back to it.
+  // key names one press: a retry of it never makes a second grant.
+  allowOAuthClient: (input: RequestBody<'allowOAuthClient'>, key: string) => request('/api/v1/oauth/authorize', oauthAllowedSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'allowOAuthClient'>(input) }),
   setupProgress: () => request('/api/v1/workspace/setup', setupProgressSchema),
   setSetupGuideHidden: (hidden: RequestBody<'setSetupGuideHidden'>['hidden']) => request('/api/v1/agents/me/setup-guide', setupGuideHiddenSchema, { method: 'PUT', body: json<'setSetupGuideHidden'>({ hidden }) }),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),

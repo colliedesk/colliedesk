@@ -102,6 +102,7 @@ export function SettingsRoute() {
     setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError ? messages.settingsActionFailed : undefined}
+    mcpAddress={`${config.data?.app_origin || window.location.origin}/mcp`}
     agentsSection={can(me.data, 'team:create_tokens') && !me.data?.token ? <AgentTokensSection roles={followableRoles(me.data?.agent.roles ?? [], roles.data?.items, me.data?.permissions ?? [])} held={me.data?.permissions ?? []}
       rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
       onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} /> : undefined}

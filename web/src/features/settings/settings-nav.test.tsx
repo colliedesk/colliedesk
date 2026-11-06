@@ -37,3 +37,9 @@ test('the channel list itself stays the current page at /settings/channels', () 
   expect(screen.getByRole('link', { name: 'Channels' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: 'Email' })).not.toHaveAttribute('aria-current');
 });
+
+// Connected AI apps is found from the nav, next to the agent tokens, by everyone (it lists their own apps).
+test('Connected AI apps has its own link in the nav', () => {
+  render(<SettingsNav page="/settings" shown={{ general: false, team: false, channels: false, savedReplies: false, exportData: false, billing: false, agents: false }} />);
+  expect(screen.getByRole('link', { name: 'Connected AI apps' })).toHaveAttribute('href', '#connected-apps-heading');
+});

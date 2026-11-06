@@ -284,6 +284,9 @@ var routeAccess = map[string]TokenAccess{
 	"PUT /api/v1/help-center/languages":               need(auth.PermHelpCenterUpdate),
 	"PUT /api/v1/help-center/search-console":          need(auth.PermHelpCenterUpdate),
 
+	// Allowing an AI app makes a grant that acts with everything its person holds: a grant that allowed
+	// apps would leave them connected after it was disconnected, like a token that made tokens.
+	"POST " + oauthAllowRoutePath:                     personOnly("an app connected by another app would outlive its disconnection: a person allows each app in a browser"),
 	"POST /api/v1/auth/tokens":                        personOnlyNeeding(auth.PermTeamCreateTokens, "a token that makes tokens outlives its own revocation: revoking it would leave the tokens it made behind"),
 	"POST /api/v1/auth/invites":                       need(auth.PermTeamInvite),
 	"GET /api/v1/export":                              need(auth.PermWorkspaceExport),
@@ -427,6 +430,8 @@ var routeAccess = map[string]TokenAccess{
 	"DELETE /api/v1/autofix/connectors/cursor_api/key": need(auth.PermAutofixSettingsManageCredentials),
 
 	"GET /api/v1/config": notForPeople,
+	// The consent page reads which app asks before anyone signs in; it answers no workspace data.
+	"GET " + oauthClientRoutePath: notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
 	"GET " + gmailCallbackPath: notForPeople,
 	// Microsoft's redirects: the consent finishes like Gmail's; the admin consent stores nothing.

@@ -19,7 +19,10 @@
   for a REST client. Do not copy any of them into a tool. Each REST call authenticates again
   (about 3 ms); that is the price of one code path.
 - **Gate.** `requireBearer` runs before the SDK reads any message. No `Authorization: Bearer`
-  header gives 401 with `WWW-Authenticate: Bearer`; cookies are never read. A person's own session
+  header gives 401 with `WWW-Authenticate: Bearer resource_metadata="<scheme>://<host>/.well-known/oauth-protected-resource/mcp"`
+  (the host the app asked), from which an OAuth client starts its sign-in, and a body that says how to
+  connect again in each app (`TestMCPNamesItsProtectedResourceMetadataAndTakesAnOAuthAccessToken`).
+  An agent token and an OAuth access token (`docs/internals/auth.md`, "OAuth grants") pass; cookies are never read. A person's own session
   as a bearer is also 401: it has no permissions of its own, no one-year cap and no attribution, so an AI client holding
   one would act with that person's full rights and leave no trace of the agent
   (`TestMCPRequiresABearerTokenAndNeverACookie`). Every refusal of a

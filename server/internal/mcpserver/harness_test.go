@@ -109,7 +109,7 @@ func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real htt
 	if front != nil {
 		toolAPI = front(api)
 	}
-	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion, Operators: api.Operators()}, api))
+	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion, Operators: api.Operators(), Origin: testOrigin}, api))
 	t.Cleanup(server.Close)
 	return &env{t: t, api: api, pool: pool, service: service, server: server, files: files}
 }

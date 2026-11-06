@@ -173,7 +173,7 @@ const tokenPermissionSchema = z.string() as z.ZodType<TokenPermission>;
 // What an agent token was given: it follows one role of its person, or holds a fixed list; legacy ones
 // were made before roles.
 export const tokenGrantSchema = z.object({
-  kind: z.enum(['role', 'custom', 'legacy']), role: roleRefSchema.nullable(), role_held: z.boolean(),
+  kind: z.enum(['role', 'custom', 'legacy', 'oauth']), role: roleRefSchema.nullable(), role_held: z.boolean(),
   permissions: z.array(tokenPermissionSchema), legacy_tier: z.enum(['read', 'draft', 'send', 'admin', 'custom']).nullable(),
 }) satisfies z.ZodType<Generated<'TokenGrant'>>;
 export type TokenGrant = z.infer<typeof tokenGrantSchema>;
@@ -240,11 +240,22 @@ export const webFormSettingsSchema = z.object({
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
 export const testMessageResultSchema = z.object({ conversation_id: z.string(), message_id: z.string(), sent_to: z.string() }) satisfies z.ZodType<JsonResponse<'sendEmailTestMessage', 201>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
+export const connectedAppSchema = z.object({
+  client_id: z.string(), user_agent: z.string(), connected_at: z.string().datetime(), needs_reconnecting: z.boolean(),
+}) satisfies z.ZodType<Generated<'ConnectedApp'>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), agent_name: z.string(), label: z.string(),
   token: tokenGrantSchema.nullable(), role: roleRefSchema.nullable(), permissions: z.array(z.string()), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
+  // An older server sends no app: every row of it is a person's session or an API token.
+  app: connectedAppSchema.nullable().default(null),
 }) satisfies z.ZodType<Generated<'Session'>>;
+// The AI app a consent page shows, and the redirect it may be sent back to.
+export const oauthClientSchema = z.object({
+  client_id: z.string(), name: z.string(), redirect_uri: z.string(), host: z.string(), client_host: z.string().default(''), verified: z.boolean(),
+}) satisfies z.ZodType<Generated<'OAuthClient'>>;
+export type OAuthClient = z.infer<typeof oauthClientSchema>;
+export const oauthAllowedSchema = z.object({ redirect_to: z.string() }) satisfies z.ZodType<JsonResponse<'allowOAuthClient', 200>>;
 export const inviteSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), roles: z.array(roleRefSchema), created_by_email: z.string().email(),
   created_at: z.string().datetime(), expires_at: z.string().datetime(), used_at: nullableDate, revoked_at: nullableDate,

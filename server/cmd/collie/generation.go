@@ -329,7 +329,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		consoleSignIn.PublishableKey = cloudAuth.PublishableKey
 	}
 	// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api, consoleSignIn))
+	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators, Origin: origin}, webui.Handler(api, consoleSignIn))
 	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(inner), inner, webui.OperatorHandler("", consoleSignIn))
 	return g
 }
