@@ -147,6 +147,8 @@ export const messages = {
       `${name} ${to === 'resolved' ? 'resolved it' : to === 'closed' ? 'closed it' : to === 'open' ? 'reopened it' : to === 'spam' ? 'moved it to Spam' : 'set it to Pending'}`,
     aiAgent: 'An AI agent',
     customer: 'Reopened when the customer wrote',
+    // A sender marked as spam wrote again into a conversation that was not in Spam.
+    spamSender: 'Moved to Spam: its sender is marked as spam',
     command: 'Reopened by the customer’s Reopen command',
     autoClose: 'Closed by itself after staying resolved',
     setting: 'setting',

@@ -109,8 +109,9 @@ function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) =
     setBusy(true);
     onSpam(spam).finally(() => setBusy(false));
   };
-  return <button type="button" className="status-button" aria-disabled={busy || undefined} data-tip={spam ? messages.spamTip : messages.notSpamTip} onClick={press}>
-    {spam ? <BanIcon /> : <RotateCcwIcon />}{spam ? messages.spam : messages.notSpam}</button>;
+  // On a phone Spam is an icon in the title row; Not spam takes Resolve's place.
+  return <button type="button" className={spam ? 'status-button spam-button' : 'status-button'} aria-disabled={busy || undefined} data-tip={spam ? messages.spamTip : messages.notSpamTip} onClick={press}>
+    {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
 }
 
 export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
@@ -182,7 +183,7 @@ function StatusEvent({ conversation, timezone, canManageChannels }: { conversati
   if (!change || change.by === 'agent') return null;
   const channel = conversation.channel_ref;
   const words = change.by === 'token' ? messages.statusEvent.token(change.name || messages.statusEvent.aiAgent, change.to)
-    : change.by === 'customer' ? messages.statusEvent.customer
+    : change.by === 'customer' ? (change.to === 'spam' ? messages.statusEvent.spamSender : messages.statusEvent.customer)
     : change.by === 'command' ? messages.statusEvent.command
     : change.by === 'import' ? messages.statusEvent.imported(messages.statuses[change.to])
     : <>{messages.statusEvent.autoClose}{channel && <> ({canManageChannels ? <a href={`/settings/channels/${channel.id}?tab=messages`}>{channel.name}</a> : channel.name} {messages.statusEvent.setting})</>}</>;

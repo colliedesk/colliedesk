@@ -1162,6 +1162,11 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .timeline-meta::-webkit-scrollbar { display: none; }
   .timeline-meta > * { flex: none; }
   .timeline-actions > .status-button, .timeline-actions > .status-split { grid-column: 3 / 5; grid-row: 2; justify-self: end; }
+  .timeline-header:has(.spam-button) h2 { grid-column: 2 / 3; }
+  .timeline-actions > .spam-button { grid-column: 3; grid-row: 1; width: var(--touch); height: var(--touch); padding: 0; justify-content: center;
+    border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
+  .spam-button svg { width: 20px; height: 20px; }
+  .spam-button-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .timeline-header > div:first-of-type > :not(h2, .timeline-meta), .status-button-error { grid-column: 1 / -1; margin-left: var(--space-3); }
   .status-button-error { text-align: left; }
   .timeline-header .status-split .action-popover { right: var(--space-3); }
