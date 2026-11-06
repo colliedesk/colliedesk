@@ -64,6 +64,17 @@
   .ai-auto-draft-row button, .ai-auto-draft-acts > * { flex: 1; }
   .ai-auto-draft-acts { width: 100%; margin-left: 0; }
 }
+/* On a phone a folded draft is one line above the reply box, its name cut short, so the conversation and Send keep
+   the screen. At rest it offers Show draft and Use draft; while the agent writes, Show draft only (Insert below and
+   Replace my text are in the open draft). Discard is in the open draft too. */
+@media (max-width: 44rem) {
+  .composer > section.ai-auto-draft-strip { flex-wrap: nowrap; gap: var(--space-2); padding-block: var(--space-1); }
+  .composer > section.ai-auto-draft-strip > span:not(.ai-chip, .ai-auto-draft-acts) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer > section.ai-auto-draft-strip .ai-auto-draft-acts { flex: none; flex-wrap: nowrap; width: auto; }
+  .composer > section.ai-auto-draft-strip .ai-auto-draft-acts > * { flex: none; }
+  .composer > section.ai-auto-draft-strip .ai-auto-draft-acts > .ghost,
+  .composer:has(> .composer-card[data-compact="false"]) > section.ai-auto-draft-strip .ai-auto-draft-acts > :not([aria-expanded]) { display: none; }
+}
 /* A notice about a newer message inside the card of the draft still to use: one line, no box of its own. */
 .ai-auto-draft > .ai-auto-draft-strip { font-size: var(--fs-label); margin: 0; border: 0; border-radius: 0; padding: 0 0 var(--space-2); border-bottom: 1px solid var(--line); background: transparent; }
 .ai-auto-draft > .ai-auto-draft-strip.note, .ai-auto-draft > .ai-auto-draft-strip.note b { color: var(--note-text); }

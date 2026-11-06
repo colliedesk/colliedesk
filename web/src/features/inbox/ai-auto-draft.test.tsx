@@ -137,3 +137,20 @@ test('discard takes it away', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Discard' }));
   await waitFor(() => expect(onDiscard).toHaveBeenCalled());
 });
+
+test('on a phone the draft starts folded whatever the screen height, so the conversation keeps the screen', async () => {
+  // A 412×915 phone is taller than a short laptop (800 px), and still a phone: 44 rem wide or less.
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('max-width: 44rem'), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  serve([draft()]);
+  show();
+  expect(await screen.findByRole('button', { name: 'Show draft' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByText('Hi Jordan, I refunded INV-20932.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Use draft' })).toBeInTheDocument();
+});
+
+test('a tall wide screen still opens the draft', async () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  serve([draft()]);
+  show();
+  expect(await screen.findByText('Hi Jordan, I refunded INV-20932.')).toBeInTheDocument();
+});

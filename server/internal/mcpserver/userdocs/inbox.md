@@ -4,10 +4,21 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
-On a phone the list and the conversation take turns. A conversation you open fills the screen, with its
-subject at the top and the composer at the bottom. **Back to Inbox** above the subject, or the browser's
-Back, returns to the list with the same filters and scrolled to where you left it. The workspace name
-and your address stay at the top while the page scrolls.
+On a phone the list and the conversation take turns. A conversation you open fills the screen, and its
+messages take most of it. The top row has **Back to Inbox** (the arrow), the subject (two lines at most)
+and **Show details** (the panel icon), which opens the properties, tags and the customer's other
+conversations. Under it the status, priority and customer slide sideways beside **Resolve**. **Back to
+Inbox**, or the browser's Back, returns to the list with the same filters and scrolled to where you left
+it. The workspace name and your address stay at the top while the page scrolls.
+
+The composer at the bottom is one line with **Send reply** until you tap it; the lock beside it starts a
+**Private note** in one tap. Tapped, it opens with the cursor in it, with
+**Reply** and **Private note**, the tools, **Send and resolve** and **Send reply**, and it stays open
+while it holds text, files, copies or a notice. Tap the conversation above with nothing written and it
+goes back to one line. The box and its buttons stay reachable while you type; on Android, where the
+page shrinks above the keyboard, the top bar and the status row step aside to make room. A draft AI wrote
+waits above the box folded to one line with **Show draft** and **Use draft** (while you write, **Show draft**);
+**Insert below**, **Replace** and **Discard** are in the open draft.
 
 The [setup guide](setup-guide.md) waits in the bottom-left corner while setup is unfinished, also when
 conversations exist; folded to one button, it does not cover them. It lists **Receive customer email**,

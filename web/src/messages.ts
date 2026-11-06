@@ -215,6 +215,7 @@ export const messages = {
   copyFailed: 'Could not copy. Select the text and copy it yourself.',
   incoming: 'Incoming',
   noteMode: 'Private note',
+  writeNote: 'Write a private note',
   attachments: 'Attachments',
   attachFiles: 'Attach files',
   addAttachment: 'Add attachment',
