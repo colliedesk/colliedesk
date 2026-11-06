@@ -14,8 +14,8 @@ const (
 
 	sessionSchema = `{"type":"object","required":["id","label","owner","state"],"properties":{"id":{"type":"string"},"label":{"type":"string"},` +
 		`"owner":{"type":"string","description":"Email of the team member it acts as"},"owner_name":{"type":"string"},` +
-		`"token":{"type":["object","null"],"description":"null for a person's sign-in. kind role (follows the role named in role), custom (a list picked when it was made) or legacy (made before roles); given is what it was given; stopped says why a role token does nothing now.",` +
-		`"properties":{"kind":{"type":"string","enum":["role","custom","legacy"]},"role":{"type":["string","null"]},"given":{"type":"array","items":{"type":"string"}},"legacy_tier":{"type":"string"},"stopped":{"type":"string"}}},` +
+		`"token":{"type":["object","null"],"description":"null for a person's sign-in. kind role (follows the role named in role), custom (a list picked when it was made) legacy (made before roles) or oauth (an AI app connected with OAuth: label is the app, it has what its person holds); given is what it was given; stopped says why a role token does nothing now.",` +
+		`"properties":{"kind":{"type":"string","enum":["role","custom","legacy","oauth"]},"role":{"type":["string","null"]},"given":{"type":"array","items":{"type":"string"}},"legacy_tier":{"type":"string"},"stopped":{"type":"string"}}},` +
 		`"permissions":{"type":"array","items":{"type":"string"},"description":"What an agent token was given (resource:action); empty for a person's sign-in"},` +
 		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"}}}`
 

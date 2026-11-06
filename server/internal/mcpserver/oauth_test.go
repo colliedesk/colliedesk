@@ -90,4 +90,10 @@ func TestMCPNamesItsProtectedResourceMetadataAndTakesAnOAuthAccessToken(t *testi
 	if response, body := postMCP(t, e.mcpURL(), access); response.StatusCode != http.StatusOK || !strings.Contains(body, "colliedesk_whoami") {
 		t.Fatalf("OAuth access token on /mcp status=%d body=%.200s", response.StatusCode, body)
 	}
+	// Each answer holds to its tool's output schema (a real client refuses one that does not).
+	session := e.connect(access, "")
+	if kind := e.ok(session, "colliedesk_whoami", nil)["token"].(map[string]any)["kind"]; kind != "oauth" {
+		t.Fatalf("whoami token kind=%v, want oauth", kind)
+	}
+	e.ok(session, "colliedesk_sessions_list", nil)
 }
