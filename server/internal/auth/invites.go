@@ -15,9 +15,10 @@ import (
 var ErrInvalidInviteEmail = errors.New("an invite needs an email address")
 
 // CreateInvite invites email with roles (by ids or by names; the Agent role when neither is given). The
-// caller must hold every permission of those roles (*domain.ExceedsYoursError). An address that already
-// belongs to a member is refused (domain.ErrAlreadyMember): an invite lets a new person join, it never
-// signs in or changes the roles of someone who is already in the workspace.
+// caller must hold every permission of those roles (*domain.ExceedsYoursError). An invite to someone
+// already in the workspace adds roles and signs in as them, so it needs a person who may change their
+// roles (store.RequireMayReinviteTx); an agent token gets domain.ErrAlreadyMember. The link records that
+// member, and it signs in no one else.
 func (s *Service) CreateInvite(ctx context.Context, principal Principal, email string, roleIDs, roleNames []string) (domain.Invite, string, error) {
 	if !strings.Contains(email, "@") {
 		return domain.Invite{}, "", ErrInvalidInviteEmail
@@ -30,12 +31,19 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email s
 	if err := requireActiveAgent(ctx, tx, principal.Workspace.ID, nil, strings.ToLower(email)); err != nil {
 		return domain.Invite{}, "", err
 	}
-	var member bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, principal.Workspace.ID, email).Scan(&member); err != nil {
-		return domain.Invite{}, "", fmt.Errorf("check member: %w", err)
+	var memberID string
+	err = tx.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1 AND email=lower($2)`, principal.Workspace.ID, email).Scan(&memberID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return domain.Invite{}, "", fmt.Errorf("find member: %w", err)
 	}
-	if member {
-		return domain.Invite{}, "", domain.ErrAlreadyMember
+	if memberID != "" {
+		if principal.IsToken() {
+			return domain.Invite{}, "", domain.ErrAlreadyMember
+		}
+		caller := store.Caller{AgentID: principal.Agent.ID, Permissions: principal.Effective()}
+		if err := store.RequireMayReinviteTx(ctx, tx, principal.Workspace.ID, caller, memberID); err != nil {
+			return domain.Invite{}, "", err
+		}
 	}
 	if len(roleIDs) == 0 && len(roleNames) == 0 {
 		roleNames = []string{"Agent"}
@@ -56,7 +64,7 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email s
 			return domain.Invite{}, "", err
 		}
 	}
-	link, err := s.createLinkTx(ctx, tx, principal.Workspace.ID, "", strings.ToLower(email), "invite", ceiling, &principal.Agent.ID)
+	link, err := s.createLinkTx(ctx, tx, principal.Workspace.ID, memberID, strings.ToLower(email), "invite", ceiling, &principal.Agent.ID)
 	if err != nil {
 		return domain.Invite{}, "", err
 	}

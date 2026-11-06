@@ -8,13 +8,15 @@ Invite people from **Settings → Invites** (it needs `team:invite`, which the A
 3. Select **Create invite** and copy the **One-time invite link**. It is shown only once.
 4. Send the link to the person through a channel you trust.
 
-When the person joins, they get the invite's roles. See
-[Roles and permissions](roles-and-permissions.md) for what each role allows. An invite is for someone
-new: inviting the address of someone who is already in the workspace is refused with
-`already_a_member`. Change their roles in [Manage your team](team.md) instead. An invite link made
-before its address joined the workspace no longer signs anyone in. Revoke an unused invite
+When the person joins, they get the invite's roles, added to any roles they already hold. See
+[Roles and permissions](roles-and-permissions.md) for what each role allows. Revoke an unused invite
 with **Revoke** in the invite list (`team:revoke`). Taking a role away from someone also revokes
 their unused invites that would give it back.
+
+Inviting someone who is already in the workspace adds the invite's roles and signs in as them, so
+only someone who may change their roles can do it: you need `team:manage_roles` and every permission
+they hold. An AI agent's token cannot; it changes their roles in [Manage your team](team.md) instead.
+An invite link made before its address joined the workspace no longer signs anyone in.
 
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**, and
 its roles. Only a pending invite can be revoked. To end a teammate's access after they joined,

@@ -144,8 +144,7 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 				return Redeemed{}, err
 			}
 		}
-		// An invite makes a new member with its roles. A link for an address that became a member after
-		// the invite was made signs nobody in: a member signs in with their own link.
+		// The invited person gets the invite's roles, added to any they hold; someone new holds only them.
 		var created string
 		var inserted bool
 		if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),$3)
@@ -153,20 +152,32 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 			RETURNING id::text,(xmax=0)`, workspaceID, email, ceiling).Scan(&created, &inserted); err != nil {
 			return Redeemed{}, fmt.Errorf("create invited agent: %w", err)
 		}
+		var invitedBy *string
+		if err := tx.QueryRow(ctx, `SELECT created_by_agent_id::text FROM pairing_links WHERE workspace_id=$1 AND id=$2`, workspaceID, linkID).Scan(&invitedBy); err != nil {
+			return Redeemed{}, fmt.Errorf("invite creator: %w", err)
+		}
+		// An invite signs in as an existing member only when it was made for that member, and only while
+		// its creator may still change their roles; a link made for someone new signs in no one who
+		// joined since.
 		if !inserted {
-			return Redeemed{}, fmt.Errorf("redeem link: %w", domain.ErrAlreadyMember)
+			if agentRef(agentID) != created {
+				return Redeemed{}, fmt.Errorf("redeem link: %w", domain.ErrAlreadyMember)
+			}
+			inviter, err := store.MemberCallerTx(ctx, tx, workspaceID, invitedBy)
+			if err != nil {
+				return Redeemed{}, err
+			}
+			if err := store.RequireMayReinviteTx(ctx, tx, workspaceID, inviter, created); err != nil {
+				return Redeemed{}, fmt.Errorf("redeem link: %w", err)
+			}
 		}
 		var roleIDs []string
-		var invitedBy *string
 		rows, err := tx.Query(ctx, `SELECT i.role_id::text FROM invite_roles i WHERE i.workspace_id=$1 AND i.link_id=$2`, workspaceID, linkID)
 		if err != nil {
 			return Redeemed{}, fmt.Errorf("invite roles: %w", err)
 		}
 		if roleIDs, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 			return Redeemed{}, fmt.Errorf("invite roles: %w", err)
-		}
-		if err := tx.QueryRow(ctx, `SELECT created_by_agent_id::text FROM pairing_links WHERE workspace_id=$1 AND id=$2`, workspaceID, linkID).Scan(&invitedBy); err != nil {
-			return Redeemed{}, fmt.Errorf("invite creator: %w", err)
 		}
 		if err := store.GiveRolesOnJoin(ctx, tx, workspaceID, created, roleIDs, inserted, invitedBy); err != nil {
 			return Redeemed{}, err

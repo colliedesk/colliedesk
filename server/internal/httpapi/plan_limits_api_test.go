@@ -147,7 +147,7 @@ func TestConcurrentInvitesNeverPassTheCap(t *testing.T) {
 	}
 }
 
-func TestInvitingAnExistingAgentIsRefusedAndResendingAPendingInviteTakesNoSeat(t *testing.T) {
+func TestReinvitingAnExistingAgentOrResendingAPendingInviteTakesNoSeat(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	f.upgrade(t, f.workspaceA, "sub_reinvite") // Team: ten seats
 	// Seat 2 is an agent; seats 3 to 10 are pending invites: the workspace is at the cap of 10.
@@ -165,8 +165,8 @@ func TestInvitingAnExistingAgentIsRefusedAndResendingAPendingInviteTakesNoSeat(t
 		return request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
 			map[string]any{"email": email, "roles": []string{"Admin"}}, f.adminA, nil).Code
 	}
-	if got := again("agent@limits-alpha.example.com"); got != http.StatusConflict {
-		t.Fatalf("invite for an existing agent at the cap status=%d, want 409 (already a member, not a seat question)", got)
+	if got := again("agent@limits-alpha.example.com"); got != http.StatusCreated {
+		t.Fatalf("role change for an existing agent at the cap status=%d, want 201", got)
 	}
 	if got := again("Teammate1@limits-alpha.example.com"); got != http.StatusCreated {
 		t.Fatalf("re-sending a pending invite status=%d, want 201 (same person, same seat)", got)

@@ -33,7 +33,7 @@ var (
 	// ErrAgentDeactivated means the action needs an active agent but the address belongs to a
 	// deactivated one. Reactivate the agent first.
 	ErrAgentDeactivated = errors.New("this person is a deactivated agent; reactivate them in the team list")
-	// ErrAlreadyMember means an invite names someone who is already a member of the workspace. An invite
-	// only lets a new person join; a member's roles change in the team list.
+	// ErrAlreadyMember means an agent token invited someone who is already a member of the workspace.
+	// Only a person who may change a member's roles re-invites them; a token changes their roles instead.
 	ErrAlreadyMember = errors.New("this person is already a member of this workspace")
 )

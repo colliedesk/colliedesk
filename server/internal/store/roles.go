@@ -760,3 +760,34 @@ func loadTeamMember(ctx context.Context, tx pgx.Tx, workspaceID string, caller C
 func RequireOutranksTx(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller, memberID string) error {
 	return requireOutranks(ctx, tx, workspaceID, caller, memberID)
 }
+
+// RequireMayReinviteTx refuses an invite to member, someone already in the workspace, unless caller may
+// change member's roles: it holds team:manage_roles and every permission member holds. Redeeming such an
+// invite signs in as member, so only someone who outranks them may make or redeem it.
+func RequireMayReinviteTx(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller, memberID string) error {
+	if !caller.holds(permManageRoles) {
+		return &domain.ExceedsYoursError{Missing: []string{permManageRoles}}
+	}
+	return requireOutranks(ctx, tx, workspaceID, caller, memberID)
+}
+
+// MemberCallerTx is what an active member may do through their roles; a deactivated or deleted member
+// may do nothing.
+func MemberCallerTx(ctx context.Context, tx pgx.Tx, workspaceID string, agentID *string) (Caller, error) {
+	if agentID == nil {
+		return Caller{}, nil
+	}
+	var active bool
+	err := tx.QueryRow(ctx, `SELECT deactivated_at IS NULL FROM agents WHERE workspace_id=$1 AND id=$2`, workspaceID, *agentID).Scan(&active)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !active) {
+		return Caller{AgentID: *agentID}, nil
+	}
+	if err != nil {
+		return Caller{}, fmt.Errorf("load member: %w", err)
+	}
+	roles, err := agentRoleRecords(ctx, tx, workspaceID, *agentID)
+	if err != nil {
+		return Caller{}, err
+	}
+	return Caller{AgentID: *agentID, Permissions: heldBy(roles)}, nil
+}

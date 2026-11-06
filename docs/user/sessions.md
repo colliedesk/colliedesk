@@ -19,8 +19,7 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
 shows **You are signed out** instead of the inbox. On instances with cloud sign-in it opens the
 sign-in page instead and signs the browser out of the sign-in provider too, so the next sign-in
-asks for a code again. To sign in again on a revoked device, use cloud sign-in, or ask whoever runs the
-server for a pairing link (`collie pair`).
+asks for a code again. To sign in again on a revoked device, ask an admin for a new link.
 
 ## Connected AI apps
 
