@@ -36,6 +36,7 @@ type Carry struct {
 	trial                               *trialEvidence
 	helpChat                            *helpChatLimiters
 	chatGate                            *ai.ChatGate
+	oauth                               *oauthState
 	// Hot holds the settings read at each use; Store applies a change at once.
 	Hot *Hot
 }
@@ -76,6 +77,7 @@ func NewCarry(config Config) *Carry {
 		liveChecks:         helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
 		alerted:            &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
 		founding: &foundingState{}, trial: &trialEvidence{}, helpChat: &helpChatLimiters{}, chatGate: ai.NewChatGate(),
+		oauth: newOAuthState(),
 	}
 }
 
