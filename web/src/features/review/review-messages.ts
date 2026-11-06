@@ -72,6 +72,8 @@ export const reviewMessages = {
   ignoreReasons: { chat: 'Just chat', handled_in_chat: 'Answered in chat', duplicate: 'Already reported', other: 'Something else' } satisfies Record<IntakeIgnoreReason, string>,
   failedAction: 'It was not saved. Check your connection, then try again.',
   decidedElsewhere: (who: string, name: string) => `${who} decided ${name}'s card first.`,
+  changedMeanwhile: (name: string) => `${name} wrote again and it joined their card, so nothing was decided. Read the card again, then decide.`,
+  changedToAI: (name: string) => `${name} wrote again and it joined their card, so nothing was decided. AI is reading the whole card now; it comes back to Waiting if AI is not sure.`,
   putBack: 'Put back in queue',
   done: {
     created: (name: string) => `${name}'s card opened a conversation.`,

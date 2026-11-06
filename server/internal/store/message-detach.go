@@ -184,7 +184,7 @@ func (s *Store) DetachedCardOf(ctx context.Context, workspaceID, gatheringID str
 // ErrGatheringDecided.
 func (s *Store) DecideDetachedCard(ctx context.Context, workspaceID, gatheringID, toID, subject string, apply IntakeApply, now time.Time) (GatheringOutcome, error) {
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
-		g, err := lockGathering(ctx, tx, workspaceID, gatheringID, nil)
+		g, err := lockGathering(ctx, tx, workspaceID, gatheringID, nil, &apply)
 		if err != nil {
 			return struct{}{}, err
 		}

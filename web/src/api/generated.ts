@@ -1187,7 +1187,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Decides a card that waits for a person or for AI: create opens a conversation with what it said, as one message (never joining a conversation its thread found since; command and subject are optional, a command of the channel that opens a request), attach adds it to conversation_id, ignore sets it aside (requeue takes it back). conversation_id is one where the reply reaches the same people: in a group, a conversation of the same place; in a one-to-one chat, one of the same customer on the same channel; or the conversation the rules named. A conversation merged into another is joined through the one it was merged into, which must be one of these. Any other is 400 and nothing is decided; a closed one of the same place opens again. The same decision again changes nothing; another one once the card is decided is 409 gathering_decided, with how it stands. An agent token needs messages:send to create (the channel may tell the customer it was received) and conversations:update otherwise; without it the call is filed for a person (202). A repeat with the same Idempotency-Key answers what the first one got and decides nothing; the key with another decision or card is refused with 422, code `idempotency_key_reused`. */
+        /** @description Decides a card that waits for a person or for AI: create opens a conversation with what it said, as one message (never joining a conversation its thread found since; command and subject are optional, a command of the channel that opens a request), attach adds it to conversation_id, ignore sets it aside (requeue takes it back). conversation_id is one where the reply reaches the same people: in a group, a conversation of the same place; in a one-to-one chat, one of the same customer on the same channel; or the conversation the rules named. A conversation merged into another is joined through the one it was merged into, which must be one of these. Any other is 400 and nothing is decided; a closed one of the same place opens again. The same decision again changes nothing; another one once the card is decided is 409 gathering_decided, with how it stands. At intake level auto a customer who writes again while their card waits joins that card, and AI decides it again: send item_count as read, and a decision of a card the customer added to since is 409 gathering_changed (nothing decided; read it again). An agent token needs messages:send to create (the channel may tell the customer it was received) and conversations:update otherwise; without it the call is filed for a person (202). A repeat with the same Idempotency-Key answers what the first one got and decides nothing; the key with another decision or card is refused with 422, code `idempotency_key_reused`. */
         post: operations["decideIntakeGathering"];
         delete?: never;
         options?: never;
@@ -5303,7 +5303,7 @@ export interface components {
             scope: string;
             /** Format: uuid */
             thread_id: string | null;
-            /** @description The place and sender whose cards are decided one after the other. */
+            /** @description The place and sender whose cards are decided one after the other. At auto what the sender adds while their card waits for a person joins that card, decided again. */
             lane_key: string;
             /** Format: uuid */
             contact_id: string | null;
@@ -5643,6 +5643,8 @@ export interface components {
              * @description The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card's, or no AI decision, is refused.
              */
             follows_decision_id?: string;
+            /** @description The card's item_count as the decider read it. When the customer added messages since (at auto they join their waiting card), nothing is decided: 409 gathering_changed. Left out, the decision is of what the card holds. */
+            item_count?: number;
         };
         IntakeStats: {
             days: number;
@@ -9830,7 +9832,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The card was decided otherwise meanwhile (gathering_decided); nothing changed */
+        /** @description The card was decided otherwise meanwhile (gathering_decided), or the customer added messages to it since it was read (gathering_changed); nothing changed */
         IntakeGatheringDecided: {
             headers: {
                 [name: string]: unknown;
@@ -9839,7 +9841,7 @@ export interface components {
                 "application/json": {
                     error: {
                         /** @enum {string} */
-                        code: "gathering_decided";
+                        code: "gathering_decided" | "gathering_changed";
                         message: string;
                         request_id?: string;
                         state: string;

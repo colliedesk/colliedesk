@@ -123,9 +123,16 @@ Email and web forms declare none, so their path gains no row and no query beyond
    workspaces under `PrivilegeIntakeDueClaim`) sends what is past `decide_by` (two minutes) to the queue
    (`ai_unavailable`, `fallback=true`): the rules never decide in AI's place. A card whose scope's intake
    was turned off since it was held is the rules' again: replayed through them as they stand then.
-5. **Lanes.** A gathering's lane is its place and sender (`lane_key`). A batch behind a card of its lane
-   that waits for a person waits in review (`lane_blocked`); deciding that card gives the next blocked one
-   back to `deciding` while it is younger than two hours. A card at `suggest` waiting with AI's suggestion
+5. **Lanes.** A gathering's lane is its place and sender (`lane_key`). At `auto` a batch whose lane has a
+   card waiting for a person joins that card (`joinWaitingCard`): its events and items, and those of any
+   `lane_blocked` card of the lane (never decided, never tasked; the row goes), point at the oldest waiting
+   card, which goes back to `deciding` with `closed_at` now, so `auto_max_age_seconds` counts from the last
+   message. Its queued or running task is cancelled (`messages_added`) and a new one reads the whole card
+   (`enqueueAgain`, whatever tasks it had: a done task may be newer than the batch that joined).
+   A customer who takes a while to say what a picture is is otherwise left to a person with AI never having
+   read both. A detached card (`detached:` lane) is never joined: its messages were stored already. Elsewhere,
+   a batch behind a card of its lane that waits for a person waits in review (`lane_blocked`); deciding that
+   card gives the next blocked one back to `deciding` while it is younger than two hours. A card at `suggest` waiting with AI's suggestion
    (`ai_suggests`) holds up nothing: the next card of its lane gets its turn with AI. Raising a scope from
    `suggest` to `auto` therefore lets AI apply a new card before an older suggested one is decided: kept
    on purpose (the older card's messages are in the place's history AI reads, and a person may still
@@ -145,7 +152,8 @@ Email and web forms declare none, so their path gains no row and no query beyond
 
 1. **One task a card, one card a lane.** The ingest transaction queues the `intake` AI task in SQL (the
    store cannot import `ai`): `holdForIntake` and every conclusion of a card (`unblockLane`) ask for the
-   lane's next turn, which goes to the oldest `deciding` card that never had a task, only while no card of
+   lane's next turn, which goes to the oldest `deciding` card that never had a task since it last changed
+   (one created at or after its `closed_at`, a `messages_added` cancel aside), only while no card of
    the lane has one waiting or running and none waits for a person. At `suggest` a card is held like at `auto`
    and gets its turn the same way; what AI says waits for a person. `ai_tasks_intake_gathering` keeps one live task
    a card. The worker polls (5 s), so a card waits seconds for AI, never the request that brought it.
@@ -170,6 +178,10 @@ Email and web forms declare none, so their path gains no row and no query beyond
    cancelled task records nothing; a card a person decided meanwhile records `person_first`, one the sweep
    already sent to a person `too_old`. An applied decision goes through `Service.Decide` like a person's and
    loses to whoever locked the card first.
+   A decision is also of what its decider read: AI's apply and its move to review lock the card with the
+   events it read (`IntakeApply.Seen`), a person's with the `item_count` they read, so a card the customer
+   added to since is `ErrGatheringChanged` (an `ErrGatheringDecided`; 409 `gathering_changed`) and nothing
+   is applied. A task that loses this records nothing: the join cancelled its claim.
 5. **A task that ends without deciding hands the card to the rules.** When the worker cancels or fails an
    intake task (the day's `intake_per_day`, the feature off, a locked workspace, retries spent), it sets
    the card's `decide_by` to now, so the next sweep applies the rules instead of waiting two minutes.

@@ -3,6 +3,7 @@ package channeltest_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -248,10 +249,10 @@ func TestOneCardOfALaneIsWithAIAtATime(t *testing.T) {
 }
 
 // Cards that waited behind one a person decides get their turn with AI one after the other, even while
-// more of them still wait behind.
+// more of them still wait behind (at suggest: at auto they join the card instead).
 func TestALaneBlockedBehindAPersonGoesBackToAI(t *testing.T) {
 	d := newAIDesk(t, nil)
-	d.intakeAt(t, "auto")
+	d.intakeAt(t, "suggest")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
 	d.flush(t)
 	first := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
@@ -843,5 +844,175 @@ func TestACardAIDecidedSaysHowSureWhyAndWhichModel(t *testing.T) {
 	d.flush(t)
 	if got := decided(); got.AIDecision != nil {
 		t.Fatalf("decided by the rules = %+v", got)
+	}
+}
+
+// At auto, what a customer adds while their card waits for a person joins that card, and AI reads the
+// whole of it again: a picture AI was not sure of, then the words that say what it is, is decided alone.
+func TestAtAutoWhatACustomerAddsJoinsTheirWaitingCardAndAIDecidesItAgain(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "[picture]"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Picture", "confidence": 0.55})
+	d.runAI(t)
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1`); got != "review/ai_unsure" {
+		t.Fatalf("first card = %s", got)
+	}
+	*d.clock = d.clock.Add(8 * time.Minute)
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Name: "Lan", Group: "g1", Text: "please fix the cash report, it shows no detail"})
+	d.flush(t)
+	if got := d.gatherings(t); got != "deciding/create/new_thread/-:2" {
+		t.Fatalf("gatherings after the customer added = %s", got)
+	}
+	if got := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`); got != card {
+		t.Fatalf("the card that waited is not the one decided again: %s", got)
+	}
+	items := `SELECT string_agg(disposition||'/'||disposition_reason,',' ORDER BY occurred_at) FROM channel_thread_items WHERE workspace_id=$1 AND gathering_id=$2::uuid`
+	if got := d.one(t, items, card); got != "gathering/deciding,gathering/deciding" {
+		t.Fatalf("items = %s", got)
+	}
+	if got := d.tasks(t); got != "done,queued" {
+		t.Fatalf("tasks = %s", got)
+	}
+	d.answers(map[string]any{"action": "create", "subject": "Cash report shows no detail", "confidence": 0.95})
+	d.runAI(t)
+	if got := d.gatherings(t); got != "created/create/new_thread/ai:2" {
+		t.Fatalf("gatherings = %s", got)
+	}
+	if got := d.decisions(t); got != "create/below_threshold,create/applied" {
+		t.Fatalf("decisions = %s", got)
+	}
+	requests := d.fake.Requests()
+	prompt := requests[len(requests)-1].Messages[0].Text
+	if !strings.Contains(prompt, "[picture]") || !strings.Contains(prompt, "cash report") {
+		t.Fatalf("the second prompt does not hold both messages:\n%s", prompt)
+	}
+}
+
+// AI that read a card before the customer added to it decides nothing of what it did not read: the old
+// task is let go, and a new one reads the whole card.
+func TestAnAITaskThatReadTheCardBeforeTheCustomerAddedDecidesNothing(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "hello"})
+	d.flush(t)
+	stale := `{"action":"ignore","target":"","runner_up":"","runner_up_confidence":0,"command":"","subject":"","reply_kind":"acknowledgement","ignore_reason":"chat","confidence":0.99,"reason":"x"}`
+	answered := false
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		if !answered {
+			answered = true
+			// While the model reads, the card runs out of time and the customer says what they need.
+			*d.clock = d.clock.Add(3 * time.Minute)
+			if _, err := d.intake().Sweep(context.Background()); err != nil {
+				t.Error(err)
+			}
+			d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "the stock export fails"})
+			d.flush(t)
+		}
+		return aiprovider.Response{Text: stale, JSON: stale, Stop: aiprovider.StopDone, Model: "claude-haiku-5-5"}, nil
+	}
+	d.runAI(t)
+	if got := d.gatherings(t); got != "deciding/create/new_thread/-:2" {
+		t.Fatalf("gatherings after the stale answer = %s", got)
+	}
+	if got := d.decisions(t); got != "" {
+		t.Fatalf("decisions of the stale answer = %s", got)
+	}
+	if got := d.tasks(t); got != "cancelled:messages_added,queued" {
+		t.Fatalf("tasks = %s", got)
+	}
+	d.fake.Answer = nil
+	d.answers(map[string]any{"action": "create", "subject": "Stock export fails", "confidence": 0.95})
+	d.runAI(t)
+	if got := d.gatherings(t); got != "created/create/new_thread/ai:2" {
+		t.Fatalf("gatherings = %s", got)
+	}
+}
+
+// A person who read a card before the customer added to it is refused, so they read it again; one who
+// read all of it decides.
+func TestAPersonWhoReadTheCardBeforeTheCustomerAddedIsRefused(t *testing.T) {
+	d := newAIDesk(t, nil)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "hello"})
+	d.flush(t)
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, card, intake.Decision{Action: intake.Review, ReviewReason: "ai_unsure"}, store.DecidedByAI, store.ChannelActor{}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	actor := store.ChannelActor{AgentID: d.agentID}
+	one := 1
+	_, err := d.intake().Decide(context.Background(), d.workspaceID, card, intake.Decision{Action: intake.Ignore, ItemCount: &one}, store.DecidedByAgent, actor)
+	if !errors.Is(err, store.ErrGatheringChanged) {
+		t.Fatalf("a decision of one message of two = %v", err)
+	}
+	if got := d.gatherings(t); got != "deciding/create/new_thread/-:2" {
+		t.Fatalf("gatherings = %s", got)
+	}
+	two := 2
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, card, intake.Decision{Action: intake.Ignore, ItemCount: &two}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.gatherings(t); got != "ignored/create/new_thread/agent:2" {
+		t.Fatalf("gatherings = %s", got)
+	}
+}
+
+// At auto, what a customer wrote while AI was still reading their card waits for its turn; when AI is not
+// sure of the card, that batch joins it and AI reads the two together.
+func TestAtAutoABatchWaitingItsTurnJoinsTheCardAIWasNotSureOf(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "[picture]"})
+	d.flush(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "please fix the cash report, it shows no detail"})
+	d.flush(t)
+	if got := d.gatherings(t); got != "deciding/create/new_thread/-:1,deciding/create/new_thread/-:1" {
+		t.Fatalf("gatherings before AI = %s", got)
+	}
+	d.answers(map[string]any{"action": "create", "subject": "Picture", "confidence": 0.55})
+	d.runAI(t)
+	if got := d.gatherings(t); got != "deciding/create/new_thread/-:2" {
+		t.Fatalf("gatherings after AI was not sure = %s", got)
+	}
+	if got := d.tasks(t); got != "done,queued" {
+		t.Fatalf("tasks = %s", got)
+	}
+	d.answers(map[string]any{"action": "create", "subject": "Cash report shows no detail", "confidence": 0.95})
+	d.runAI(t)
+	if got := d.gatherings(t); got != "created/create/new_thread/ai:2" {
+		t.Fatalf("gatherings = %s", got)
+	}
+}
+
+// A card AI was not sure of takes in the batch that waited its turn behind it even when AI read the card
+// after that batch closed: a new task reads the two together.
+func TestABatchJoiningACardAIReadAfterItClosedGetsANewTask(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	for _, event := range []channeltest.LoopbackEvent{{ID: "a-1", From: "a", Group: "g1", Text: "first thing"},
+		{ID: "a-2", From: "a", Group: "g1", Text: "[picture]"}, {ID: "a-3", From: "a", Group: "g1", Text: "please fix the cash report"}} {
+		d.send(t, event)
+		d.flush(t)
+	}
+	*d.clock = d.clock.Add(time.Minute)
+	d.answers(map[string]any{"action": "create", "subject": "First", "confidence": 0.95})
+	d.runAI(t)
+	d.answers(map[string]any{"action": "create", "subject": "Picture", "confidence": 0.55})
+	d.runAI(t)
+	if got := d.gatherings(t); got != "created/create/new_thread/ai:1,deciding/create/new_thread/-:2" {
+		t.Fatalf("gatherings = %s", got)
+	}
+	if got := d.tasks(t); got != "done,done,queued" {
+		t.Fatalf("tasks = %s", got)
+	}
+	d.answers(map[string]any{"action": "create", "subject": "Cash report", "confidence": 0.95})
+	d.runAI(t)
+	if got := d.gatherings(t); got != "created/create/new_thread/ai:1,created/create/new_thread/ai:2" {
+		t.Fatalf("gatherings at the end = %s", got)
 	}
 }
