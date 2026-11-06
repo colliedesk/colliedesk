@@ -57,6 +57,8 @@ interface SettingsPageProps {
   showInvites?: boolean;
   // agentsSection creates agent tokens for AI hosts; every signed-in person sees it, just above the sessions it adds to.
   agentsSection?: ReactNode;
+  // connectedAppsSection lists the AI apps connected with OAuth, just above the agent tokens.
+  connectedAppsSection?: ReactNode;
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
   // helpCenterSection turns the public help center on or off; every agent sees it, admins change it.
@@ -70,7 +72,7 @@ interface SettingsPageProps {
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite, inviteRoles,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, savedRepliesSection, helpCenterSection, exportSection, showBilling = false, showInvites = true }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, connectedAppsSection, savedRepliesSection, helpCenterSection, exportSection, showBilling = false, showInvites = true }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
@@ -101,6 +103,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           {teamSection}
           {showInvites && <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInvite={createdInvite} creatingInvite={creatingInvite}
             inviteError={inviteError} roles={inviteRoles} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />}
+          {connectedAppsSection}
           {agentsSection}
           <SessionsSection sessions={sessions} timezone={timezone} onRevokeSession={onRevokeSession} />
           {savedRepliesSection}

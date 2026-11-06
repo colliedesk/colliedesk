@@ -11,12 +11,42 @@ token that holds `messages:send` only when you want it to write to customers.
 - URL: `https://<your-colliedesk>/mcp`. It uses MCP Streamable HTTP without sessions, protocol
   versions `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`.
 <!-- /generated -->
-- Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
-  person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
-- Create the token in **Settings → External AI agents**, as described in
+- Sign-in: **OAuth** for an AI app (Claude, ChatGPT, Codex, Cursor, Claude Code, VS Code): add the
+  URL in the app and it opens a Colliedesk page in your browser that asks you to **Allow** it. Or an
+  **agent token** in the `Authorization: Bearer <token>` header, for a script. A browser cookie or a
+  person's own session token is never accepted on `/mcp`. A missing or invalid credential gets HTTP
+  401 with a `WWW-Authenticate` header that names where the app signs in
+  (`resource_metadata="https://<your-colliedesk>/.well-known/oauth-protected-resource/mcp"`) and says
+  how to connect again.
+- An app connected with OAuth acts as you, with everything you can do in the workspace you allowed it
+  in, as your roles are on each call; see [Connected AI apps](sessions.md#connected-ai-apps).
+- An agent token is created in **Settings → External AI agents**, as described in
   [Agent tokens](sessions.md#agent-tokens): it follows a role (one whose permissions you all hold), or holds a fixed
   list of your permissions. Give it only what the job needs. The token is shown once; revoke it in
   **Settings → Sessions**.
+
+### Connect an app with OAuth
+
+1. In the app, add a remote MCP server (a "custom connector" in Claude and ChatGPT) with the URL
+   `https://<your-colliedesk>/mcp`. On Colliedesk Cloud the URL is `https://app.colliedesk.com/mcp` for
+   every workspace. Leave any token or header field empty.
+2. The app opens a Colliedesk page in your browser. Sign in if it asks (on Cloud, choose the workspace
+   there), check the app's name and the workspace, and choose **Allow**. **Cancel** tells the app no.
+3. The app is connected. It shows in **Settings → External AI agents → Connected AI apps**.
+
+Each sign-in is its own connection: the same app on two computers shows twice, and disconnecting one
+leaves the other. An app you do not use for 30 days is disconnected; it asks you to sign in again.
+
+If a connection stops working (you disconnected it, it expired, or your account was deactivated), the
+app gets HTTP 401 and asks you to sign in again. To connect again:
+
+- **Claude** and **ChatGPT**: **Disconnect** the Colliedesk connector, then **Connect**.
+- **Claude Code**: run `/mcp`, choose `colliedesk` and **Authenticate**, or `claude mcp login colliedesk`.
+- **Codex**: `codex mcp login colliedesk`.
+- **Cursor**: Settings → MCP, log in to `colliedesk` again.
+
+To use another workspace, connect again and choose that workspace. Removing the server in the app does
+not disconnect it in Colliedesk; **Disconnect** in Settings does.
 
 The agent does what the token's [permissions](roles-and-permissions.md) allow, at once; nothing waits
 for a person to approve it, and it never does more than the person who made the token can do right
