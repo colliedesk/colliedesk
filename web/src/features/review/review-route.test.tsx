@@ -39,7 +39,7 @@ test('Waiting lists the cards for a person of the channel picked; a card opens w
   expect(await screen.findByLabelText('Subject')).toHaveValue('The scale stopped printing labels');
   expect(intake.get).toHaveBeenCalledWith(CARD);
   fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
-  await waitFor(() => expect(intake.decide).toHaveBeenCalledWith(CARD, { action: 'create', subject: 'The scale stopped printing labels' }, expect.any(String)));
+  await waitFor(() => expect(intake.decide).toHaveBeenCalledWith(CARD, { action: 'create', subject: 'The scale stopped printing labels', item_count: 2 }, expect.any(String)));
   expect(await screen.findByText('Lan Nguyen\'s card opened a conversation.')).toHaveAttribute('role', 'status');
   expect(screen.getByRole('link', { name: 'Open the conversation' })).toHaveAttribute('href', `/conversations/${CONVERSATION}`);
   // The lists, the counts and the badge are read again.
@@ -58,6 +58,32 @@ test('a card a teammate decided first leaves Waiting and the page says who decid
   await waitFor(() => expect(screen.queryByRole('article')).not.toBeInTheDocument());
   expect(screen.getByText("Ann Agent decided Lan Nguyen's card first.")).toHaveAttribute('role', 'status');
   expect(screen.getByRole('link', { name: 'Open the conversation' })).toHaveAttribute('href', `/conversations/${CONVERSATION}`);
+});
+
+test('a card the customer wrote again into goes back to AI, nothing decided, and the page says so', async () => {
+  intake.decide.mockRejectedValue(new ConflictError('The customer added messages.', { code: 'gathering_changed', state: 'deciding', decided_by: null,
+    decided_by_agent_id: null, conversation_id: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: 'Decide' }));
+  await screen.findByLabelText('Subject');
+  intake.list.mockResolvedValue(page([]));
+  fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
+  expect(await screen.findByText('Lan Nguyen wrote again and it joined their card, so nothing was decided. AI is reading the whole card now; it comes back to Waiting if AI is not sure.'))
+    .toHaveAttribute('role', 'status');
+  await waitFor(() => expect(screen.queryByRole('article')).not.toBeInTheDocument());
+  expect(screen.queryByRole('link', { name: 'Open the conversation' })).not.toBeInTheDocument();
+});
+
+test('a card the customer wrote again into that still waits for a person says to read it again', async () => {
+  intake.decide.mockRejectedValue(new ConflictError('The customer added messages.', { code: 'gathering_changed', state: 'review', decided_by: null,
+    decided_by_agent_id: null, conversation_id: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: 'Decide' }));
+  await screen.findByLabelText('Subject');
+  fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
+  expect(await screen.findByText('Lan Nguyen wrote again and it joined their card, so nothing was decided. Read the card again, then decide.')).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('article', { name: 'Lan Nguyen' })).toBeInTheDocument();
+  await waitFor(() => expect(intake.get.mock.calls.length).toBeGreaterThan(1));
 });
 
 test('AI dismissed reads what AI set aside, and Put back sends the card back', async () => {

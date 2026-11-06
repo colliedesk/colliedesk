@@ -134,7 +134,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// A decision of a gathering applies only while it is undecided and holds exactly these events.
 	var pending pendingGathering
 	if request.Intake != nil {
-		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs); err != nil {
+		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs, request.Intake); err != nil {
 			return result, err
 		}
 	}
@@ -563,7 +563,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	switch decision := rules.Decide(facts); decision.Action {
 	case rules.Archive:
 		if aiOn(level) && rules.AIDecides(facts, decision) {
-			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+			return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 		}
 		// Chatter of a scope that opens conversations only on a command is kept, not opened. A message a
 		// join-open scope could join nowhere stays unresolved in its chat, where it is seen and counted.
@@ -594,7 +594,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return finish(result)
 	case rules.Review:
 		if aiOn(level) && rules.AIDecides(facts, decision) {
-			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+			return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 		}
 		// Collected messages that named no command wait for a person to decide what they are.
 		if level == "" {
@@ -710,7 +710,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		decision = request.Intake.basisOf(decision, pending)
 	}
 	if aiOn(level) && rules.AIDecides(facts, decision) {
-		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+		return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 	}
 	if contactID == "" {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
