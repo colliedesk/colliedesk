@@ -7067,7 +7067,7 @@ export interface components {
             id: string;
             /** Format: email */
             email: string;
-            /** @description The roles the invited person gets on joining, added to any they already hold. */
+            /** @description The roles the invited person gets on joining. */
             roles: components["schemas"]["RoleRef"][];
             /** Format: email */
             created_by_email: string;

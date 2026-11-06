@@ -10665,7 +10665,7 @@ components:
       properties:
         id: {type: string, format: uuid}
         email: {type: string, format: email}
-        roles: {type: array, items: {$ref: '#/components/schemas/RoleRef'}, description: 'The roles the invited person gets on joining, added to any they already hold.'}
+        roles: {type: array, items: {$ref: '#/components/schemas/RoleRef'}, description: 'The roles the invited person gets on joining.'}
         created_by_email: {type: string, format: email}
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}

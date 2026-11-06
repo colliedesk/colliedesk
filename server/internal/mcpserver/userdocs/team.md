@@ -71,6 +71,7 @@ If you deactivate yourself, you are signed out. You can only do that while anoth
 
 Select **Reactivate** in a deactivated row. On the hosted cloud this uses a seat again; if all seats
 are taken you get the plan-limit message, and you free a seat first (deactivate someone or revoke an
-invite). Reactivating does not give back their conversations or devices. Send them a new invite link,
-or create a pairing link, so they can sign in. An invite to the email of a deactivated agent is
-refused with "reactivate them in the team list".
+invite). Reactivating does not give back their conversations or devices. They sign in again with cloud
+sign-in, or with a pairing link that whoever runs the server prints with `collie pair`. An invite to
+the email of a deactivated agent is refused with "reactivate them in the team list", and an invite to
+someone already in the workspace is refused with `already_a_member`.
