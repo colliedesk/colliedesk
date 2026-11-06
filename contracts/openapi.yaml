@@ -10648,13 +10648,14 @@ components:
         needs_reconnecting: {type: boolean, description: 'Disconnected, revoked or expired: the app signs in again (each app''s steps are in the docs).'}
     OAuthClient:
       type: object
-      required: [client_id, name, redirect_uri, host, verified]
+      required: [client_id, name, redirect_uri, host, client_host, verified]
       properties:
         client_id: {type: string}
         name: {type: string, description: 'The name the app gave itself (at most 80 characters).'}
         redirect_uri: {type: string}
         host: {type: string, description: 'Where the browser returns after the decision: the redirect''s host, or its scheme for a desktop app.'}
-        verified: {type: boolean, description: 'The name comes from a client ID metadata document at an https address, not from a registration anyone could make.'}
+        client_host: {type: string, description: 'The host that published the app''s client ID metadata document (its https client_id); empty for an app known by registration. The consent page names it.'}
+        verified: {type: boolean, description: 'The client ID metadata document is on a known AI vendor''s host (claude.ai, anthropic.com, chatgpt.com, openai.com, cursor.com, or a subdomain), so the name is theirs. False for a registration and any other host: the app named itself.'}
     Invite:
       type: object
       required: [id, email, roles, created_by_email, created_at, expires_at, used_at, revoked_at]

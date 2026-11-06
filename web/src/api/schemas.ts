@@ -250,7 +250,7 @@ export const sessionSchema = z.object({
 }) satisfies z.ZodType<Generated<'Session'>>;
 // The AI app a consent page shows, and the redirect it may be sent back to.
 export const oauthClientSchema = z.object({
-  client_id: z.string(), name: z.string(), redirect_uri: z.string(), host: z.string(), verified: z.boolean(),
+  client_id: z.string(), name: z.string(), redirect_uri: z.string(), host: z.string(), client_host: z.string().default(''), verified: z.boolean(),
 }) satisfies z.ZodType<Generated<'OAuthClient'>>;
 export type OAuthClient = z.infer<typeof oauthClientSchema>;
 export const oauthAllowedSchema = z.object({ redirect_to: z.string() }) satisfies z.ZodType<JsonResponse<'allowOAuthClient', 200>>;

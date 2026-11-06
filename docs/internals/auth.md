@@ -199,10 +199,12 @@ the workspace, and the app acts as that person with everything they hold. Code: 
   (`TestTwoRefreshesAtOnceWithOneTokenBothSucceed`). Used after that, it is a replay and revokes the
   grant. Used refresh tokens are remembered a day, then forgotten (`invalid_grant` without a revoke).
 - **Clients are not stored.** Dynamic registration signs the app's name and redirects into the
-  `client_id` (`cdk_client_<payload>.<HMAC>`, key `oauth_client_key` in `server_secrets`), limited to 30
-  per client address a day. A client ID metadata document (an https `client_id`, Claude Code's) is
+  `client_id` (`cdk_client_<payload>.<HMAC>`, key `oauth_client_key` in `server_secrets`), limited to 1000
+  valid registrations per client address an hour (a refused one is not counted). A client ID metadata document (an https `client_id`, Claude Code's) is
   fetched through `netguard` (public addresses after resolution, every dial), no redirect, 64 KiB, 5 s,
-  cached 10 minutes; the document must name itself as `client_id`. Redirects: https anywhere, http only
+  cached 10 minutes; the document must name itself as `client_id`. Anyone can publish one, so the consent
+  page always names its host and calls the name verified only on a known vendor's host (`trustedClientHosts`:
+  exact or a subdomain at a dot, default port). Redirects: https anywhere, http only
   to `localhost`/`127.0.0.1`/`::1` (any port, RFC 8252), a private scheme with a dot or a known desktop
   app's (`cursor`, `vscode`…). `GET /api/v1/oauth/client` is the only unauthenticated way to make the
   server fetch one, 60 a minute per address.

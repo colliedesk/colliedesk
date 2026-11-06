@@ -240,7 +240,7 @@ func unauthorizedResource(response http.ResponseWriter, request *http.Request, o
 	response.Header().Set("WWW-Authenticate", `Bearer realm="colliedesk", resource_metadata="`+resourceMetadataURL(request, origin)+`"`)
 	writeJSONError(response, http.StatusUnauthorized, "unauthorized",
 		"Colliedesk needs you to sign in again. "+httpapi.OAuthReconnectSteps+
-			" A script sends an API token as 'Authorization: Bearer <token>' (Settings → API tokens). Cookies and a person's own session are not accepted here.")
+			" A script sends an API token as 'Authorization: Bearer <token>' (Settings → External AI agents). Cookies and a person's own session are not accepted here.")
 }
 
 func bearerToken(request *http.Request) (string, bool) {

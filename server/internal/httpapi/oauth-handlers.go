@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -122,11 +123,6 @@ func writeOAuthError(response http.ResponseWriter, status int, code, description
 // holds the app's name and redirect addresses, signed; nothing is stored.
 func (a *API) registerOAuthClient(response http.ResponseWriter, request *http.Request) {
 	allowCrossOrigin(response)
-	if allowed, _ := a.oauth.registrations.allow(clientIP(request, a.config.TrustedProxies), a.now()); !allowed {
-		response.Header().Set("Retry-After", "3600")
-		writeOAuthError(response, http.StatusTooManyRequests, "rate_limited", "Too many app registrations from this address today. Try again later.")
-		return
-	}
 	var input struct {
 		RedirectURIs            []string `json:"redirect_uris"`
 		ClientName              string   `json:"client_name"`
@@ -157,6 +153,12 @@ func (a *API) registerOAuthClient(response http.ResponseWriter, request *http.Re
 	name := clientName(input.ClientName)
 	if name == "" {
 		name = "AI app"
+	}
+	// Only a registration that is answered counts: a refused one signs nothing.
+	if allowed, wait := a.oauth.registrations.allow(clientIP(request, a.config.TrustedProxies), a.now()); !allowed {
+		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeOAuthError(response, http.StatusTooManyRequests, "rate_limited", "Too many app registrations from this address this hour. Try again later.")
+		return
 	}
 	clientID, err := a.signClient(request.Context(), registeredClient{Name: name, RedirectURIs: redirects})
 	if err != nil {
@@ -233,9 +235,11 @@ type oauthClientAnswer struct {
 	RedirectURI string `json:"redirect_uri"`
 	// Host is where the app sends the person back after the decision.
 	Host string `json:"host"`
-	// Verified: the name comes from a client ID metadata document published at an https address, not
-	// from a registration anyone could make.
-	Verified bool `json:"verified"`
+	// ClientHost is the host of a client ID metadata document's address (who published the app), "" for
+	// a registration. Verified: that host is a known AI vendor's, so the name is theirs; a registration and
+	// any other host named the app themselves.
+	ClientHost string `json:"client_host"`
+	Verified   bool   `json:"verified"`
 }
 
 // describeOAuthClient answers the app a consent page shows, and whether redirect_uri is one of its own;
@@ -252,7 +256,8 @@ func (a *API) describeOAuthClient(response http.ResponseWriter, request *http.Re
 		a.writeOAuthClientError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, oauthClientAnswer{ClientID: client.ID, Name: client.Name, RedirectURI: redirect.String(), Host: redirectHost(redirect), Verified: client.Metadata})
+	writeJSON(response, http.StatusOK, oauthClientAnswer{ClientID: client.ID, Name: client.Name, RedirectURI: redirect.String(), Host: redirectHost(redirect),
+		ClientHost: client.Host, Verified: client.Metadata && trustedClientHost(client.ID)})
 }
 
 func (a *API) checkOAuthRequest(request *http.Request, clientID, redirectURI string) (oauthClient, *url.URL, error) {

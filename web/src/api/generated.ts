@@ -7057,7 +7057,9 @@ export interface components {
             redirect_uri: string;
             /** @description Where the browser returns after the decision: the redirect's host, or its scheme for a desktop app. */
             host: string;
-            /** @description The name comes from a client ID metadata document at an https address, not from a registration anyone could make. */
+            /** @description The host that published the app's client ID metadata document (its https client_id); empty for an app known by registration. The consent page names it. */
+            client_host: string;
+            /** @description The client ID metadata document is on a known AI vendor's host (claude.ai, anthropic.com, chatgpt.com, openai.com, cursor.com, or a subdomain), so the name is theirs. False for a registration and any other host: the app named itself. */
             verified: boolean;
         };
         Invite: {

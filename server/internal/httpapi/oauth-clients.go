@@ -28,16 +28,16 @@ import (
 //     redirect addresses at (Claude Code). The server fetches it, guarded against reaching its own
 //     network, and keeps it in memory for a while.
 const (
-	oauthClientPrefix        = "cdk_client_"
-	oauthClientKeyName       = "oauth_client_key"
-	oauthRegistrationsPerDay = 30
-	oauthClientLookupsPerMin = 60
-	oauthMetadataMaxBytes    = 64 << 10
-	oauthMetadataTimeout     = 5 * time.Second
-	oauthMetadataCacheFor    = 10 * time.Minute
-	oauthMetadataCacheSize   = 1000
-	maxOAuthRedirectURIs     = 10
-	maxOAuthClientNameRunes  = 80
+	oauthClientPrefix         = "cdk_client_"
+	oauthClientKeyName        = "oauth_client_key"
+	oauthRegistrationsPerHour = 1000
+	oauthClientLookupsPerMin  = 60
+	oauthMetadataMaxBytes     = 64 << 10
+	oauthMetadataTimeout      = 5 * time.Second
+	oauthMetadataCacheFor     = 10 * time.Minute
+	oauthMetadataCacheSize    = 1000
+	maxOAuthRedirectURIs      = 10
+	maxOAuthClientNameRunes   = 80
 )
 
 // oauthClient is an app as the consent page and the token endpoint know it.
@@ -45,8 +45,9 @@ type oauthClient struct {
 	ID           string
 	Name         string
 	RedirectURIs []string
-	// Metadata: the id is a client ID metadata document's address.
+	// Metadata: the id is a client ID metadata document's address; Host is that address's host.
 	Metadata bool
+	Host     string
 }
 
 // oauthClientError is why a client id or a redirect address is refused; the consent page shows it and
@@ -70,7 +71,7 @@ type cachedClient struct {
 
 func newOAuthState() *oauthState {
 	return &oauthState{
-		registrations: newWindowLimiter(oauthRegistrationsPerDay, webFormMaxKeys, 24*time.Hour),
+		registrations: newWindowLimiter(oauthRegistrationsPerHour, webFormMaxKeys, time.Hour),
 		lookups:       newWindowLimiter(oauthClientLookupsPerMin, webFormMaxKeys, time.Minute),
 		documents:     map[string]cachedClient{},
 	}
@@ -194,7 +195,7 @@ func (a *API) metadataOAuthClient(ctx context.Context, clientID string) (oauthCl
 	if name == "" {
 		name = address.Host
 	}
-	client := oauthClient{ID: clientID, Name: name, RedirectURIs: redirects, Metadata: true}
+	client := oauthClient{ID: clientID, Name: name, RedirectURIs: redirects, Metadata: true, Host: address.Hostname()}
 	a.oauth.mu.Lock()
 	if len(a.oauth.documents) >= oauthMetadataCacheSize {
 		clear(a.oauth.documents)
@@ -297,6 +298,26 @@ func (c oauthClient) redirectAllowed(requested string) bool {
 			continue
 		}
 		if registered.Hostname() == asked.Hostname() && registered.EscapedPath() == asked.EscapedPath() && registered.RawQuery == asked.RawQuery {
+			return true
+		}
+	}
+	return false
+}
+
+// trustedClientHosts are the AI vendors whose client ID metadata documents name their own apps: on these
+// hosts (or a subdomain) the name an app gives is the vendor's. Any other host published its own name.
+var trustedClientHosts = []string{"claude.ai", "anthropic.com", "chatgpt.com", "openai.com", "cursor.com"}
+
+// trustedClientHost reports whether a client ID metadata document's address is on a trusted vendor's
+// host: exactly, or a subdomain at a dot boundary, on the default https port, written as browsers do.
+func trustedClientHost(clientID string) bool {
+	address, err := url.Parse(clientID)
+	if err != nil || address.Scheme != "https" || address.User != nil || address.Port() != "" {
+		return false
+	}
+	host := address.Hostname()
+	for _, trusted := range trustedClientHosts {
+		if host == trusted || strings.HasSuffix(host, "."+trusted) {
 			return true
 		}
 	}

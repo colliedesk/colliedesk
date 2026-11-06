@@ -517,17 +517,22 @@ func TestRegistrationRefusesUnsafeRedirectsAndIsLimitedPerAddress(t *testing.T) 
 	for _, scheme := range []string{"cursor://anysphere.cursor-mcp/oauth/callback", "vscode://vscode.github-authentication/did-authenticate"} {
 		f.register(t, "Desktop app", scheme)
 	}
-	limited := false
-	for range 40 {
+	// Refused registrations are not counted: they store nothing and sign nothing.
+	for range 50 {
+		request(t, f.api, http.MethodPost, "/oauth/register", map[string]any{"client_name": "x", "redirect_uris": []string{"http://evil.example/cb"}}, "", nil)
+	}
+	// Two valid registrations above, 998 here: 1000 in the hour.
+	for index := range 998 {
 		response := request(t, f.api, http.MethodPost, "/oauth/register", map[string]any{"client_name": "x", "redirect_uris": []string{oauthRedirect}}, "", nil)
-		if response.Code == http.StatusTooManyRequests {
-			limited = true
-			break
+		if response.Code != http.StatusCreated {
+			t.Fatalf("valid registration %d from one address in an hour status=%d, want 201", index+3, response.Code)
 		}
 	}
-	if !limited {
-		t.Fatal("40 registrations from one address in a day were all accepted")
+	if response := request(t, f.api, http.MethodPost, "/oauth/register", map[string]any{"client_name": "x", "redirect_uris": []string{oauthRedirect}}, "", nil); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("valid registration 1001 from one address in an hour status=%d, want 429", response.Code)
 	}
+	f.clock.set(f.clock.Now().Add(time.Hour + time.Second))
+	f.register(t, "After an hour", oauthRedirect)
 }
 
 func TestClientMetadataDocumentIsFetchedSafely(t *testing.T) {
@@ -551,12 +556,15 @@ func TestClientMetadataDocumentIsFetchedSafely(t *testing.T) {
 		return request(t, f.api, http.MethodGet, "/api/v1/oauth/client?"+url.Values{"client_id": {clientID}, "redirect_uri": {"http://localhost:5555/callback"}}.Encode(), nil, "", nil)
 	}
 	var app struct {
-		Name     string `json:"name"`
-		Verified bool   `json:"verified"`
+		Name       string `json:"name"`
+		Verified   bool   `json:"verified"`
+		ClientHost string `json:"client_host"`
 	}
 	response := describe(documentURL)
 	decode(t, response, &app)
-	if response.Code != http.StatusOK || app.Name != "Claude Code" || !app.Verified {
+	// The document names itself "Claude Code" on a host that is not Anthropic's: the name is not verified,
+	// and the page says which host published it.
+	if response.Code != http.StatusOK || app.Name != "Claude Code" || app.Verified || app.ClientHost != "127.0.0.1" {
 		t.Fatalf("metadata document status=%d body=%s", response.Code, response.Body.String())
 	}
 	for _, path := range []string{"/liar.json", "/moved.json", "/missing.json"} {

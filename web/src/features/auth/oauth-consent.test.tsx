@@ -13,7 +13,7 @@ const request = oauthRequestFrom(new URLSearchParams({
   client_id: 'cdk_client_x', redirect_uri: 'http://localhost:4567/callback', response_type: 'code', code_challenge: 'c'.repeat(43),
   code_challenge_method: 'S256', state: 'st', resource: 'https://desk.example.com/mcp',
 }));
-const app = { client_id: 'cdk_client_x', name: 'Claude Code', redirect_uri: 'http://localhost:4567/callback', host: 'localhost', verified: false };
+const app = { client_id: 'cdk_client_x', name: 'Claude Code', redirect_uri: 'http://localhost:4567/callback', host: 'localhost', client_host: '', verified: false };
 const me = { agent: { email: 'ada@example.com', display_name: 'Ada' }, workspace: { name: 'Acme Support' }, plan: null };
 
 function show() {
@@ -67,4 +67,16 @@ test('signed out on Cloud: the sign-in page chooses the workspace and comes back
   show();
   const link = await screen.findByRole('link', { name: 'Sign in' });
   expect(link.getAttribute('href')).toBe('https://app.colliedesk.com/sign-in?next=%2Foauth%2Fauthorize%3Fclient_id%3Dcdk_client_x');
+});
+
+test('an app published by a client ID metadata document names its host; only a known vendor host is not warned about', async () => {
+  api.describeOAuthClient.mockResolvedValue({ ...app, client_id: 'https://evil.example/x', client_host: 'evil.example', name: 'Claude' });
+  const { unmount } = show();
+  expect(await screen.findByText('Published by evil.example.')).toBeTruthy();
+  expect(screen.getByText('The app named itself; check it is the app you just connected.')).toBeTruthy();
+  unmount();
+  api.describeOAuthClient.mockResolvedValue({ ...app, client_id: 'https://claude.ai/oauth/claude-code-client-metadata', client_host: 'claude.ai', verified: true });
+  show();
+  expect(await screen.findByText('Published by claude.ai.')).toBeTruthy();
+  expect(screen.queryByText('The app named itself; check it is the app you just connected.')).toBeNull();
 });
