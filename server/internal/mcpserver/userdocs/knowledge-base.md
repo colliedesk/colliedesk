@@ -13,8 +13,9 @@ dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base
 ## Collections
 
 A collection groups articles, like a Freshdesk category, folder and subfolder: collections go three
-levels deep. Every article belongs to one collection, so a new knowledge base starts by asking for
-one, for example "Getting started".
+levels deep. Every article has a home collection, so a new knowledge base starts by asking for
+one, for example "Getting started". An article can also be listed in more collections; see
+[Several collections](#several-collections).
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
   goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
@@ -50,6 +51,34 @@ before, Colliedesk takes their change into account and moves yours again; if tha
 says so and nothing changes. If someone else moved or deleted the very row you moved, the page says
 so and shows the list as it is now. The order is not part of an article's history, so restoring a
 version does not move an article.
+
+### Several collections
+
+One answer often belongs under two topics, for example "Get a VAT invoice" under both **Billing** and
+**Bookings**. Keep one article and list it in both, instead of two copies that drift apart.
+
+1. Open the article. In **Placement**, **Collections** shows its home collection, marked **Home**.
+2. Choose a collection in **Also list in…**. It appears as a row under the home.
+3. Select **Save**.
+
+The help center now lists the article in each of these collections. Every link opens the same
+address, `/a/<number>-<address name>`. Adding or removing a collection never changes that address.
+
+- **The home** gives the article's breadcrumb on the help center and its place when you order a
+  collection by hand. In the other collections the article comes after that collection's own
+  articles, by title. Choosing another home moves the article; if it was listed there already, it
+  is no longer an extra row.
+- **Remove** a collection with **×** on its row, then **Save**. Only that listing goes; the article,
+  its address and its other collections stay.
+- **Search, sitemap.xml, llms.txt and AI answers** return the article once, at its address.
+- **The articles list** of a collection in Colliedesk shows the articles whose home it is. The
+  number next to a collection counts those too.
+- **Delete a collection** that an article is only listed in: the article stays in its home and
+  leaves that list. Restore the collection from the trash and the article is listed there again.
+  A collection that is still the home of an article cannot be deleted, as before.
+- **Import**: the Freshdesk import brings each article into one collection, as Freshdesk has it.
+- **AI agents** do the same with `collection_ids` (the home first) on `colliedesk_kb_article_create`
+  and `colliedesk_kb_article_update`; every article answer carries `collection_ids`.
 
 ## Find an article
 
@@ -89,7 +118,7 @@ Every action on an article is in the bar at the top: **Save**, **Publish** for a
 **Delete article…**. The column on the right only shows the article's **Visibility** (with **Turn on
 help center** while it is off), the images that still need alt text, and its **Placement**
 (collection and address name). On a phone the bar is at the bottom of the screen: the status,
-**Details** (visibility, alt text, collection, address), **⋯** and **Save**.
+**Details** (visibility, alt text, collections, address), **⋯** and **Save**.
 
 **Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
 window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
