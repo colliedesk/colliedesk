@@ -84,18 +84,25 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 	return got.site, true, nil
 }
 
+// listedKBArticles is a FROM item over the articles a of workspace $1 joined with l(listed, extra): each
+// collection the article is listed in, its home (extra false) and every other one (extra true).
+const listedKBArticles = `kb_articles a CROSS JOIN LATERAL (SELECT a.collection_id AS listed, false AS extra
+		UNION ALL SELECT x.collection_id, true FROM kb_article_collections x
+		WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id) l`
+
 // helpCenterCollectionsSQL lists the live collections of workspace $1 with their name and description
 // in language $2 ("" the primary one; a missing name falls back to it), the published articles each
-// holds itself, and how many of those are published in each shown language, by position and name.
-const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.collection_id, t.locale, count(*) AS n
-		FROM kb_articles a JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.status='published' AND t.deleted_at IS NULL
-		JOIN help_center_languages l ON l.workspace_id=t.workspace_id AND l.locale=t.locale AND l.visible
-		WHERE ` + publishedKBArticle + ` GROUP BY a.collection_id, t.locale),
+// lists itself (its own and those listed in it too), and how many of those are published in each shown
+// language, by position and name.
+const helpCenterCollectionsSQL = `WITH shown AS (SELECT l.listed AS collection_id, t.locale, count(*) AS n
+		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.status='published' AND t.deleted_at IS NULL
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
+		WHERE ` + publishedKBArticle + ` GROUP BY l.listed, t.locale),
 	byc AS (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
 	SELECT c.id::text, COALESCE(c.parent_id::text, ''), COALESCE(ct.name, c.name), CASE WHEN ct.collection_id IS NULL THEN c.description ELSE ct.description END,
 		c.slug, COALESCE(n.published, 0), COALESCE(byc.counts, '{}'::jsonb)
 	FROM kb_collections c
-	LEFT JOIN (SELECT a.collection_id, count(*) AS published FROM kb_articles a WHERE ` + publishedKBArticle + ` GROUP BY a.collection_id) n
+	LEFT JOIN (SELECT l.listed AS collection_id, count(*) AS published FROM ` + listedKBArticles + ` WHERE ` + publishedKBArticle + ` GROUP BY l.listed) n
 		ON n.collection_id=c.id
 	LEFT JOIN byc ON byc.collection_id=c.id
 	LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=$2 AND $2 <> ''
@@ -156,25 +163,26 @@ func shownTranslation(locale string) string {
 const publicKBTranslationColumns = `a.number, t.slug, t.title, a.collection_id::text, t.published_at, t.updated_at`
 
 // helpCenterArticlesSQL lists, for each collection of workspace $1 that collections (an SQL array
-// of ids) names, its published articles in their order (position, then title), skipping the first $2
-// and keeping at most $3.
+// of ids) names, the published articles it lists in their order: its own by position, then title; then
+// those listed in it from another home, by title; skipping the first $2 and keeping at most $3. The
+// collection id read is the one listed in, so a list groups by it; the article page reads the home.
 func helpCenterArticlesSQL(collections string) string {
-	return `SELECT ` + publicKBArticleColumns + ` FROM (
-			SELECT a.*, row_number() OVER (PARTITION BY a.collection_id ORDER BY a.position, lower(a.title), a.number) AS place
-			FROM kb_articles a WHERE ` + publishedKBArticle + ` AND a.collection_id = ANY(` + collections + `)) a
-		WHERE a.place > $2 AND a.place <= $2 + $3 ORDER BY a.collection_id, a.place`
+	return `SELECT a.number, a.slug, a.title, a.listed::text, a.published_at, a.updated_at FROM (
+			SELECT a.*, l.listed, row_number() OVER (PARTITION BY l.listed ORDER BY l.extra, CASE WHEN l.extra THEN 0 ELSE a.position END, lower(a.title), a.number) AS place
+			FROM ` + listedKBArticles + ` WHERE ` + publishedKBArticle + ` AND l.listed = ANY(` + collections + `)) a
+		WHERE a.place > $2 AND a.place <= $2 + $3 ORDER BY a.listed, a.place`
 }
 
 // helpCenterTranslatedArticlesSQL is helpCenterArticlesSQL for the translations in language $5: only
 // the articles published in it count, in the same order.
-const helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.collection_id::text, x.tpublished, x.tupdated FROM (
-		SELECT a.number, a.collection_id, t.slug AS tslug, t.title AS ttitle, t.published_at AS tpublished, t.updated_at AS tupdated,
-			row_number() OVER (PARTITION BY a.collection_id ORDER BY a.position, lower(t.title), a.number) AS place
-		FROM kb_articles a` + `
+const helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.listed::text, x.tpublished, x.tupdated FROM (
+		SELECT a.number, l.listed, t.slug AS tslug, t.title AS ttitle, t.published_at AS tpublished, t.updated_at AS tupdated,
+			row_number() OVER (PARTITION BY l.listed ORDER BY l.extra, CASE WHEN l.extra THEN 0 ELSE a.position END, lower(t.title), a.number) AS place
+		FROM ` + listedKBArticles + `
 		JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$5 AND t.status='published' AND t.deleted_at IS NULL
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
-		WHERE ` + publishedKBArticle + ` AND a.collection_id = ANY($4::uuid[])) x
-	WHERE x.place > $2 AND x.place <= $2 + $3 ORDER BY x.collection_id, x.place`
+		WHERE ` + publishedKBArticle + ` AND l.listed = ANY($4::uuid[])) x
+	WHERE x.place > $2 AND x.place <= $2 + $3 ORDER BY x.listed, x.place`
 
 // HelpCenterArticles returns, for each of the collections, its published articles in order, skipping
 // the first offset and keeping at most limit; the text is left out.

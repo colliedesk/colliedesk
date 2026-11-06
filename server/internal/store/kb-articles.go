@@ -21,17 +21,23 @@ const kbArticleChangeColumns = `v.version,v.kind,v.restored_from_version,v.chang
 
 // kbArticleSelect reads articles a with their newest version; extra columns follow the change columns.
 func kbArticleSelect(extra, join string) string {
-	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,a.updated_at,` +
+	return `SELECT a.id::text,a.number,a.collection_id::text,` + kbArticleCollectionIDs + `,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,a.updated_at,` +
 		kbArticleChangeColumns + extra + `
 	FROM kb_articles a
 	LEFT JOIN LATERAL (SELECT * FROM kb_article_versions x WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id ORDER BY x.version DESC LIMIT 1) v ON true
 	LEFT JOIN agents p ON p.workspace_id=v.workspace_id AND p.id=v.changed_by_agent_id` + join
 }
 
+// kbArticleCollectionIDs reads the collections article a is listed in: its home first, then the other
+// collections outside the trash by name.
+const kbArticleCollectionIDs = `ARRAY[a.collection_id::text] || ARRAY(SELECT x.collection_id::text FROM kb_article_collections x
+		JOIN kb_collections c ON c.workspace_id=x.workspace_id AND c.id=x.collection_id AND c.deleted_at IS NULL
+		WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id ORDER BY lower(c.name), c.id)`
+
 func scanKBSummary(row pgx.Row, extra ...any) (domain.KBArticleSummary, error) {
 	var item domain.KBArticleSummary
 	var change changeRow
-	targets := append([]any{&item.ID, &item.Number, &item.CollectionID, &item.Position, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.AuthorAgentID,
+	targets := append([]any{&item.ID, &item.Number, &item.CollectionID, &item.CollectionIDs, &item.Position, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.AuthorAgentID,
 		&item.CreatedAt, &item.UpdatedAt}, change.targets()...)
 	if err := row.Scan(append(targets, extra...)...); err != nil {
 		return item, err
@@ -343,9 +349,63 @@ func checkKBCollection(ctx context.Context, tx pgx.Tx, workspaceID, id string) e
 	return err
 }
 
+// checkKBExtraCollections refuses extra collections of an article with home collection home that are
+// not ids, are named twice (or are the home), or are missing or in the trash in this workspace; it takes
+// the same share lock as checkKBCollection, in id order.
+func checkKBExtraCollections(ctx context.Context, tx pgx.Tx, workspaceID, home string, extras []string) ([]string, error) {
+	if len(extras) >= domain.MaxKBCollections {
+		return nil, &domain.InvalidKBError{Message: fmt.Sprintf("An article is listed in at most %d collections.", domain.MaxKBCollections)}
+	}
+	seen := map[string]bool{strings.ToLower(home): true}
+	cleaned := make([]string, 0, len(extras))
+	for _, id := range extras {
+		if !savedReplyID.MatchString(id) {
+			return nil, &domain.InvalidKBError{Message: fmt.Sprintf("%q in collection_ids is not a collection id; list them with GET /api/v1/kb/collections.", id)}
+		}
+		id = strings.ToLower(id)
+		if seen[id] {
+			return nil, &domain.InvalidKBError{Message: fmt.Sprintf("Collection %s is in collection_ids twice; name each collection once, the home first.", id)}
+		}
+		seen[id] = true
+		cleaned = append(cleaned, id)
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text FROM kb_collections WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NULL ORDER BY id FOR SHARE`, workspaceID, cleaned)
+	if err != nil {
+		return nil, err
+	}
+	live, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range cleaned {
+		if !slices.Contains(live, id) {
+			return nil, &domain.InvalidKBError{Message: fmt.Sprintf("Collection %s was not found in this workspace, or it is in the trash; list them with GET /api/v1/kb/collections.", id)}
+		}
+	}
+	return cleaned, nil
+}
+
+// setKBArticleCollections lists the article in extras besides its home and nowhere else outside the
+// trash: a link to a collection in the trash stays, so restoring that collection lists the article again.
+func setKBArticleCollections(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, extras []string) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM kb_article_collections x USING kb_collections c
+		WHERE x.workspace_id=$1 AND x.article_id=$2 AND c.workspace_id=x.workspace_id AND c.id=x.collection_id
+			AND (c.deleted_at IS NULL OR c.id=(SELECT collection_id FROM kb_articles WHERE workspace_id=$1 AND id=$2)) AND x.collection_id <> ALL($3::uuid[])`,
+		workspaceID, articleID, extras); err != nil {
+		return fmt.Errorf("unlist knowledge base article: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_collections(workspace_id,article_id,collection_id)
+		SELECT $1,$2,id FROM unnest($3::uuid[]) id ON CONFLICT DO NOTHING`, workspaceID, articleID, extras); err != nil {
+		return fmt.Errorf("list knowledge base article: %w", err)
+	}
+	return nil
+}
+
 // KBArticleInput is a new article; an empty Slug is made from the title, an empty Status is a draft.
+// ExtraCollectionIDs list it in more collections besides its home, CollectionID.
 type KBArticleInput struct {
 	CollectionID, Title, Slug, BodyMD, Status string
+	ExtraCollectionIDs                        []string
 	// SEOTitle and SEODescription are the search fields; empty uses the defaults.
 	SEOTitle, SEODescription string
 }
@@ -384,10 +444,17 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 		if err := checkKBCollection(ctx, tx, workspaceID, input.CollectionID); err != nil {
 			return domain.KBArticle{}, err
 		}
+		extras, err := checkKBExtraCollections(ctx, tx, workspaceID, input.CollectionID, input.ExtraCollectionIDs)
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
 		var id string
 		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position,seo_title,seo_description)
 			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`,$9,$10) RETURNING id::text`,
 			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID), input.SEOTitle, input.SEODescription).Scan(&id); err != nil {
+			return domain.KBArticle{}, err
+		}
+		if err := setKBArticleCollections(ctx, tx, workspaceID, id, extras); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
@@ -398,10 +465,13 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 	return article, kbError("create knowledge base article", err)
 }
 
-// KBArticleChange is a partial update of an article; a nil field stays as it is.
+// KBArticleChange is a partial update of an article; a nil field stays as it is. ExtraCollectionIDs
+// replaces the collections it is listed in besides its home; without it, a new home leaves the others
+// as they are, except the new home itself.
 type KBArticleChange struct {
 	Title, Slug, BodyMD, CollectionID, Status *string
 	SEOTitle, SEODescription                  *string
+	ExtraCollectionIDs                        *[]string
 }
 
 // UpdateKBArticle changes a live article and records the version. seen is the updated_at the client read.
@@ -451,14 +521,41 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 				return err
 			}
 		}
-		_, err := tx.Exec(ctx, `UPDATE kb_articles SET title=COALESCE($3,title), slug=COALESCE($4,slug), body_md=COALESCE($5,body_md),
-			position=CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END,
-			collection_id=COALESCE($6::uuid,collection_id), status=COALESCE($7,status),
-			published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
-			seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description), updated_at=clock_timestamp()
-			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription)
+		var extras []string
+		if change.ExtraCollectionIDs != nil {
+			home := ""
+			if change.CollectionID != nil {
+				home = *change.CollectionID
+			} else if err := tx.QueryRow(ctx, `SELECT collection_id::text FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&home); err != nil {
+				return err
+			}
+			var err error
+			if extras, err = checkKBExtraCollections(ctx, tx, workspaceID, home, *change.ExtraCollectionIDs); err != nil {
+				return err
+			}
+		}
+		if err := updateKBArticleRow(ctx, tx, workspaceID, id, change); err != nil {
+			return err
+		}
+		if change.ExtraCollectionIDs != nil {
+			return setKBArticleCollections(ctx, tx, workspaceID, id, extras)
+		}
+		// A new home is no longer one of the other collections.
+		_, err := tx.Exec(ctx, `DELETE FROM kb_article_collections x USING kb_articles a WHERE x.workspace_id=$1 AND x.article_id=$2
+			AND a.workspace_id=x.workspace_id AND a.id=x.article_id AND x.collection_id=a.collection_id`, workspaceID, id)
 		return err
 	})
+}
+
+// updateKBArticleRow writes the fields of change that are set to the article's row.
+func updateKBArticleRow(ctx context.Context, tx pgx.Tx, workspaceID, id string, change KBArticleChange) error {
+	_, err := tx.Exec(ctx, `UPDATE kb_articles SET title=COALESCE($3,title), slug=COALESCE($4,slug), body_md=COALESCE($5,body_md),
+		position=CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END,
+		collection_id=COALESCE($6::uuid,collection_id), status=COALESCE($7,status),
+		published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
+		seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description), updated_at=clock_timestamp()
+		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription)
+	return err
 }
 
 // RestoreKBArticleVersion makes the title, slug, text and search fields of version current as a new version; the

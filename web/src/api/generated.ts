@@ -3726,7 +3726,7 @@ export interface paths {
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
+        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -7218,9 +7218,15 @@ export interface components {
              */
             purges_at: string;
         };
+        /** @description Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. */
         KBArticleInput: {
-            /** Format: uuid */
-            collection_id: string;
+            /**
+             * Format: uuid
+             * @description Its home collection.
+             */
+            collection_id?: string;
+            /** @description Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. A collection of another workspace, in the trash or named twice is refused. */
+            collection_ids?: string[];
             title: string;
             /** @description Lowercase letters, digits and hyphens in any script; made from the title when left out. */
             slug?: string;
@@ -7282,8 +7288,13 @@ export interface components {
             id: string;
             /** @description Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>. */
             number: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Its home collection: the breadcrumb and its place among siblings.
+             */
             collection_id: string;
+            /** @description Its home (collection_id) first, then every other collection the help center lists it in. One of those in the trash is left out until it is restored, and listed again then. */
+            collection_ids: string[];
             /** @description Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number. */
             position: number;
             title: string;
@@ -7488,6 +7499,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            /** @description Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary. */
+            collection_ids: string[];
             position: number;
             title: string;
             slug: string;
@@ -7531,6 +7544,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            /** @description Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary. */
+            collection_ids: string[];
             position: number;
             title: string;
             slug: string;
@@ -18176,8 +18191,13 @@ export interface operations {
                     title?: string;
                     slug?: string;
                     body_md?: string;
-                    /** Format: uuid */
+                    /**
+                     * Format: uuid
+                     * @description A new home collection (a move). The other collections it is listed in stay, except this one.
+                     */
                     collection_id?: string;
+                    /** @description Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. Replaces the whole list. A collection of another workspace, in the trash or named twice is refused. */
+                    collection_ids?: string[];
                     /** @enum {string} */
                     status?: "draft" | "published";
                     /** @description The page title search engines show; empty uses the article title. */

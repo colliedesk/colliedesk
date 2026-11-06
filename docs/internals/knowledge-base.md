@@ -24,6 +24,15 @@ The public help center is in `help-center.md`.
   keeps its numbers until the purge, which does not lower the counter either. The help center address
   `/a/<number>-<slug>` therefore never points at another article. A slug may repeat; only a
   collection slug is unique, among the live collections of one parent.
+- **A home and extra collections.** `kb_articles.collection_id` stays the article's only home: the
+  breadcrumb, its manual position, versions, the collection delete guard and every import use it, so
+  the API and the export stayed backward compatible. `kb_article_collections` adds the other
+  collections; both foreign keys carry `workspace_id`, so a row cannot cross workspaces. A link stays
+  while its collection is in the trash (the API hides it, a restore shows it again); a purge cascades.
+  The help center lists an extra after the collection's own articles, by title, with no position of
+  its own: ordering extras by hand is left out until someone asks. Lists group by the collection the
+  article is listed in (`PublicKBArticle.CollectionID` is that one in lists, the home on the article
+  page); the sitemap, llms.txt, search and AI read `kb_articles` alone, so each names an article once.
 - **Three levels, checked in Go.** Collections nest category, folder, subfolder like Freshdesk. Depth,
   loops and the limits are checked under one advisory lock per workspace (`lockKB`), taken by every
   write that counts rows or reshapes the tree. A collection that still holds a live article or

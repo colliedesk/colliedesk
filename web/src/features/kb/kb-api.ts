@@ -35,7 +35,7 @@ const translationSummaryFields = {
 };
 const translationSummarySchema = z.object(translationSummaryFields) satisfies z.ZodType<Generated<'KBTranslationSummary'>>;
 const summaryFields = {
-  id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
+  id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), collection_ids: z.array(z.string().uuid()).min(1), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
   published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   last_change: changeSchema.nullable(), url: z.string(),
 };
