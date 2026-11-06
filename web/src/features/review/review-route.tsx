@@ -65,6 +65,13 @@ export function ReviewRoute({ tab, filter, onChange }: ReviewRouteProps) {
       setDone({ text: said(name), conversationID: card.state === 'created' || card.state === 'attached' ? card.conversation_id : null });
       if (openID === item.id) setOpenID(undefined);
     } catch (error) {
+      // The customer wrote again and their message joined this card: nothing was decided. AI reads the whole
+      // card again (it comes back to Waiting when not sure), or it waits here with every message, read again on
+      // the refresh below.
+      if (error instanceof ConflictError && error.detail?.code === 'gathering_changed') {
+        setDone({ text: error.detail.state === 'deciding' ? m.changedToAI(name) : m.changedMeanwhile(name), conversationID: null });
+        return;
+      }
       // Someone (or AI, or the rules) decided the card first: it leaves the list on the refresh below, so the
       // page says who, with the conversation it opened or joined.
       const conflict = error instanceof ConflictError && error.detail?.code === 'gathering_decided' ? error.detail : undefined;
@@ -81,11 +88,13 @@ export function ReviewRoute({ tab, filter, onChange }: ReviewRouteProps) {
   const items = list.data?.pages.flatMap((page) => page.items);
   const renderCard = (item: IntakeGathering) => {
     const open = openID === item.id;
+    // What the person read of the card: a decision of fewer messages than it holds now is refused.
+    const read = open && detail.data?.id === item.id ? detail.data.item_count : item.item_count;
     return <IntakeCard key={item.id} item={item} open={open} timezone={me.data?.timezone ?? 'UTC'}
       detail={open && detail.data?.id === item.id ? detail.data : undefined} detailFailed={open && detail.isError} onRetryDetail={() => void detail.refetch()}
       onToggle={() => setOpenID(open ? undefined : item.id)}
       channelName={(id) => channels.get(id) ?? ''} agentName={(id) => (id && names.get(id)) || m.aTeammate}
-      onDecide={(input: IntakeDecideInput) => after(item, decide.run({ id: item.id, input }), m.done[input.action === 'create' ? 'created' : input.action === 'attach' ? 'attached' : 'ignored'])}
+      onDecide={(input: IntakeDecideInput) => after(item, decide.run({ id: item.id, input: { ...input, item_count: read } }), m.done[input.action === 'create' ? 'created' : input.action === 'attach' ? 'attached' : 'ignored'])}
       onRequeue={() => after(item, requeue.run(item.id), m.done.requeued)} />;
   };
   return <ReviewPage available={summary.data?.available ?? true} tab={tab} onTab={(next) => onChange(next, filter)} filter={filter} onFilter={(next) => onChange(tab, next)}

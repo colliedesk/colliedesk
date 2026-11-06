@@ -78,14 +78,18 @@ func intakeDecideSpec() Spec {
 			`(optional command: one of the channel's commands that opens a request, for its tags and priority; optional subject); attach adds it to conversation_id ` +
 			`(one of the card's candidates, so the reply goes to the same customer); ignore sets it aside, with an optional ignore_reason (colliedesk_intake_requeue takes it back). ` +
 			`To decide as AI suggested, send its action and conversation with follows_decision_id. The same decision again changes nothing; another one once the card is decided ` +
-			`fails with gathering_decided and how it stands. Opening a conversation may tell the customer it was received, so create needs messages:send.`,
+			`fails with gathering_decided and how it stands. Send item_count (the card's, as you read it): at auto a customer who writes again joins their waiting card, ` +
+			`and a decision of fewer messages than it holds fails with gathering_changed: nothing is decided, AI reads the whole card again (state deciding), ` +
+			`and it is back in the queue with every message (state review) when AI is not sure: read it then. ` +
+			`Opening a conversation may tell the customer it was received, so create needs messages:send.`,
 
 		REST: []string{"POST /api/v1/intake/gatherings/{id}/decide"},
 		Input: `{"type":"object","additionalProperties":false,"required":["gathering_id","action"],"properties":{` + intakeIDInput + `,` +
 			`"action":{"type":"string","enum":["create","attach","ignore"]},"conversation_id":{"type":"string",` + uuid + `,"description":"With attach."},` +
 			`"command":{"type":"string","minLength":1,"maxLength":40},"subject":{"type":"string","minLength":1,"maxLength":200},` +
 			`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."},` +
-			`"follows_decision_id":{"type":"string",` + uuid + `,"description":"The card's suggestion.decision_id when deciding as AI suggested; its reply_kind comes with it."}}}`,
+			`"follows_decision_id":{"type":"string",` + uuid + `,"description":"The card's suggestion.decision_id when deciding as AI suggested; its reply_kind comes with it."},` +
+			`"item_count":{"type":"integer","minimum":1,"description":"The card's item_count as you read it; the decision is refused (gathering_changed) when the customer added messages since."}}}`,
 		Output: `{"type":"object","properties":{"card":` + intakeCardSchema + `,"items":{"type":"array"},"decisions":{"type":"array"}},"required":["card"]}`,
 		run:    intakeDecide,
 	}

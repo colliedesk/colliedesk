@@ -2100,7 +2100,10 @@ paths:
         channel; or the conversation the rules named. A conversation merged into another is joined through the
         one it was merged into, which must be one of these. Any other is 400 and nothing is decided; a
         closed one of the same place opens again. The same decision again changes
-        nothing; another one once the card is decided is 409 gathering_decided, with how it stands. An agent
+        nothing; another one once the card is decided is 409 gathering_decided, with how it stands. At intake
+        level auto a customer who writes again while their card waits joins that card, and AI decides it again:
+        send item_count as read, and a decision of a card the customer added to since is 409 gathering_changed
+        (nothing decided; read it again). An agent
         token needs messages:send to create (the channel may tell the customer it was received) and
         conversations:update otherwise; without it the call is filed for a person (202).
         A repeat with the same Idempotency-Key answers what the first one got and decides nothing; the key
@@ -8397,7 +8400,7 @@ components:
       description: The resource is not in a state that allows this action
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     IntakeGatheringDecided:
-      description: The card was decided otherwise meanwhile (gathering_decided); nothing changed
+      description: The card was decided otherwise meanwhile (gathering_decided), or the customer added messages to it since it was read (gathering_changed); nothing changed
       content:
         application/json:
           schema:
@@ -8408,7 +8411,7 @@ components:
                 type: object
                 required: [code, message, state, decided_by, decided_by_agent_id, conversation_id]
                 properties:
-                  code: {type: string, enum: [gathering_decided]}
+                  code: {type: string, enum: [gathering_decided, gathering_changed]}
                   message: {type: string}
                   request_id: {type: string}
                   state: {type: string}
@@ -8998,7 +9001,7 @@ components:
         channel_id: {type: string, format: uuid}
         scope: {type: string}
         thread_id: {type: [string, 'null'], format: uuid}
-        lane_key: {type: string, description: 'The place and sender whose cards are decided one after the other.'}
+        lane_key: {type: string, description: 'The place and sender whose cards are decided one after the other. At auto what the sender adds while their card waits for a person joins that card, decided again.'}
         contact_id: {type: [string, 'null'], format: uuid}
         state: {type: string, enum: [deciding, review, created, attached, ignored, applied, cancelled], description: 'applied: the rules decided and AI only suggested (cards from before intake at suggest held every card).'}
         review_reason: {type: [string, 'null'], enum: [no_command, ai_unsure, ai_unavailable, too_old, credential, target_changed, lane_blocked, requeued, gate_closed, ai_suggests, null]}
@@ -9268,6 +9271,7 @@ components:
         subject: {type: string, minLength: 1, maxLength: 200, description: With create.}
         ignore_reason: {$ref: '#/components/schemas/IntakeIgnoreReason'}
         follows_decision_id: {type: string, format: uuid, description: 'The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card''s, or no AI decision, is refused.'}
+        item_count: {type: integer, minimum: 1, description: 'The card''s item_count as the decider read it. When the customer added messages since (at auto they join their waiting card), nothing is decided: 409 gathering_changed. Left out, the decision is of what the card holds.'}
     IntakeStats:
       type: object
       required: [days, gatherings, by_state, decided_by, fallback, ai_decisions, ai_corrected]
