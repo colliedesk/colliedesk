@@ -154,7 +154,8 @@ func inviteCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_invite_create",
 		Title: "Invite a team member",
-		Description: `Invite a person by email with one or more roles by name (the Agent role when you give none); they get those roles on joining, added to any they hold. ` +
+		Description: `Invite a person by email with one or more roles by name (the Agent role when you give none); they get those roles on joining. ` +
+			`Someone already in the workspace cannot be invited this way (already_a_member): change their roles with colliedesk_member_roles_set. ` +
 			`You can only give roles whose every permission you hold. On the hosted cloud a pending invite takes a seat. ` +
 			`The answer holds the one-time sign-in link, shown this once: it is a credential, so give it only to the invited person, privately. Revoke it with colliedesk_invite_revoke.`,
 		REST: []string{"POST /api/v1/auth/invites"},
