@@ -1,8 +1,9 @@
 # Colliedesk
 
-**The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams.
+**The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams
+([compare](https://colliedesk.com/compare)).
 Leave Freshdesk with all your data. AI that actually answers tickets is included, not an add-on.
-Flat price, no per-agent fees.
+Flat price, no per-agent fees ([pricing](https://colliedesk.com/pricing)).
 
 Think of Colliedesk as the sheepdog for your support queue: the AI herds every ticket home,
 your team stays in charge.
@@ -13,13 +14,13 @@ self-hosted installs. See the [roadmap](ROADMAP.md) and [versioning](#versioning
 
 ## "Wait, what are you selling me?"
 
-Self-hosting Colliedesk is free, forever, with every feature. We sell two things:
+[Self-hosting Colliedesk](https://colliedesk.com/self-hosted-helpdesk) is free, forever, with every feature. We sell two things:
 
-1. **Colliedesk Cloud**: we run it for you. One flat price per workspace, not per agent. Every new
+1. **[Colliedesk Cloud](https://colliedesk.com/pricing)**: we run it for you. One flat price per workspace, not per agent. Every new
    workspace starts with a 14-day free trial, no card needed; there is no permanent free plan. When
    the trial ends the workspace is locked, never deleted, and you can always export all your data.
-2. **Migration**: we move your Freshdesk history (tickets, replies, attachments, tags) and give
-   you a reconcile report that proves nothing was lost.
+2. **[Migration](https://colliedesk.com/migrate/freshdesk)**: we move your Freshdesk history (tickets, replies, attachments, tags) and give
+   you a [reconcile report](https://colliedesk.com/migrate/freshdesk/done-for-you) that proves nothing was lost.
 
 AI features work with your own model key on self-hosted installs (**bring your own AI key**).
 On the cloud you can bring your key or use ours at cost plus a small margin.
