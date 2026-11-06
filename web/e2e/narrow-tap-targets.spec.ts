@@ -44,6 +44,9 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   expect(savedReply.status()).toBe(201);
   await page.goto(`${servers.main}/conversations/${conversation}`);
   await expect(page.getByLabel('Message body')).toBeVisible();
+  // A narrow screen keeps the reply box to one line until it is used: its tabs and tools show once tapped.
+  await expectTapSized(page.locator('.composer-card'), 'the compact reply box');
+  await page.getByLabel('Message body').click();
   await expectTapSized(page.locator('.composer-head'), 'composer tabs');
   await expectTapSized(page.locator('.composer-actions'), 'composer actions');
   await page.getByRole('button', { name: /Insert saved reply/ }).click();

@@ -261,7 +261,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           messageNote={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeWhy conversation={selected} message={item} timezone={timezone} />} />)}
           messageMenu={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />)}
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
-        {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
+        {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
           {canManage && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
         {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}

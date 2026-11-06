@@ -1129,3 +1129,92 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .closed-screen .button-row a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .closed-screen .button-row a.button { min-height: var(--touch); } }
+
+/* A conversation on a phone: the messages take the screen. The header is two short rows (Back, the title and
+   Details; then the conversation's labels beside Resolve), the messages lie flat between hairlines, and the reply
+   box is one line with Send reply until the agent goes into it (reply-composer.tsx sets data-compact). */
+.details-toggle svg, .send-icon, .compact-note { display: none; }
+@media (max-width: 44rem) {
+  .timeline-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-1) var(--space-2);
+    padding: var(--space-1) var(--space-3) var(--space-2) var(--space-1); position: relative; z-index: 1; }
+  /* The action group no longer boxes the buttons, so Resolve's menu hangs from the header's right edge. */
+  .timeline-header > div:first-of-type, .timeline-actions { display: contents; }
+  .timeline-header > .thread-back { grid-column: 1; grid-row: 1; width: var(--touch); height: var(--touch); margin: 0; padding: 0; justify-content: center; }
+  .thread-back svg { width: 20px; height: 20px; }
+  .thread-back-label, .details-toggle-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* Two lines at most; the details drawer and the list show the whole subject. */
+  .timeline-header h2 { grid-column: 2 / 4; grid-row: 1; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 15px; line-height: 1.3; }
+  .timeline-header .details-toggle { grid-column: 4; grid-row: 1; position: relative; width: var(--touch); height: var(--touch); padding: 0; justify-content: center;
+    border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
+  .details-toggle svg { display: block; width: 20px; height: 20px; }
+  .details-toggle .details-badge { position: absolute; top: 9px; right: 9px; margin: 0; box-shadow: 0 0 0 2px var(--surface-1); }
+  /* The labels keep one line and slide sideways (no scrollbar, faded edges); Resolve stays at the right. */
+  .timeline-meta { grid-column: 1 / 3; grid-row: 2; min-width: 0; align-items: center; margin: 0 0 0 var(--space-3); overflow-x: auto; white-space: nowrap; scrollbar-width: none;
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--space-4)), transparent); }
+  .timeline-meta::-webkit-scrollbar { display: none; }
+  .timeline-meta > * { flex: none; }
+  .timeline-actions > .status-button, .timeline-actions > .status-split { grid-column: 3 / 5; grid-row: 2; justify-self: end; }
+  .timeline-header > div:first-of-type > :not(h2, .timeline-meta), .status-button-error { grid-column: 1 / -1; margin-left: var(--space-3); }
+  .status-button-error { text-align: left; }
+  .timeline-header .status-split .action-popover { right: var(--space-3); }
+
+  .timeline-scroll { padding: 0 var(--space-3) var(--space-2); overscroll-behavior: contain; }
+  .timeline-stack { gap: 0; }
+  .timeline-stack > * + * { margin-top: var(--space-2); }
+  .timeline-stack > :is(.message, .message-event) + :is(.message, .message-event) { margin-top: 0; }
+  .message { border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-3) 0; }
+  /* Our side and private notes keep a tint edge to edge, so a long thread still reads as two sides. */
+  .message-outgoing, .message-note { margin-inline: calc(-1 * var(--space-3)); padding-inline: var(--space-3); }
+  .message-outgoing { background: var(--surface-0); }
+  .message-note { background: color-mix(in srgb, var(--note-bg) 55%, var(--surface-1)); box-shadow: none; }
+  .message-author { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .message-meta { align-items: start; }
+  .message-meta .avatar { margin-top: 2px; }
+
+  .conversation-center .composer { padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); }
+  .composer-tabs kbd { display: none; }
+  /* A narrow box puts the note's hint under the tabs when it does not fit beside them, never over them. */
+  .composer-head { flex-wrap: wrap; row-gap: 0; }
+  .composer-head-end { margin-left: auto; }
+  /* 16 px: a smaller box makes iOS zoom the page when it is focused. */
+  .composer textarea { font-size: 16px; }
+  .composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 5.5rem; }
+  .composer-card[data-compact="true"] { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1); box-shadow: inset 0 0 0 1px var(--line-control); }
+  .composer-card[data-compact="true"] > :not(textarea, .composer-actions),
+  .composer-card[data-compact="true"] .composer-actions > :not(.primary-action, .compact-note, .ai-tool) { display: none; }
+  .composer-card[data-compact="true"] textarea { flex: 1; min-width: 0; height: var(--touch); min-height: var(--touch); resize: none; overflow: hidden; padding: 10px var(--space-2); line-height: 1.5; white-space: nowrap; text-overflow: ellipsis; }
+  .composer-card[data-compact="true"] .composer-actions { flex: none; padding: 0; }
+  .composer-card[data-compact="true"] .composer-actions { gap: var(--space-1); }
+  .composer-card[data-compact="true"] :is(.primary-action, .compact-note, .ai-tool) { width: var(--touch); min-width: var(--touch); margin: 0; padding: 0; }
+  /* Draft with AI stays one press away as its sparkle; its name (and a draft's Ready) stay its accessible name. A ready
+     draft shows a dot. */
+  .composer-card[data-compact="true"] .ai-tool { position: relative; }
+  .composer-card[data-compact="true"] .ai-tool :is(.tool-label, .ai-draft-badge) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; padding: 0; margin: 0; }
+  .composer-card[data-compact="true"] .ai-tool:has(.ai-draft-badge)::after { content: ""; position: absolute; top: 10px; right: 10px; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); }
+  .composer-card[data-compact="true"] .ai-tool svg { width: 18px; height: 18px; }
+  .compact-note { display: grid; place-items: center; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
+  .compact-note svg { width: 18px; height: 18px; }
+  .composer-card[data-compact="true"] .send-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .composer-card[data-compact="true"] .send-icon { display: grid; place-items: center; }
+  .send-icon svg { width: 18px; height: 18px; }
+  /* Who the reply goes from is said when the agent writes one. */
+  .conversation-center:has(.composer-card[data-compact="true"]) > .composer-from { display: none; }
+  /* That replies are not emailed takes one line, its link (Open Settings) kept beside it; the whole sentence is its
+     title and what a screen reader reads. */
+  .conversation-center > .composer-notice:has(> .composer-notice-text) { display: flex; align-items: center; gap: var(--space-2); justify-self: stretch; min-width: 0;
+    padding-block: 0; font-size: var(--fs-small); }
+  .composer-notice-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conversation-center > .composer-notice > .link-action { flex: none; display: inline-flex; align-items: center; min-height: var(--touch); }
+  .timeline-panel { overflow: hidden; }
+}
+/* The keyboard is up (interactive-widget=resizes-content in index.html makes the page that short): while the agent
+   writes (data-writing: the text box took the focus; a kept draft alone, or a press on Send, moves nothing), the top bar and the header's second row step aside so the box and its Send stay above the keyboard.
+   Back, the title, Details and the workspace bar stay; Send and resolve is in the box. */
+@media (max-width: 44rem) and (max-height: 34rem) {
+  .app-shell:has(.composer-card[data-writing="true"]) .app-rail,
+  .conversation-center:has(.composer-card[data-writing="true"]) :is(.timeline-meta, .timeline-actions > .status-button, .timeline-actions > .status-split) { display: none; }
+  .composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 3.5rem; }
+  /* What waits above the box (an AI draft, the not-emailed line) comes back when the keyboard goes down. */
+  .conversation-center:has(.composer-card[data-writing="true"]) .composer > .ai-auto-draft,
+  .conversation-center:has(.composer-card[data-writing="true"]) > :is(.composer-notice[role="status"], .composer-from) { display: none; }
+}
