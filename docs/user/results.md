@@ -36,8 +36,8 @@ The same rules apply to both sides, so the two columns can be compared.
 **Which conversations.** Only conversations a customer started: the first message that is not a
 note came from the customer. Conversations your team started, problem reports and, on the
 Colliedesk side, conversations brought in by an import are left out. A conversation counts in a
-window by the day it was created. Spam that reached the inbox counts too: there is no way to tell it
-apart.
+window by the day it was created. A conversation marked as [spam](inbox.md#spam) is left out, and so
+is the time it spent in Spam: one taken out again counts as if it had stayed where it was.
 
 **Measured at a moment.** Each side counts only what had happened by its moment: the Colliedesk
 side now, the baseline when its import finished. A reply that came later does not count.

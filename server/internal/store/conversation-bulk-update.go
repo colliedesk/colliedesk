@@ -97,6 +97,9 @@ func bulkUpdateConversations(ctx context.Context, tx pgx.Tx, workspaceID string,
 		return 0, fmt.Errorf("validate conversation tag: unknown tag")
 	}
 	if update.Status != nil {
+		if err := refuseSpamStatus(ctx, tx, workspaceID, ids); err != nil {
+			return 0, err
+		}
 		if err := setStatusCause(ctx, tx, statusChange{ActorID: update.ActorID, TokenID: update.TokenID, Cause: tokenCause(update.TokenID), Quiet: update.Quiet}); err != nil {
 			return 0, err
 		}

@@ -82,6 +82,10 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrReplyFilesTooLarge):
 		writeError(response, http.StatusRequestEntityTooLarge, "attachments_too_large", tooLargeMessage+" The draft's files count too: keep fewer of them (ai_draft_file_ids).")
 		return
+	case errors.Is(err, store.ErrConversationSpam):
+		writeError(response, http.StatusConflict, "conversation_spam", "A conversation in Spam keeps its status: mark it Not spam first "+
+			"(PUT /api/v1/conversations/spam with spam: false), which puts it back where it was. Nothing was changed.")
+		return
 	case errors.Is(err, domain.ErrLastAdmin):
 		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Give the Admin role to another active member first.")
 		return

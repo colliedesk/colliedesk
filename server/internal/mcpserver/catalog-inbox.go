@@ -24,7 +24,7 @@ func inboxSearchSpec() Spec {
 		REST:     []string{"GET /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/contacts", "GET /api/v1/tags", "GET /api/v1/auth/me", "GET /api/v1/saved-views"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{` +
 			savedViewIDPropertyForSearch +
-			`"status":` + oneOrMany(`{"type":"string","enum":["open","pending","resolved","closed"]}`, 4, `"Only conversations in this status, or in any of these. Leave out for every status."`) + `,` +
+			`"status":` + oneOrMany(`{"type":"string","enum":["open","pending","resolved","closed","spam"]}`, 5, `"Only conversations in this status, or in any of these. Leave out for every status but spam; spam lists the conversations marked as spam."`) + `,` +
 			`"priority":` + oneOrMany(`{"type":"string","enum":["low","normal","high","urgent"]}`, 4, `"Only this priority, or any of these."`) + `,` +
 			`"assignee":` + oneOrMany(`{"type":"string","pattern":"^(me|unassigned|anyone|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$","description":"me, unassigned, anyone or a team member id (colliedesk_agents_list)"}`, 50,
 			`"me: assigned to the person this token acts as. unassigned: nobody. anyone: assigned to somebody. An id: that team member. A list matches any."`) + `,` +

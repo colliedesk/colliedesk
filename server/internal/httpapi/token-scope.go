@@ -163,6 +163,7 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/conversations":                                                     need(auth.PermMessagesSend),
 	"GET /api/v1/conversations/{id}":                                                 need(auth.PermConversationsRead),
 	"PATCH /api/v1/conversations/{id}":                                               need(auth.PermConversationsUpdate),
+	"PUT /api/v1/conversations/spam":                                                 need(auth.PermConversationsUpdate),
 	"PUT /api/v1/conversations/{id}/tags/{tagId}":                                    need(auth.PermConversationsUpdate),
 	"DELETE /api/v1/conversations/{id}/tags/{tagId}":                                 need(auth.PermConversationsUpdate),
 	"GET /api/v1/conversations/{id}/messages":                                        need(auth.PermMessagesRead),

@@ -12,7 +12,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -409,6 +409,8 @@ export const api = {
   conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema).then((read) => ({ ...read, status_notices: read.status_notices ?? [] })),
   updateConversation: (id: string, value: UpdateConversationRequest) => request(`/api/v1/conversations/${id}`, conversationSchema, { method: 'PATCH', body: json<'updateConversation'>(value) }),
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
+  // spam true files the conversations in Spam with their senders; false (Not spam) puts them back where they were.
+  markSpam: (ids: string[], spam: boolean) => request('/api/v1/conversations/spam', spamResultSchema, { method: 'PUT', body: json<'markConversationsSpam'>({ ids, spam }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
