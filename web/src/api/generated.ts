@@ -345,7 +345,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Redeems a one-time link (pairing, invite or hand-off) for a session. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's links are accepted; another workspace's link is refused like an invalid one and stays unused. */
+        /** @description Redeems a one-time link (pairing, invite or hand-off) for a session. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's links are accepted; another workspace's link is refused like an invalid one and stays unused. An invite link whose address is already a member of the workspace is refused the same way: an invite only lets a new person join. */
         post: operations["redeemLink"];
         delete?: never;
         options?: never;
@@ -479,7 +479,7 @@ export interface paths {
         };
         get: operations["listInvites"];
         put?: never;
-        /** @description Creates an invite and returns its one-time URL once, to a person or an agent token alike. Needs `team:invite`, and every permission of the roles it gives (403 `role_exceeds_yours`). The invited person gets these roles on joining, added to any they hold. A `role_ceiling` (the old field) is refused with 400. */
+        /** @description Creates an invite and returns its one-time URL once, to a person or an agent token alike. Needs `team:invite`, and every permission of the roles it gives (403 `role_exceeds_yours`). The invited person gets these roles on joining. An invite is for someone new: the address of a member of the workspace is refused with 409 `already_a_member` (change their roles with `PUT /api/v1/agents/{id}/roles`). A `role_ceiling` (the old field) is refused with 400. */
         post: operations["createInvite"];
         delete?: never;
         options?: never;
@@ -11175,7 +11175,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
             403: components["responses"]["Forbidden"];
-            /** @description The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent in the team list instead of inviting them again. */
+            /** @description The address belongs to a deactivated agent (error code `agent_deactivated`): reactivate the agent in the team list instead of inviting them again. Or it belongs to a member of the workspace (error code `already_a_member`): change their roles with `PUT /api/v1/agents/{id}/roles`. */
             409: {
                 headers: {
                     [name: string]: unknown;

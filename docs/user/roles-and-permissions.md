@@ -87,8 +87,8 @@ team list appear only with their `:read` permission. **Settings** shows only the
 
 In **Settings → Team**, each person shows their roles. **Change roles** opens the list of roles:
 tick the ones they should hold and choose **Apply**. Everyone needs at least one role. An invite
-carries roles too: pick them in **Settings → Invites** (Agent is selected); the person gets them when
-they join, added to any roles they already hold. See [Invite your team](invites.md) and
+carries roles too: pick them in **Settings → Invites** (Agent is selected); the new person gets them
+when they join. Someone already in the workspace cannot be invited; change their roles here. See [Invite your team](invites.md) and
 [Manage your team](team.md).
 
 Taking a role away from someone also stops every token of theirs that follows that role (the form

@@ -144,13 +144,17 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 				return Redeemed{}, err
 			}
 		}
-		// The invited person gets the invite's roles, added to any they hold; someone new holds only them.
+		// An invite makes a new member with its roles. A link for an address that became a member after
+		// the invite was made signs nobody in: a member signs in with their own link.
 		var created string
 		var inserted bool
 		if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),$3)
 			ON CONFLICT(workspace_id,email) DO UPDATE SET email=EXCLUDED.email
 			RETURNING id::text,(xmax=0)`, workspaceID, email, ceiling).Scan(&created, &inserted); err != nil {
 			return Redeemed{}, fmt.Errorf("create invited agent: %w", err)
+		}
+		if !inserted {
+			return Redeemed{}, fmt.Errorf("redeem link: %w", domain.ErrAlreadyMember)
 		}
 		var roleIDs []string
 		var invitedBy *string

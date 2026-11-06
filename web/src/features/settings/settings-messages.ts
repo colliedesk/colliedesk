@@ -66,7 +66,7 @@ export const settingsMessages = {
   teamReactivate: 'Reactivate',
   teamReactivateName: (name: string) => `Reactivate ${name}`,
   teamReactivateHelp: 'Reactivating uses a seat and does not restore assignments. Send them a new invite link to sign in.',
-  invitesDescription: 'A one-time sign-in link for a new teammate. The person joins with the roles you choose; someone already in the workspace gets them added to theirs.',
+  invitesDescription: 'A one-time sign-in link for a new teammate. The person joins with the roles you choose. To change the roles of someone already in the workspace, use Team.',
   createInvite: 'Create invite',
   inviteLinkShownOnce: 'This invite was created by an earlier press, and its link is shown only once. Revoke it below and create a new one to get a link.',
   inviteEmail: 'Invite email',

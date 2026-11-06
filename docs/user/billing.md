@@ -47,8 +47,8 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
 
 - **Agents.** Up to 25, so a team of 11 to 25 agents can try Colliedesk with everyone. An agent and a pending invite each take one seat. Creating an invite when all
   seats are taken fails with a message that names the limit. Revoke an invite you no longer need and
-  try again. Sending a second invite to the same address, or inviting someone who already is an
-  agent, does not take another seat.
+  try again. Sending a second invite to the same address does not take another seat. Someone who
+  already is an agent cannot be invited.
 - **Replies by email.** Up to 200 people in any 24 hours. Each reply counts the customer and
   everyone you copy, so a reply with two people in Cc counts 3. A reply that would pass the limit
   is refused with the time to wait, and your text stays in the composer. A reply that left and then

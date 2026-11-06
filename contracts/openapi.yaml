@@ -463,7 +463,8 @@ paths:
       description: >-
         Redeems a one-time link (pairing, invite or hand-off) for a session. On a workspace's own host
         `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's links are accepted; another workspace's link is
-        refused like an invalid one and stays unused.
+        refused like an invalid one and stays unused. An invite link whose address is already a member of
+        the workspace is refused the same way: an invite only lets a new person join.
       requestBody:
         required: true
         content:
@@ -687,8 +688,9 @@ paths:
       description: >
         Creates an invite and returns its one-time URL once, to a person or an agent token alike. Needs
         `team:invite`, and every permission of the roles it gives (403 `role_exceeds_yours`). The invited
-        person gets these roles on joining, added to any they hold. A `role_ceiling` (the old field) is
-        refused with 400.
+        person gets these roles on joining. An invite is for someone new: the address of a member of the
+        workspace is refused with 409 `already_a_member` (change their roles with
+        `PUT /api/v1/agents/{id}/roles`). A `role_ceiling` (the old field) is refused with 400.
       responses:
         '201':
           description: The invite and its one-time URL
@@ -709,8 +711,9 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409':
           description: >
-            The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent
-            in the team list instead of inviting them again.
+            The address belongs to a deactivated agent (error code `agent_deactivated`): reactivate the agent
+            in the team list instead of inviting them again. Or it belongs to a member of the workspace (error
+            code `already_a_member`): change their roles with `PUT /api/v1/agents/{id}/roles`.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/auth/invites/{id}:

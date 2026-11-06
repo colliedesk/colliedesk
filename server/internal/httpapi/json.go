@@ -90,6 +90,10 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrAgentDeactivated):
 		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")
 		return
+	case errors.Is(err, domain.ErrAlreadyMember):
+		writeError(response, http.StatusConflict, "already_a_member", domain.ErrAlreadyMember.Error()+
+			". Change their roles in the team list (PUT /api/v1/agents/{id}/roles) instead of inviting them.")
+		return
 	case errors.As(err, new(*domain.ContactExistsError)):
 		var exists *domain.ContactExistsError
 		errors.As(err, &exists)
