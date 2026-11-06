@@ -63,9 +63,11 @@ export function OAuthConsent({ request, here }: OAuthConsentProps) {
   } else if (me.error instanceof UnauthorizedError || !me.data) {
     body = <><h1>{text.signInTitle}</h1>
       <p>{cloud ? text.signInCloud : text.signInSelfHost}</p>
-      {cloud ? <a className="primary-action" href={signInAddress}>{text.signIn}</a>
-        : <button type="button" className="primary-action" onClick={() => void me.refetch()}>{text.tryAgain}</button>}
-      <button type="button" className="secondary-action" onClick={() => leaveTo(cancelAddress(app.data, request.state, issuer))}>{text.cancel}</button></>;
+      <div className="consent-actions">
+        {cloud ? <a className="primary-action" href={signInAddress}>{text.signIn}</a>
+          : <button type="button" className="primary-action" onClick={() => void me.refetch()}>{text.tryAgain}</button>}
+        <button type="button" className="secondary-action" onClick={() => leaveTo(cancelAddress(app.data, request.state, issuer))}>{text.cancel}</button>
+      </div></>;
   } else {
     const person = me.data.agent.display_name?.trim() || me.data.agent.email;
     const locked = me.data.plan?.locked === true;
@@ -83,7 +85,7 @@ export function OAuthConsent({ request, here }: OAuthConsentProps) {
       </div>
       {cloud ? <p className="muted-copy"><a href={signInAddress}>{text.otherWorkspace}</a></p> : <p className="muted-copy">{text.otherWorkspaceSelfHost}</p>}</>;
   }
-  return <main className="redeem-page"><section className="redeem-panel" aria-live="polite">
+  return <main className="redeem-page"><section className="redeem-panel oauth-consent" aria-live="polite">
     <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
     {body}
   </section></main>;

@@ -81,6 +81,7 @@ export const messages = {
   importFreshdesk: 'Import from Freshdesk',
   aiSettings: 'Built-in AI',
   aiAgents: 'External AI agents',
+  connectedApps: 'Connected AI apps',
   channels: 'Channels',
   emailNav: 'Email',
   webFormNav: 'Web form',

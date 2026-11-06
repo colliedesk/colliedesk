@@ -565,6 +565,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .data-list span, .data-list time { min-width: 0; overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
 .data-list time { font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 .data-list .badge { color: var(--text-2); }
+/* How to reconnect an AI app: the row's whole point once it stopped, so it wraps and is never cut. */
+.data-list .reconnect-steps, .data-list .app-detail { grid-column: 1 / -1; margin: 0; color: var(--text-3); font-size: var(--fs-label); white-space: normal; overflow-wrap: anywhere; }
 .data-list .token-detail { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
 .token-permissions summary { cursor: pointer; color: var(--text-2); }
 @media (pointer: coarse), (max-width: 30rem) { .token-permissions summary { display: flex; align-items: center; min-height: var(--touch); } }

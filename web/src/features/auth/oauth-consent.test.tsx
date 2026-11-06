@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -79,4 +80,18 @@ test('an app published by a client ID metadata document names its host; only a k
   show();
   expect(await screen.findByText('Published by claude.ai.')).toBeTruthy();
   expect(screen.queryByText('The app named itself; check it is the app you just connected.')).toBeNull();
+});
+
+// The page's text and its two buttons keep the app's spacing: the layout stylesheet spaces the actions
+// from the text above them and the buttons from each other.
+test('Allow and Cancel sit apart from the text and from each other', async () => {
+  const style = document.createElement('style');
+  style.textContent = readFileSync('src/styles/layout.css', 'utf8');
+  document.head.append(style);
+  show();
+  const actions = (await screen.findByRole('button', { name: 'Allow' })).parentElement!;
+  const rules = [...style.sheet!.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && actions.matches(rule.selectorText));
+  style.remove();
+  expect(rules.some((rule) => rule.style.getPropertyValue('gap'))).toBe(true);
+  expect(rules.some((rule) => rule.style.getPropertyValue('margin-top'))).toBe(true);
 });

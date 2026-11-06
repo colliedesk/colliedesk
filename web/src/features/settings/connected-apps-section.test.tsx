@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Session } from '../../api/schemas';
@@ -34,4 +35,24 @@ test('a disconnected or expired app needs reconnecting and says how in each app'
 test('no app yet says so', () => {
   render(<ConnectedAppsSection sessions={[]} timezone="UTC" mcpAddress="https://desk.example.com/mcp" />);
   expect(screen.getByText('No AI app is connected yet.')).toBeTruthy();
+});
+
+// jsdom does not lay text out, so this reads the shipped stylesheet: the last rule of components.css that
+// matches the element and sets the property is the one that applies.
+function declared(element: Element, property: 'white-space' | 'overflow' | 'text-overflow') {
+  const style = document.createElement('style');
+  style.textContent = readFileSync('src/styles/components.css', 'utf8');
+  document.head.append(style);
+  const rules = [...style.sheet!.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
+  style.remove();
+  return rules.filter((rule) => element.matches(rule.selectorText) && rule.style.getPropertyValue(property)).at(-1)?.style.getPropertyValue(property);
+}
+
+// The steps are the one thing a row that needs reconnecting is for: they wrap, never cut to one line.
+test('the reconnect steps wrap in full instead of being cut with an ellipsis', () => {
+  render(<ConnectedAppsSection sessions={[session({ revoked_at: '2026-11-06T11:00:00Z', app: { ...session().app!, needs_reconnecting: true } })]}
+    timezone="UTC" mcpAddress="https://desk.example.com/mcp" />);
+  const steps = screen.getByText(/codex mcp login colliedesk/);
+  expect(declared(steps, 'white-space')).not.toBe('nowrap');
+  expect(declared(steps, 'text-overflow')).not.toBe('ellipsis');
 });

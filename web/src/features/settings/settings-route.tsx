@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
 import { AnsweredWithoutSecret, useCreateMutation } from '../../api/use-create';
 import { AgentTokensSection, followableRoles } from './agent-tokens-section';
-import { ConnectedAppsSection } from './connected-apps-section';
 import { ExportAllData } from './export-all-data';
 import { SavedRepliesSection } from './saved-replies-section';
 import { TeamSection } from './team-section';
@@ -103,8 +102,7 @@ export function SettingsRoute() {
     setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError ? messages.settingsActionFailed : undefined}
-    connectedAppsSection={<ConnectedAppsSection sessions={sessions.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
-      mcpAddress={`${config.data?.app_origin || window.location.origin}/mcp`} onDisconnect={(id) => revokeSession.mutate(id)} />}
+    mcpAddress={`${config.data?.app_origin || window.location.origin}/mcp`}
     agentsSection={can(me.data, 'team:create_tokens') && !me.data?.token ? <AgentTokensSection roles={followableRoles(me.data?.agent.roles ?? [], roles.data?.items, me.data?.permissions ?? [])} held={me.data?.permissions ?? []}
       rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
       onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} /> : undefined}

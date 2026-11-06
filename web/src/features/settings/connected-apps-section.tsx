@@ -38,12 +38,12 @@ export function ConnectedAppsSection({ sessions, timezone, mcpAddress, onDisconn
           const stale = app.needs_reconnecting || session.revoked_at !== null || Date.parse(session.expires_at) <= Date.now();
           const device = describeUserAgent(app.user_agent);
           return <article key={session.id}>
-            <div><span className="session-name"><strong>{session.label}</strong>{device && <span>{device}</span>}</span>
-              <span>{session.agent_email}</span>
+            <div><span className="session-name"><strong title={session.label}>{session.label}</strong></span>
+              <span title={session.agent_email}>{session.agent_email}</span>
               <span className={stale ? 'badge badge-warn' : 'badge'}>{stale ? text.needsReconnecting : text.active}</span>
-              <span>{text.connected} <time dateTime={app.connected_at}>{formatDate(app.connected_at, timezone)}</time></span>
               <span>{text.lastUsed} <time dateTime={session.last_seen_at}>{formatDate(session.last_seen_at, timezone)}</time></span>
-              {stale && <span className="muted-copy">{text.reconnectSteps}</span>}</div>
+              <p className="app-detail">{device && <>{device} · </>}{text.connected} <time dateTime={app.connected_at}>{formatDate(app.connected_at, timezone)}</time></p>
+              {stale && <p className="reconnect-steps">{text.reconnectSteps}</p>}</div>
             {!stale && <button type="button" className="danger-action" onClick={() => onDisconnect?.(session.id)}
               aria-label={`${text.disconnect} ${session.label}`}>{text.disconnect}</button>}
           </article>;
