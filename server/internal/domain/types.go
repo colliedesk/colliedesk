@@ -41,6 +41,17 @@ type Session struct {
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	// App is the AI app an OAuth grant connected; nil for a person's session and an API token.
+	App *ConnectedApp `json:"app"`
+}
+
+// ConnectedApp is what Settings shows of an AI app connected with OAuth, one per sign-in (device).
+type ConnectedApp struct {
+	ClientID    string    `json:"client_id"`
+	UserAgent   string    `json:"user_agent"`
+	ConnectedAt time.Time `json:"connected_at"`
+	// NeedsReconnecting: the grant was disconnected, revoked or expired; the app must sign in again.
+	NeedsReconnecting bool `json:"needs_reconnecting"`
 }
 
 type Invite struct {

@@ -38,6 +38,11 @@ type restSession struct {
 	LastSeenAt  time.Time       `json:"last_seen_at"`
 	ExpiresAt   time.Time       `json:"expires_at"`
 	RevokedAt   *time.Time      `json:"revoked_at"`
+	App         *struct {
+		UserAgent         string    `json:"user_agent"`
+		ConnectedAt       time.Time `json:"connected_at"`
+		NeedsReconnecting bool      `json:"needs_reconnecting"`
+	} `json:"app"`
 }
 
 type restEmailSettings struct {
@@ -289,6 +294,9 @@ func sessionsList(c *call, _ map[string]any) (any, error) {
 		}
 		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "owner_name": session.AgentName, "token": sessionToken(session.Token), "permissions": session.Permissions,
 			"this_token": session.Current, "state": state, "last_seen_at": utc(session.LastSeenAt), "expires_at": utc(session.ExpiresAt)}
+		if app := session.App; app != nil {
+			sessions[index]["app"] = map[string]any{"user_agent": app.UserAgent, "connected_at": utc(app.ConnectedAt), "needs_reconnecting": app.NeedsReconnecting}
+		}
 	}
 	return map[string]any{"sessions": sessions}, nil
 }

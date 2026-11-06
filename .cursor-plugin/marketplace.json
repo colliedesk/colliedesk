@@ -1,0 +1,16 @@
+{
+  "name": "colliedesk",
+  "owner": {
+    "name": "HC Labs"
+  },
+  "metadata": {
+    "description": "The Colliedesk plugin for Cursor."
+  },
+  "plugins": [
+    {
+      "name": "colliedesk",
+      "source": "plugins/colliedesk",
+      "description": "The Colliedesk MCP server and skills to triage, draft replies and chase pending conversations."
+    }
+  ]
+}

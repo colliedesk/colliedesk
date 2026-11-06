@@ -108,6 +108,10 @@
 .redeem-panel > .signin-offer { margin: 0 0 var(--space-3); color: var(--text-1); font-weight: 600; }
 .redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 44px; font-size: var(--fs-ui); }
 .redeem-panel > .error-copy { margin-top: var(--space-4); }
+/* An AI app's consent page: its sentences and its two buttons keep the panel's spacing. */
+.oauth-consent > p { margin: var(--space-3) 0 0; }
+.oauth-consent .consent-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
+.oauth-consent .consent-actions > * { flex: 1 1 8rem; --control: 44px; font-size: var(--fs-ui); }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .cloud-sign-in { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .cloud-sign-in h2 { font-size: 14px; font-weight: 600; }

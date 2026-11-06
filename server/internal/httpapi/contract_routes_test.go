@@ -64,7 +64,12 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 		}
 		return req
 	}
-	return newRequest(t, method, item.path, item.body, token, cookie)
+	req := newRequest(t, method, item.path, item.body, token, cookie)
+	if item.path == "/api/v1/oauth/authorize" && cookie == nil {
+		// The consent page's Allow is checked against the page's origin for every caller.
+		req.Header.Set("Origin", testOrigin)
+	}
+	return req
 }
 
 // sessionRoute reports whether a route is authenticated by an agent session (not public, not a channel secret).
@@ -431,6 +436,9 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss":  {path: "/api/v1/conversations/" + f.aiTriageOtherConversation + "/ai-triage/" + f.aiTriageOtherID + "/dismiss", token: admin, status: 200},
 		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":     {path: "/api/v1/conversations/" + f.aiTriageAutoConversation + "/ai-triage/" + f.aiTriageAutoID + "/undo", token: admin, status: 200},
 		"POST /api/v1/public/forms/{workspace_slug}":                        {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
+		"GET /api/v1/oauth/client":                                          {path: "/api/v1/oauth/client?" + url.Values{"client_id": {f.oauthClientID}, "redirect_uri": {"http://127.0.0.1:4000/callback"}}.Encode(), status: 200},
+		"POST /api/v1/oauth/authorize": {path: "/api/v1/oauth/authorize", body: map[string]any{"client_id": f.oauthClientID, "redirect_uri": "http://127.0.0.1:4000/callback",
+			"response_type": "code", "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", "code_challenge_method": "S256", "state": "s"}, token: admin, status: 200},
 	}
 	maps.Copy(cases, kbContractCases(f))
 	return cases

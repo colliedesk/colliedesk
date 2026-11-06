@@ -1,0 +1,60 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.colliedesk/colliedesk",
+  "title": "Colliedesk",
+  "description": "Work a Colliedesk helpdesk inbox: find, triage and answer customer conversations.",
+  "version": "0.0.0",
+  "websiteUrl": "https://colliedesk.com/docs/mcp",
+  "repository": {
+    "url": "https://github.com/colliedesk/colliedesk",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.colliedesk.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer followed by an agent token from Settings → External AI agents in Colliedesk Cloud",
+          "value": "Bearer {token}",
+          "isRequired": true,
+          "isSecret": true,
+          "variables": {
+            "token": {
+              "description": "Agent token, starts with cdk_agent_",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp",
+      "variables": {
+        "host": {
+          "description": "The address of your own Colliedesk server, for example desk.example.com",
+          "isRequired": true
+        }
+      },
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer followed by an agent token from Settings → External AI agents on your server",
+          "value": "Bearer {token}",
+          "isRequired": true,
+          "isSecret": true,
+          "variables": {
+            "token": {
+              "description": "Agent token, starts with cdk_agent_",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

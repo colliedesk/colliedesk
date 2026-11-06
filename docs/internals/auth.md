@@ -63,9 +63,10 @@ set of them. Code: `auth/principal.go`, `auth/permissions.go`, `auth/legacy.go`,
   token) is not deleted (`role_in_use` names them). A token's call is checked against the token's
   permissions, not only the person's.
 - **Creating a token is person-only** (`personOnlyNeeding(team:create_tokens, …)`): a token that made
-  tokens would leave them behind after it was revoked. That is why `maxPersonOnly` is 4 in
-  `mcpserver/agent_parity_test.go` (the two agent-request decision routes, the mail image proxy and
-  token creation; raising it needs the maintainer's written approval). A token is created with
+  tokens would leave them behind after it was revoked. That is why `maxPersonOnly` is 5 in
+  `mcpserver/agent_parity_test.go` (the two agent-request decision routes, the mail image proxy, token
+  creation and allowing an AI app with OAuth, raised from 4 for #477; raising it needs the maintainer's
+  written approval). A token is created with
   `role_id` (any role whose permissions the caller all holds, else 403 `role_exceeds_yours`; 404 when
   there is no such role) or `permissions` (each held, else
   `role_exceeds_yours`), never both; a `scope` is 400. The CLI's `--scope` maps `read`/`draft`/`send`
@@ -138,7 +139,7 @@ null scope is a person's session. It reuses the session machinery on purpose: `l
   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an unclassified or stale
   `routeAccess` row, a `PersonOnly` row without `Why`, an uncovered callable route, a stale
   `mcpToolPending` entry, and a tool that calls a closed route; its message names the file to edit.
-  Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0, `maxPersonOnly` 4.
+  Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0, `maxPersonOnly` 5.
 - **The contract's `TokenPermission` enum is the Go list** in its order
   (`TestTokenPermissionEnumOfTheContractIsTheServersList`); the web matrix's copy is held to the
   contract by `token-permissions.test.ts`.
@@ -170,6 +171,68 @@ null scope is a person's session. It reuses the session machinery on purpose: `l
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `routeAccess` row first.
 - The CLI (`collie token create`) resolves the workspace by slug through
   `PrivilegeWorkspaceBySlug`, like `pair`.
+
+## OAuth grants
+
+Decided in #477 (Long, 2026-11-06): an AI app connects to `/mcp` with OAuth 2.1, the person picks only
+the workspace, and the app acts as that person with everything they hold. Code: `auth/oauth.go`,
+`httpapi/oauth-handlers.go`, `httpapi/oauth-clients.go`, the consent page `web/src/features/auth/oauth-consent.tsx`.
+
+- **A grant is a session of scope `oauth`**, not a person's session (scope null): `Principal.IsToken()`
+  is true, so every person-only route refuses it (it cannot create tokens or allow another app), a
+  cookie holding one is refused, and messages it writes carry `agent_token_id` like any token's. Its
+  `given` is a copy of what the person holds now (`setAccess`), cut to `role_id` when the session that
+  allowed it was limited (an admin's Agent-limited session makes an Agent-limited grant). No one-year
+  cap: it lives 30 days after its last use, like a browser session. `role_ceiling` is written for a
+  rollback only.
+- **The grant's id never changes; its credentials rotate in `oauth_tokens`** (`kind` code, access,
+  refresh; RLS like every workspace table). `sessions.token_hash` of a grant is the hash of a random
+  `cdk_oag_` value nobody receives, so a grant authenticates only through an access token:
+  `Authenticate` finds `cdk_oat_` bearers in `oauth_tokens` (privileged lookup, then the session scoped
+  by id and an unexpired access row). Codes (`cdk_oac_`) and refresh tokens (`cdk_ort_`) are refused as
+  bearers. All four prefixes share the hash domain `colliedesk-oauth\x00` (`credentialHash`), so an
+  older image finds none of them (`TestOAuthAccessTokensCannotBeFoundByThePlainHashAnOlderImageUses`).
+- **Lifetimes.** Code 5 minutes, one use; a second use revokes the grant (RFC 6749 §4.1.2). Access token
+  1 hour. Refresh token rotated on every use; the one it replaced still works for 2 minutes
+  (`oauthRefreshGrace`) and gives another new pair without touching the others, so a client that lost
+  the answer, or two processes of Claude Code sharing one credential, never sign each other out
+  (`TestTwoRefreshesAtOnceWithOneTokenBothSucceed`). Used after that, it is a replay and revokes the
+  grant. Used refresh tokens are remembered a day, then forgotten (`invalid_grant` without a revoke).
+- **Clients are not stored.** Dynamic registration signs the app's name and redirects into the
+  `client_id` (`cdk_client_<payload>.<HMAC>`, key `oauth_client_key` in `server_secrets`), limited to 1000
+  valid registrations per client address an hour (a refused one is not counted). A client ID metadata document (an https `client_id`, Claude Code's) is
+  fetched through `netguard` (public addresses after resolution, every dial), no redirect, 64 KiB, 5 s,
+  cached 10 minutes; the document must name itself as `client_id`. Anyone can publish one, so the consent
+  page always names its host and calls the name verified only on a known vendor's host (`trustedClientHosts`:
+  exact or a subdomain at a dot, default port). Redirects: https anywhere, http only
+  to `localhost`/`127.0.0.1`/`::1` (any port, RFC 8252), a private scheme with a dot or a known desktop
+  app's (`cursor`, `vscode`…). `GET /api/v1/oauth/client` is the only unauthenticated way to make the
+  server fetch one, 60 a minute per address.
+- **Issuer.** The authorization server is `APP_ORIGIN` for every workspace (Cloud's one `/mcp`).
+  `/.well-known/oauth-authorization-server` answers only there (its `issuer` must equal where it was
+  fetched); `/.well-known/oauth-protected-resource[/mcp]` answers on every host with that host's `/mcp`
+  as `resource`. A token is bound to the `resource` the app asked for (`APP_ORIGIN/mcp` or the
+  workspace's own host's), refused otherwise (`invalid_target`); the code exchange and refresh compare it.
+  The bound token also works on `/api/v1`, because every MCP tool calls the REST API with it in process.
+- **Consent.** No new sign-in. `/oauth/authorize` is a web app page (`frame-ancestors 'none'`, set by
+  `webui`) on the session of the host it opens on. On Cloud a browser without a session goes to the
+  sign-in page on `APP_ORIGIN` with `next=/oauth/authorize?…`; `ExchangeCloud` asks which workspace
+  (409 `workspaces`) and hands the browser off to the workspace's host, which opens the consent page;
+  the code it issues is traded at `APP_ORIGIN/oauth/token`. **Allow** (`POST /api/v1/oauth/authorize`)
+  is `personOnly` (`maxPersonOnly` 5, Long's approval quoted in `agent_parity_test.go`) and checks
+  `Origin` for every caller. A request the app got wrong after the redirect was checked goes back to
+  the app as an OAuth error; one with an unregistered redirect is shown on the page and never redirected.
+- **Rollback.** The down migration keeps grant rows (a note names them) as revoked legacy `read`
+  tokens and drops `oauth_tokens` (`TestOAuthGrantsRollbackKeepsTheNotesAGrantWroteAttributed`).
+
+### Traps
+
+- **A grant is never a person's session.** Making it one (scope null) would let an app allow other apps
+  and create tokens that outlive its disconnection. Keep `scope='oauth'`.
+- **One access hash per grant breaks real clients**: rotating it on refresh would sign out every other
+  process sharing the credential. Access tokens are rows; old ones expire on their own.
+- **Pending grants.** A grant whose code was never traded has `oauth_connected_at` null: it lists
+  nowhere and the next Allow of the same person deletes those older than an hour.
 
 ## Operators
 

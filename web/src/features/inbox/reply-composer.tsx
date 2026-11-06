@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
@@ -15,7 +15,7 @@ import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
 import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
-import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
+import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
@@ -264,6 +264,20 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     caret.current = next.length;
     setBody(next);
   };
+  // A phone gives the conversation the screen: the box is one line with Send reply until the agent goes into
+  // it, and stays open while it holds anything (text, files, copies, a list, a notice). It opens when the text
+  // box takes the focus (not a button: Chrome focuses one on mousedown, and the compact buttons would go before
+  // their click), never on the press itself: a touch's pointerdown comes before its focus, and a box that grew
+  // then would move away from the finger. It closes on a press outside (Safari focuses no button, so a blur
+  // alone would close it under the finger) or when the keyboard leaves it. components.css styles data-compact
+  // below 44 rem only.
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const onPress = (event: PointerEvent) => { if (!card.current?.contains(event.target as Node)) setActive(false); };
+    document.addEventListener('pointerdown', onPress);
+    return () => document.removeEventListener('pointerdown', onPress);
+  }, [active]);
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -358,12 +372,18 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(event.shiftKey); }
     if (event.key === '/' && (event.metaKey || event.ctrlKey) && maySavedReplies) { event.preventDefault(); setPicking('replies'); }
   };
+  const held = Boolean(body.trim()) || files.length > 0 || picking !== null || assist || ccOpen || ccEdited !== undefined || Boolean(conflict || problem || otherDraft)
+    || otherTab || aiWarnings.length > 0;
+  const compact = !active && !held;
+  const leave = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget && !card.current?.contains(event.relatedTarget as Node)) setActive(false);
+  };
   return (
     <div className="composer">
       {aiDraftsFor && !disabled && assistPart.status === 'ready' && <assistPart.module.AutoDraftCard conversationId={aiDraftsFor} customerName={customerName}
         timezone={timezone} hasText={Boolean(body.trim())} canManage={canManage} latestCustomerMessage={latestCustomerMessage} onUse={applyDraft}
         onTryAgain={() => setAssist(true)} />}
-      <div className="composer-card" data-kind={kind} ref={card}>
+      <div className="composer-card" data-kind={kind} data-compact={compact} data-writing={active} ref={card} onFocus={(event) => { if (event.target === (field.current as EventTarget | null)) setActive(true); }} onBlur={leave}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>
             {mayReply && <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
@@ -431,8 +451,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
             aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
             {messages.sendAndResolve}</button>}
+          {/* The one-line box on a phone keeps a private note one press away, as its tab is when the box is open. */}
+          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote}
+            onClick={() => { setKind('note'); field.current?.focus(); }}><LockIcon /></button>}
           <button className="primary-action" type="button" disabled={disabled || cannotSend} onClick={() => submit()}>
-            {kind === 'note' ? messages.privateNote : messages.reply}
+            <span className="send-label">{kind === 'note' ? messages.privateNote : messages.reply}</span><span className="send-icon"><ArrowUpIcon /></span>
           </button>
         </div>
       </div>

@@ -43,10 +43,11 @@ function TokenDetail({ session }: { session: Session }) {
 }
 
 // SessionsSection names each device by browser and system; revoking this device is signing out, so it says so.
+// AI apps connected with OAuth are listed by ConnectedAppsSection instead.
 export function SessionsSection({ sessions, timezone, onRevokeSession }: SessionsSectionProps) {
   return (
     <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{settingsMessages.sessionsDescription}</p></div>
-      <div className="settings-body"><div className="data-list">{sessions.map((session) => {
+      <div className="settings-body"><div className="data-list">{sessions.filter((session) => !session.app).map((session) => {
         const state = sessionState(session);
         return <article key={session.id}>
           <div><span className="session-name"><strong title={session.label}>{describeUserAgent(session.label) ?? session.label}</strong>

@@ -21,6 +21,28 @@ shows **You are signed out** instead of the inbox. On instances with cloud sign-
 sign-in page instead and signs the browser out of the sign-in provider too, so the next sign-in
 asks for a code again. To sign in again on a revoked device, ask an admin for a new link.
 
+## Connected AI apps
+
+An AI app you connect with OAuth (see [Connect an app with OAuth](mcp.md#connect-an-app-with-oauth))
+acts as you in the workspace you allowed it in, with everything you can do there, as your roles are on
+each call: a permission taken from you is taken from the app at once, and given back, it works again
+without connecting again. **Settings → External AI agents → Connected AI apps** lists each connection:
+
+- the app's name and the browser you allowed it from (no IP address is kept);
+- when you connected it and when it was last used;
+- **Active**, or **Needs reconnecting** when it was disconnected, ran out after 30 days without use, or
+  your account was deactivated, with how to connect again in each app;
+- **Disconnect**, which stops it at once: its next call gets HTTP 401.
+
+Each sign-in is its own row, so the same app on two computers shows twice. Claude and ChatGPT call from
+their own servers, so their row is one per account, not per computer. Someone with `team:revoke` sees
+and disconnects the apps of every person they do not rank below. Deactivating a person disconnects
+their apps; after they are reactivated they connect again.
+
+Allowing an app is something only a person does in a browser: an app or an agent token cannot allow
+another app (HTTP 403 `person_only`). A note or a reply an app writes shows "by <your name> via <app
+name>" in the conversation.
+
 ## Agent tokens
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
