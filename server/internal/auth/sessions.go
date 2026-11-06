@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -30,11 +31,20 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	if raw == "" {
 		return Principal{}, fmt.Errorf("%w: missing credential", ErrInvalidCredential)
 	}
+	// A code or a refresh token is only ever sent to the token endpoint, never as a bearer.
+	if isOAuthCredential(raw) && !strings.HasPrefix(raw, oauthAccessPrefix) {
+		return Principal{}, fmt.Errorf("%w: not an access token", ErrInvalidCredential)
+	}
+	oauthAccess := strings.HasPrefix(raw, oauthAccessPrefix)
 	now := s.now()
 	hash := credentialHash(raw)
-	// Only the token-to-workspace lookup crosses workspaces; the session checks run scoped.
-	var workspaceID string
+	// Only the token-to-workspace lookup crosses workspaces; the session checks run scoped. An OAuth
+	// access token is found in oauth_tokens, which names its grant (the session).
+	var workspaceID, grantID string
 	err := s.db.Privileged(ctx, database.PrivilegeSessionToken, func(tx pgx.Tx) error {
+		if oauthAccess {
+			return tx.QueryRow(ctx, `SELECT workspace_id::text,session_id::text FROM oauth_tokens WHERE hash=$1 AND kind='access'`, hash).Scan(&workspaceID, &grantID)
+		}
 		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM sessions WHERE token_hash=$1`, hash).Scan(&workspaceID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -56,6 +66,14 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	if s.planLimits {
 		countAgents = "(SELECT count(*) FROM agents x WHERE x.workspace_id=s.workspace_id AND x.deactivated_at IS NULL)"
 	}
+	// The session is matched by its own token hash, or, for an OAuth access token, by its grant and an
+	// access token of that grant that has not expired.
+	match, args := `s.token_hash=$1`, []any{hash, now, workspaceID}
+	if oauthAccess {
+		match = `s.id=$4::uuid AND s.scope='oauth' AND EXISTS (SELECT 1 FROM oauth_tokens t
+			WHERE t.workspace_id=s.workspace_id AND t.session_id=s.id AND t.hash=$1 AND t.kind='access' AND t.expires_at>$2)`
+		args = append(args, grantID)
+	}
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		// One query: the session, its person's roles (with their permissions) and the role the session is
 		// limited to or follows. The permissions are worked out from these in Go (principalFrom).
@@ -63,19 +81,23 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 			a.timezone_override,a.setup_guide_hidden,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),s.permissions,s.legacy,
 			w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`,
 			`+personRolesColumn+`,
-			COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions
+			COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions,COALESCE(s.oauth_resource,'')
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
 			LEFT JOIN roles sr ON sr.workspace_id=s.workspace_id AND sr.id=s.role_id
-			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, hash, now, workspaceID).
+			WHERE s.workspace_id=$3 AND `+match+` AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, args...).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName,
 				&principal.Agent.TimezoneOverride, &principal.Agent.SetupGuideHidden, &principal.SessionID, &trialEndsAt, &scope, &tokenPermissions, &legacy,
-				&trialExtended, &createdAt, &lastSeenAt, &activeAgents, &roles, &limit.ID, &limit.Name, &limit.System, &limit.Permissions)
+				&trialExtended, &createdAt, &lastSeenAt, &activeAgents, &roles, &limit.ID, &limit.Name, &limit.System, &limit.Permissions, &principal.Resource)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: session revoked, expired or not found", ErrInvalidCredential)
 		}
 		if err != nil {
 			return fmt.Errorf("authenticate session: %w", err)
+		}
+		// A grant authenticates only through its access tokens (its token_hash is of a value nobody holds).
+		if (scope == ScopeOAuth) != oauthAccess {
+			return fmt.Errorf("%w: session revoked, expired or not found", ErrInvalidCredential)
 		}
 		principal.setAccess(roles, limit, scope, tokenPermissions, legacy)
 		// A browser attaches cookies by itself; an agent token is only ever sent on purpose, as a bearer.
@@ -86,7 +108,8 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 			return fmt.Errorf("%w: the session belongs to another workspace's host", ErrInvalidCredential)
 		}
 		expires := now.Add(sessionLifetime)
-		if principal.IsToken() {
+		// A grant expires only when unused, like a browser session; the app connects again in one step.
+		if principal.IsToken() && !principal.IsOAuth() {
 			// A token that is used every day still ends one year after its creation.
 			limit := createdAt.Add(agentTokenMaxAge)
 			if !now.Before(limit) {
@@ -130,7 +153,8 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 
 // ListSessions lists the caller's own sessions and tokens, and everyone's with team:revoke.
 func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]domain.Session, error) {
-	query := `SELECT ` + sessionColumns + sessionFrom + ` WHERE s.workspace_id=$1`
+	// A grant whose code no app exchanged yet is not a connection.
+	query := `SELECT ` + sessionColumns + sessionFrom + ` WHERE s.workspace_id=$1 AND (s.scope IS DISTINCT FROM 'oauth' OR s.oauth_connected_at IS NOT NULL)`
 	args := []any{principal.Workspace.ID}
 	if !principal.Can(PermTeamRevoke) {
 		query += " AND s.agent_id=$2"
@@ -143,8 +167,12 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 		sessions, err = listSessions(ctx, tx, query, args)
 		return err
 	})
+	now := s.now()
 	for index := range sessions {
 		sessions[index].Current = sessions[index].ID == principal.SessionID
+		if app := sessions[index].App; app != nil {
+			app.NeedsReconnecting = sessions[index].RevokedAt != nil || !sessions[index].ExpiresAt.After(now)
+		}
 	}
 	return sessions, err
 }
@@ -153,7 +181,7 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 const sessionColumns = `s.id::text,s.agent_id::text,a.email,COALESCE(NULLIF(btrim(a.display_name),''),a.email),s.label,COALESCE(s.scope,''),s.permissions,s.legacy,
 	COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions,
 	` + personRolesColumn + `,
-	s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
+	s.created_at,s.last_seen_at,s.expires_at,s.revoked_at,COALESCE(s.oauth_client_id,''),COALESCE(s.user_agent,''),s.oauth_connected_at`
 
 // sessionFrom joins a session to its person and its role.
 const sessionFrom = ` FROM sessions s` + sessionJoins
@@ -168,9 +196,11 @@ func scanSession(row pgx.Row) (domain.Session, error) {
 	var legacy bool
 	var role roleRow
 	var personRoles []roleRow
+	var clientID, userAgent string
+	var connectedAt *time.Time
 	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.AgentName, &session.Label, &scope, &permissions, &legacy,
 		&role.ID, &role.Name, &role.System, &role.Permissions, &personRoles,
-		&session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
+		&session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt, &clientID, &userAgent, &connectedAt); err != nil {
 		return domain.Session{}, fmt.Errorf("scan session: %w", err)
 	}
 	session.CreatedAt = domain.UTC(session.CreatedAt)
@@ -183,6 +213,21 @@ func scanSession(row pgx.Row) (domain.Session, error) {
 		ref := role.ref()
 		session.Role = &ref
 	case scope == "":
+	case scope == ScopeOAuth:
+		// An AI app's grant: everything its person holds now, limited like the session that allowed it.
+		given := rolesPermissions(personRoles)
+		var limited *domain.RoleRef
+		if role.ID != "" {
+			ref := role.ref()
+			limited = &ref
+			given = given.Intersect(role.permissions())
+		}
+		session.Token = &domain.TokenGrant{Kind: domain.TokenKindOAuth, Role: limited, RoleHeld: true, Permissions: given.Sorted()}
+		app := domain.ConnectedApp{ClientID: clientID, UserAgent: userAgent, ConnectedAt: session.CreatedAt}
+		if connectedAt != nil {
+			app.ConnectedAt = domain.UTC(*connectedAt)
+		}
+		session.App = &app
 	case legacy:
 		tier := scope
 		session.Token = &domain.TokenGrant{Kind: domain.TokenKindLegacy, LegacyTier: &tier, Permissions: legacyGiven(scope, permissions).Sorted()}

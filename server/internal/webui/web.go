@@ -30,7 +30,7 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 	files := http.FileServer(http.FS(served))
 	console := OperatorHandler("/operator", signIn)
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if strings.HasPrefix(request.URL.Path, "/api/") {
+		if strings.HasPrefix(request.URL.Path, "/api/") || oauthPath(request.URL.Path) {
 			api.ServeHTTP(response, request)
 			return
 		}
@@ -39,6 +39,12 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 			return
 		}
 		setAppHeaders(response.Header())
+		if request.URL.Path == "/oauth/authorize" {
+			// The consent page gives an app a credential with one click: no page may frame it.
+			response.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+			response.Header().Set("X-Frame-Options", "DENY")
+			response.Header().Set("Referrer-Policy", "no-referrer")
+		}
 		path := strings.TrimPrefix(request.URL.Path, "/")
 		if path != "" {
 			if file, err := served.Open(path); err == nil {
@@ -51,6 +57,12 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 		clone.URL.Path = "/"
 		files.ServeHTTP(response, clone)
 	})
+}
+
+// oauthPath: the OAuth protocol's addresses outside /api/ that the API serves (discovery, registration,
+// token); the consent page /oauth/authorize is the web app's.
+func oauthPath(path string) bool {
+	return strings.HasPrefix(path, "/.well-known/oauth-") || path == "/oauth/token" || path == "/oauth/register"
 }
 
 // setAppHeaders guards the workspace app's pages and files: no other site may frame a signed-in agent's inbox

@@ -10,6 +10,8 @@ import (
 const (
 	ScopeRole   = "role"
 	ScopeCustom = "custom"
+	// ScopeOAuth is an AI app's OAuth grant (oauth.go).
+	ScopeOAuth = "oauth"
 )
 
 // agentTokenMaxAge is how long after its creation an agent token stops working, however often it is

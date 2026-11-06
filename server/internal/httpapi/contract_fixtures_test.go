@@ -29,8 +29,10 @@ type contractFixture struct {
 	// operatorRequestID is a request the operator token filed; operatorCancelID one it withdraws.
 	operatorRequestID, operatorCancelID string
 	// github is the Autofix GitHub App's stand-in and what the fixture connected through it.
-	github                    contractGitHub
-	api                       http.Handler
+	github contractGitHub
+	api    http.Handler
+	// oauthClientID is an AI app registered with this server (dynamic client registration).
+	oauthClientID             string
 	adminToken, agentToken    string
 	agentID                   string
 	contactID, conversationID string
@@ -292,7 +294,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		channelIDs["web_form"]).Scan(&intakeCardID); err != nil {
 		t.Fatal(err)
 	}
-	return contractFixture{intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	oauthClientID := registerContractOAuthClient(t, api)
+	return contractFixture{oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -435,4 +438,15 @@ func contractOperatorRequest(t *testing.T, api http.Handler, token string) strin
 	}
 	decode(t, request(t, api, http.MethodPatch, "/api/v1/operator/config", map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@contract.example"}}, token, nil), &filed)
 	return filed.RequestID
+}
+
+// registerContractOAuthClient registers an AI app whose redirect is on this computer, for the consent routes.
+func registerContractOAuthClient(t *testing.T, api http.Handler) string {
+	t.Helper()
+	response := request(t, api, http.MethodPost, "/oauth/register", map[string]any{"client_name": "Contract app", "redirect_uris": []string{"http://127.0.0.1/callback"}}, "", nil)
+	var body struct {
+		ClientID string `json:"client_id"`
+	}
+	decode(t, response, &body)
+	return body.ClientID
 }

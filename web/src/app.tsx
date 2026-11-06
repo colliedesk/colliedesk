@@ -12,6 +12,7 @@ import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
+import { OAuthConsent, oauthRequestFrom } from './features/auth/oauth-consent';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
 import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
 import { rememberSignupAttribution } from './lib/signup-attribution';
@@ -58,7 +59,8 @@ function AppLayout() {
   // A bare link to a page of the app opens without reloading, wherever it is written.
   useInAppLinks();
   // The public page of a results share link has no session and no rail.
-  const onSignIn = path === '/sign-in' || path === '/r';
+  // The consent page of an AI app's OAuth sign-in has no rail either: it checks its own session.
+  const onSignIn = path === '/sign-in' || path === '/r' || path === '/oauth/authorize';
   // An address that matches no page is no rail destination either.
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
@@ -405,6 +407,7 @@ const signInRoute = createRoute({
   // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
   // website's "Start free trial" link: the page is titled for a new team. `next` is the page a hand-off
   // from APP_ORIGIN opens once its token (in the fragment, `#handoff=…`) signs in on this workspace host.
+  // Without a hand-off, `next` is an AI app's consent page (/oauth/authorize?…) the sign-in returns to.
   // `plan=team25` is the plan the website's trial link came for: the trial starts as usual and the plan
   // picker puts that plan first. Any other plan is dropped here.
   validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; plan?: PlanIntent; signed_out?: true; intent?: 'trial'; next?: string } => ({
@@ -424,11 +427,22 @@ const signInRoute = createRoute({
     const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
     const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });
     if (handoff) return <HandoffSignIn token={handoff} next={next} />;
-    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} />;
+    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} next={next} />;
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+// /oauth/authorize is where an AI app (Claude, ChatGPT, Codex, Cursor) asks to connect with OAuth. Its
+// parameters are read raw from the address: they are the app's, passed back to the server as they came.
+const oauthAuthorizeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/authorize',
+  component: function OAuthAuthorize() {
+    const { search, pathname } = window.location;
+    return <OAuthConsent request={oauthRequestFrom(new URLSearchParams(search))} here={pathname + search} />;
+  },
+});
+
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
