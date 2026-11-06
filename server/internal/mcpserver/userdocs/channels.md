@@ -32,7 +32,9 @@ and its state:
   paused after spam complaints, the server cannot send (no SMTP relay and no Gmail), the Gmail
   connection broke, the support address domain is not verified yet, or (on your own server) no
   inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
-  message works without it. Web form: it is on but lists no website origin, so no
+  message works without it. A support address that usually gets mail every day and has had none for
+  a day also needs attention until the next email arrives ([when no email arrives](email-channel.md#when-no-email-arrives)).
+  Web form: it is on but lists no website origin, so no
   page can post to it. Help chat: the AI chat feature is off in **Settings → Built-in AI**, so the
   help center shows no chat. Zalo OA: a secret or the tokens are not set, or an event's signature did
   not match the OA secret key; the Connection tab says which ([Zalo OA](zalo.md)).

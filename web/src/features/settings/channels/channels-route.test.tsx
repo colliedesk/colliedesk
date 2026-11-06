@@ -362,6 +362,25 @@ test('saving the sender name sends only the trimmed name to this channel, never 
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(EMAIL, { config: { sender_name: 'Colliedesk Support' } }));
 });
 
+test('a support address that went quiet says since when and what to check, on Channels and on its page', async () => {
+  const sentence = 'No email has arrived at support@example.com since Thu 5 Nov 09:12 +07. Check that forwarding to support@acme.mail.colliedesk.com is still on. This clears by itself when the next email arrives.';
+  const quiet = channel('email', { status: { state: 'needs_attention', reason_code: 'no_recent_mail', message: sentence } });
+  channelsApi.list.mockResolvedValue({ items: [quiet], types: types(1, 0) });
+  show('');
+  const notice = await screen.findByText('Needs attention:');
+  expect(notice.closest('.notice')).toHaveTextContent(`Email: ${sentence}`);
+  expect(within(notice.closest('.notice') as HTMLElement).getByRole('link', { name: 'Fix it' })).toHaveAttribute('href', `/settings/channels/${EMAIL}`);
+  channelsApi.get.mockResolvedValue({ ...quiet, config: withChannel.channel });
+  show(EMAIL);
+  expect(await screen.findByText(sentence)).toBeInTheDocument();
+});
+
+test('a quiet support address without a worded reason still says what to check', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_recent_mail', message: null } }), config: withChannel.channel });
+  show(EMAIL);
+  expect(await screen.findByText('No email has arrived at this address for more than a day. Check that its forwarding is still on; this clears by itself when the next email arrives.')).toBeInTheDocument();
+});
+
 test('a web form that lists no website says so in plain words', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form', { status: { state: 'needs_attention', reason_code: 'no_origins', message: null } }), config: webFormConfig });
   show(FORM);

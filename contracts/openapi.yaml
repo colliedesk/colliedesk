@@ -12326,9 +12326,14 @@ components:
           type: [string, 'null']
           description: >-
             Why a channel needs attention, a fixed code the web app explains: email `sending_paused`,
-            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`; help chat `ai_chat_off`.
-            A waiting channel has `no_message_yet`.
-        message: {type: [string, 'null']}
+            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`, `no_recent_mail`; web form `no_origins`; help chat `ai_chat_off`.
+            A waiting channel has `no_message_yet`. `no_recent_mail`: an address that received email on at least 5 of 7 days
+            has had none for the 24 hours since; the next email clears it, and the workspace's admins are emailed once per silence.
+        message:
+          type: [string, 'null']
+          description: >-
+            The reason in words when the server words it. For `no_recent_mail`: the address, the time of its last email in the
+            workspace's timezone and the forwarding address to check.
     Channel:
       type: object
       required: [id, type, name, enabled, status, summary, capabilities, held_count, unsent_count, last_inbound_at, created_at, updated_at]

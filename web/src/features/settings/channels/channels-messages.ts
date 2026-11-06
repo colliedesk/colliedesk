@@ -197,6 +197,7 @@ const reasons: Record<string, string> = {
   microsoft_broken: 'The Microsoft 365 connection stopped working.',
   domain_unverified: 'The domain is not verified yet.',
   no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: whoever manages your email needs an inbound secret to send it here (a password for this only). A test message works without it.',
+  no_recent_mail: 'No email has arrived at this address for more than a day. Check that its forwarding is still on; this clears by itself when the next email arrives.',
   no_origins: 'No website can send messages through this form yet. Add your website address below.',
   ai_chat_off: 'Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.',
   zalo_secret_missing: 'Zalo’s events cannot be checked yet: add the OA secret key on the Connection tab.',

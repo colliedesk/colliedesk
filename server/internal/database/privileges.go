@@ -142,6 +142,11 @@ const (
 	// emails to their admins. Only workspace ids leave the transaction; each workspace's access is read, its
 	// admins found, their reminders claimed and settled in its own scope.
 	PrivilegeTrialReminder Privilege = "trial-reminder"
+	// PrivilegeQuietMailbox lists, in every workspace, the live email channels that received mail on at
+	// least 5 of 7 days and none in the 24 hours since, for the quiet-mailbox
+	// warning. Only workspace ids, channel ids and the time of the last email leave the transaction; each
+	// channel is checked again, its spell recorded and its admins found and emailed in its own scope.
+	PrivilegeQuietMailbox Privilege = "quiet-mailbox"
 	// PrivilegeAutofixClaim leases the Autofix fixes in progress of every workspace whose next check is
 	// due (a Cursor run to start or to read), for the Autofix worker. Only workspace ids, fix ids and
 	// connectors leave the transaction; each fix is then read, sent and moved in its own workspace.
