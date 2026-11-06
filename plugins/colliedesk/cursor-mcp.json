@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "colliedesk": {
+      "url": "${COLLIEDESK_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${COLLIEDESK_TOKEN}"
+      }
+    }
+  }
+}
