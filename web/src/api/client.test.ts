@@ -236,7 +236,7 @@ test('402 seat_paused becomes a SeatPausedError with the server\'s explanation',
 
 test('an agent token is created with its label and permissions; a refusal says what the person lacks', async () => {
   const session = { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Claude Code',
-    agent_name: 'Sam', token: { kind: 'custom', role: null, role_held: true, permissions: ['tags:read'], legacy_tier: null }, role: null, permissions: ['tags:read'], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null };
+    agent_name: 'Sam', token: { kind: 'custom', role: null, role_held: true, permissions: ['tags:read'], legacy_tier: null }, role: null, permissions: ['tags:read'], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null, app: null };
   fetchMock.mockResolvedValueOnce(reply(201, { token: 'cdk_agent_secret', session }));
   expect(await api.createAgentToken('Claude Code', { permissions: ['tags:read'] }, 'press-1')).toEqual({ token: 'cdk_agent_secret', session });
   const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];

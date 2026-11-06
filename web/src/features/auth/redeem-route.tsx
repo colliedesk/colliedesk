@@ -21,7 +21,14 @@ const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: mo
 // "Start free trial" link. On APP_ORIGIN of a server whose workspaces each have a host of their own, a
 // completed sign-in continues on the workspace's host; on a workspace host, the server signs in to that
 // workspace only, and an email that is not an agent there is pointed to APP_ORIGIN to find its workspace.
-export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean }) {
+// returnTo is an AI app's consent page (/oauth/authorize?…) that sent the person here to sign in: the
+// sign-in goes back to it, on the workspace's own host where workspaces have one.
+export function returnToConsent(next: string | undefined): string | undefined {
+  return next?.startsWith('/oauth/authorize?') ? next : undefined;
+}
+
+export function RedeemRoute({ token, buy, trial = false, signedOut = false, next: asked }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean; next?: string }) {
+  const consent = returnToConsent(asked);
   const navigate = useNavigate();
   const client = useQueryClient();
   // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
@@ -36,13 +43,14 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
       return undefined;
     }
     await client.resetQueries({ queryKey: ['me'] });
+    if (consent) return navigate({ href: consent });
     return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' });
-  }, [client, navigate]);
+  }, [client, consent, navigate]);
   // The page a sign-in here opens on the workspace host. A plan to buy rides in it: that host's storage
   // is not this page's. So does the plan a trial visitor came for, which opens the inbox, not a checkout.
   const plan = readCheckoutIntent();
   const planIntent = readPlanIntent();
-  const next = plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : planIntent ? `/?plan=${planIntent}` : undefined;
+  const next = consent ?? (plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : planIntent ? `/?plan=${planIntent}` : undefined);
   // The website's trial and buy links only lead to cloud sign-in: its chunk downloads beside the config
   // instead of after it. A page without a sign-in form lets what waited for one go.
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);

@@ -935,7 +935,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   api.timeEntries.mockResolvedValue({ items: [] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
+  const notice = (await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/)).closest('p')!;
   // One channel of a type: no mailbox name on the rows or the thread.
   expect(document.querySelector('.channel-pill')).toBeNull();
   expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/55555555-5555-4555-8555-555555555555');
@@ -959,7 +959,7 @@ test('a web form conversation with no email connected can still be answered, and
   api.timeEntries.mockResolvedValue({ items: [] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const notice = await screen.findByText('Replies to this conversation are not emailed until you connect your support email.');
+  const notice = (await screen.findByText('Replies to this conversation are not emailed until you connect your support email.')).closest('p')!;
   expect(screen.queryByText(/was removed/)).toBeNull();
   fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
   expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
@@ -1067,7 +1067,7 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'connected') as never);
     api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
-    const notice = await screen.findByText(/Gmail stopped sending/);
+    const notice = (await screen.findByText(/Gmail stopped sending/)).closest('p')!;
     expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', `/settings/channels/${sales.id}?tab=replies`);
   } finally {
     api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });

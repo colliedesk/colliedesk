@@ -23,7 +23,7 @@ export function hrefFor(item: NavItem, page: SettingsPath): string {
 
 const sectionByHash: Record<string, SettingsSection> = {
   'profile-heading': 'profile', 'preferences-heading': 'preferences', 'general-heading': 'general', 'team-heading': 'team',
-  'invites-heading': 'invites', 'agents-heading': 'agents', 'sessions-heading': 'sessions',
+  'invites-heading': 'invites', 'agents-heading': 'agents', 'connected-apps-heading': 'connected_apps', 'sessions-heading': 'sessions',
   'saved-replies-heading': 'saved_replies', 'help-center-heading': 'help_center', 'export-heading': 'export',
 };
 const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : item.to === '/settings/ai' ? 'ai' : item.to.startsWith('/settings/channels') ? 'channels' : undefined);
@@ -63,6 +63,8 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
       // While in preview it shows only in a browser that turned it on (autofix-preview.ts).
       ...(shown.autofix !== false && autofixPreviewOn() ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
+      // Everyone's own AI apps connected with OAuth, above the agent tokens as on the page.
+      ...section(messages.connectedApps, 'connected-apps-heading'),
       ...section(messages.aiAgents, 'agents-heading', shown.agents),
       ...section(messages.sessions, 'sessions-heading'),
       ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels', sub: [

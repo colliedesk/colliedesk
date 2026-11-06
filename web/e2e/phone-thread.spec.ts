@@ -113,9 +113,64 @@ test.describe('on a phone', () => {
     const thread = page.getByRole('region', { name: 'Timeline' });
     await expect(thread.getByRole('heading', { name: 'Phone ticket 01' })).toBeVisible();
     await expectTouchSized(page.locator('.timeline-header'), 'the thread header');
+    await expectTouchSized(page.locator('.composer-card'), 'the compact reply box');
+    await page.getByLabel('Message body').tap();
+    await expectOnScreen(page.getByRole('button', { name: 'Send and resolve' }), 'Send and resolve, once the box is open');
     await expectTouchSized(page.locator('.composer-card'), 'the reply box');
     await expectNoOverflow(page.locator('.composer-actions'), 'the reply box toolbar');
     await expectNoOverflow(page.locator('html'), 'the page');
+  });
+
+  test('the messages take most of the screen; the reply box opens when tapped and stays above the keyboard', async ({ page }) => {
+    await signInWithTickets(page, 'Phone Reading', 1);
+    // An email channel on a server that sends no email: the inbox says replies are not emailed.
+    expect((await page.request.put(`${servers.main}/api/v1/channels/email`, { headers: { Origin: servers.main },
+      data: { support_address: `support-${Date.now()}@phone-reading.example` } })).status()).toBe(200);
+    await page.goto(`${servers.main}/`);
+    await page.getByRole('button', { name: /Phone ticket 01/ }).tap();
+    const thread = page.getByRole('region', { name: 'Timeline' });
+    await expect(thread.getByRole('heading', { name: 'Phone ticket 01' })).toBeVisible();
+    const reading = () => page.locator('.timeline-scroll').evaluate((element) => element.getBoundingClientRect().height / window.innerHeight);
+    // Before this layout the header and an always-open reply box left the messages under a third of a 390×844 screen.
+    // This server sends no email: the line that says so is one line, with its link, and the messages keep the screen.
+    const notEmailed = page.getByRole('status').filter({ hasText: 'Outgoing email is not configured' });
+    await expect(notEmailed).toBeVisible();
+    expect((await notEmailed.boundingBox())!.height, 'the not-emailed line is one line').toBeLessThanOrEqual(56);
+    expect(await reading(), 'the messages take over half the screen').toBeGreaterThan(0.55);
+    const box = page.getByLabel('Message body');
+    await expect(page.getByRole('button', { name: 'Private note', exact: true })).toBeHidden();
+    // One tap opens the box with the cursor in it (the keyboard comes up), whichever part of it is tapped.
+    for (const x of [0.05, 0.3, 0.5, 0.85]) {
+      const at = (await box.boundingBox())!;
+      await page.touchscreen.tap(at.x + at.width * x, at.y + at.height / 2);
+      await expect(box, `a tap at ${x * 100}% of the box focuses it`).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Private note', exact: true })).toBeVisible();
+      await page.getByRole('heading', { name: 'Phone ticket 01' }).tap();
+      await expect(page.getByRole('button', { name: 'Private note', exact: true })).toBeHidden();
+    }
+    // A private note is one tap away too.
+    await page.getByRole('button', { name: 'Write a private note' }).tap();
+    await expect(page.getByRole('button', { name: 'Private note', exact: true, pressed: true })).toBeVisible();
+    await expect(box).toBeFocused();
+    await page.getByRole('button', { name: 'Reply', exact: true, pressed: false }).tap();
+    await box.focus();
+    await box.fill('On it.');
+    // A virtual keyboard makes the page shorter (interactive-widget=resizes-content): the box and Send stay on it.
+    await page.setViewportSize({ width: 390, height: 420 });
+    await expectOnScreen(box, 'the reply box above the keyboard');
+    await expectOnScreen(page.getByRole('button', { name: 'Send reply' }), 'Send reply above the keyboard');
+    await expect(notEmailed, 'the not-emailed line steps aside while the keyboard is up').toBeHidden();
+    await expectOnScreen(thread.getByRole('heading', { name: 'Phone ticket 01' }), 'the conversation title while writing');
+    await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
+    // Reading with a kept reply and no keyboard (a phone on its side): the bars come back.
+    await thread.getByRole('heading', { name: 'Phone ticket 01' }).tap();
+    await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+    await page.getByRole('button', { name: 'Send reply' }).tap();
+    await expect(thread.getByText('On it.')).toBeVisible();
+    // Sent and read elsewhere, the box goes back to one line.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await thread.getByText('On it.').tap();
+    await expect(page.getByRole('button', { name: 'Private note', exact: true })).toBeHidden();
   });
 });
 

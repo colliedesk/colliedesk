@@ -2,7 +2,7 @@ import { Fragment, useCallback, useMemo, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
+import { CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, PanelRightIcon, RotateCcwIcon } from '../../ui/icons';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
@@ -115,7 +115,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
-        {onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon />{messages.backToInbox}</button>}
+        {onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon /><span className="thread-back-label">{messages.backToInbox}</span></button>}
         <div>
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
           {conversation && <div className="timeline-meta">{ownRef(conversation) && <span className="ref-copy"><span className="conv-ref">{ownRef(conversation)}</span>
@@ -134,7 +134,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
             aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
             aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
-            {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
+            <PanelRightIcon /><span className="details-toggle-label">{messages.showDetails}</span>{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
         </div>}
       </header>
       {autofix && conversation && onToggleDetails && <AutofixStrip conversationId={conversation.id} customerName={conversation.contact_name} timezone={timezone} onOpenDetails={onToggleDetails} />}

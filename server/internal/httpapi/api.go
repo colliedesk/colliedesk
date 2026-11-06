@@ -112,6 +112,9 @@ type Config struct {
 	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
 	// check; nil uses the system resolver.
 	LookupCNAME func(ctx context.Context, host string) (string, error)
+	// OAuthMetadataClient fetches the client ID metadata documents of AI apps; nil is the guarded client
+	// (oauth-clients.go). Tests set one that reaches their local server.
+	OAuthMetadataClient *http.Client
 	// HelpCenterAddressTransport opens a custom domain's help center address after a DNS check proved
 	// the claim; nil dials public addresses only and checks certificates (helpcenter.NewAddressTransport).
 	HelpCenterAddressTransport http.RoundTripper
@@ -252,6 +255,8 @@ type API struct {
 	cursorCalls *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
+	// oauth limits client registrations and remembers client ID metadata documents.
+	oauth *oauthState
 	// testMessages limits the test messages a workspace sends itself per hour.
 	testMessages *webFormLimiter
 	// migrationRequests limits the Freshdesk migration requests a workspace sends per hour.
@@ -380,7 +385,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		carry = NewCarry(config)
 	}
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
-		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
+		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports, oauth: carry.oauth,
 		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
 		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
@@ -493,6 +498,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
+	api.mountOAuth(mux)
 	return &Server{Handler: withRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
 }
 
@@ -836,6 +842,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
+		// OAuth for AI apps: the consent page reads the app, then the person allows it.
+		{http.MethodGet, oauthClientRoutePath, auth.PermissionPublic},
+		{http.MethodPost, oauthAllowRoutePath, auth.PermissionSession},
 	}
 }
 

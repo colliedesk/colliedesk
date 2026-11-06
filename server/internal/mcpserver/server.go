@@ -10,11 +10,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -34,6 +36,9 @@ type Config struct {
 	Version string
 	// Operators authenticates the operator tokens of OperatorPath; nil leaves OperatorPath unserved (404).
 	Operators *auth.OperatorService
+	// Origin is APP_ORIGIN; its scheme starts the address of the protected resource metadata a 401 names
+	// (on the host the app asked).
+	Origin string
 }
 
 const instructions = `Colliedesk is a helpdesk: customers write in, a small support team answers. You work the inbox for that team, as the team member who made your token.
@@ -84,7 +89,7 @@ func New(config Config) http.Handler {
 	// machine forwards, and self-hosters run exactly that.
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true, MaxRequestBodyBytes: maxRequestBody})
-	return requireBearer(config.Auth, limitLarge(streamable, largeRequestSlots, largeRequestSlotsPerWorkspace, callTimeout, largeRequestReadTime))
+	return requireBearer(config.Auth, config.Origin, limitLarge(streamable, largeRequestSlots, largeRequestSlotsPerWorkspace, callTimeout, largeRequestReadTime))
 }
 
 const operatorInstructions = `Colliedesk's operator tools run the whole server: its settings, operators and requests, not a workspace's inbox.
@@ -191,19 +196,21 @@ func limitLarge(next http.Handler, slots, perWorkspace int, wait, readFor time.D
 // workspaceKey carries the workspace id of an authenticated MCP request.
 type workspaceKey struct{}
 
-// requireBearer answers 401 unless the request carries a valid agent token as a bearer. Cookies and
-// a person's own session are never accepted.
-func requireBearer(service *auth.Service, next http.Handler) http.Handler {
+// requireBearer answers 401 unless the request carries a valid agent token or OAuth access token as a
+// bearer. Cookies and a person's own session are never accepted. Every 401 names the protected resource
+// metadata (RFC 9728), so an AI app that connects with OAuth starts or repeats its sign-in from it.
+func requireBearer(service *auth.Service, origin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		refuse := func() { unauthorizedResource(response, request, origin) }
 		raw, ok := bearerToken(request)
 		if !ok {
-			unauthorized(response)
+			refuse()
 			return
 		}
 		principal, err := service.Authenticate(request.Context(), raw, false)
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidCredential) {
-				unauthorized(response)
+				refuse()
 				return
 			}
 			slog.Error("authenticate MCP request", "error", err)
@@ -213,11 +220,27 @@ func requireBearer(service *auth.Service, next http.Handler) http.Handler {
 		// A person's own session has no one-year cap and no attribution, so an AI client holding one
 		// could do everything that person can without leaving a trace of the agent.
 		if !principal.IsToken() {
-			unauthorized(response)
+			refuse()
 			return
 		}
 		next.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), workspaceKey{}, principal.Workspace.ID)))
 	})
+}
+
+// resourceMetadataURL is the protected resource metadata of /mcp on the host the request reached.
+func resourceMetadataURL(request *http.Request, origin string) string {
+	scheme := "https"
+	if parsed, err := url.Parse(origin); err == nil && parsed.Scheme != "" {
+		scheme = parsed.Scheme
+	}
+	return scheme + "://" + request.Host + "/.well-known/oauth-protected-resource" + Path
+}
+
+func unauthorizedResource(response http.ResponseWriter, request *http.Request, origin string) {
+	response.Header().Set("WWW-Authenticate", `Bearer realm="colliedesk", resource_metadata="`+resourceMetadataURL(request, origin)+`"`)
+	writeJSONError(response, http.StatusUnauthorized, "unauthorized",
+		"Colliedesk needs you to sign in again. "+httpapi.OAuthReconnectSteps+
+			" A script sends an API token as 'Authorization: Bearer <token>' (Settings → External AI agents). Cookies and a person's own session are not accepted here.")
 }
 
 func bearerToken(request *http.Request) (string, bool) {

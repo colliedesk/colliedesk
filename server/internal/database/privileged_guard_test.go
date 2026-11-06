@@ -21,6 +21,7 @@ var privilegedCallSites = []string{
 	"internal/ai/worker.go: PrivilegeAIJobClaim",
 	"internal/auth/cloud.go: PrivilegeCloudIdentity",
 	"internal/auth/links.go: PrivilegeLinkToken",
+	"internal/auth/oauth.go: PrivilegeSessionToken",
 	"internal/auth/operator.go: PrivilegeOperator",
 	"internal/auth/service.go: PrivilegeCreateWorkspace",
 	"internal/auth/sessions.go: PrivilegeSessionToken",

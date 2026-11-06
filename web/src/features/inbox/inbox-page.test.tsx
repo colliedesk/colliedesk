@@ -122,8 +122,17 @@ test('renders message Markdown in the timeline', () => {
 
 test('tells the agent when replies will not be emailed', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
-  expect(screen.getByText('Outgoing email is not configured on this server.')).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('status')).toHaveTextContent('Outgoing email is not configured on this server.');
   expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
+});
+
+test('the notice keeps its words in a line of their own beside Open Settings, so a phone can show it on one line with the link', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." canManage />);
+  const words = screen.getByText('Outgoing email is not configured on this server.');
+  expect(words).toHaveClass('composer-notice-text');
+  // Cut short on a phone, the whole sentence is still its title (and what a screen reader reads).
+  expect(words).toHaveAttribute('title', 'Outgoing email is not configured on this server.');
+  expect(within(screen.getByRole('status')).getByRole('link', { name: 'Open Settings' })).toBeInTheDocument();
 });
 
 test('an admin can go straight to Settings from the notice that replies are not emailed', () => {

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -56,6 +57,9 @@ type Principal struct {
 	// LimitedTo is the one role a person's session is limited to (a pairing link that asked for the
 	// Agent role); nil otherwise.
 	LimitedTo *domain.RoleRef
+	// Resource is the address an OAuth grant's access tokens are bound to (RFC 8707: this server's /mcp);
+	// "" for every other session and token.
+	Resource string
 	// Access is the workspace's plan at the time of the request, derived inside the transaction that
 	// authenticated the session so the lock check costs no transaction of its own. The zero value
 	// (self-hosted, no plan limits) is never locked.
@@ -86,6 +90,17 @@ func (p *Principal) setAccess(roles []roleRow, limit roleRow, scope string, perm
 		return
 	}
 	switch {
+	case scope == ScopeOAuth:
+		// An AI app's grant acts with everything its person holds now, limited like the session the person
+		// allowed it from (a pairing link that asked for the Agent role limits the grant the same way).
+		if limit.ID != "" {
+			ref := limit.ref()
+			p.LimitedTo = &ref
+			p.person = p.person.Intersect(limit.permissions())
+		}
+		p.given = maps.Clone(p.person)
+		p.Token = &domain.TokenGrant{Kind: domain.TokenKindOAuth, Role: p.LimitedTo, RoleHeld: true, Permissions: p.given.Sorted()}
+		return
 	case legacy:
 		p.given = legacyGiven(scope, permissions)
 		tier := scope
@@ -106,6 +121,9 @@ func (p *Principal) setAccess(roles []roleRow, limit roleRow, scope string, perm
 	}
 	p.Token.Permissions = p.given.Sorted()
 }
+
+// IsOAuth reports whether the principal is an AI app's OAuth grant.
+func (p Principal) IsOAuth() bool { return p.Token != nil && p.Token.Kind == domain.TokenKindOAuth }
 
 // IsToken reports whether the principal is an agent token rather than a person's own session.
 func (p Principal) IsToken() bool { return p.Token != nil }
