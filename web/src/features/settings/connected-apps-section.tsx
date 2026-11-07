@@ -10,7 +10,7 @@ export const connectedAppsMessages = {
   lastUsed: 'Last used',
   active: 'Active',
   needsReconnecting: 'Needs reconnecting',
-  reconnectSteps: 'To use it again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; in Claude Code, run /mcp, choose colliedesk and Authenticate; in Codex, run codex mcp login colliedesk; in Cursor, log in to colliedesk again in Settings → MCP.',
+  reconnectSteps: 'To use it again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; in Claude Code, run /mcp, choose colliedesk (plugin:colliedesk:colliedesk with the Colliedesk plugin) and Authenticate; in Codex, run codex mcp login colliedesk; in Cursor, log in to colliedesk again in Settings → MCP.',
   disconnect: 'Disconnect',
   removingInApp: 'Removing the server in the app does not disconnect it here; Disconnect does.',
 } as const;

@@ -24,9 +24,6 @@ A step your token has no permission for is refused with the permission it needs;
 you which one, and you give it a token that holds it
 ([Roles and permissions](roles-and-permissions.md#when-a-permission-is-missing)).
 
-The Colliedesk plugin for Claude Code also adds `/colliedesk-token`, a command you run yourself to
-replace the plugin's token; see [Connect Claude Code](connect-claude-code.md).
-
 ## Install
 
 The skills are in the Colliedesk repository, in

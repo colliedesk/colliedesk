@@ -36,6 +36,8 @@ export function SettingsRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
+  // Where an AI app signs in with OAuth: APP_ORIGIN's /mcp (on Cloud, one address for every workspace).
+  const mcpAddress = `${config.data?.app_origin || window.location.origin}/mcp`;
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
   // A section the person's roles may not read is neither asked for nor shown.
   const readsTeam = can(me.data, 'team:read');
@@ -102,8 +104,8 @@ export function SettingsRoute() {
     setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError ? messages.settingsActionFailed : undefined}
-    mcpAddress={`${config.data?.app_origin || window.location.origin}/mcp`}
-    agentsSection={can(me.data, 'team:create_tokens') && !me.data?.token ? <AgentTokensSection roles={followableRoles(me.data?.agent.roles ?? [], roles.data?.items, me.data?.permissions ?? [])} held={me.data?.permissions ?? []}
+    mcpAddress={mcpAddress}
+    agentsSection={can(me.data, 'team:create_tokens') && !me.data?.token ? <AgentTokensSection roles={followableRoles(me.data?.agent.roles ?? [], roles.data?.items, me.data?.permissions ?? [])} held={me.data?.permissions ?? []} mcpAddress={mcpAddress}
       rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
       onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} /> : undefined}
     teamSection={can(me.data, 'team:read') ? <TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={can(me.data, 'team:manage_roles')}

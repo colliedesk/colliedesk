@@ -11,6 +11,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/mcpbridge"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
+	"github.com/colliedesk/colliedesk/server/internal/mcpserver/docgen"
 )
 
 const plugin = "../../../plugins/colliedesk"
@@ -117,9 +118,12 @@ func TestSkillsDescribeTheirPurposeAndLinkTheGuides(t *testing.T) {
 	}
 }
 
-// The plugin asks for the token as a sensitive option (kept in the system's credential store) and
-// only references it; no file of the plugin holds one.
-func TestPluginKeepsTheTokenOutOfItsFiles(t *testing.T) {
+// The plugins connect with OAuth to the fixed public address of Colliedesk Cloud: no token, no
+// header and no option in any of their files, so Claude Code (and Cursor) runs the sign-in when /mcp
+// answers 401, and the plugin directory reads one public URL. A self-hosted server is added next to
+// the plugin with its own address (docs/user/connect-claude-code.md). The plugin has a version, so an
+// install changes only when it is raised (TestPluginVersionIsRaisedWithItsFiles in CI).
+func TestPluginConnectsWithOAuthToAFixedAddress(t *testing.T) {
 	read := func(path string, into any) string {
 		t.Helper()
 		raw, err := os.ReadFile(path)
@@ -132,14 +136,16 @@ func TestPluginKeepsTheTokenOutOfItsFiles(t *testing.T) {
 		return string(raw)
 	}
 	var manifest struct {
-		Name       string `json:"name"`
-		Version    string `json:"version"`
-		UserConfig map[string]struct {
-			Sensitive bool `json:"sensitive"`
-			Required  bool `json:"required"`
-		} `json:"userConfig"`
+		Name       string          `json:"name"`
+		Version    string          `json:"version"`
+		Skills     json.RawMessage `json:"skills"`
+		UserConfig json.RawMessage `json:"userConfig"`
 	}
 	read(filepath.Join(plugin, ".claude-plugin", "plugin.json"), &manifest)
+	var cursor struct {
+		Variables json.RawMessage `json:"variables"`
+	}
+	read(filepath.Join(plugin, ".cursor-plugin", "plugin.json"), &cursor)
 	var marketplace struct {
 		Name    string `json:"name"`
 		Plugins []struct {
@@ -148,67 +154,51 @@ func TestPluginKeepsTheTokenOutOfItsFiles(t *testing.T) {
 		} `json:"plugins"`
 	}
 	read("../../../.claude-plugin/marketplace.json", &marketplace)
-	var servers struct {
+	type servers struct {
 		MCPServers map[string]struct {
 			Type    string            `json:"type"`
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 		} `json:"mcpServers"`
 	}
-	raw := read(filepath.Join(plugin, ".mcp.json"), &servers)
 
-	if manifest.Name != "colliedesk" || manifest.Version != "" {
-		t.Errorf("plugin %q, version %q: no version, so an install follows main", manifest.Name, manifest.Version)
+	if manifest.Name != "colliedesk" || !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(manifest.Version) {
+		t.Errorf("plugin %q, version %q: want colliedesk with a version such as 1.0.0", manifest.Name, manifest.Version)
 	}
-	if token := manifest.UserConfig["token"]; !token.Sensitive || !token.Required {
-		t.Errorf("the token option must be required and sensitive: %+v", token)
+	if manifest.UserConfig != nil || cursor.Variables != nil {
+		t.Errorf("the plugins ask for nothing (userConfig %s, Cursor variables %s): the address is fixed and OAuth signs in", manifest.UserConfig, cursor.Variables)
+	}
+	if manifest.Skills != nil {
+		t.Errorf("plugin.json skills %s: the plugin loads only skills/, the Agent Skills every host shares", manifest.Skills)
 	}
 	if len(marketplace.Plugins) != 1 || marketplace.Plugins[0].Name != manifest.Name || marketplace.Plugins[0].Source != "./plugins/colliedesk" {
 		t.Errorf("marketplace %+v does not offer the plugin", marketplace)
 	}
-	server, ok := servers.MCPServers["colliedesk"]
-	if !ok || server.Type != "http" || server.URL != "${user_config.url}" || server.Headers["Authorization"] != "Bearer ${user_config.token}" {
-		t.Errorf(".mcp.json: %+v", servers)
-	}
-	if strings.Contains(raw, mcpbridge.TokenPrefix) {
-		t.Error(".mcp.json holds a token")
-	}
-}
-
-// /colliedesk-token <token> replaces a revoked token from inside Claude Code. It is a Claude Code
-// skill, not an Agent Skill (other hosts keep the token in their own settings), so it lives outside
-// skills/; only a person runs it, and the script checks the token before saving it
-// (tests/plugin-token-test.sh).
-func TestPluginReplacesTheTokenOnlyWhenAPersonAsks(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(plugin, ".claude-plugin", "plugin.json"))
-	if err != nil {
-		t.Skipf("plugins/colliedesk is not next to this module: %v", err)
-	}
-	var manifest struct {
-		Skills []string `json:"skills"`
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Contains(manifest.Skills, "./claude-code-skills/") {
-		t.Errorf("plugin.json skills %v does not load ./claude-code-skills/", manifest.Skills)
-	}
-	skill, err := os.ReadFile(filepath.Join(plugin, "claude-code-skills", "colliedesk-token", "SKILL.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		"name: colliedesk-token\n",
-		"disable-model-invocation: true\n",
-		// The token goes in a quoted heredoc: a quote or $( in a paste stays text.
-		"sh \"${CLAUDE_PLUGIN_ROOT}/scripts/colliedesk-token.sh\" '${user_config.url}' <<'COLLIEDESK_TOKEN'\n$ARGUMENTS\nCOLLIEDESK_TOKEN\n",
-		"never repeat the token",
-	} {
-		if !strings.Contains(string(skill), want) {
-			t.Errorf("colliedesk-token/SKILL.md lacks %q", want)
+	for _, file := range []string{".mcp.json", "cursor-mcp.json"} {
+		var config servers
+		raw := read(filepath.Join(plugin, file), &config)
+		server, ok := config.MCPServers[docgen.ServerName]
+		if len(config.MCPServers) != 1 || !ok || server.URL != docgen.PluginMCPURL || server.Headers != nil {
+			t.Errorf("%s: %+v; want only %s at %s with no headers", file, config, docgen.ServerName, docgen.PluginMCPURL)
+		}
+		if file == ".mcp.json" && server.Type != "http" {
+			t.Errorf(".mcp.json: type %q, want http", server.Type)
+		}
+		if strings.Contains(raw, mcpbridge.TokenPrefix) || strings.Contains(raw, "${") {
+			t.Errorf("%s refers to a token or a variable", file)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(plugin, "scripts", "colliedesk-token.sh")); err != nil {
-		t.Error(err)
+	// Everything the plugin holds is Markdown, JSON or its icon: it runs no program on the person's computer.
+	err := filepath.WalkDir(plugin, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		if ext := filepath.Ext(path); ext != ".md" && ext != ".json" && ext != ".png" {
+			t.Errorf("%s: the plugin holds only Markdown, JSON and its icon", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

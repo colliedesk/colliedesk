@@ -34,7 +34,7 @@ const (
 // OAuthReconnectSteps says how each app connects again; the token endpoint and /mcp answer it when a
 // connection no longer works.
 const OAuthReconnectSteps = "Connect again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; " +
-	"in Claude Code, run /mcp, choose colliedesk and Authenticate (or claude mcp login colliedesk); " +
+	"in Claude Code, run /mcp, choose colliedesk (plugin:colliedesk:colliedesk with the Colliedesk plugin) and Authenticate; " +
 	"in Codex, run codex mcp login colliedesk; in Cursor, open Settings → MCP and log in to colliedesk again."
 
 func (a *API) mountOAuth(mux *http.ServeMux) {
