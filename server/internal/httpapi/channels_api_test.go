@@ -23,6 +23,7 @@ type channelBody struct {
 	Status      struct {
 		State      string  `json:"state"`
 		ReasonCode *string `json:"reason_code"`
+		Message    *string `json:"message"`
 	} `json:"status"`
 	Config json.RawMessage `json:"config"`
 }

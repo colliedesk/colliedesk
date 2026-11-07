@@ -27,6 +27,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
+	"github.com/colliedesk/colliedesk/server/internal/mailboxquiet"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
@@ -212,6 +213,13 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 			Origin: origin, HelpCenterDomain: helpCenterDomain}
 		g.Go(func(ctx context.Context) { alerts.Run(ctx, time.Minute) })
 	}
+	// An email channel that usually gets mail every day and had none for a day shows a warning; its admins
+	// hear of it once, from the platform address, on a server that sends mail (docs/user/email-channel.md).
+	quiet := mailboxquiet.Worker{Store: channelStore, Origin: origin, HelpCenterDomain: helpCenterDomain, HostedMailDomain: emailConfig.HostedMailDomain}
+	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
+		quiet.Mailer, quiet.From = email.SMTPSender{Config: emailConfig.SMTP}, "noreply@"+emailConfig.MailFromDomain
+	}
+	g.Go(func(ctx context.Context) { quiet.Run(ctx, 15*time.Minute) })
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
 	intakeSweep := intake.New(channelStore, journal, nil)

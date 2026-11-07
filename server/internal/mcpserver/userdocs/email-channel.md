@@ -410,6 +410,36 @@ replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does n
 - Complaints count for replies sent from the platform address and for replies sent as your own verified
   support address.
 
+## When no email arrives
+
+A support address can stop reaching Colliedesk while customers keep writing: the forwarding rule was
+removed, the domain's MX records changed, or your provider stopped forwarding. Colliedesk notices when
+an address that usually gets mail goes quiet:
+
+- **When it warns:** no email arrived in the last 24 hours, and email arrived on at least 5 of the 7 days
+  before those 24 hours (days are 24-hour periods, not calendar days). A new address, or one that gets
+  mail only now and then, never warns, and neither does an address that has been quiet for days already.
+- **What you see:** the address reads **Needs attention** on **Settings → Channels** and on its own
+  page, with one sentence: "No email has arrived at `<address>` since `<time>`. Check that forwarding
+  to `<forwarding address>` is still on." The time is in the workspace's timezone. On your own server
+  without a forwarding address, it asks you to check that the address's mail is still forwarded to
+  Colliedesk.
+- **Who is emailed:** everyone who can change channels (admins) gets one email from the platform
+  address, once per quiet spell. A server that cannot send mail shows the warning only.
+- **How it clears:** the next email that arrives at the address clears the warning by itself. There is
+  nothing to press. If the address goes quiet again later, that is a new spell and a new email.
+
+What to check:
+
+1. Send an email to the support address from another mailbox. If it arrives, the warning clears.
+2. If it does not arrive, open your mail provider's forwarding settings and check that forwarding to
+   the address in the warning is still on (see [step 2 of the setup](#2-forward-its-mail-to-colliedesk)).
+3. Check that your domain's MX records still point to your mail provider, and that your provider has
+   not blocked forwarding (Microsoft 365 often does: see the steps in step 2).
+
+Through the API and MCP (`colliedesk_channels_list`, `colliedesk_channels_get`) the channel's status is
+`needs_attention` with reason `no_recent_mail` and the same sentence as its message.
+
 ## What you see in the inbox
 
 - Incoming messages show the sender address. A message with an HTML version is shown formatted,

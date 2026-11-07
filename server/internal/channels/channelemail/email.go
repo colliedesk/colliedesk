@@ -14,6 +14,7 @@ import (
 	"net/mail"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -189,11 +190,14 @@ const (
 	ReasonMicrosoftBroken  = "microsoft_broken"
 	ReasonDomainUnverified = "domain_unverified"
 	ReasonNoInboundSecret  = "no_inbound_secret"
+	// ReasonNoRecentMail: an address that gets mail every day has had none for a day (store.QuietCandidates).
+	ReasonNoRecentMail = "no_recent_mail"
 )
 
 func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (channels.Status, error) {
 	var paused, verified, secret bool
 	var mailboxStatus, mailboxProvider *string
+	var slug, timezone string
 	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
 	if err != nil {
 		return channels.Status{}, err
@@ -202,9 +206,9 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 		return channels.Status{State: channels.StateNotConnected}, nil
 	}
 	verified, secret = settings.DomainVerifiedAt != nil, settings.SecretSet
-	err = tx.QueryRow(ctx, `SELECT w.email_paused_at IS NOT NULL,m.status,m.provider FROM workspaces w
+	err = tx.QueryRow(ctx, `SELECT w.email_paused_at IS NOT NULL,m.status,m.provider,w.slug,w.timezone FROM workspaces w
 		LEFT JOIN mailbox_connections m ON m.workspace_id=w.id AND m.channel_id=$2::uuid WHERE w.id=$1`, channel.WorkspaceID, channel.ID).
-		Scan(&paused, &mailboxStatus, &mailboxProvider)
+		Scan(&paused, &mailboxStatus, &mailboxProvider, &slug, &timezone)
 	if err != nil {
 		return channels.Status{}, fmt.Errorf("read email channel state: %w", err)
 	}
@@ -226,7 +230,33 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 	case !secret && !c.a.config.PlatformForwarding:
 		return attention(ReasonNoInboundSecret)
 	}
+	// A busy address that went quiet; the next email ends it, so nothing needs to clear it.
+	since, err := store.QuietSinceTx(ctx, tx, channel.WorkspaceID, channel.ID)
+	if err != nil {
+		return channels.Status{}, err
+	}
+	if since != nil {
+		forwarding := mailpkg.HostedLocalAddress(settings.HostedLocal, slug, c.a.config.HostedMailDomain)
+		return channels.Status{State: channels.StateNeedsAttention, ReasonCode: ReasonNoRecentMail,
+			Message: QuietMessage(settings.SupportAddress, forwarding, *since, timezone)}, nil
+	}
 	return channels.Status{State: channels.StateWorking}, nil
+}
+
+// QuietMessage says which address has had no email since when (in the workspace's timezone) and what to
+// check: the forwarding to the hosted address, or on a server without one the forwarding to Colliedesk.
+// The channel's status and the admins' email say the same.
+func QuietMessage(address, forwarding string, since time.Time, timezone string) string {
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		location = time.UTC
+	}
+	check := "Check that its mail is still forwarded to Colliedesk."
+	if forwarding != "" {
+		check = "Check that forwarding to " + forwarding + " is still on."
+	}
+	return "No email has arrived at " + address + " since " + since.In(location).Format("Mon 2 Jan 15:04 MST") + ". " + check +
+		" This clears by itself when the next email arrives."
 }
 
 // BeforeRemove reads the mailbox grant the channel holds, which goes with it, so it is revoked at its
