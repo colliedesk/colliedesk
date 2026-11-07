@@ -89,9 +89,12 @@ type TrashedKBCollection struct {
 
 // KBArticleSummary is an article without its text, as lists show it.
 type KBArticleSummary struct {
-	ID            string           `json:"id"`
-	Number        int64            `json:"number"`
-	CollectionID  string           `json:"collection_id"`
+	ID           string `json:"id"`
+	Number       int64  `json:"number"`
+	CollectionID string `json:"collection_id"`
+	// CollectionIDs are the collections the help center lists it in: CollectionID, its home, first, then
+	// the others outside the trash by name.
+	CollectionIDs []string         `json:"collection_ids"`
 	Position      int              `json:"position"`
 	Title         string           `json:"title"`
 	Slug          string           `json:"slug"`

@@ -39,7 +39,7 @@ test('a new article is saved as a draft in the collection it was started from, t
   open({ collectionId: ids.setup });
   fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: '  Reset your password ' } });
   fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: '# Steps' } });
-  expect(screen.getByRole('combobox', { name: 'Collection' })).toHaveValue(ids.setup);
+  expect(screen.getByRole('combobox', { name: 'Collections' })).toHaveValue(ids.setup);
   fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge/articles/$articleId', params: { articleId: ids.article }, replace: true }));
   expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ collection_id: ids.setup, title: 'Reset your password', body_md: '# Steps', status: 'draft' });
@@ -268,7 +268,7 @@ test('a new article without a collection says why it cannot be saved yet', async
   fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Refunds' } });
   expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Save draft' })).toHaveAccessibleDescription('Choose a collection below to save.');
-  fireEvent.change(screen.getByRole('combobox', { name: 'Collection' }), { target: { value: ids.billing } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Collections' }), { target: { value: ids.billing } });
   expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
   expect(screen.queryByText('Choose a collection below to save.')).not.toBeInTheDocument();
 });

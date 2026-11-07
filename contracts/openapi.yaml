@@ -6375,8 +6375,8 @@ paths:
       operationId: updateKBArticle
       x-permission: kb_articles:update
       description: >
-        Change the title, slug, text, collection, status (publish or unpublish), search title or meta
-        description. Send back the
+        Change the title, slug, text, collection (or the collections it is listed in), status (publish or
+        unpublish), search title or meta description. Send back the
         `updated_at` you read; when the article was saved since, nothing changes and the answer is 409
         `changed_elsewhere`. Every change adds a version to the history. An article in the trash is
         404. At most 64 KiB of JSON.
@@ -6392,7 +6392,8 @@ paths:
                 title: {type: string, minLength: 1, maxLength: 300}
                 slug: {type: string, minLength: 1, maxLength: 120}
                 body_md: {type: string, maxLength: 100000}
-                collection_id: {type: string, format: uuid}
+                collection_id: {type: string, format: uuid, description: 'A new home collection (a move). The other collections it is listed in stay, except this one.'}
+                collection_ids: {type: array, minItems: 1, maxItems: 1000, items: {type: string, format: uuid}, description: 'Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. Replaces the whole list. A collection of another workspace, in the trash or named twice is refused.'}
                 status: {type: string, enum: [draft, published]}
                 seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
                 seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
@@ -10870,9 +10871,11 @@ components:
         purges_at: {type: string, format: date-time, description: When it is deleted for good (30 days after deleted_at).}
     KBArticleInput:
       type: object
-      required: [collection_id, title, body_md]
+      required: [title, body_md]
+      description: 'Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids.'
       properties:
-        collection_id: {type: string, format: uuid}
+        collection_id: {type: string, format: uuid, description: 'Its home collection.'}
+        collection_ids: {type: array, minItems: 1, maxItems: 1000, items: {type: string, format: uuid}, description: 'Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. A collection of another workspace, in the trash or named twice is refused.'}
         title: {type: string, minLength: 1, maxLength: 300}
         slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the title when left out.'}
         body_md: {type: string, maxLength: 100000, description: 'The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written.'}
@@ -10926,11 +10929,16 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
-        collection_id: {type: string, format: uuid}
+        collection_id: {type: string, format: uuid, description: 'Its home collection: the breadcrumb and its place among siblings.'}
+        collection_ids:
+          type: array
+          minItems: 1
+          items: {type: string, format: uuid}
+          description: 'Its home (collection_id) first, then every other collection the help center lists it in. One of those in the trash is left out until it is restored, and listed again then.'
         position: {type: integer, minimum: 0, description: 'Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number.'}
         title: {type: string}
         slug: {type: string}
@@ -11134,12 +11142,13 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
+        collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary.'}
         position: {type: integer, minimum: 0}
         title: {type: string}
         slug: {type: string}
@@ -11173,11 +11182,12 @@ components:
           items: {type: string, format: uuid}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
+        collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary.'}
         position: {type: integer, minimum: 0}
         title: {type: string}
         slug: {type: string}
