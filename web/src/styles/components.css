@@ -541,6 +541,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .details-link:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
 .details-link > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .details-link > svg { flex: none; width: 16px; height: 16px; color: var(--text-3); }
+@media (pointer: coarse), (max-width: 30rem) { .details-link { min-height: var(--touch); } }
 .conversation-organization .link-button { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 79.99rem) {
