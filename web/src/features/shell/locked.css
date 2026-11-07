@@ -4,6 +4,8 @@
 main.settings-page.locked-screen {
   display: flex; flex-direction: column; gap: var(--space-6); width: min(100%, calc(880px + 2 * var(--space-10))); margin: 0 auto;
   border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-16) var(--space-10) var(--space-10);
+  /* The paused screen's Sign out card is a .settings-card, whose @container rule (layout.css) folds it to one column. */
+  container-type: inline-size;
 }
 main.locked-screen > * { margin: 0; }
 main.locked-screen > header { display: flex; flex-direction: column; gap: var(--space-1); max-width: none; margin: 0; }
@@ -19,12 +21,13 @@ main.locked-screen .locked-paths > * { display: flex; flex-wrap: wrap; align-ite
   padding: var(--space-3) var(--space-4); color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
 main.locked-screen .locked-paths > * + * { border-top: 1px solid var(--line); }
 main.locked-screen .locked-export > p { flex: 1 1 20rem; min-width: 0; margin: 0; color: var(--text-2); font-size: var(--fs-ui); }
-main.locked-screen .locked-paths a { color: var(--text-1); text-decoration: underline; text-underline-offset: 2px; }
+main.locked-screen .locked-paths a { display: inline-flex; align-items: center; min-height: 32px; color: var(--text-1); text-decoration: underline; text-underline-offset: 2px; }
 main.locked-screen .locked-export .export-action { flex: none; }
 /* The paused screen keeps its own Sign out card. */
-main.locked-screen > .settings-card { border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+main.locked-screen > .settings-card { border-top: 0; border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: var(--space-5); }
 
 @media (max-width: 44rem) {
+  main.locked-screen .locked-paths a { min-height: var(--touch); }
   main.settings-page.locked-screen { padding: var(--space-8) var(--space-4) var(--space-6); }
   main.locked-screen .locked-export .export-action { flex: 1 1 100%; }
 }

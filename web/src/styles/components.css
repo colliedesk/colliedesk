@@ -1,8 +1,8 @@
 /* List header: status tabs, then search beside one Filter menu. */
 .inbox-filters { display: grid; gap: var(--space-3); }
-.status-tabs { display: flex; gap: var(--space-3); margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
+.status-tabs { display: flex; gap: 10px; margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
 .status-tabs::-webkit-scrollbar { display: none; }
-.status-tabs label { position: relative; display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
+.status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: var(--control, 32px); min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
 .status-tabs input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
 .status-tabs label:hover { color: var(--text-1); }
 .status-tabs label:has(input:checked) { color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
@@ -408,7 +408,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .picker-search svg { flex: none; width: 16px; height: 16px; }
 .picker-search input { flex: 1; min-width: 0; min-height: 40px; border: 0; background: transparent; padding: 0; }
 .picker-search input:focus-visible { outline: 0; }
-.saved-reply-picker ul { display: grid; gap: 2px; max-height: 15rem; margin: 0; padding: var(--space-1); overflow-y: auto; overscroll-behavior: contain; list-style: none; }
+.saved-reply-picker ul { display: grid; gap: 2px; max-height: min(15rem, 25dvh); margin: 0; padding: var(--space-1); overflow-y: auto; overscroll-behavior: contain; list-style: none; }
 .saved-reply-picker ul:empty { display: none; }
 .saved-reply-picker li { display: grid; gap: 1px; min-width: 0; cursor: pointer; border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
 .saved-reply-picker li[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
@@ -477,10 +477,10 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .status-pick-tell { padding: 0 var(--space-2); }
 .status-pick-tell span, .status-pick-which { white-space: normal; }
 .status-pick-which { display: block; padding: 0 var(--space-2) var(--space-2); border-bottom: 1px solid var(--line); margin-bottom: 2px; color: var(--text-3); font-size: var(--fs-label); }
-@media (pointer: coarse), (max-width: 30rem) { .status-pick .action-popover button, .status-pick-tell { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .status-pick .action-popover button, .status-pick-tell, .status-pick-row .status-pick summary { min-height: var(--touch); } }
 .property-row + .property-row { margin-top: 2px; }
 .property-row > span { color: var(--text-3); font-size: var(--fs-small); }
-.property-row select { width: 100%; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); }
+.property-row select { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); }
 .property-row select:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); background-image: var(--select-chevron); }
 /* Values share one left edge after a 16 px mark: the status dot and the priority arrow, as in the list rows. */
 .property-row::after { position: absolute; left: calc(80px + var(--space-3) + var(--space-2)); top: 50%; translate: 0 -50%; pointer-events: none;
@@ -499,7 +499,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .tag-check { position: relative; display: inline-flex; align-items: center; min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
 .tag-check input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
-.tag-check { min-height: 24px; border-color: transparent; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+.tag-check { min-height: var(--control, 32px); border-color: transparent; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
 .tag-check::before { content: "#" / ""; margin-right: 1px; color: var(--text-3); }
 .tag-check:hover { background: var(--surface-2); color: var(--text-1); }
 .tag-check:has(input:checked) { color: var(--text-1); font-weight: 500; }
@@ -602,7 +602,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Row time: the short form for a mouse (the full stamp in the tooltip and for keyboard focus), the full stamp
    for a screen reader. Without hover there is no tooltip: a row from today shows its time (the Today heading
    gives the day), an earlier row its date and time. */
-.conversation-row[data-tip]::after { left: auto; right: var(--space-3); top: var(--space-1); translate: 0 0; }
+.conversation-row[data-tip]::after { left: auto; right: var(--space-3); top: auto; bottom: calc(100% - var(--space-1)); translate: 0 0; }   /* above the row, never over its subject */
 .conversation-row .time-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .conversation-row .time-touch { display: none; }
 @media (hover: none) {
@@ -772,6 +772,25 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .team-list article { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); row-gap: var(--space-2); }
   .team-list article > :not(.team-cells), .team-list .team-person, .team-list .team-role { grid-column: 1 / -1; }
   .team-actions { justify-content: flex-start; }
+}
+/* A medium column (a laptop beside the sidebar): two lines a person, not four. Name, then whether active and when;
+   under them the roles with Change roles, and Rename and Deactivate at the right. */
+@container (min-width: 30rem) and (max-width: 46rem) {
+  .team-list article { grid-template-columns: minmax(0, 1fr) 6rem 11rem; column-gap: var(--space-4); }   /* fixed, so rows line up */
+  .team-list .team-person { grid-column: 1; grid-row: 1; }
+  .team-list .team-cells > span:not(.team-person, .team-role) { grid-column: 2; grid-row: 1; }
+  .team-list .team-cells > time { grid-column: 3; grid-row: 1; justify-self: end; }
+  .team-list .team-role { grid-column: 1 / 3; grid-row: 2; }
+  .team-list article > .team-actions { grid-column: 3; grid-row: 2; justify-content: flex-end; }
+}
+/* Invites: every row keeps the same columns (the Revoke column too, empty or not), so they line up down the list. */
+[aria-labelledby="invites-heading"] .data-list article { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem; }
+[aria-labelledby="invites-heading"] .data-list article > div { grid-column: 1; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 6rem 9rem; }
+[aria-labelledby="invites-heading"] .data-list article > button { grid-column: 2; justify-self: end; }
+@media (max-width: 44rem) {
+  [aria-labelledby="invites-heading"] .data-list article { grid-template-columns: minmax(0, 1fr); }
+  [aria-labelledby="invites-heading"] .data-list article > div { grid-template-columns: 1fr; }
+  [aria-labelledby="invites-heading"] .data-list article > button { grid-column: 1; justify-self: start; }
 }
 
 /* Settings details: a warning that needs action, the saved state of a form, copyable values. */
@@ -1238,5 +1257,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Text links and link buttons in the inbox are 20 px lines; padding with an equal negative margin makes each one a
    32 px target without moving the text around it. */
 .inbox-shell :is(.link-button, .link-action, .details-panel a, .message-envelope a, .timeline-panel .message a[download], .targets-foot a) {
-  display: inline-block; padding-block: 7px; margin-block: -7px;
+  display: inline-block; padding-block: 8px; margin-block: -8px;
+}
+@media (pointer: coarse), (max-width: 30rem) {
+  .inbox-shell :is(.link-button, .link-action, .details-panel a, .message-envelope a, .timeline-panel .message a[download], .targets-foot a), .timeline-contact { padding-block: 14px; margin-block: -14px; }
 }

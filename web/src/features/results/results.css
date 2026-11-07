@@ -43,6 +43,8 @@
   text-decoration-thickness: 1px; text-underline-offset: 4px; font-variant-numeric: tabular-nums; }
 .results-number:hover { color: var(--text-1); text-decoration-color: currentColor; }
 .results-number-plain { text-decoration: none; }
+/* A one-digit number ("0") is still a 32px-wide target; phones get 44px below. */
+.results-number { display: inline-block; min-width: 32px; }
 /* A turned-off share link: one card in the middle of the page, the credit under it (Paper P42). */
 .results-page.results-share-off { justify-items: center; padding-top: var(--space-24); }
 .results-share-off > .results-card { max-width: 560px; padding: var(--space-8); }
@@ -128,3 +130,4 @@
   .results-share-copy button { min-height: var(--touch); }
   .results-switch { min-height: var(--touch); }
 }
+

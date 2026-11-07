@@ -271,14 +271,15 @@
   font-size: var(--fs-small); }
 .ai-differ-label { color: var(--text-2); }
 .ai-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
-.ai-chip { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; border-radius: 999px; background: var(--surface-0);
+.ai-chip { display: inline-flex; align-items: center; min-height: 32px; max-width: 100%; border-radius: 999px; background: var(--surface-0);
   box-shadow: 0 0 0 1px var(--line); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); text-decoration: none; overflow-wrap: anywhere; }
 .ai-chip:hover { background: color-mix(in srgb, var(--text-1) 5%, var(--surface-0)); }
 .ai-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-@media (pointer: coarse) { .ai-chip { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-chip { min-height: var(--touch); } }
 @media (max-width: 44rem) { .ai-differ { padding: 0 var(--space-2); } }
 .ai-sources-consent { display: grid; gap: var(--space-1); grid-column: 1 / -1; min-width: 0; margin: 0; border: 0; padding: 0; }
 .ai-sources-consent legend { padding: 0; font-size: var(--fs-small); font-weight: 600; }
 .ai-sources-consent .ai-pick { display: flex; align-items: center; gap: var(--space-2); }
 /* Text links (Change, Setup guide links): a 32px tall target, the line keeps its height. */
 .ai-settings :is(.link-action, .link-button, .ai-slot-limit a) { display: inline-block; margin-block: -7px; padding-block: 7px; }
+@media (pointer: coarse), (max-width: 30rem) { .ai-settings :is(.link-action, .link-button, .ai-slot-limit a) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }

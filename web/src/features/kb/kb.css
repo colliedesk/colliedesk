@@ -906,3 +906,61 @@ span.kb-article-open { opacity: 0.35; }
 @media (pointer: coarse) {
   .kb-sections a, .kb-frame .segmented label, .kb-tabs button, .kb-list > .kb-collection-head .button-row button { min-height: var(--touch); }
 }
+
+/* The article list follows its own width, not the window's: beside the collections on a tablet it is far
+   narrower than the window says. Under 36rem the Updated column goes; under 28rem a row is the title with its
+   status beside it, like on a phone (the open and order buttons stay). */
+.kb-list { container: kb-list / inline-size; }
+/* A phone keeps its own rules (above); these are for a list beside the collections. */
+@media (min-width: 44.01rem) {
+@container kb-list (max-width: 36rem) {
+  .kb-cols-head > :nth-child(3), .kb-article-when { display: none; }
+  .kb-cols-head, .kb-article-item { grid-template-columns: minmax(0, 1fr) 7.5rem 2.5rem; }
+  .kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: minmax(0, 1fr) 7.5rem 2.5rem 4.5rem; }
+  .kb-article-row { grid-column: 1 / 3; }
+}
+@container kb-list (max-width: 28rem) {
+  .kb-cols-head { display: none; }
+  .kb-cols-head + .kb-list-scroll { margin-top: 0; border-radius: var(--radius-lg); }
+  .kb-article-item { grid-template-columns: minmax(0, 1fr) 2.5rem; }
+  .kb-list[data-order="true"] .kb-article-item { grid-template-columns: minmax(0, 1fr) 2.5rem 4.5rem; }
+  .kb-article-row { grid-column: 1; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding: var(--space-3) 0 var(--space-3) var(--space-4); }
+  /* The status reads on one line under the title: "Published · public". */
+  .kb-article-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+  .kb-article-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; }
+}
+}
+
+/* ── rv3 review: hit areas, a few contrasts and edges. ── */
+/* KB-02 … KB-04, KB-06: links and small controls are 32 px to click with a mouse, 44 px with a finger. */
+:is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a) { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
+.media-tabs button { --control: 32px; min-height: 32px; }
+@media (pointer: coarse), (max-width: 44rem) {
+  :is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a, .media-tabs button) { min-height: var(--touch); }
+}
+/* KB-05: every tile is as wide as its column, a video without a poster too (a button centres its content). */
+.media-card { grid-template-columns: minmax(0, 1fr); justify-content: stretch; }
+/* KB-07: the editor's loading, missing and trash notes keep the page's margins. */
+.kb-editor-page > :is(.kb-back, .error-copy, .empty-copy, .warning-note) { margin: var(--space-4) var(--space-6) 0; }
+/* KB-08: "Outdated" in the warning ink (4.5:1 on white); the amber of pending is too light for small text. */
+.kb-outdated, .kb-language-counts [data-warn="true"] { color: var(--warn); }
+/* KB-10: the description's resize grip is drawn by the page, not the system. */
+.kb-frame textarea { resize: vertical; }
+.kb-frame textarea::-webkit-resizer { background: linear-gradient(135deg, transparent 55%, var(--line-strong) 55% 62%, transparent 62% 72%, var(--line-strong) 72% 79%, transparent 79%); }
+@media (max-width: 44rem) {
+  .kb-editor-page > :is(.kb-back, .error-copy, .empty-copy, .warning-note) { margin: var(--space-3) var(--space-4) 0; }
+  /* KB-09: on a phone the side sections line up with the title and the text (16 px). */
+  .kb-side-box, .kb-ai-note, .kb-editor-page > .kb-ai-box { padding-inline: var(--space-4); }
+}
+/* KB-12: "Edited by …" may take two lines instead of an ellipsis. */
+.kb-article-when small { display: -webkit-box; overflow: hidden; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* KB-11: on a phone the collection's actions are a grid of two equal columns of outlined buttons. */
+@media (max-width: 44rem) {
+  .kb-list > .kb-collection-head .button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); width: 100%; }
+  .kb-list > .kb-collection-head .button-row button { justify-content: center; border-color: var(--line-control); }
+}
+/* KB-01b on a phone: the status goes under the title, so the move buttons beside a row leave the title room. */
+@media (max-width: 44rem) {
+  .kb-article-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .kb-article-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+}

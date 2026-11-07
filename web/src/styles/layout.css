@@ -146,6 +146,27 @@
   .inbox-shell { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
   .details-panel { display: none; }
 }
+/* Beside the 248 px sidebar (64–90 rem, laptops up to 1440 px) the list, and Details from 80 rem, are a little narrower,
+   so the thread and its reply box keep their room: the tools and both send buttons stay on one row. */
+@media (min-width: 64.01rem) and (max-width: 79.99rem) {
+  .inbox-shell { grid-template-columns: 288px minmax(0, 1fr); }
+}
+@media (min-width: 80rem) and (max-width: 89.99rem) {
+  .inbox-shell { grid-template-columns: 288px minmax(0, 1fr) 240px; }
+  .details-section { padding-inline: var(--space-4); }
+}
+/* Every status tab stays in sight in the narrower list, on the rows' left edge: smaller words, tabs closer (each keeps
+   4 px of padding on both sides and a 32 px minimum width, so they still read apart and stay easy to hit). */
+@media (min-width: 64.01rem) and (max-width: 89.99rem) {
+  .list-pane .status-tabs { gap: 2px; }
+  .list-pane .status-tabs label { min-width: var(--control, 32px); justify-content: center; font-size: var(--fs-small); }
+}
+/* With the sidebar or rail beside it the thread of a 705–1439 px screen is narrow: the reply box keeps its tools and both send
+   buttons on one row by giving up some padding and spacing. */
+@media (min-width: 44.01rem) and (max-width: 89.99rem) {
+  .inbox-shell .composer { padding-inline: var(--space-4); }
+  .inbox-shell .composer-actions { gap: var(--space-1); padding-inline: var(--space-1); }
+}
 /* A tablet or a small laptop: the sidebar folds into an icon rail (each link keeps its name and a tooltip) and the
    workspace and address move to a bar over the sheet, so the thread keeps its room. */
 @media (min-width: 44.01rem) and (max-width: 64rem) {

@@ -36,7 +36,17 @@ main.redeem-page .cloud-sign-in h2 { margin: 0; font-size: var(--fs-ui); font-we
 main.redeem-page .oauth-consent > .muted-copy { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
 main.redeem-page .oauth-consent .consent-actions > * { font-weight: 500; }
 
+/* Inline text links (guarantees, status, terms, another workspace): vertical padding on the inline box makes
+   each a 32px target (44px on a phone) without moving its line. */
+main.redeem-page .signin-status a, main.redeem-page .cloud-sign-in a, main.redeem-page .cloud-signup a, main.redeem-page .oauth-consent .muted-copy a { padding-block: 8px; }
+
+/* The terms line is 12px text: one more pixel of padding keeps it at 32px. */
+main.redeem-page .cloud-sign-in .signin-consent a { padding-block: 9px; }
+
+@media (pointer: coarse), (max-width: 30rem) {
+  main.redeem-page .cloud-sign-in .signin-consent a { padding-block: 15px; }
+  main.redeem-page .signin-status a, main.redeem-page .cloud-sign-in a, main.redeem-page .cloud-signup a, main.redeem-page .oauth-consent .muted-copy a { padding-block: 14px; }
+}
 @media (max-width: 30rem) {
   main.redeem-page:not(.signin-split) .redeem-panel { padding: var(--space-6) var(--space-5); }
-  main.redeem-page .cloud-sign-in a, main.redeem-page .oauth-consent .muted-copy a { display: inline-flex; align-items: center; min-height: var(--touch); }
 }

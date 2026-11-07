@@ -26,7 +26,7 @@
 .role-confirm p { margin: 0; }
 /* A name that may only be read is still a name, not a code. */
 .role-form input[readonly] { font-family: inherit; font-size: inherit; }
-.role-save-bar { position: sticky; bottom: 0; z-index: 1; border-top: 1px solid var(--line); background: var(--surface-0); padding: var(--space-3) 0; }
+.role-save-bar { position: sticky; bottom: 0; z-index: 1; margin-inline: calc(-1 * var(--space-4)); border-top: 1px solid var(--line); background: var(--surface-1); padding: var(--space-3) var(--space-4); }   /* edge to edge of the card; the buttons keep the content's line */
 .role-delete { border-top: 1px solid var(--line); padding-top: var(--space-3); }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { position: static; }

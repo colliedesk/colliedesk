@@ -17,7 +17,7 @@
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .warning-note { margin: 0; border-left: 3px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); padding: var(--space-2) var(--space-3); color: var(--text-1); }
-.copy-field { display: grid; gap: var(--space-2); }
+.copy-field { display: grid; gap: var(--space-2); justify-items: start; }
 .dialog-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 0.45); padding: var(--space-3); }
 .dialog textarea { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; padding: var(--space-2) var(--space-3); line-height: 1.5; }
 .dialog {
@@ -45,9 +45,8 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-id { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
 .ops-id strong { flex: none; font-weight: 600; font-size: var(--fs-ui); }
 .ops-host { min-width: 0; overflow: hidden; color: var(--on-brand-panel-2); font-family: var(--font-mono); font-size: var(--fs-label); text-overflow: ellipsis; white-space: nowrap; }
-.ops-ledger { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; color: var(--on-brand-panel-2); font-size: var(--fs-small); white-space: nowrap; }
+.ops-ledger { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; min-height: var(--control, 32px); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--on-brand-panel-2); font-size: var(--fs-small); text-decoration: none; white-space: nowrap; }
 .ops-ledger b { color: var(--on-brand-panel); font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 500; }
-.ops-ledger { text-decoration: none; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); }
 .ops-ledger:hover { color: var(--on-brand-panel); background: color-mix(in srgb, var(--on-brand-panel) 10%, transparent); }
 .ops-dot { width: 8px; height: 8px; flex: none; border-radius: var(--radius-full); background: var(--on-brand-panel-2); }
 .ops-dot[data-tone="ok"] { background: var(--ok); }
@@ -85,7 +84,7 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-nav .settings-group-label { padding: 0 var(--space-2); }
 .ops-nav a { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2);
   color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
-.ops-nav .seg-count { margin-left: auto; }
+.ops-nav .seg-count { margin-left: auto; border-radius: var(--radius-full); background: var(--warn-soft); color: var(--warn); }
 .ops-main:focus, .ops-sign:focus { outline: none; }
 .ops-main { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--space-2) var(--space-2) var(--space-2) 0; }
 .ops-page { min-height: 100%; display: flex; flex-direction: column; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
@@ -160,7 +159,7 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-table .status { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
 .ops-table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
 
-.badge { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; padding: 0 var(--space-2); line-height: 20px; white-space: nowrap; }
+.badge { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-full); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 500; padding: 0 var(--space-2); line-height: 20px; white-space: nowrap; }
 .badge[data-tone="ok"] { background: var(--ok-soft); color: var(--ok); }
 .badge[data-tone="danger"] { background: var(--danger-soft); color: var(--danger); }
 .badge[data-tone="warn"] { background: var(--warn-soft); color: var(--warn); }
@@ -285,14 +284,6 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
   
   .ops-strip .button-row { margin-left: 0; width: 100%; }
   /* Tables become one card per row: each cell says which column it is. */
-  .ops-table-wrap { overflow: visible; box-shadow: none; }
-  .ops-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .ops-table, .ops-table tbody, .ops-table tr, .ops-table td { display: block; }
-  .ops-table tr { margin-bottom: var(--space-2); border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-2) var(--space-3); }
-  .ops-table td { display: flex; gap: var(--space-3); justify-content: space-between; align-items: center; border: 0; padding: var(--space-1) 0; text-align: right !important; overflow-wrap: anywhere; }
-  .ops-table td::before { content: attr(data-label); flex: none; color: var(--text-3); font-family: var(--font-sans); font-size: var(--fs-label); text-align: left; }
-  .ops-table td[data-label=""]::before { content: none; }
-  .ops-table td[data-label=""] { justify-content: flex-end; }
   .ops-strip .button-row button { flex: 1 1 0; }
   .apply-line .button-row { margin-left: 0; }
 }
@@ -304,8 +295,8 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 
 /* Parts the React console adds to the prototype. */
 .logo-tile { fill: var(--logo-tile); }
-.ops-requests { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 32px; color: var(--on-brand-panel); font-size: var(--fs-small); text-decoration: none; }
-.ops-command { display: block; overflow-x: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-0); white-space: pre; }
+.ops-requests { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 32px; color: var(--on-brand-panel); font-size: var(--fs-small); text-decoration: none; white-space: nowrap; }
+.ops-command { display: block; overflow-x: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-0); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ops-warnings, .ops-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .ops-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--line); }
 .ops-list li > div { display: grid; gap: 2px; min-width: 0; }
@@ -318,9 +309,6 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-filters { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
 .version-list button span { color: var(--text-3); font-size: var(--fs-label); }
 .setting-key { color: var(--text-3); }
-.setting-meta { color: var(--text-3); font-size: var(--fs-label); }
-.badge { display: inline-flex; align-items: center; border-radius: var(--radius-full); background: var(--surface-2); padding: 0 var(--space-2); font-size: var(--fs-label); font-weight: 500; }
-.badge[data-tone="danger"] { background: var(--danger-soft); }
 .empty { color: var(--text-2); }
 @media (max-width: 56rem) { .version-layout { grid-template-columns: 1fr; } .ops-env > div { grid-template-columns: 1fr; } }
 /* The test button names the operator's address, which can be long: it wraps instead of widening the page. */
@@ -350,11 +338,9 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 /* The band at tablet width keeps the host whole: the console's name gives way first. */
 .ops-id strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ops-host { flex: none; }
-.ops-requests { white-space: nowrap; }
 /* On a phone the save bar names the count; the review lists what saving asks. */
 @media (max-width: 30rem) { .save-asks { display: none; } }
 .page-error { margin-bottom: var(--space-4); }
-.copy-field { justify-items: start; }
 .sign-card > * + * { margin-top: var(--space-3); }
 
 /* ── Design pass (Paper "80 Operator console", OP1-a … OP4-a). The code keeps its own structure: the band on
@@ -369,7 +355,6 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-nav a svg { display: none; }
 .ops-nav a:hover { background: var(--surface-2); }
 .ops-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 600; }
-.ops-nav .seg-count { border-radius: var(--radius-full); background: var(--warn-soft); color: var(--warn); }
 
 /* Page: 32 px top, 40 px sides, 720 px of content; sections are a heading over a card. */
 .ops-page header.page-head { margin-bottom: 0; }
@@ -429,9 +414,24 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .sign-card { width: min(100%, 25rem); box-shadow: var(--shadow-1); padding: var(--space-8); }
 .sign-card h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
 .sign-card > * { min-width: 0; }
-.ops-command { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* OP4: the history is wider than a settings page (list 320 px, the chosen version in a card beside it). */
-.ops-page-inner:has(> .version-layout) { max-width: 72rem; }
+/* Pages of tables (audit, operators) and the history are as wide as their content needs; a date never wraps. */
+.ops-page-inner:is(:has(> .version-layout), :has(.ops-table-wrap):not(:has(.ops-tiles))) { max-width: 72rem; }
+.ops-when { white-space: nowrap; }
+/* The page head's link (Export CSV) is as tall as a button. */
+.page-head a { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
+@media (pointer: coarse), (max-width: 44rem) { .page-head a { min-height: var(--touch); } }
+/* Under 72rem a table is one card per row, each cell naming its column: six columns do not fit a tablet. */
+@media (max-width: 72rem) {
+  .ops-table-wrap { overflow: visible; box-shadow: none; }
+  .ops-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ops-table, .ops-table tbody, .ops-table tr, .ops-table td { display: block; }
+  .ops-table tr { margin-bottom: var(--space-2); border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-2) var(--space-3); }
+  .ops-table td { height: auto; display: flex; gap: var(--space-3); justify-content: space-between; align-items: center; border: 0; padding: var(--space-1) 0; text-align: right !important; overflow-wrap: anywhere; }
+  .ops-table td::before { content: attr(data-label); flex: none; color: var(--text-3); font-family: var(--font-sans); font-size: var(--fs-label); text-align: left; }
+  .ops-table td[data-label=""]::before { content: none; }
+  .ops-table td[data-label=""] { justify-content: flex-end; }
+}
 .version-layout { display: grid; grid-template-columns: 320px minmax(0, 32rem); align-items: start; }
 .version-list button strong { font-family: var(--font-mono); font-size: var(--fs-ui); font-weight: 600; }
 .version-detail { display: grid; gap: var(--space-3); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-6); }
