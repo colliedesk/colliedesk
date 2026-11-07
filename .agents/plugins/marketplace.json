@@ -1,0 +1,20 @@
+{
+  "name": "colliedesk",
+  "interface": {
+    "displayName": "Colliedesk"
+  },
+  "plugins": [
+    {
+      "name": "colliedesk",
+      "source": {
+        "source": "local",
+        "path": "./plugins/colliedesk"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

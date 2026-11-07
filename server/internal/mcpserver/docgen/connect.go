@@ -89,6 +89,8 @@ func snippets(d Data) map[string]string {
 		"claudeCodeCLILogin": "claude mcp login " + d.ServerName,
 		"tokenEnv":           "export " + d.TokenEnv + "=<your token>",
 		"codex":              "codex mcp add " + d.ServerName + " --url " + d.MCPURL + " --bearer-token-env-var " + d.TokenEnv,
+		"codexPlugin":        "codex plugin marketplace add " + d.Marketplace + "\ncodex plugin add " + d.PluginID,
+		"codexLogin":         "codex mcp login " + d.ServerName,
 		"cursor": jsonOf(map[string]any{"mcpServers": map[string]httpServer{
 			d.ServerName: {URL: d.MCPURL, Headers: authorization{"Bearer ${env:" + d.TokenEnv + "}"}},
 		}}),
