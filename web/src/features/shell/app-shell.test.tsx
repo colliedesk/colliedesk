@@ -117,3 +117,32 @@ test('Report a problem in the account menu opens the dialog, and closing it retu
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(avatar).toHaveFocus();
 });
+
+test('the sidebar starts as its rail, opens and folds again, and the browser keeps the choice', () => {
+  localStorage.removeItem('colliedesk.sidebar');
+  const { container, unmount } = render(<AppShell me={me}><p>inbox</p></AppShell>);
+  const shell = container.querySelector('.app-shell')!;
+  expect(shell).toHaveAttribute('data-sidebar', 'collapsed');
+  fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+  expect(shell).toHaveAttribute('data-sidebar', 'expanded');
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
+  unmount();
+  render(<AppShell me={me}><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: true });
+});
+
+test('the sidebar edge resizes with the keyboard within its limits and remembers the width', () => {
+  localStorage.setItem('colliedesk.sidebar', JSON.stringify({ width: 9999, collapsed: false }));
+  const { container } = render(<AppShell me={me}><p>inbox</p></AppShell>);
+  const edge = screen.getByRole('separator', { name: 'Resize sidebar' });
+  expect(edge).toHaveAttribute('aria-valuenow', '360');
+  fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+  expect(edge).toHaveAttribute('aria-valuenow', '344');
+  expect((container.querySelector('.app-shell') as HTMLElement).style.getPropertyValue('--sidebar-user-width')).toBe('344px');
+  fireEvent.keyDown(edge, { key: 'Home' });
+  expect(edge).toHaveAttribute('aria-valuenow', '56');
+  fireEvent.doubleClick(edge);
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
+  localStorage.removeItem('colliedesk.sidebar');
+});

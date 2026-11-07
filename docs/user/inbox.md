@@ -4,6 +4,11 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+On a computer the sidebar on the left starts folded into a row of icons. It can be made wider or narrower: drag its right edge, or focus the
+edge and use the arrow keys. Double-click the edge to restore the default width. **Expand sidebar** (the
+panel icon at the top) opens it with each page's name, as does dragging the edge to the right;
+**Collapse sidebar** folds it again, and each icon is named when you point at it. The browser remembers the width and the choice.
+
 On a phone the list and the conversation take turns. A conversation you open fills the screen, and its
 messages take most of it. The top row has **Back to Inbox** (the arrow), the subject (two lines at most)
 and **Show details** (the panel icon), which opens the properties, tags and the customer's other

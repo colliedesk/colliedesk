@@ -464,7 +464,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .details-section legend { float: left; width: 100%; }
 .details-section h2, .details-section legend { margin-bottom: var(--space-2); padding: 0; }
 .details-section h2, .details-section legend { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
-.property-row { position: relative; display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 32px; }
+.property-row { --label: 80px; position: relative; display: grid; grid-template-columns: var(--label) minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 32px; }
 /* Details · Status as a menu on a chat that tells its customer: it keeps the select's look (dot, word, an arrow
    on hover), and its menu is as wide as the row, inside the panel. */
 .status-pick-row { position: relative; }
@@ -483,7 +483,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .property-row select { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); }
 .property-row select:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); background-image: var(--select-chevron); }
 /* Values share one left edge after a 16 px mark: the status dot and the priority arrow, as in the list rows. */
-.property-row::after { position: absolute; left: calc(80px + var(--space-3) + var(--space-2)); top: 50%; translate: 0 -50%; pointer-events: none;
+.property-row::after { position: absolute; left: calc(var(--label) + var(--space-3) + var(--space-2)); top: 50%; translate: 0 -50%; pointer-events: none;
   display: grid; place-items: center; width: 16px; font-size: 13px; font-weight: 700; line-height: 1; }
 .property-row:has(option[value="open"]:checked) { --dot: var(--open); }
 .property-row:has(option[value="pending"]:checked) { --dot: var(--pending); }
@@ -508,6 +508,30 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .tag-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-top: var(--space-3); }
 .conversation-origin { display: grid; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+/* Details, refined: never scrolls sideways; section titles read as small caps; every value starts on one edge after a
+   16 px mark (status dot, priority arrow, assignee ring); tags are pills, the conversation's own filled. */
+.details-panel { overflow-x: hidden; }
+.details-section h2, .details-section legend { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.details-section h2 { margin-top: 0; }
+.status-pick-row .status-pick summary { gap: 0; padding-left: var(--space-2); }
+.status-pick-row .status-pick summary .status { gap: var(--space-2); color: var(--text-1); font-size: var(--fs-ui); font-weight: 400; }
+.status-pick-row .status-pick summary .status::before { margin-inline: 4px; }
+.property-row:has(> select > option[value=""])::after { content: ""; width: 12px; height: 12px; margin-left: 2px; border: 1.5px dashed var(--text-3); border-radius: var(--radius-full); }
+.property-row:has(> select > option[value=""]:not(:checked))::after { border-style: solid; border-color: var(--text-2); background: var(--surface-3); }
+.tag-choices { gap: var(--space-1); }
+.tag-check { min-height: 26px; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--text-3); }
+.tag-check::before { content: "+" / ""; margin-right: 3px; }
+.tag-check:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.tag-check:has(input:checked) { border-color: transparent; background: var(--accent-soft); color: var(--text-1); }
+.tag-check:has(input:checked)::before { content: "#" / ""; margin-right: 1px; color: var(--text-3); }
+.tag-create { margin-top: var(--space-2); }
+.tag-create :is(input, button) { --control: 32px; min-height: 32px; font-size: var(--fs-small); }
+.details-link { display: flex; align-items: center; gap: var(--space-2); width: calc(100% + 2 * var(--space-2)); min-height: 32px; margin: 2px calc(-1 * var(--space-2)) 0;
+  border-color: transparent; background: transparent; box-shadow: none; padding: 0 var(--space-2); color: var(--text-1); font-size: var(--fs-small); font-weight: 400; text-align: left; }
+.details-link:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.details-link > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.details-link > svg { flex: none; width: 16px; height: 16px; color: var(--text-3); }
+.conversation-organization .link-button { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 79.99rem) {
   .details-toggle { display: inline-flex; }
