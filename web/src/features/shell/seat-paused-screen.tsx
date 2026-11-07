@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { api } from '../../api/client';
 import { messages } from '../../messages';
+import './locked.css';
 
 // SeatPausedScreen replaces the view of an agent paused because the workspace moved to a plan with
 // fewer agents than it has. A paused admin may be the one who holds the billing account, so an admin

@@ -6,6 +6,7 @@ import { billingMessages } from '../settings/billing-messages';
 import type { PlanIntent } from '../settings/plan-intent';
 import { PlanPicker } from '../settings/plan-picker';
 import '../settings/purchase.css';
+import './locked.css';
 
 interface LockedScreenProps {
   isAdmin: boolean;

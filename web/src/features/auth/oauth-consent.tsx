@@ -5,6 +5,7 @@ import { leaveTo } from '../../lib/leave-to';
 import { LogoMark } from '../../ui/logo';
 import { messages } from '../../messages';
 import { oauthConsentMessages as text } from './oauth-consent-messages';
+import './auth.css';
 
 // The parameters an AI app sends to /oauth/authorize (RFC 6749 §4.1.1, PKCE, RFC 8707).
 export interface OAuthRequest {

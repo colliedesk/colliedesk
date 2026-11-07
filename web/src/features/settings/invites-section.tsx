@@ -40,7 +40,7 @@ export function InvitesSection({ invites, timezone, canCreateInvites, createdInv
   const chosenNames = roles.filter((role) => chosen.includes(role.id)).map((role) => role.name);
   return (
     <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{settingsMessages.invitesDescription}</p></div>
-      <div className="settings-body">
+      <div className="settings-body settings-rows">
         {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (chosen.length > 0) onCreateInvite?.(email, chosen); }}>
           <label className="field"><span>{settingsMessages.inviteEmail}</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <div className="field"><span>{settingsMessages.inviteRole}</span>

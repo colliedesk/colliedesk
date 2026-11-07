@@ -51,7 +51,7 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
   return (
     <section className="settings-card" aria-labelledby="team-heading">
       <div className="section-heading"><h2 id="team-heading">{messages.team}</h2><p>{settingsMessages.teamDescription}</p></div>
-      <div className="settings-body">
+      <div className="settings-body settings-rows">
         {error && <p role="alert" className="error-copy">{error}</p>}
         <p role="status" className="sr-only">{status}</p>
         <div className="data-list team-list">{members.map((member) => {

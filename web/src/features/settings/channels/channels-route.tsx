@@ -179,7 +179,7 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
   return <>
     <div className="ch-tabs-row">
       <Tabs label={m.tabs} prefix={prefix} value={tab} onChange={show} tabs={[{ id: 'channels', label: m.tabChannels, count: list?.items.length }, { id: 'history', label: m.tabHistory }]} />
-      {isAdmin && list && list.items.length > 0 && <button type="button" className="ch-add" onClick={() => setAdding(true)}><PlusIcon /><span>{m.addChannel}</span></button>}
+      {isAdmin && list && list.items.length > 0 && <button type="button" className="ch-add primary-action" onClick={() => setAdding(true)}><PlusIcon /><span>{m.addChannel}</span></button>}
     </div>
     <div role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} className="ch-stack">
       {tab === 'history' ? <History timezone={timezone} />
@@ -309,7 +309,7 @@ function NewChannel({ type, navigate, isAdmin, timezone }: PageProps & { type: s
     <a href={base} className="ch-back">{m.backToChannels}</a>
     <Part part={ui.panels} failed={<PartUnavailable />} render={({ Connect, Setup }) => (Setup
       ? <Setup canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} named />
-      : <section className="settings-card" aria-labelledby="ch-new-heading">
+      : <section className="settings-card ch-new" aria-labelledby="ch-new-heading">
           <div className="section-heading"><h2 id="ch-new-heading">{ui.connectLabel}</h2>{!isAdmin && <p>{m.adminsOnly}</p>}</div>
           <Connect canManage={isAdmin} timezone={timezone} create={create(false)} />
         </section>)} />

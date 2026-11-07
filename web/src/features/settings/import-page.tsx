@@ -10,6 +10,7 @@ import { importMessages as m } from './import-messages';
 import { ImportSteps } from './import-steps';
 import { onlyArchiveRefused } from './import-verdict';
 import { SettingsNav } from './settings-nav';
+import './settings-v2.css';
 
 const defaultRecentDays = 90;
 
@@ -53,7 +54,7 @@ const shownHistory = (history: ImportJob[], job?: ImportJob) => history.filter((
 export function ImportPage(props: ImportPageProps) {
   const { isAdmin, job, history, loadFailed } = props;
   return (
-    <main className="settings-page panel import-page">
+    <main className="settings-page panel settings-v2 import-page">
       <header><h1>{m.heading}</h1><p>{m.description}</p></header>
       <div className="settings-layout">
         <SettingsNav page="/settings/import-freshdesk" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: Boolean(props.showBilling), importData: isAdmin, ai: true }} />

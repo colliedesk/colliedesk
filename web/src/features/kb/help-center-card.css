@@ -1,0 +1,13 @@
+/* The Help center card in Settings (help-center-card.tsx and its sections). Design: Paper "19 Help center" H2-a
+   and "20 Settings" S12-x; the card stays in Settings, so only its inside follows the design. */
+.hc-section, .theme-settings { display: grid; gap: var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-5); }
+/* One step under the section's name (Settings shows it above the card): every heading inside is 14 px / 600. */
+.hc-section > h3, .theme-settings > h3 { margin: 0; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.hc-section > .muted-copy, .theme-settings > .muted-copy { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
+/* H2-a: the plan question and the portal snippet. */
+.hc-section fieldset.field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-5); margin: 0; border: 0; padding: 0; }
+.hc-section fieldset.field > legend { margin-bottom: var(--space-2); padding: 0; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; }
+.hc-section fieldset.field > small { flex-basis: 100%; }
+.hc-section .invite-link textarea { width: 100%; border-color: transparent; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3); color: var(--text-1);
+  font-family: var(--font-mono); font-size: var(--fs-label); line-height: 18px; resize: vertical; }
+.hc-section .invite-link .field-label { color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }

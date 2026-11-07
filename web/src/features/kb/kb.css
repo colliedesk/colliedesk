@@ -680,7 +680,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-translation-original, .kb-translation-own { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; min-width: 0;
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-3) var(--space-4); }
 .kb-translation-original { background: var(--surface-2, var(--surface-1)); }
-.kb-translation-original h2, .kb-translation-own h2 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
+.kb-translation-original > h2, .kb-translation-own > h2 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .kb-translation-original-title { font-size: var(--fs-title, 1.125rem); }
 .kb-translation-own [role="tabpanel"] { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .kb-translation-scroll { flex: 1 1 auto; min-height: 8rem; overflow-y: auto; scrollbar-gutter: stable; }
@@ -698,4 +698,211 @@ span.kb-article-open { opacity: 0.35; }
 }
 @media (max-width: 44rem) {
   .kb-translation-page .kb-back { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* ── Design pass (Paper "19 Help center", H1-a … H5-b). Values from the design's own nodes; tokens only. ──
+   The page: 32 px top, 40 px sides, content at most 1020 px wide. Title and the page's actions on one row,
+   the section tabs under them on a hairline, then the work area. */
+.kb-articles-page, .media-page, .kb-languages-page { gap: var(--space-6); padding: var(--space-8) 40px var(--space-6); }
+/* The design's content width; one variable so a shared layout width can replace it in one place. */
+.kb-frame { --kb-content-max: 1020px; }
+/* Not the visually hidden live regions (.sr-only): a full width made them overflow the page on a phone. */
+:is(.kb-articles-page, .media-page, .kb-languages-page) > :not(.sr-only) { width: 100%; max-width: var(--kb-content-max); }
+.kb-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "tabs tabs"; align-items: start; gap: var(--space-6) var(--space-4); }
+.kb-head .kb-page-title { grid-area: title; font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.kb-head .kb-head-actions { grid-area: actions; margin-left: 0; }
+.kb-head .kb-sections { grid-area: tabs; gap: var(--space-5); border-bottom: 1px solid var(--line); }
+.kb-sections a { gap: var(--space-1); min-height: 36px; margin-bottom: -1px; padding: 0; color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; }
+.kb-sections a[aria-current="page"] { font-weight: 600; box-shadow: inset 0 -2px var(--text-1); }
+.kb-sections .kb-count-tag { font-size: var(--fs-label); }
+.kb-head-actions > :is(button, .button-link, span > .button-link) { font-size: var(--fs-ui); }
+
+/* H1-a: the collections column (232 px) and the list beside it. */
+.kb-art-layout { grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-6); }
+.kb-collections { gap: var(--space-1); }
+.kb-collections-head { padding: 0 0 var(--space-1) var(--space-2); }
+.kb-collections-head h2 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; line-height: 16px; }
+.kb-tree, .kb-tree ul { gap: var(--space-1); }
+.kb-tree ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); border-left: 0; }
+.kb-tree-link { min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; }
+.kb-tree-link:hover { background: var(--surface-2); }
+.kb-tree-link[aria-current="page"] { background: var(--surface-3); font-weight: 500; box-shadow: none; }
+.kb-tree-count { width: 24px; text-align: right; }
+
+/* The list: the tools and the collection's name sit on the page; the rows sit on a card of their own. */
+.kb-list { gap: var(--space-3); overflow: visible; border: 0; background: transparent; box-shadow: none; }
+.kb-list > .kb-collection-head { border-bottom: 0; padding: var(--space-2) 0 0; }
+.kb-collection-title h2 { font-size: 16px; line-height: 24px; }
+/* The collection's actions read as quiet words beside its name (each still a 32 px button). */
+.kb-list > .kb-collection-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.kb-list > .kb-collection-head .kb-collection-title { flex: 1 1 12rem; min-width: 0; }
+.kb-list > .kb-collection-head > :not(.kb-collection-title) { flex: 0 1 auto; }
+.kb-list > .kb-collection-head .button-row { gap: 0; }
+.kb-list > .kb-collection-head .button-row button { border-color: transparent; background: transparent; box-shadow: none; padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+.kb-list > .kb-collection-head .button-row button:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
+.kb-list > .kb-collection-head .button-row button.danger-action { color: var(--danger); }
+.kb-list > .kb-collection-head .button-row button svg { width: 14px; height: 14px; }
+.kb-list-tools { gap: var(--space-3); border-bottom: 0; padding: 0; }
+.kb-list-tools .kb-search { flex: 0 1 280px; }
+.kb-frame .kb-search input { border-color: var(--line-control); background: var(--surface-1); }
+.kb-frame .kb-search input:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-1); }
+.kb-frame .segmented { border: 0; background: var(--surface-2); gap: 0; }
+/* 32 px to click (rule: controls >= 32 px with a mouse); the design draws 28. */
+.kb-frame .segmented label { min-height: 32px; padding: 0 var(--space-3); }
+.kb-frame .segmented label:has(input:checked) { box-shadow: var(--shadow-1); }
+.kb-cols-head { min-height: 36px; border-bottom: 1px solid var(--line); background: var(--surface-1); padding: 0 0 0 var(--space-4); color: var(--text-3); font-weight: 600; line-height: 16px; }
+.kb-list-scroll { background: var(--surface-1); }
+/* A row button's tip opens to its left: below it, the hidden tip made the rows scroll sideways and down. */
+.kb-list-scroll [data-tip]::after { top: 50%; left: auto; right: calc(100% + var(--space-1)); translate: 0 -50%; }
+/* The column head and the rows touch: one card. */
+.kb-cols-head + .kb-list-scroll { margin-top: calc(-1 * var(--space-3)); }
+.kb-article-item:last-child { border-bottom: 0; }
+/* (Row padding: desktop only, below.) */
+.kb-article-main { gap: 0; }
+.kb-article-title { font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.kb-article-meta { line-height: 16px; }
+.kb-article-status { gap: 0; }
+.kb-article-status .kb-dot-status { color: var(--text-1); font-size: var(--fs-small); line-height: 20px; }
+.kb-article-status .kb-dot-status::before { display: none; }
+.kb-article-status .kb-dot-status[data-status="draft"] { color: var(--text-2); }
+.kb-article-status small { font-size: var(--fs-label); }
+.kb-article-when { font-size: var(--fs-small); }
+.kb-article-open { color: var(--text-3); }
+.kb-article-open svg, .kb-order svg { width: 14px; height: 14px; }
+@media (min-width: 44.01rem) {
+  .kb-cols-head, .kb-article-item { grid-template-columns: minmax(0, 1fr) 7.5rem 8rem 2.5rem; }
+  .kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: minmax(0, 1fr) 7.5rem 8rem 2.5rem 4.5rem; }
+  .kb-article-row { padding: var(--space-2) 0 var(--space-2) var(--space-4); }
+  /* One card for the column head and the rows: the head rounds the top, the scroller the bottom. */
+  .kb-cols-head { border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-1); }
+  .kb-list-scroll { flex: 0 1 auto; border-radius: 0 0 var(--radius-lg) var(--radius-lg); box-shadow: var(--shadow-1); }
+}
+
+/* H1-b, H5-b: the editor. A 52 px bar on a hairline (path, state, actions), then the text column and a
+   300 px side column of sections divided by hairlines, not cards. */
+.kb-editor-page, .kb-translation-page { gap: 0; padding: 0; }
+.kb-art-bar { min-height: 52px; gap: var(--space-2); border-bottom: 1px solid var(--line); padding: 0 var(--space-4); }
+.kb-art-bar .kb-crumbs { font-size: var(--fs-ui); font-weight: 500; }
+.kb-art-bar .kb-crumbs a { color: var(--text-3); }
+.kb-art-bar .kb-crumbs [aria-current] { font-weight: 500; }
+.kb-art-state { font-size: var(--fs-small); }
+.kb-art-state .kb-dot-status { min-height: 20px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); }
+.kb-editor-notes { padding: var(--space-3) var(--space-6) 0; }
+.kb-editor { gap: 0; grid-template-columns: minmax(0, 1fr) 300px; }
+.kb-editor-main { gap: var(--space-4); border-right: 1px solid var(--line); padding: var(--space-6); }
+.kb-title-field input { --control: 44px; border-color: var(--line-control); font: 600 var(--fs-heading, 24px)/32px var(--font-sans); letter-spacing: 0; }
+.kb-editor-card { border-color: var(--line-control); border-radius: var(--radius); box-shadow: none; }
+.kb-editor-side { gap: 0; }
+.kb-side-box, .kb-editor-side > .kb-alt-warn { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; padding: var(--space-5); }
+.kb-side-box { gap: var(--space-3); }
+.kb-side-box .field { gap: var(--space-1); }
+.kb-side-box .field label { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; }
+.kb-side-box input[id$="-slug-input"] { font-family: var(--font-mono); font-size: var(--fs-small); }
+.kb-side-status .kb-dot-status { color: var(--text-1); font-size: var(--fs-small); }
+@media (max-width: 44rem) {
+  .kb-editor-page, .kb-translation-page { padding: 0 0 var(--space-6); }
+  .kb-editor { grid-template-columns: minmax(0, 1fr); }
+  .kb-editor-main { border-right: 0; padding: var(--space-4); }
+  .kb-editor-notes { padding: var(--space-3) var(--space-4) 0; }
+}
+.kb-tabs { gap: 0; border: 0; background: var(--surface-2); }
+.kb-tabs button { --control: 32px; min-height: 32px; font-size: var(--fs-small); font-weight: 500; }
+.kb-tabs button[aria-selected="true"] { box-shadow: var(--shadow-1); }
+
+/* H1-c: version history. 600 px; each version a row on a hairline, its restore button at the right. */
+.kb-history { width: min(600px, 100%); }
+.kb-history .kb-dialog-head { border-bottom: 1px solid var(--line); padding: var(--space-5) var(--space-4) var(--space-4) var(--space-5); }
+.kb-history .kb-dialog-head h2 { font-size: 16px; line-height: 24px; }
+.kb-history .kb-dialog-body { padding: 0; }
+.kb-history .saved-reply-versions { gap: 0; }
+.kb-history .saved-reply-versions > li { align-items: center; gap: var(--space-4); border-top: 0; border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-5); }
+.kb-history .saved-reply-versions > li:last-child { border-bottom: 0; }
+.kb-history .saved-reply-text { gap: 2px; }
+.kb-history .saved-reply-text strong { font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.kb-history .saved-reply-text .saved-reply-meta { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
+.kb-history .saved-reply-tag { margin-left: var(--space-2); border-radius: var(--radius-sm); background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); font-size: var(--fs-label); }
+.kb-history .saved-reply-version-body { display: -webkit-box; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.kb-history .saved-reply-text .link-button { justify-self: start; font-size: var(--fs-label); }
+.kb-history .saved-reply-versions > li > button { flex: none; }
+
+/* H4-a … H4-c: media. The page uses the full width (the details panel sits beside the grid); cards are a
+   picture tile and a caption under it, with no frame of their own. */
+.media-page > :not(.sr-only) { max-width: none; }
+.media-ledger { justify-content: space-between; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3) var(--space-4); }
+.media-ledger .media-review { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; }
+.media-toolbar { gap: var(--space-3); }
+.media-toolbar .media-search { flex: 0 1 320px; }
+.media-page .search-field input { border-color: var(--line-control); background: var(--surface-1); }
+.media-page .search-field input:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-1); }
+.media-grid { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--space-4); }
+.media-card { gap: var(--space-2); border-color: transparent; background: transparent; box-shadow: none; padding: 0; }
+.media-card:hover:not(:disabled) { border-color: transparent; background: transparent; }
+.media-card:hover:not(:disabled) .media-picture { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.media-card[aria-current="true"], .media-card[data-checked="true"] { border-color: transparent; box-shadow: none; }
+.media-card[aria-current="true"] .media-picture, .media-card[data-checked="true"] .media-picture,
+.media-card:is([aria-current="true"], [data-checked="true"]):hover:not(:disabled) .media-picture { box-shadow: 0 0 0 2px var(--text-1); }
+.media-ledger .media-review { text-decoration: underline; text-underline-offset: 2px; }
+.media-picture { border-radius: var(--radius); }
+.media-check-box { top: var(--space-2); left: var(--space-2); }
+.media-pin { top: var(--space-2); right: var(--space-2); }
+.media-caption { gap: 0; }
+.media-name { font-weight: 500; line-height: 20px; }
+.media-meta { line-height: 16px; }
+.media-flags .badge { background: transparent; box-shadow: none; padding: 0; color: var(--warn); font-weight: 500; }
+.media-flags .media-flag-note { border: 0; }
+/* H4-b: the details panel. Head on a hairline, sections at 20 px, actions in a foot on a hairline. */
+@media (min-width: 44.01rem) { .media-detail { border: 0; border-left: 1px solid var(--line); border-radius: 0; box-shadow: none; } }
+.media-detail-head { border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5); }
+.media-detail-head h2 { font-size: 16px; font-weight: 600; line-height: 24px; }
+.media-detail-main { gap: var(--space-4); padding: var(--space-5); }
+.media-detail-pad { padding: 0 var(--space-5); }
+.media-detail-preview { border-radius: var(--radius); }
+.media-detail-foot { padding: var(--space-3) var(--space-5); }
+/* H4-c: not used. The explanation and the selection read as grey bands on the page, not cards. */
+.media-explain.kb-panel, .media-selectbar { border: 0; border-radius: var(--radius); background: var(--surface-2); box-shadow: none; }
+.media-explain { padding: var(--space-3) var(--space-4); }
+.media-explain .media-explain-big { font-size: var(--fs-small); }
+.media-explain p { font-size: var(--fs-label); }
+.media-selectbar { padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); }
+.media-library > .kb-crumbs h1, .media-unused > .kb-crumbs h1 { font-size: 20px; }
+
+/* H5-a: languages. The primary language on a card of its own, the others as rows of one card on hairlines. */
+.kb-languages { max-width: 800px; gap: var(--space-4); }
+.kb-languages > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.kb-languages > .muted-copy { color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.kb-language-primary { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
+.kb-language-list { gap: 0; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.kb-language-row { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-3) var(--space-4); }
+.kb-language-row:last-child { border-bottom: 0; }
+.kb-language-name strong { font-size: var(--fs-ui); font-weight: 600; }
+.kb-language-name small { font-size: var(--fs-label); }
+.kb-language-counts { font-size: var(--fs-label); }
+.kb-language-visible { font-size: var(--fs-small); }
+.kb-languages .warning-note { border: 0; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3) var(--space-4); }
+.kb-languages > h3 { margin-bottom: calc(-1 * var(--space-2)); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; line-height: 16px; }
+
+/* H5-b: a translation. The original (read only, grey) and the translation share one frame below the bar. */
+.kb-translation-page .kb-editor-notes { padding: var(--space-6) var(--space-6) 0; }
+.kb-translation-page .kb-outdated-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); border: 0; border-radius: var(--radius); background: var(--warn-soft); padding: var(--space-3) var(--space-4); font-size: var(--fs-small); }
+.kb-translation-split { gap: 0; margin: var(--space-4) var(--space-6) var(--space-6); overflow: hidden; border: 1px solid var(--line-control); border-radius: var(--radius); }
+.kb-translation-original, .kb-translation-own { border: 0; border-radius: 0; box-shadow: none; padding: var(--space-4); }
+.kb-translation-own { border-left: 1px solid var(--line); background: var(--surface-1); }
+.kb-translation-original-title { font-size: 16px; font-weight: 600; }
+@media (max-width: 44rem) {
+  .kb-translation-page .kb-editor-notes { padding: var(--space-3) var(--space-4) 0; }
+  .kb-translation-split { margin: var(--space-3) var(--space-4) 0; }
+  .kb-translation-own { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* Phone and touch: the design pass above is sized for a mouse; fingers keep 44 px and the page its phone margins. */
+@media (max-width: 44rem) {
+  .kb-articles-page, .media-page, .kb-languages-page { gap: var(--space-4); padding: var(--space-3) var(--space-4) var(--space-6); }
+  .kb-head { gap: var(--space-3); }
+  .kb-sections a { min-height: var(--touch); }
+  .kb-frame .segmented label, .kb-tabs button { min-height: var(--touch); }
+  .kb-list-tools .kb-search { flex: 1 1 100%; }
+  .media-toolbar .media-search { flex: 1 1 100%; }
+}
+@media (pointer: coarse) {
+  .kb-sections a, .kb-frame .segmented label, .kb-tabs button, .kb-list > .kb-collection-head .button-row button { min-height: var(--touch); }
 }

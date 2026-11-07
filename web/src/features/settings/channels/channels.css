@@ -1,61 +1,99 @@
 /* Settings → Channels. Shared controls (tabs, switch, notices, dialogs) come from ui/controls.css. */
-.ch-page { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+.ch-page { display: grid; gap: var(--space-4); align-content: start; min-width: 0; max-width: 55rem; }
 .ch-stack { display: grid; gap: var(--space-3); min-width: 0; }
 .ch-loading { min-height: 10rem; }
 .ch-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
 .ch-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
-.ch-back { justify-self: start; color: var(--text-2); font-size: var(--fs-small); }
+.ch-back { justify-self: start; }
 .ch-back::before { content: "← "; }
 .ch-reason { display: block; }
 
 .ch-st-ok { --dot: var(--ok); }
-.ch-st-warn { --dot: var(--pending); }
+.ch-st-warn { --dot: var(--warn); }
 .ch-st-off { --dot: var(--line-control); }
 
-/* The list: name, state, then the switch and Configure. */
-.ch-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); }
+/* The list (S11-a): an icon tile, the name over its summary, the state as a dot and words in its colour,
+   then the switch and Configure. Rows are 64px, split by hairlines inside the card. */
+.ch-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; min-height: 64px; padding: var(--space-2) var(--space-4); }
 .ch-row + .ch-row { border-top: 1px solid var(--line); }
 .ch-row-off .ch-row-name > svg { opacity: 0.6; }
-.ch-row-name { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
-.ch-row-name > svg { flex: none; color: var(--text-3); }
-.ch-row-name > span { display: grid; gap: 2px; min-width: 0; }
-.ch-row-name strong, .ch-row-name h2 { font-size: 14px; font-weight: 600; }
-.ch-row-name small, .ch-row-state small { color: var(--text-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.ch-row-name { display: flex; gap: var(--space-4); align-items: center; min-width: 0; }
+/* The type's icon sits on a 32px tile; the padding keeps the glyph at 16px. */
+.ch-row-name > svg, .ch-type > svg { box-sizing: border-box; flex: none; width: 32px; height: 32px; padding: var(--space-2); border-radius: var(--radius); background: var(--surface-2); color: var(--text-2); }
+.ch-row-name > span { display: grid; gap: 0; min-width: 0; }
+.ch-row-name strong, .ch-row-name h2 { font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.ch-row-name small, .ch-row-state small { color: var(--text-3); font-size: var(--fs-small); line-height: 20px; overflow-wrap: anywhere; }
 .ch-default { justify-self: start; width: fit-content; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 500; line-height: 1.6; }
-.ch-row-state { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.ch-row-state { display: grid; gap: 0; justify-items: start; min-width: 0; }
+/* The state reads in its own colour next to its dot (words, never the dot alone). */
+.ch-row-state .status, .ch-detail-head .status { gap: var(--space-2); color: var(--dot); font-size: var(--fs-small); line-height: 20px; }
+.ch-st-off.status { color: var(--text-2); }
 .ch-row-actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .ch-switch { display: inline-flex; align-items: center; gap: var(--space-2); }
 
-/* Types to connect: on the empty page and in Add channel. */
-.ch-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.ch-type { display: flex; gap: var(--space-3); align-items: flex-start; width: 100%; min-height: var(--touch); height: 100%; border: 1px solid var(--line); border-radius: var(--radius-lg);
+/* Types to connect (S11-b): one card per type, an icon tile, the name over what it is, and a chevron. */
+.ch-types { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.ch-type { display: flex; gap: var(--space-3); align-items: center; width: 100%; min-height: 64px; height: 100%; border: 1px solid var(--line); border-radius: var(--radius-lg);
   background: var(--surface-1); padding: var(--space-3); color: var(--text-1); text-align: left; text-decoration: none; font: inherit; white-space: normal; justify-content: flex-start; cursor: pointer;
   transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease); }
 a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); background: var(--surface-0); }
-.ch-type > svg { flex: none; margin-top: 2px; color: var(--text-3); }
-.ch-type > span { display: grid; gap: 2px; min-width: 0; }
-.ch-type strong { font-weight: 600; }
-.ch-type small { color: var(--text-3); font-size: var(--fs-small); }
+a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; height: 16px; margin-left: auto; background: var(--text-3);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
+.ch-type > span { display: grid; gap: 0; min-width: 0; }
+.ch-type strong { font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.ch-type small { color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
 .ch-type[aria-disabled="true"] { cursor: default; background: var(--surface-0); color: var(--text-3); }
 .ch-empty .ch-types { grid-column: 2; }
+/* The empty page keeps its two columns (heading, then the types) while there is room; in a narrow content
+   area (768px with the sidebar) the heading column would shrink to a word a line, so it stacks instead.
+   Measured on the list's own width, not the window's, since the sidebar takes a varying share. */
+.ch-stack { container-type: inline-size; }
+@container (max-width: 44rem) {
+  .ch-empty { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .ch-empty .ch-types { grid-column: auto; }
+}
 
 /* Email · Replies: one block per question, each under its heading. */
 .email-replies > section { display: grid; gap: var(--space-3); }
 .email-replies > section + section, .email-replies > .gmail-connection { border-top: 1px solid var(--line); padding-top: var(--space-4); }
 .email-replies h3, .embed-code h3 { font-size: 14px; font-weight: 600; }
 
-/* The web form's code to copy: it scrolls sideways in its own frame. */
-.embed-code { display: grid; gap: var(--space-2); }
-.embed-code pre { margin: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0);
-  padding: var(--space-3); font-size: var(--fs-small); line-height: 1.5; }
+/* The web form's code to copy and the form to try (S11-l): each in a card; the code scrolls sideways in
+   its own frame, with the app's thin scrollbar. */
+.embed-code { display: grid; gap: var(--space-3); }
+.ch-panel .embed-code { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
+.embed-code h3.field-label { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.embed-code pre { margin: 0; overflow-x: auto; border-radius: var(--radius); background: var(--surface-2);
+  padding: var(--space-2) var(--space-3); font-family: var(--font-mono); font-size: var(--fs-small); line-height: 20px; }
 
-/* One channel: its head, then its tabs. */
-.ch-detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-.ch-detail-head { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; }
+/* One channel (S11-e/h/j/l): its name as the page title with the state under it, the switch on the right,
+   then underline tabs and the open tab's panel. */
+.ch-detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); border-top: 0; padding-top: 0; max-width: 45rem; }
+.ch-detail-head { display: flex; gap: var(--space-4); align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.ch-detail-head .ch-row-name > svg { display: none; }
+.ch-detail-head .ch-row-name > span { gap: var(--space-1); }
+.ch-detail-head h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 28px; }
+.ch-detail-head .ch-row-actions { min-height: var(--control); }
+.ch-back { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 32px; color: var(--text-2); font-size: var(--fs-ui); text-decoration: none; }
+.ch-back:hover { color: var(--text-1); }
+/* Underline tabs inside a channel: 36px tall, 20px apart, the open one underlined in text-1. */
+.ch-detail > .seg-tabs, .ch-tabs-row > .seg-tabs { display: flex; gap: var(--space-5); border: 0; border-radius: 0; background: none; padding: 0; box-shadow: inset 0 -1px var(--line); }
+/* On the list the hairline runs under the tabs and Add channel alike, across the whole row. */
+.ch-tabs-row { align-items: flex-end; box-shadow: inset 0 -1px var(--line); }
+.ch-tabs-row > .seg-tabs { box-shadow: none; }
+.ch-tabs-row > .ch-add { margin-bottom: var(--space-2); }
+.ch-tabs-row > .seg-tabs { flex: 1 1 auto; }
+.ch-detail > .seg-tabs button, .ch-tabs-row > .seg-tabs button { min-height: 36px; border-radius: 0; background: none; padding: 0; color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; box-shadow: none; }
+.ch-detail > .seg-tabs button:hover:not(:disabled), .ch-tabs-row > .seg-tabs button:hover:not(:disabled) { background: none; color: var(--text-1); }
+.ch-detail > .seg-tabs button[aria-selected="true"], .ch-detail > .seg-tabs button[aria-selected="true"]:hover,
+.ch-tabs-row > .seg-tabs button[aria-selected="true"], .ch-tabs-row > .seg-tabs button[aria-selected="true"]:hover { background: none; color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--text-1); }
+.ch-detail > .seg-tabs button:focus-visible, .ch-tabs-row > .seg-tabs button:focus-visible { outline-offset: -2px; }
+@media (pointer: coarse), (max-width: 30rem) { .ch-detail > .seg-tabs button, .ch-tabs-row > .seg-tabs button { min-height: var(--touch); } }
 .ch-carries { font-size: var(--fs-small); }
-.ch-panel { display: grid; gap: var(--space-3); min-width: 0; }
+.ch-panel { display: grid; gap: var(--space-4); min-width: 0; }
 .ch-panel .settings-body { min-width: 0; }
-.ch-remove { justify-content: flex-start; }
+.ch-remove { justify-content: flex-start; border-top: 1px solid var(--line); padding-top: var(--space-4); }
 
 .ch-history { margin: 0; padding: 0; list-style: none; }
 .ch-history li { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-4); padding: var(--space-2) var(--space-4); color: var(--text-2); font-size: var(--fs-small); }
@@ -68,7 +106,6 @@ a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); backgr
 @media (max-width: 40rem) {
   .ch-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
   .ch-row-actions { justify-content: flex-start; }
-  .ch-empty .ch-types { grid-column: auto; }
   .ch-tabs-row .seg-tabs { flex: 1 1 auto; }
   .ch-history li { grid-template-columns: 1fr; gap: 0; padding: var(--space-2) var(--space-3); }
 }
@@ -131,3 +168,42 @@ a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); backgr
 .ch-intake-patterns > button { justify-self: start; }
 @media (max-width: 30rem) { .ch-intake-pattern { grid-template-columns: minmax(0, 1fr) auto; } .ch-intake-pattern input { grid-column: 1 / -1; } }
 .ch-intake-lowered { margin: 0; }
+
+/* A type's connect form (S11-g Zalo, S11-i Help chat, S11-k Web form): its name as the heading, then one card
+   with a row per field, the label on the left (200px) and the field with its help on the right.
+   The form is a two-column grid: column 1 is the row's padding, label and gap, column 2 the fields. A row spans
+   both and lays out its label and field on the same columns; a help line written after a row (help chat,
+   web form) is a grid item of column 2, so it lines up with the field without offsets. */
+.ch-new { --ch-label: 12.5rem; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); border-top: 0; padding-top: 0; max-width: 45rem; }
+.ch-new > .section-heading h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 28px; }
+.ch-new > .section-heading p { color: var(--text-2); font-size: var(--fs-ui); }
+.ch-new form.settings-body, .ch-new .settings-body > form { display: grid; grid-template-columns: calc(var(--ch-label) + 2 * var(--space-4)) minmax(0, 1fr); gap: 0;
+  border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.ch-new form > * { grid-column: 1 / -1; }
+.ch-new form > .field, .ch-new form > label.field, .ch-new form > fieldset.field { display: grid; grid-template-columns: var(--ch-label) minmax(0, 1fr); align-items: start;
+  gap: var(--space-1) var(--space-4); margin: 0; border: 0; padding: var(--space-4); min-width: 0; }
+.ch-new form > * + .field, .ch-new form > * + label.field, .ch-new form > * + fieldset.field, .ch-new form > .button-row { border-top: 1px solid var(--line); }
+.ch-new form > .field > :first-child, .ch-new form > label.field > span:first-child, .ch-new form > fieldset.field > legend { grid-column: 1; grid-row: 1; padding: 6px 0 0;
+  color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+/* A legend is drawn on the fieldset's border unless it floats; floated, it is an ordinary grid item. */
+.ch-new form > fieldset.field > legend { float: left; }
+.ch-new form > .field > :not(:first-child), .ch-new form > label.field > :not(:first-child), .ch-new form > fieldset.field > :not(legend) { grid-column: 2; }
+.ch-new form > :is(.field, label.field, fieldset.field):has(+ :is(small, p)) { padding-bottom: var(--space-1); }
+.ch-new form > :is(small, p) { grid-column: 2; margin: 0; padding: 0 var(--space-4) var(--space-4) 0; }
+/* Every help line reads the same: 13px, text-3 (Zalo's live in the row, help chat's and the web form's after it). */
+.ch-new form .field-note, .ch-new form > small, .ch-new form > p { font-size: var(--fs-small); line-height: 20px; }
+.ch-new form .help.field-note, .ch-new form > small:not(.error-copy), .ch-new form > p:not(.error-copy) { color: var(--text-3); }
+.ch-new form > .button-row { padding: var(--space-4); }
+@media (max-width: 40rem) {
+  .ch-new form.settings-body, .ch-new .settings-body > form { grid-template-columns: minmax(0, 1fr); }
+  .ch-new form > .field, .ch-new form > label.field, .ch-new form > fieldset.field { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
+  .ch-new form > .field > :first-child, .ch-new form > label.field > span:first-child, .ch-new form > fieldset.field > legend { grid-row: auto; padding-top: 0; }
+  .ch-new form > .field > :not(:first-child), .ch-new form > label.field > :not(:first-child), .ch-new form > fieldset.field > :not(legend) { grid-column: 1; }
+  .ch-new form > :is(.field, label.field, fieldset.field):has(+ :is(small, p)) { padding-bottom: var(--space-1); }
+  .ch-new form > :is(small, p) { grid-column: 1; padding: 0 var(--space-3) var(--space-3); }
+}
+/* A channel's switch is a fingertip wide as well as tall on a phone (the switch itself is 34px wide). */
+@media (pointer: coarse), (max-width: 30rem) { .ch-switch .switch { min-width: var(--touch); justify-content: center; } }
+/* A link inside a sentence (Fix it, See them, Try again) gets a 32px tall target without moving the text:
+   padding grows the box, the same negative margin gives the line its height back. */
+.channels-settings :is(.notice a, .link-action, .link-button, .ch-reason a) { display: inline-block; margin-block: -7px; padding-block: 7px; }

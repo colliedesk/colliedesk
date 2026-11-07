@@ -237,7 +237,7 @@ export function ResultsPage(props: ResultsPageProps) {
     return <p className="results-muted">{m.ai.tooFew(key)}</p>;
   })();
 
-  return <main className="settings-page results-page">
+  return <main className={shared ? 'settings-page results-page results-shared' : 'settings-page results-page'}>
     {header}
     {notices.length > 0 && !shared && <div className="results-notices">{notices}</div>}
     {shared && withBaseline && status === 'UNVERIFIED' && <p className="results-notice results-notice-warn">{m.share.unverified}</p>}

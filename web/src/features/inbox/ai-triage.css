@@ -48,7 +48,7 @@
 .ai-triage-line b { font-weight: 600; }
 .ai-triage-line-sum { min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .ai-triage-line time { color: var(--text-3); font-size: var(--fs-label); }
-.ai-triage-line button { margin-left: auto; --control: 30px; padding: 0 var(--space-3); }
+.ai-triage-line button { margin-left: auto; --control: 32px; padding: 0 var(--space-3); }
 .ai-triage-timeline { display: none; }
 /* A phone shows the whole suggestion on the timeline, where it is reached without opening the
    details sheet; a tablet keeps the line, and the details drawer whose toggle says a suggestion waits. */

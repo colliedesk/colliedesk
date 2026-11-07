@@ -148,7 +148,7 @@ function settingsRouterLink(item: NavItem) {
 function NotFoundPage() {
   return <main className="settings-page">
     <header><h1>{messages.pageNotFound}</h1><p>{messages.pageNotFoundExplanation}</p></header>
-    <Link to="/">{messages.backToInbox}</Link>
+    <Link to="/" className="link-action page-back">{messages.backToInbox}</Link>
   </main>;
 }
 
