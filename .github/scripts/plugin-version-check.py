@@ -4,17 +4,21 @@
 plugins/colliedesk/.claude-plugin/plugin.json sets "version", which Anthropic's plugin directory asks
 for. Claude Code keeps an install from the colliedesk marketplace on that version until it changes,
 so a change to the plugin that leaves the version as it was never reaches the people who installed it.
+plugins/colliedesk/.codex-plugin/plugin.json, read by Codex and OpenAI's plugin directory, carries the
+same version, so an install from either marketplace names the same plugin.
 
 Usage: plugin-version-check.py <base commit>, run in the checkout of the pull request. Exit 1 says what
 changed and which version to raise.
 """
 import json
+import os
 import re
 import subprocess
 import sys
 
 PLUGIN = "plugins/colliedesk"
 MANIFEST = PLUGIN + "/.claude-plugin/plugin.json"
+CODEX_MANIFEST = PLUGIN + "/.codex-plugin/plugin.json"
 SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 
@@ -22,9 +26,9 @@ def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
 
 
-def version_at(ref):
+def version_at(ref, manifest=MANIFEST):
     try:
-        raw = git("show", f"{ref}:{MANIFEST}") if ref else open(MANIFEST, encoding="utf-8").read()
+        raw = git("show", f"{ref}:{manifest}") if ref else open(manifest, encoding="utf-8").read()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
     return json.loads(raw).get("version")
@@ -38,6 +42,9 @@ def main():
     head = version_at(None)
     if head is not None and not SEMVER.match(head):
         sys.exit(f"{MANIFEST}: version {head!r} is not MAJOR.MINOR.PATCH, such as 1.0.0.")
+    if os.path.exists(CODEX_MANIFEST) and version_at(None, CODEX_MANIFEST) != head:
+        sys.exit(f"{CODEX_MANIFEST}: version {version_at(None, CODEX_MANIFEST)!r} differs from {head!r} in "
+                 f"{MANIFEST}. Set both to the same version.")
     if not changed:
         print(f"{PLUGIN} unchanged.")
         return

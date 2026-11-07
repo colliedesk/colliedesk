@@ -329,7 +329,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `autofix_settings:manage_credentials` |
 <!-- /generated -->
 
-Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
+Tools marked "Cannot be undone" carry the MCP `destructiveHint: true` (every other tool states `false`), and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.
 Many clients also ask you before such a call.
 

@@ -30,17 +30,22 @@ def manifest(version):
     return json.dumps(data)
 
 
-def case(name, base_version, head_version, change_plugin, want_ok, want=""):
+def case(name, base_version, head_version, change_plugin, want_ok, want="", codex_version="same"):
     with tempfile.TemporaryDirectory() as repo:
         git(repo, "init", "-q")
         git(repo, "config", "user.email", "test@example.com")
         git(repo, "config", "user.name", "test")
         write(repo, "plugins/colliedesk/.claude-plugin/plugin.json", manifest(base_version))
+        if codex_version is not None:
+            write(repo, "plugins/colliedesk/.codex-plugin/plugin.json", manifest(base_version))
         write(repo, "plugins/colliedesk/skills/a/SKILL.md", "one\n")
         write(repo, "README.md", "one\n")
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", "base")
         write(repo, "plugins/colliedesk/.claude-plugin/plugin.json", manifest(head_version))
+        if codex_version is not None:
+            write(repo, "plugins/colliedesk/.codex-plugin/plugin.json",
+                  manifest(head_version if codex_version == "same" else codex_version))
         write(repo, "plugins/colliedesk/skills/a/SKILL.md" if change_plugin else "README.md", "two\n")
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", "head")
@@ -59,6 +64,8 @@ case("10 is above 9", "1.9.0", "1.10.0", True, True, "to 1.10.0")
 case("version removed", "1.0.0", None, True, False, "Raise")
 case("first version", None, "1.0.0", True, True, "first")
 case("not semver", "1.0.0", "1.0", True, False, "MAJOR.MINOR.PATCH")
+case("codex manifest left behind", "1.0.0", "1.1.0", True, False, "Set both to the same version", "1.0.0")
+case("no codex manifest", "1.0.0", "1.0.1", True, True, "to 1.0.1", None)
 
 if failures:
     print("\n\n".join(failures))

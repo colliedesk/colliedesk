@@ -532,8 +532,11 @@ func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 				if a == nil || a.ReadOnlyHint != want.readOnly || a.IdempotentHint != want.idempotent || a.Title == "" || tool.Title == "" {
 					t.Errorf("%s: annotations=%+v title=%q, want readOnly=%v idempotent=%v and a title", tool.Name, a, tool.Title, want.readOnly, want.idempotent)
 				}
-				if !want.readOnly && (a == nil || a.DestructiveHint == nil || *a.DestructiveHint != want.destructive) {
-					t.Errorf("%s: a writing tool must state destructiveHint=%v", tool.Name, want.destructive)
+				if a == nil || a.DestructiveHint == nil || *a.DestructiveHint != (want.destructive && !want.readOnly) {
+					t.Errorf("%s: every tool states destructiveHint, %v here", tool.Name, want.destructive && !want.readOnly)
+				}
+				if a == nil || a.OpenWorldHint == nil || *a.OpenWorldHint {
+					t.Errorf("%s: every tool states openWorldHint=false: it reaches only the caller's workspace", tool.Name)
 				}
 				if want.destructive && !strings.Contains(tool.Description, "cannot be undone") {
 					t.Errorf("%s: a destructive tool must say it cannot be undone\n%s", tool.Name, tool.Description)

@@ -1,7 +1,7 @@
 {
   "name": "colliedesk",
   "displayName": "Colliedesk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Work your Colliedesk inbox from Claude Code: the Colliedesk MCP server and skills to triage, draft replies and chase pending conversations.",
   "author": {
     "name": "HC Labs",

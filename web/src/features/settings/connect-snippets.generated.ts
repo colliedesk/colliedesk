@@ -23,6 +23,8 @@ export const connectSnippets = {
   claudeCodeLogin: "claude mcp login plugin:colliedesk:colliedesk",
   claudeCodePlugin: "claude plugin install colliedesk --marketplace colliedesk/colliedesk",
   codex: "codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN",
+  codexLogin: "codex mcp login colliedesk",
+  codexPlugin: "codex plugin marketplace add colliedesk/colliedesk\ncodex plugin add colliedesk@colliedesk",
   collieTokenFile: "(umask 077 \u0026\u0026 pbpaste \u003e ~/.colliedesk-token)",
   collieTokenFileWindows: "Get-Clipboard | Set-Content -NoNewline \"$HOME\\.colliedesk-token\"",
   collieUnix: "mkdir -p ~/.local/bin\ncurl -fsSL https://github.com/colliedesk/colliedesk/releases/latest/download/collie_$(uname -s)_$(uname -m).tar.gz | tar -xz -C ~/.local/bin collie\necho \"$HOME/.local/bin/collie\"",

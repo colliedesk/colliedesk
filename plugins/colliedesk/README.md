@@ -1,6 +1,6 @@
-# Colliedesk for Claude
+# Colliedesk plugin
 
-Work your [Colliedesk](https://colliedesk.com) support inbox from Claude: find, read and triage
+Work your [Colliedesk](https://colliedesk.com) support inbox from Claude or Codex: find, read and triage
 conversations, leave notes, draft replies for a person to send, and chase customers who stopped
 answering. Colliedesk is an open-source helpdesk; this plugin works with Colliedesk Cloud and with a
 server you run yourself.
@@ -31,6 +31,17 @@ On a server you run yourself, keep the plugin for its skills, add your own addre
 and turn the plugin's Cloud server off there.
 
 Full steps: [Connect Claude Code](https://colliedesk.com/docs/connect-claude-code).
+
+### Codex
+
+```sh
+codex plugin marketplace add colliedesk/colliedesk
+codex plugin add colliedesk@colliedesk
+codex mcp login colliedesk
+```
+
+The last command opens Colliedesk in your browser: sign in, choose the workspace and choose **Allow**.
+Full steps: [Connect Codex](https://colliedesk.com/docs/connect-codex).
 
 ## What it sends, and where
 
