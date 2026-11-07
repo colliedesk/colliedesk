@@ -518,10 +518,10 @@ a:where(.primary-action):where(:not(.setup-step > a)):hover { border-color: var(
 fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .tag-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-top: var(--space-3); }
 .conversation-origin { display: grid; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
-/* Details, refined: never scrolls sideways; section titles read as small caps; every value starts on one edge after a
+/* Details, refined: never scrolls sideways; section titles are bolder; every value starts on one edge after a
    16 px mark (status dot, priority arrow, assignee ring); tags are pills, the conversation's own filled. */
 .details-panel { overflow-x: hidden; }
-.details-section h2, .details-section legend { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.details-section h2, .details-section legend { color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
 .details-section h2 { margin-top: 0; }
 .status-pick-row .status-pick summary { gap: 0; padding-left: var(--space-2); }
 .status-pick-row .status-pick summary .status { gap: var(--space-2); color: var(--text-1); font-size: var(--fs-ui); font-weight: 400; }

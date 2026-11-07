@@ -61,6 +61,6 @@
 .details-section.ai-triage { margin: var(--space-3) var(--space-3) 0; border: 1px solid var(--line); border-radius: var(--radius-lg);
   background: var(--surface-0); padding: var(--space-3); }
 .details-section.ai-triage + .details-section { border-top: 0; }
-.details-section.ai-triage h2 { margin: 0; color: var(--text-2); font-size: var(--fs-label); letter-spacing: 0; text-transform: none; }
+.details-section.ai-triage h2 { margin: 0; color: var(--text-2); font-size: var(--fs-label); }
 .details-section.ai-triage .ai-triage-message { font-size: var(--fs-label); line-height: 1.5; }
 .details-section.ai-triage .ai-triage-actions :is(button, a) { --control: 30px; min-height: 30px; font-size: var(--fs-small); }
