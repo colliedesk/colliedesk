@@ -12,6 +12,7 @@ import { ConnectedAppsSection } from './connected-apps-section';
 import { SessionsSection } from './sessions-section';
 import { SettingsNav } from './settings-nav';
 import { TimezoneSelect } from './timezone-select';
+import './settings-v2.css';
 
 interface SettingsPageProps {
   sessions: Session[];
@@ -75,7 +76,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
   workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite, inviteRoles,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, mcpAddress = `${window.location.origin}/mcp`, savedRepliesSection, helpCenterSection, exportSection, showBilling = false, showInvites = true }: SettingsPageProps) {
   return (
-    <main className="settings-page panel">
+    <main className="settings-page panel settings-v2">
       <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
       {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className="settings-layout">
         <SettingsNav page="/settings" shown={{ general: canManageWorkspace, team: Boolean(teamSection), channels: true,
@@ -85,7 +86,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           <p className="settings-group-label">{messages.settingsYourAccount}</p>
           <section className="settings-card" aria-labelledby="profile-heading">
             <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{settingsMessages.profileDescription}</p></div>
-            <div className="settings-body">
+            <div className="settings-body settings-rows">
               <DisplayNameField value={displayName} email={email} save={displayNameSave} onSave={onSetDisplayName} />
               <TimezoneSelect label={settingsMessages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={settingsMessages.sameAsWorkspace(workspaceTimezone)}
                 save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
@@ -95,7 +96,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           <p className="settings-group-label">{messages.settingsWorkspace}</p>
           {canManageWorkspace && <section className="settings-card" aria-labelledby="general-heading">
             <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
-            <div className="settings-body">
+            <div className="settings-body settings-rows">
               <NameForm label={messages.workspaceName} saveLabel={settingsMessages.saveWorkspaceName} hint={settingsMessages.workspaceNameHelp}
                 value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
               <TimezoneSelect label={settingsMessages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
@@ -111,7 +112,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           {helpCenterSection}
           {exportSection && <section className="settings-card" aria-labelledby="export-heading">
             <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
-            <div className="settings-body">{exportSection}</div>
+            <div className="settings-body settings-rows">{exportSection}</div>
           </section>}
         </div>
       </div>}

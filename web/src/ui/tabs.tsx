@@ -10,7 +10,9 @@ export const panelID = (prefix: string, id: string) => `${prefix}-${id}-panel`;
 
 // Tabs is a WAI-ARIA tablist: one tab in the Tab order, the arrow keys move between them, Home and End
 // go to the first and the last.
-export function Tabs<T extends string>({ label, tabs, value, onChange, prefix }: { label: string; tabs: TabItem<T>[]; value: T; onChange: (id: T) => void; prefix: string }) {
+// variant 'underline' draws text tabs with a 2 px line under the open one (a page's views, as in Review); the default is the
+// segmented control.
+export function Tabs<T extends string>({ label, tabs, value, onChange, prefix, variant = 'segmented' }: { label: string; tabs: TabItem<T>[]; value: T; onChange: (id: T) => void; prefix: string; variant?: 'segmented' | 'underline' }) {
   const keys = (event: KeyboardEvent) => {
     const at = tabs.findIndex((t) => t.id === value);
     const index = { ArrowRight: (at + 1) % tabs.length, ArrowLeft: (at + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 }[event.key];
@@ -54,7 +56,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, prefix }:
     if (left < 0 || left + at.width > strip.clientWidth) strip.scrollLeft += left - (strip.clientWidth - at.width) / 2;
     measure();
   }, [value, measure]);
-  const className = ['seg-tabs', fade.start && 'fade-start', fade.end && 'fade-end'].filter(Boolean).join(' ');
+  const className = ['seg-tabs', variant === 'underline' && 'seg-tabs-underline', fade.start && 'fade-start', fade.end && 'fade-end'].filter(Boolean).join(' ');
   return <div className={className} role="tablist" aria-label={label} ref={list} onScroll={measure}>
     {tabs.map((item) => <button key={item.id} type="button" role="tab" id={tabID(prefix, item.id)} aria-selected={value === item.id}
       aria-controls={panelID(prefix, item.id)} tabIndex={value === item.id ? 0 : -1} onClick={() => onChange(item.id)} onKeyDown={keys}>

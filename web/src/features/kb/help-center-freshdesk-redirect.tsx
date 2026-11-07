@@ -27,7 +27,7 @@ export function HelpCenterFreshdeskRedirectSection() {
   const redirect = current.data;
   if (!redirect || redirect.state === 'no_import' || !redirect.freshdesk_domain) return null;
   const domain = redirect.freshdesk_domain;
-  return <section className="stacked-form" aria-labelledby="help-center-freshdesk-redirect-heading">
+  return <section className="stacked-form hc-section" aria-labelledby="help-center-freshdesk-redirect-heading">
     <h3 id="help-center-freshdesk-redirect-heading">{text.heading}</h3>
     <p className="muted-copy">{text.intro(domain)}</p>
     {redirect.state === 'own_domain' && <p>{text.ownDomain}</p>}

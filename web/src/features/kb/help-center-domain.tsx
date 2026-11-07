@@ -65,7 +65,7 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
   if (!current.data) return null;
   const domain = current.data;
   const error = set.error ?? check.error ?? remove.error;
-  return <section className="stacked-form" aria-labelledby="help-center-domain-heading">
+  return <section className="stacked-form hc-section" aria-labelledby="help-center-domain-heading">
     <h3 id="help-center-domain-heading">{domainMessages.heading}</h3>
     <p className="muted-copy">{domainMessages.description}</p>
     {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}

@@ -13,6 +13,7 @@ import { permissionLabel, outsidePermissions } from '../token-permissions';
 import { useCreateMutation } from '../../../api/use-create';
 import '../permission-matrix.css';
 import './roles.css';
+import '../settings-v2.css';
 
 // Settings → Roles: the workspace's roles, and one role to create, read, change or delete.
 // page: list, new (with an optional role to start from) or a role's id.
@@ -60,7 +61,7 @@ export function RolesRoute({ page }: { page: RolesPage }) {
       setFocusStatus(false);
     }
   }, [focusStatus, status]);
-  return <main className="settings-page panel roles-page">
+  return <main className="settings-page panel settings-v2 roles-page">
     <header><h1>{m.heading}</h1></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/roles" shown={shown} />
@@ -92,7 +93,7 @@ function RoleList({ onStatus }: { onStatus: (status: { text: string } | undefine
       <div><h2 id="roles-heading">{m.heading}</h2><p>{m.description}</p></div>
       {manage && <a className="button primary-action roles-new" href="/settings/roles/new">{m.newRole}</a>}
     </div>
-    <div className="settings-body">
+    <div className="settings-body settings-rows">
       {roles.isPending ? <div className="roles-loading" aria-busy="true">{[0, 1, 2].map((row) => <span key={row} className="roles-skeleton" />)}</div>
         : roles.isError ? <div role="alert" className="notice"><span>{m.loadFailed}</span> <button type="button" onClick={() => void roles.refetch()}>{m.tryAgain}</button></div>
         : <>

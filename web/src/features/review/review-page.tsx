@@ -72,7 +72,7 @@ export function ReviewPage({ available, tab, onTab, filter, onFilter, scopes, wa
       {!available ? <p className="empty-copy">{m.noChatChannels}</p> : <>
         {stats && <StatsLine stats={stats} />}
         <div className="review-bar">
-          <Tabs prefix="review" label={m.tabs} value={tab} onChange={onTab}
+          <Tabs prefix="review" variant="underline" label={m.tabs} value={tab} onChange={onTab}
             tabs={[{ id: 'waiting', label: m.waiting, count: waitingCount }, { id: 'dismissed', label: m.aiDismissed }, { id: 'decided', label: m.decided }]} />
           {filters.length > 2 && (filters.length <= maxChoices
             ? <Choice legend={m.filter} hideLegend value={filter} onChange={onFilter} items={filters} />

@@ -221,7 +221,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   }, [selected?.id]);
   // Past the three-pane width the drawer button is hidden, so an open drawer would strand focus.
   useEffect(() => {
-    const wide = window.matchMedia?.('(min-width: 75rem)');
+    const wide = window.matchMedia?.('(min-width: 80rem)');
     if (!wide) return;
     const onChange = (event: { matches: boolean }) => { if (event.matches) setDetailsOpen(false); };
     wide.addEventListener('change', onChange);

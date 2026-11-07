@@ -13,6 +13,7 @@ import type { Shown } from '../settings-nav';
 import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
 import { can } from '../../../lib/can';
+import '../../../ui/controls.css';
 import './targets.css';
 
 // Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
@@ -77,7 +78,7 @@ export function TargetsRoute() {
   const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
-  return <main className="settings-page panel">
+  return <main className="settings-page panel targets-page">
     <header><h1>{m.heading}</h1><p>{m.description}</p></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/targets" shown={shown} />

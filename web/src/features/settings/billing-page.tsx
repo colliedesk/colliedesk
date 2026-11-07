@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { messages } from '../../messages';
 import './purchase.css';
+import './settings-v2.css';
 import { BillingAlerts, isPaid } from './billing-alerts';
 import { billingMessages } from './billing-messages';
 import { TrialLine } from './billing-trial-line';
@@ -65,7 +66,7 @@ export function BillingPage({ billing, timezone, importDone, freshdeskAgents, pl
   const dismiss = () => { setRequesting(false); setWelcomed(true); onWelcomeDone?.(); };
   const checkoutError = checkoutFailed === true ? billingMessages.checkoutFailed : checkoutFailed || undefined;
   return (
-    <main className="settings-page panel billing-page">
+    <main className="settings-page panel settings-v2 billing-page">
       <header><h1>{billingMessages.billingHeading}</h1><p>{billingMessages.billingDescription}</p></header>
       <div className="settings-layout">
         {/* Only admins reach this page, and an admin sees every settings section. */}

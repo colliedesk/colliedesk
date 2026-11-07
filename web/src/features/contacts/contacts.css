@@ -1,0 +1,69 @@
+/* The customer page (Paper "16 Customers" C1-a…e): an 800px column, name and Rename on one line, the facts
+   with Merge a duplicate… above a hairline, then merges and conversations as cards of 52px rows.
+   Scoped under .contact-page / .merge-dialog so it wins over the shared rules by specificity. */
+main.contact-page { display: flex; flex-direction: column; gap: var(--space-6); }
+main.contact-page > :not(.dialog-backdrop):not(.sr-only) { width: 100%; max-width: 720px; margin: 0; }
+
+.contact-page .contact-header { display: flex; flex-direction: column; gap: var(--space-6); }
+/* Merge a duplicate… keeps its own row under the facts; the hairline closes the customer's details. */
+.contact-page > .button-row { margin: 0; border-bottom: 1px solid var(--line); padding-bottom: var(--space-6); }
+.contact-page .contact-name-row { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.contact-page .contact-name-row h1 { flex: 1 1 0; min-width: 0; margin: 0; font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.contact-page .contact-name-row button { flex: none; }
+
+.contact-page .contact-facts { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); margin: 0; }
+.contact-page .contact-facts > div { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.contact-page .contact-facts dt { color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
+.contact-page .contact-facts dd { margin: 0; color: var(--text-1); font-size: var(--fs-ui); line-height: 20px; overflow-wrap: anywhere; }
+
+/* Rename: the name becomes a field with Save name and Cancel. */
+.contact-page .contact-rename { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
+.contact-page .contact-rename label { flex-basis: 100%; color: var(--text-1); font-size: var(--fs-small); font-weight: 600; line-height: 20px; }
+.contact-page .contact-rename input { flex: 1 1 20rem; max-width: 360px; min-height: var(--control, 32px); }
+
+/* Section titles and the cards under them. */
+.contact-page .contact-merges, .contact-page .contact-history { display: flex; flex-direction: column; gap: var(--space-3); }
+.contact-page .contact-merges h2, .contact-page .contact-history h2 { margin: 0; color: var(--text-1); font-size: 16px; font-weight: 600; line-height: 24px; }
+.contact-page .contact-history h2 + .muted-copy { margin: calc(-1 * var(--space-2)) 0 0; color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
+.contact-page .contact-merges ul, .contact-page .contact-history-list {
+  display: flex; flex-direction: column; margin: 0; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: 0; list-style: none; overflow: hidden;
+}
+.contact-page .contact-history-list:empty { display: none; }
+.contact-page .contact-merges li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 52px; border: 0; padding: var(--space-2) var(--space-4);
+  color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.contact-page .contact-merges li > span { flex: 1 1 16rem; min-width: 0; }
+.contact-page .contact-merges li a { color: var(--text-1); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.contact-page .contact-merges li time { color: var(--text-3); }
+.contact-page .contact-merges li + li, .contact-page .contact-history-list li + li { border-top: 1px solid var(--line); }
+.contact-page .contact-history-list li { border: 0; }
+
+/* A conversation row: subject, then status, imported and date in fixed lanes so they line up. */
+.contact-page .contact-history-row { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-4); min-height: 52px; padding: var(--space-2) var(--space-4);
+  color: var(--text-1); text-decoration: none; }
+.contact-page .contact-history-row:hover { background: var(--surface-2); }
+.contact-page .contact-history-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.contact-page .contact-history-subject { flex: 1 1 0; min-width: 0; font-size: var(--fs-ui); font-weight: 500; line-height: 20px; overflow-wrap: anywhere; }
+.contact-page .contact-history-meta { display: grid; flex: none; grid-template-columns: 96px 72px minmax(88px, max-content); align-items: center; gap: var(--space-4); color: var(--text-3);
+  font-size: var(--fs-small); line-height: 20px; }
+.contact-page .contact-history-meta > :first-child { grid-column: 1; color: var(--text-2); }
+.contact-page .contact-history-meta > .badge { grid-column: 2; justify-self: start; }
+.contact-page .contact-history-meta > time { grid-column: 3; text-align: right; font-variant-numeric: tabular-nums; }
+.contact-page .contact-history .pagination { margin: 0; }
+
+/* The merge window: find the duplicate, then confirm. */
+.merge-dialog { display: flex; flex-direction: column; gap: var(--space-4); width: min(calc(100vw - 2 * var(--space-4)), 480px); }
+.merge-dialog > * { margin: 0; }
+.merge-dialog h2 { color: var(--text-1); font-size: 16px; font-weight: 600; line-height: 24px; }
+.merge-dialog h2 + p { margin-top: calc(-1 * var(--space-3)); color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.merge-dialog .contact-picker label { color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
+.merge-dialog .contact-picker-results { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-1); }
+.merge-dialog .contact-picker-results li { padding: var(--space-2) var(--space-3); }
+.merge-dialog .contact-picker-name { font-weight: 500; }
+.merge-dialog .button-row { justify-content: flex-end; margin: 0; }
+
+@media (max-width: 44rem) {
+  .contact-page .contact-history-row { flex-wrap: wrap; gap: var(--space-1) var(--space-3); min-height: var(--touch); }
+  .contact-page .contact-history-subject { flex-basis: 100%; }
+  .contact-page .contact-history-meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+  .contact-page .contact-name-row { flex-wrap: wrap; }
+}

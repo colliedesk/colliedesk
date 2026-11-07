@@ -1,0 +1,170 @@
+/* Settings v2 (Paper "Colliedesk — App design", page 20 Settings): each section is a small label over a card
+   of rows; a row is a 240px label column, then its control. Scoped to .settings-v2, so the pages that borrow
+   .settings-page or .settings-card (operator console, locked screen, failure states) keep their look.
+   Lazy-loaded with the settings pages: the first bundle has no room for it. Tokens only. */
+
+/* Absolutely placed helpers (.sr-only, the radios of a segmented control) stay inside the scrolling sheet,
+   not below the window, where they gave the whole window a second scroll bar. */
+.settings-v2.settings-page { position: relative; }
+.settings-v2 .settings-sections { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-6); min-width: 0; max-width: 45rem; }
+/* Your account / Workspace: a divider with a small name over the sections it groups, not a heading that competes with them. */
+.settings-v2 .settings-sections > .settings-group-label { border-bottom: 1px solid var(--line); padding: var(--space-4) 0 var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: var(--track-label); }
+.settings-v2 .settings-sections > .settings-group-label:first-child,
+.settings-v2 .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
+
+/* A section: the label, its sentence, then the card. */
+.settings-v2 .settings-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); border-top: 0; padding: 0; }
+/* The section's name is the largest words of its block (final review V03): headings inside a card (help center
+   h3s, 14px/600) sit under it. The 12px grey label of 3HV-0 inverted that order. */
+.settings-v2 .section-heading h2 { color: var(--text-1); font-size: var(--fs-body); font-weight: 600; line-height: 24px; letter-spacing: -0.005em; }
+.settings-v2 .section-heading p { margin-top: var(--space-1); max-width: 45rem; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+/* The members table needs the wider sheet of its artboard (S5-a: 880px); the sections of that page share it. */
+.settings-v2 .settings-sections:has(.team-list) { max-width: 55rem; }
+.settings-v2 .team-list .role-chip + .role-chip::before { content: "· "; color: var(--text-3); }
+
+/* The card. Any section's body is a card with an inset; the sections of these pages mark their body
+   .settings-rows, and only the row elements named here become 56px rows with a hairline between them,
+   so the markup of other sections (agent tokens, saved replies, help center) is never padded or bordered.
+   Another section opts in by marking its body .settings-rows and each of its rows .settings-row. */
+.settings-v2 .settings-body { gap: var(--space-3); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
+.settings-v2 .settings-body.settings-rows { gap: 0; padding: 0; }
+.settings-v2 .settings-rows > :is(.settings-row, .field, .form-row, .invite-form, .invite-link, .export-action, .button-row, .notice, p:not(.sr-only), .num-loading, .roles-loading) {
+  min-width: 0; margin: 0; border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-4); }
+.settings-v2 .settings-rows > :is(.data-list, .num-rows) { min-width: 0; margin: 0; border-bottom: 1px solid var(--line); }
+.settings-v2 .settings-rows > :last-child { border-bottom: 0; }
+/* A lone link button in a list card (Roles: "Deleted roles") keeps its own size, inset like a row. */
+.settings-v2 .settings-rows > .link-action { justify-self: start; margin: var(--space-3) var(--space-4); }
+.settings-v2 .settings-rows > :is(.field, .form-row) { min-height: 56px; }
+
+/* A field row: label left, control right. The label element stays (it names the control); only its box goes. */
+.settings-v2 .settings-rows > .form-row { grid-template-columns: 15rem minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-4); row-gap: var(--space-1); }
+.settings-v2 .settings-rows > .form-row > .field { display: contents; }
+.settings-v2 .settings-rows > .form-row > :nth-child(n + 3) { grid-column: 2 / -1; }
+.settings-v2 .settings-rows > .field { grid-template-columns: 15rem minmax(0, 1fr); align-items: center; column-gap: var(--space-4); row-gap: var(--space-1); }
+.settings-v2 .settings-rows > .field > :nth-child(n + 3) { grid-column: 2 / -1; }
+.settings-v2 .settings-rows > .field > .field-inline { grid-column: 1 / -1; }
+.settings-v2 .settings-rows > :is(.form-row, .field) > .field > span:first-child,
+.settings-v2 .settings-rows > .field > :is(label, .field-label):first-child { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.settings-v2 .settings-rows > .field > .input-with-actions select { width: 100%; }
+.settings-v2 .settings-rows > .field > .segmented { border: 0; background: var(--surface-2); }
+.settings-v2 .settings-rows > .field > .segmented label { min-height: var(--control, 32px); padding: 0 var(--space-3); }
+.settings-v2 .settings-rows > .field-inline, .settings-v2 .settings-rows > .field > .field-inline { font-size: var(--fs-ui); }
+
+/* Lists in a card: the rows carry the padding, the list none. */
+.settings-v2 .settings-rows > .data-list { border-top: 0; padding: 0; }
+.settings-v2 .settings-rows > .data-list article { min-height: 56px; padding: var(--space-3) var(--space-4); }
+.settings-v2 .settings-rows > .data-list article:last-child { border-bottom: 0; padding-bottom: var(--space-3); }
+.settings-v2 .data-list strong { color: var(--text-1); font-size: var(--fs-ui); }
+.settings-v2 .data-list .session-name .badge { border-radius: var(--radius-full); background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font-weight: 500; }
+
+/* Members (S5-a): name and email, roles, status, last active, then the row's buttons. */
+.settings-v2 .team-list .team-person strong { font-weight: 600; }
+.settings-v2 .team-list .team-person small { font-size: var(--fs-label); }
+.settings-v2 .team-cells { color: var(--text-3); }
+.settings-v2 .team-list .team-role { color: var(--text-2); font-weight: 500; }
+.settings-v2 .team-list .role-chip { border-radius: 0; box-shadow: none; background: none; padding: 0; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+
+/* Invites (S5-b/c): the form is the first row of the card, the link and the list follow. */
+.settings-v2 .settings-rows > .invite-form { align-items: end; }
+.settings-v2 .settings-rows > .invite-link { gap: var(--space-1); }
+
+/* A muted line under a card (Connected AI apps, export status). */
+.settings-v2 .settings-rows > .muted-copy { color: var(--text-3); font-size: var(--fs-label); }
+
+@media (max-width: 44rem) {
+  .settings-v2 .settings-sections, .settings-v2 .settings-sections:has(.team-list) { max-width: none; }
+  .settings-v2 .settings-rows > .form-row, .settings-v2 .settings-rows > .field { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .settings-v2 .settings-rows > .form-row > :nth-child(n + 3), .settings-v2 .settings-rows > .field > :nth-child(n + 3) { grid-column: 1 / -1; }
+  .settings-v2 .settings-rows > .form-row > button { justify-self: start; }
+}
+
+/* Conversation numbers (S4 "Conversation numbers" row): the series list is the card itself, not a card in a card. */
+.settings-v2 .settings-rows > .num-rows { border: 0; border-radius: 0; background: none; padding: 0; }
+.settings-v2 .num-row { min-height: 56px; }
+.settings-v2 .num-row strong { font-weight: 500; }
+
+/* Import from Freshdesk (S14-a/b/c): the step's title, then its parts as cards of their own on the page:
+   the connect form, the ledger, the steps. The body is no card here. */
+.settings-v2.import-page .settings-sections { max-width: 55rem; }
+.settings-v2.import-page .section-heading p { color: var(--text-2); font-size: var(--fs-small); }
+.settings-v2.import-page .settings-body { gap: var(--space-4); border-radius: 0; background: none; box-shadow: none; padding: 0; }
+.settings-v2.import-page .settings-body > :is(p, small) { max-width: 45rem; }
+.settings-v2 .import-connect { max-width: 34rem; gap: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
+.settings-v2.import-page .settings-body > .import-connect { padding: var(--space-5); }
+.settings-v2 .import-connect label { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; line-height: 20px; }
+.settings-v2 .import-connect label:not(:first-child) { margin-top: var(--space-2); }
+.settings-v2 .import-connect small { font-size: var(--fs-label); line-height: 16px; }
+
+/* The ledger: a card table, 36px head, 48px rows, counts in the sans face, right-aligned. */
+.settings-v2 .import-ledger { max-width: none; border-collapse: separate; border-spacing: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); font-size: var(--fs-ui); }
+.settings-v2 .import-ledger th, .settings-v2 .import-ledger td { height: 48px; padding: 0 var(--space-4); }
+.settings-v2 .import-ledger thead th { height: 36px; font-family: var(--font-sans); }
+.settings-v2 .import-ledger td { font-family: var(--font-sans); color: var(--text-2); }
+.settings-v2 .import-ledger td:last-child { color: var(--text-1); font-weight: 600; }
+.settings-v2 .import-ledger tbody tr:last-child > * { border-bottom: 0; }
+.settings-v2 .import-report { gap: var(--space-2); }
+
+/* The steps of a running import: one card, a row a step, its mark on the left. */
+.settings-v2 .import-steps { gap: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.settings-v2 .import-steps li { align-items: center; min-height: 44px; border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-4); font-size: var(--fs-ui); }
+.settings-v2 .import-steps li:last-child { border-bottom: 0; }
+.settings-v2 .import-steps li[data-state="current"] [data-step-name] { font-weight: 500; }
+.settings-v2 .import-step-mark { margin-top: 0; }
+.settings-v2 .import-steps li[data-state="current"] .import-step-mark { border-color: var(--text-1); border-top-color: var(--accent); }
+.settings-v2 .import-step-body .usage-bar { margin-top: var(--space-1); }
+
+/* Earlier imports and the people of the account are cards with rows. */
+.settings-v2.import-page .import-history { gap: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); font-size: var(--fs-ui); }
+.settings-v2.import-page .import-history li { border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-4); }
+.settings-v2.import-page .import-history li:last-child { border-bottom: 0; }
+.settings-v2.import-page .import-people { gap: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); font-size: var(--fs-ui); }
+.settings-v2.import-page .import-people li { padding: var(--space-3) var(--space-4); }
+.settings-v2.import-page .import-people li:last-child { border-bottom: 0; }
+
+/* Plan and billing (S15-a/b/d). The trial line is a card of its own above the plans. */
+.settings-v2.billing-page .purchase-stack { gap: var(--space-4); max-width: 55rem; }
+.settings-v2 .billing-trial-line { display: flex; flex-wrap: wrap; align-items: baseline; border-bottom: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.settings-v2 .billing-trial-line strong { font-weight: 600; }
+/* Paid rows: a 200px label in ink, the value, then the row's one action; 56px rows. */
+.settings-v2 .billing-row { grid-template-columns: 12.5rem minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); min-height: 56px; padding: var(--space-3) var(--space-4); }
+.settings-v2 .billing-row dt { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; }
+.settings-v2 .billing-value { color: var(--text-2); font-size: var(--fs-ui); }
+.settings-v2 .billing-value strong { color: var(--text-1); font-weight: 500; }
+.settings-v2 .billing-value .usage-bar { max-width: none; height: 4px; margin-top: var(--space-2); }
+.settings-v2 .cancel-line { padding: 0 var(--space-4); }
+
+/* The plan that fits leads in ink (S15-b): the inverse surface, its button and word in the light surface. */
+.settings-v2 .plan-card-picked { background: var(--surface-inverse); box-shadow: var(--shadow-2); color: var(--text-inverse); }
+.settings-v2 .plan-card-picked :is(h3, .plan-price strong) { color: var(--text-inverse); }
+.settings-v2 .plan-card-picked :is(.plan-audience, .plan-price span, .plan-fit, ul) { color: color-mix(in srgb, var(--text-inverse) 82%, transparent); }
+.settings-v2 .plan-card-picked .plan-price small { color: color-mix(in srgb, var(--text-inverse) 70%, transparent); }
+.settings-v2 .plan-card-picked ul { border-top-color: color-mix(in srgb, var(--text-inverse) 16%, transparent); }
+.settings-v2 .plan-card-picked li::before { color: var(--text-inverse); }
+.settings-v2 .plan-card-picked .plan-pick { border-radius: var(--radius-full); background: var(--surface-1); padding: 2px var(--space-2); color: var(--text-1); font-weight: 500; }
+.settings-v2 .plan-card-picked > button.primary-action { border-color: var(--surface-1); background: var(--surface-1); color: var(--text-1); }
+.settings-v2 .plan-card-picked > button.primary-action:hover:not(:disabled) { background: var(--surface-2); }
+.settings-v2 .plan-card-picked > button:focus-visible { outline-color: var(--text-inverse); }
+.settings-v2 :is(.billing-trial-line, .billing-rows, .billing-page .inline-alert) { max-width: 45rem; }
+
+/* Export all data (S16-a/b/c): the button, then what happened as a line with a dot under a hairline. */
+.settings-v2 .export-action { gap: var(--space-3); }
+.settings-v2 .export-action > p { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: baseline; gap: var(--space-3); margin: 0 calc(var(--space-4) * -1); border-top: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4) 0; font-size: var(--fs-small); line-height: 20px; }
+.settings-v2 .export-action > p::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--warn); transform: translateY(-1px); }
+.settings-v2 .export-action > p.error-copy::before { background: var(--danger); }
+
+/* Connected AI apps (S0-f): name with its state as a word in a soft pill, then email, last use and device under it. */
+.settings-v2 [aria-labelledby="connected-apps-heading"] .data-list article > div { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+.settings-v2 [aria-labelledby="connected-apps-heading"] .data-list article > div > :not(.badge) { grid-column: 1; font-size: var(--fs-label); }
+.settings-v2 [aria-labelledby="connected-apps-heading"] .data-list article > div > .session-name { grid-row: 1; font-size: var(--fs-ui); }
+.settings-v2 [aria-labelledby="connected-apps-heading"] .data-list article > div > .badge { grid-column: 2; grid-row: 1; justify-self: end; }
+.settings-v2 [aria-labelledby="connected-apps-heading"] .data-list article > div > :is(.app-detail, .reconnect-steps) { grid-column: 1 / -1; }
+.settings-v2 [aria-labelledby="connected-apps-heading"] .badge { border-radius: var(--radius-full); background: var(--ok-soft); padding: 0 var(--space-2); color: var(--ok); font-size: var(--fs-label); font-weight: 500; line-height: 20px; }
+.settings-v2 [aria-labelledby="connected-apps-heading"] .badge-warn { background: var(--warn-soft); color: var(--warn); }
+
+/* Role editor (S5-d): the permission matrix is the card's content, not a second card inside it. */
+.settings-v2 .role-form .permission-matrix { border: 0; background: none; padding: 0; }
+
+/* Links inside a sentence of a card (Roles: "Make a role", "Give to someone") get a 32px hit area without
+   moving the line: vertical padding on an inline box does not change the line height (final review V11). */
+.settings-v2 :is(.roles-list, .settings-rows > .muted-copy, .role-form .muted-copy) a:not(.button) { padding-block: 9px; }

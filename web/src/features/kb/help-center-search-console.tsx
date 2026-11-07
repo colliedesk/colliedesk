@@ -52,7 +52,7 @@ export function HelpCenterSearchConsoleSection({ canManage }: { canManage: boole
     if (save.isPending) return;
     save.mutate({ google_site_verification: google.trim() || null, bing_site_verification: bing.trim() || null });
   };
-  return <section className="stacked-form" aria-labelledby="help-center-search-console-heading">
+  return <section className="stacked-form hc-section" aria-labelledby="help-center-search-console-heading">
     <h3 id="help-center-search-console-heading">{text.heading}</h3>
     <p className="muted-copy">{text.description}</p>
     {canManage

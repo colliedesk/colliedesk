@@ -210,16 +210,22 @@
 
 /* ---------- Settings → Autofix ---------- */
 .af-settings { flex: 1; }
-.af-steps3 { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-3); counter-reset: af-step; }
+/* S17-a/b: the three steps share one card, split by hairlines; each step's number sits in a 20px circle,
+   ringed in text-1 while it is the one to do, a thin ring while it is locked. */
+.af-settings { max-width: 45rem; }
+.af-steps3 { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; counter-reset: af-step; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 .af-steps3 > li { counter-increment: af-step; min-width: 0; }
-.af-stepcard { padding: var(--space-4) var(--space-5); display: grid; gap: var(--space-3); grid-template-columns: minmax(0, 1fr); }
+.af-steps3 > li + li { border-top: 1px solid var(--line); }
+.af-steps3 .af-stepcard { border-radius: 0; background: none; box-shadow: none; }
+.af-stepcard { padding: var(--space-4); display: grid; gap: var(--space-3); grid-template-columns: minmax(0, 1fr); }
 .af-stepcard > header { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-.af-stepcard > header h2 { margin: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: var(--space-2); }
-.af-stepcard > header h2::before { content: counter(af-step); width: 1.5rem; height: 1.5rem; border-radius: 999px; border: 1px solid var(--line-strong); display: grid; place-items: center;
-  font: 600 12px/1 var(--font-mono); color: var(--text-2); flex: none; }
-.af-stepcard.af-locked > header h2 { color: var(--text-3); }
+.af-stepcard > header h2 { margin: 0; font-size: var(--fs-ui); font-weight: 600; line-height: 20px; display: flex; align-items: center; gap: var(--space-3); }
+.af-stepcard > header h2::before { content: counter(af-step); width: 20px; height: 20px; border-radius: 999px; border: 0; box-shadow: inset 0 0 0 2px var(--text-1); display: grid; place-items: center;
+  font: 600 var(--fs-label)/16px var(--font-sans); color: var(--text-1); flex: none; }
+.af-stepcard.af-locked > header h2 { color: var(--text-3); font-weight: 500; }
+.af-stepcard.af-locked > header h2::before { box-shadow: inset 0 0 0 1px var(--line-control); color: var(--text-3); font-weight: 500; }
 .af-head-acts { margin-left: auto; }
-.af-stepcard > p { margin: 0; color: var(--text-2); font-size: var(--fs-small); max-width: 46rem; }
+.af-stepcard > p { margin: 0; padding-left: calc(20px + var(--space-3)); color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; max-width: 46rem; }
 .af-stepcard details summary { cursor: pointer; }
 .af-stepcard details[open] summary { margin-bottom: var(--space-2); }
 .af-acct { display: flex; align-items: center; gap: var(--space-3); }
