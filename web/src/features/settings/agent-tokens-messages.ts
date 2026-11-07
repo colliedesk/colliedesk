@@ -69,7 +69,7 @@ export const agentTokenMessages = {
   fullGuide: 'Full guide',
   disconnect: 'To disconnect: ',
   revokeAfter: ', then revoke the token in Sessions below.',
-  disconnectAfter: ', then Disconnect it in Connected AI apps below.',
+  disconnectAfter: ', then Disconnect it in Connected AI apps above.',
   claudeCodeRemove: ['run ', 'claude mcp remove colliedesk'] as [string, string?],
   // Each is the words before a command or path, then the command or path if there is one, as in the host guide's "Remove it".
   disconnects: {

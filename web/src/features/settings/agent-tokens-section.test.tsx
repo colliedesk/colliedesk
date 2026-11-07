@@ -137,7 +137,7 @@ test('each agent app has its steps with this address, a copy button, a guide and
   expect(panel).toHaveTextContent('needs no token');
   expect(panel).not.toHaveTextContent('Authorization');
   expect(within(panel).getByRole('link', { name: 'Full guide' })).toHaveAttribute('href', 'https://colliedesk.com/docs/connect-claude-code');
-  expect(panel).toHaveTextContent('claude mcp remove colliedesk, then Disconnect it in Connected AI apps below.');
+  expect(panel).toHaveTextContent('claude mcp remove colliedesk, then Disconnect it in Connected AI apps above.');
   expect(document.body.innerHTML).not.toContain('desk.example.com');
   expect(screen.getByRole('heading', { level: 3, name: 'Connect your agent' })).toBeInTheDocument();
 
@@ -248,6 +248,6 @@ test('on Colliedesk Cloud, Claude Code installs the plugin and signs in with OAu
   // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
   expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent(/^claude plugin install colliedesk --marketplace colliedesk\/colliedesk$/);
   expect(within(panel).getByRole('group', { name: 'Then sign in' })).toHaveTextContent('claude mcp login plugin:colliedesk:colliedesk');
-  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk, then Disconnect it in Connected AI apps below.');
+  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk, then Disconnect it in Connected AI apps above.');
   expect(panel).not.toHaveTextContent('acme.colliedesk.com');
 });
