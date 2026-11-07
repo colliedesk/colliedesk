@@ -456,6 +456,16 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .list-notice p { margin: 0; }
 .list-notice button { justify-self: start; }
 
+/* A link doing a button's job (Sign in, New role, Manage…) gets the button's shape wherever it sits; a page's own rules
+   may still restyle it. The setup guide's steps are rows, not buttons. Zero-weight classes: any class rule wins. */
+a:where(.button, .primary-action, .secondary-action, .danger-action):where(:not(.setup-step > a)) {
+  min-height: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: transparent;
+  padding: 0 var(--space-3); font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 600; color: var(--text-1);
+  white-space: nowrap; text-decoration: none;
+}
+a:where(.button, .secondary-action):where(:not(.setup-step > a)):hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--text-1); }
+a:where(.primary-action):where(:not(.setup-step > a)):hover { border-color: var(--accent-hover); background: var(--accent-hover); color: var(--on-accent); }
 /* Details panel: label/value property rows, then tags. */
 .details-section { margin: 0; border: 0; padding: var(--space-3) var(--space-5); min-width: 0; }
 .details-section + .details-section { border-top: 1px solid var(--line); }

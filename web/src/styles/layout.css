@@ -174,10 +174,6 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .oauth-consent > p { margin: var(--space-3) 0 0; }
 .oauth-consent .consent-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
 .oauth-consent .consent-actions > * { flex: 1 1 8rem; --control: 44px; font-size: var(--fs-ui); }
-/* Sign in on the cloud is a link to another page: it takes the button's shape, like Cancel beside it. */
-.oauth-consent .consent-actions > a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control); border-width: 1px; border-style: solid;
-  border-radius: var(--radius); box-shadow: var(--shadow-1); padding: 0 var(--space-3); text-decoration: none; white-space: nowrap; }
-.oauth-consent .consent-actions > a.primary-action:hover { border-color: var(--accent-hover); background: var(--accent-hover); color: var(--on-accent); }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .cloud-sign-in { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .cloud-sign-in h2 { font-size: 14px; font-weight: 600; }
