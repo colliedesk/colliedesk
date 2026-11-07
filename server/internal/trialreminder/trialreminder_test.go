@@ -403,3 +403,76 @@ func TestWithoutAMailerARunFailsLoudly(t *testing.T) {
 		t.Fatalf("error = %v, want ErrNoMailer", err)
 	}
 }
+
+// A new workspace keeps the UTC default; the admin's own timezone (set from the browser at the first
+// sign-in) is the one the reminder speaks in. The trial ends at 02:00 UTC on 13 November, which is
+// 9:00 PM on Thursday 12 November in New York (EST, UTC-5).
+func TestAnAdminsOwnTimezoneSetsTheEndDayAndTheTime(t *testing.T) {
+	e := newEnv(t)
+	w := e.workspace(t, "Utc Desk", "UTC", trialEnd, "ann@utc.example")
+	e.exec(t, `UPDATE agents SET timezone_override='America/New_York' WHERE workspace_id=$1 AND email='ann@utc.example'`, w.ID)
+	if sent := e.run(t, "2026-11-10T02:00:00Z"); sent != 1 {
+		t.Fatalf("3 days before the end: %d emails, want 1", sent)
+	}
+	first := parse(t, e.mailer.sent[0].Raw)
+	if first.Subject != "Your Colliedesk trial for Utc Desk ends on November 12" {
+		t.Errorf("subject = %q", first.Subject)
+	}
+	if want := `ends on Thursday, November 12, 2026 at 9:00 PM (America/New_York).`; !strings.Contains(first.Body, want) {
+		t.Errorf("body lacks %q:\n%s", want, first.Body)
+	}
+	// Midnight of 12 November in New York is 05:00 UTC.
+	if sent := e.run(t, "2026-11-12T04:59:59Z"); sent != 0 {
+		t.Fatalf("the evening before in New York: %d emails, want 0", sent)
+	}
+	if sent := e.run(t, "2026-11-12T05:00:00Z"); sent != 1 {
+		t.Fatalf("midnight of the end day in New York: %d emails, want 1", sent)
+	}
+	if body := parse(t, e.mailer.sent[1].Raw).Body; !strings.Contains(body, "ends today, Thursday, November 12, 2026, at 9:00 PM (America/New_York).") {
+		t.Errorf("body = %s", body)
+	}
+}
+
+const moreTime = "Still moving from Freshdesk, and not answering real tickets here yet? Reply to this email and I extend your trial. You pay after your first real ticket, not before."
+
+func (e *env) goal(t *testing.T, w workspace, goal string) {
+	t.Helper()
+	e.exec(t, `INSERT INTO workspace_onboarding(workspace_id,goal) VALUES($1,$2) ON CONFLICT (workspace_id) DO UPDATE SET goal=EXCLUDED.goal`, w.ID, goal)
+}
+
+// reply writes an outgoing reply to a contact at address on a new conversation.
+func (e *env) reply(t *testing.T, w workspace, address string) {
+	t.Helper()
+	e.exec(t, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada',$2) RETURNING id),
+		v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id)
+		INSERT INTO messages(workspace_id,conversation_id,kind,body) SELECT $1,id,'outgoing','Hi Ada' FROM v`, w.ID, address)
+}
+
+func TestATeamMovingFromFreshdeskWithoutARealReplyIsOfferedMoreTime(t *testing.T) {
+	e := newEnv(t)
+	moving := e.workspace(t, "Moving Desk", "Asia/Ho_Chi_Minh", trialEnd, "ann@moving.example")
+	e.goal(t, moving, "leave_helpdesk")
+	// The answer to the admin's own test message goes to an agent's address: it is not a real ticket.
+	e.reply(t, moving, "ann@moving.example")
+	answered := e.workspace(t, "Answered Desk", "Asia/Ho_Chi_Minh", trialEnd, "bob@answered.example")
+	e.goal(t, answered, "leave_helpdesk")
+	e.reply(t, answered, "customer@shop.example")
+	inbox := e.workspace(t, "Inbox Desk", "Asia/Ho_Chi_Minh", trialEnd, "cat@inbox.example")
+	e.goal(t, inbox, "shared_inbox")
+
+	if sent := e.run(t, "2026-11-10T02:00:00Z"); sent != 3 {
+		t.Fatalf("3 days before the end: %d emails, want 3", sent)
+	}
+	bodies := map[string]string{}
+	for _, m := range e.mailer.sent {
+		bodies[m.To] = parse(t, m.Raw).Body
+	}
+	if !strings.Contains(bodies["ann@moving.example"], moreTime) {
+		t.Errorf("a team moving from Freshdesk without a real reply is not offered more time:\n%s", bodies["ann@moving.example"])
+	}
+	for _, to := range []string{"bob@answered.example", "cat@inbox.example"} {
+		if strings.Contains(bodies[to], "Still moving from Freshdesk") {
+			t.Errorf("%s is offered more time, want the plain reminder:\n%s", to, bodies[to])
+		}
+	}
+}

@@ -37,11 +37,14 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
   that tab), so **Buy Team 25** in the banner, **Plan and billing** and the locked page show the Team 25
   card first, marked **Your pick**. Any other `plan` value is ignored. The sign-up form asks for the
   workspace name only here too.
-- Everyone with `billing:manage` (the admins) gets an email three days before the trial ends and another on the day it ends, in the workspace's
-  timezone (the day starts at its midnight). It gives the end date and time, says that the workspace locks,
+- Everyone with `billing:manage` (the admins) gets an email three days before the trial ends and another on the day it ends, in
+  their own timezone, or the workspace's when they have none (the day starts at its midnight). It gives the end date and time, says that the workspace locks,
   that nothing is deleted and that export stays available, and links to **Plan and billing**. Each of them
   gets each email once. A workspace that has a plan, or whose trial is over, gets none. If the trial end
   moves (for example after a Freshdesk import extends it), the new end gets its own two emails.
+- A workspace whose sign-up goal was moving from another helpdesk, and that has not answered a real ticket
+  yet, also reads in these emails that a reply gets the trial extended: on the switch offer you pay after
+  your team answers its first real ticket. The answer to your own test message does not count as one.
 
 ### Limits during the trial
 
