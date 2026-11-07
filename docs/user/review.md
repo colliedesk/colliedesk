@@ -21,6 +21,13 @@ it may decide it alone then, and otherwise it comes back here with every message
 a customer who has an earlier card still waiting in the same place sits right under that card (**Waiting for
 the card above**). Decide the upper one first, so their messages stay in order.
 
+A picture, a video or a file a customer sent shows on the card itself, as in a conversation: a picture to
+look at, a video or a voice clip to play, any other file to download, and the gallery opens at the one you
+press. A file the channel could not fetch says why, for example when it is larger than the channel accepts
+(25 MB a file on Zalo). The card shows its first 8 files; **Decide** shows every file under the message that
+carried it. An AI agent reads them with `colliedesk_attachment_get` (`gathering_id`, `item_id`, `file_index`)
+or `GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}`, with the `messages:read` permission.
+
 ## Decide a card
 
 Press **Decide** on a card to read every message of it, then pick one:

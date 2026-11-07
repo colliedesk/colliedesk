@@ -32,7 +32,7 @@ type levelDesk struct {
 
 const levelChat channels.Type = "levelchat"
 
-func newLevelDesk(t *testing.T) levelDesk {
+func newLevelDesk(t *testing.T, mutate ...func(*httpapi.Config)) levelDesk {
 	t.Helper()
 	loop := channeltest.NewLoopback(levelChat, channels.Async)
 	loop.Defaults.Scopes = map[string]channels.Scope{"group": {Gather: &channels.Gather{QuietSeconds: 300, MaxSeconds: 1200}}}
@@ -47,6 +47,9 @@ func newLevelDesk(t *testing.T) levelDesk {
 		config.Google = google.Config{Keys: keys}
 		config.AI = fakeAIConfig(fake)
 		config.ExtraChannelTypes = []channels.Adapter{loop}
+		for _, change := range mutate {
+			change(config)
+		}
 	})
 	d := levelDesk{api: api, pool: pool, service: service}
 	d.adminA = createSession(t, api, service, "Level Desk A", "admin@level-a.example.com")

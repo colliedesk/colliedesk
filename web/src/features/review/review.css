@@ -44,7 +44,11 @@
 .intake-item-head { margin: 0; font-size: var(--fs-small); color: var(--text-3); }
 .intake-item-head strong { color: var(--text-1); font-weight: 600; }
 .intake-item-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-ui); line-height: 20px; }
-.intake-files { margin: 0; padding: 0; list-style: none; color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 16px; overflow-wrap: anywhere; }
+/* What the customer sent, as a conversation shows its attachments (the tiles are components.css's); a file the
+   channel could not fetch is a quiet line that says why. */
+.intake-files { display: grid; gap: var(--space-2); min-width: 0; }
+.intake-files .message-attachments { margin: 0; }
+.intake-files-missing { margin: 0; padding: 0; list-style: none; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; overflow-wrap: anywhere; }
 
 .intake-form { display: grid; gap: var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-3); }
 .intake-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-3); }

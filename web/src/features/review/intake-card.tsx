@@ -7,6 +7,7 @@ import { Choice } from '../../ui/choice';
 import { AIDecisionWhy } from './ai-decision-why';
 import { AISuggestion } from './ai-suggestion';
 import { CandidatePicker } from './candidate-picker';
+import { IntakeFiles } from './intake-files';
 import { reviewMessages as m } from './review-messages';
 
 type Action = IntakeDecideInput['action'];
@@ -41,6 +42,11 @@ function subjectOf(items: ChatItem[], commands: string[]) {
   if (command) line = line.slice(command.length).trim();
   return line.slice(0, 200);
 }
+
+// A chat message with only a picture, a video or a file has no words: the channel writes what it is ("[picture]").
+// When the card shows the file itself, that line says nothing more.
+const fileMark = /^(\s*\[(picture|video|file(: [^\]]*)?|file not received: [^\]]*)\])+\s*$/;
+const onlyFileMarks = (text: string) => fileMark.test(text);
 
 function whoDecided(item: IntakeGathering, agentName: (id: string | null) => string) {
   if (item.decided_by === 'rules') return item.rules.basis === 'match' ? m.rulesMatch : m.rulesDefault;
@@ -89,7 +95,10 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
         && <p className="notice notice-danger" role="note"><span>{m.credentialWarning}</span></p>}
       {item.review_reason === 'lane_blocked' && waiting && <p className="muted-copy">{m.laneBlocked}</p>}
       {/* A decided card whose messages a person took back out of their conversation keeps nothing to show. */}
-      {!open && (item.item_count === 0 ? <p className="intake-preview muted-copy">{m.movedOut}</p> : <p className="intake-preview">{item.preview}</p>)}
+      {!open && (item.item_count === 0 ? <p className="intake-preview muted-copy">{m.movedOut}</p>
+        : !(item.files.length > 0 && onlyFileMarks(item.preview)) && <p className="intake-preview">{item.preview}</p>)}
+      {!open && item.item_count > 0 && item.files.length > 0 && <IntakeFiles gatheringId={item.id} files={item.files} sender={item.sender.name ?? m.someone}
+        at={item.opened_at} timezone={timezone} />}
       <p className="intake-meta muted-copy">
         <time dateTime={item.opened_at}>{formatDate(item.opened_at, timezone)}</time>
         {item.item_count > 0 && <span>{m.messagesCount(item.item_count)}</span>}
@@ -108,8 +117,9 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
       {open && detail && <ol className="intake-items">
         {detail.items.map((entry) => <li key={entry.id} className="intake-item" data-role={entry.role}>
           <p className="intake-item-head"><strong>{entry.sender.name ?? m.someone}</strong> <time dateTime={entry.occurred_at}>{formatDate(entry.occurred_at, timezone)}</time></p>
-          {entry.body && <div className="intake-item-body"><PlainTextBody text={entry.body} keepBreaks /></div>}
-          {entry.files.length > 0 && <ul className="intake-files">{entry.files.map((file, index) => <li key={`${file.name}-${index}`}>{file.name}</li>)}</ul>}
+          {entry.body && !(entry.files.length > 0 && onlyFileMarks(entry.body)) && <div className="intake-item-body"><PlainTextBody text={entry.body} keepBreaks /></div>}
+          {entry.files.length > 0 && <IntakeFiles gatheringId={item.id} files={entry.files.map((file, index) => ({ ...file, item_id: entry.id, index }))}
+            sender={entry.sender.name ?? m.someone} at={entry.occurred_at} timezone={timezone} />}
         </li>)}
       </ol>}
       {open && detail && waiting && <DecideForm key={detail.id} item={item} detail={detail} timezone={timezone} busy={busy} onDecide={(input) => void run(() => onDecide(input))} />}

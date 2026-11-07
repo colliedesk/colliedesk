@@ -265,7 +265,7 @@ export function MediaGallery({ items, start, timezone, onClose, opener }: { item
     go(to < from ? index + 1 : index - 1);
   };
   const { file, kind } = item;
-  const url = attachmentURL(file.id);
+  const url = item.src ?? attachmentURL(file.id);
   const broken = failed === file.id;
   return createPortal(
     <div ref={backdrop} className="media-gallery-backdrop" onMouseDown={keepDialogFocus}>
@@ -330,7 +330,7 @@ function StripThumb({ item, near, root }: { item: GalleryItem; near: boolean; ro
   return (
     <span ref={box} className="media-strip-box">
       {show
-        ? <img src={stage === 'original' ? attachmentURL(id) : thumbnailURL(id)} alt="" decoding="async"
+        ? <img src={stage === 'original' ? item.src ?? attachmentURL(id) : item.thumb ?? item.src ?? thumbnailURL(id)} alt="" decoding="async"
           onError={() => setStage(stage === 'thumbnail' ? 'original' : 'broken')} />
         : <span className={`media-strip-mark${stage === 'broken' ? ' is-broken' : ''}`} aria-hidden="true">
           {stage === 'broken' ? <ImageOffIcon /> : item.kind === 'video' ? <PlayIcon /> : item.kind === 'audio' ? <AudioIcon /> : <ImageIcon />}
