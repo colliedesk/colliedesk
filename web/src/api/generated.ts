@@ -1176,6 +1176,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The item of the card: an id in the card's items, or item_id in its files. */
+                itemId: string;
+                /** @description The file's place among the item's files, from 0 (the order of files in the item, or index in the card's files). */
+                index: number;
+            };
+            cookie?: never;
+        };
+        /** @description Streams the stored bytes of one file a customer sent on a card of the intake queue, so a person sees the picture or video before deciding the card. Like GET /api/v1/attachments/{id} it is always a download (`Content-Disposition: attachment`, `application/octet-stream`); the file's media type is content_type in the card. A single byte `Range` is answered with 206, so a video plays and seeks without the whole file. A file the channel could not fetch (status failed, its error says why) or has not fetched yet answers 404. */
+        get: operations["getIntakeGatheringFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/intake/gatherings/{id}/decide": {
         parameters: {
             query?: never;
@@ -5371,6 +5394,18 @@ export interface components {
             conversation_ref: string | null;
             /** @description The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided. */
             ai_decision: components["schemas"]["IntakeAIDecision"] | null;
+            /** @description The card's first files (at most 8), in the order its items came: a picture or a video shows on the card without opening it. Read one with GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}; the card's detail lists every file with its item. */
+            files: {
+                /** Format: uuid */
+                item_id: string;
+                index: number;
+                name: string;
+                content_type: string;
+                /** @description stored: it can be read; pending: not fetched yet; failed: error says why (for example larger than the channel accepts). */
+                status: string;
+                size: number | null;
+                error: string | null;
+            }[];
         };
         IntakeAIDecision: {
             /** Format: uuid */
@@ -12795,6 +12830,77 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getIntakeGatheringFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description One byte range, for example bytes=0-1023. */
+                Range?: string;
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The item of the card: an id in the card's items, or item_id in its files. */
+                itemId: string;
+                /** @description The file's place among the item's files, from 0 (the order of files in the item, or index in the card's files). */
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File bytes */
+            200: {
+                headers: {
+                    /** @description bytes */
+                    "Accept-Ranges"?: string;
+                    "Content-Disposition"?: string;
+                    /** @description default-src 'none'; sandbox */
+                    "Content-Security-Policy"?: string;
+                    /** @description The quoted SHA-256 of the file */
+                    ETag?: string;
+                    /** @description Hex SHA-256 recorded when the file was stored */
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description The requested byte range of the file, with the same download headers */
+            206: {
+                headers: {
+                    /** @description bytes */
+                    "Accept-Ranges"?: string;
+                    /** @description bytes first-last/size */
+                    "Content-Range"?: string;
+                    "Content-Disposition"?: string;
+                    /** @description Hex SHA-256 recorded when the file was stored */
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Not modified (If-None-Match matched the ETag, the file's SHA-256) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The range starts past the end of the file; `Content-Range` names the size */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     decideIntakeGathering: {

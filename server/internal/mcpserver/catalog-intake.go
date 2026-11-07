@@ -28,6 +28,10 @@ const (
 		`"ai_decision":{"type":["object","null"],"description":"On a card AI decided by itself (decided_by ai): decision_id, action, target_conversation_id, confidence, ` +
 		`runner_up_confidence, model (the one the channel asked), fallback_model (the model that answered instead when the channel's model did not, else null), created_at; ` +
 		`its reason under untrusted_customer_content. Null for a card the rules or a person decided."},` +
+		`"files":{"type":"array","description":"The card's first files (at most 8): read one with colliedesk_attachment_get and gathering_id, item_id, file_index. ` +
+		`status stored can be read; failed says why in error (for example larger than the channel accepts).","items":{"type":"object","required":["item_id","file_index","content_type","status","untrusted_customer_content"],` +
+		`"properties":{"item_id":{"type":"string"},"file_index":{"type":"integer"},"content_type":{"type":"string"},"status":{"type":"string"},"size":{"type":["integer","null"]},` +
+		`"error":{"type":["string","null"]},"untrusted_customer_content":{"type":"object","properties":{"name":{"type":"string"}}}}}},` +
 		`"untrusted_customer_content":{"type":"object","properties":{"sender_name":{"type":"string"},"sender":{"type":"string"},"preview":{"type":"string"},` +
 		`"place_name":{"type":"string","description":"The group's name on the channel."}}}}}`
 	intakeCandidateSchema = `{"type":"object","required":["conversation_id","status","resolved","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
@@ -180,6 +184,15 @@ type intakeCardJSON struct {
 	Preview    string         `json:"preview"`
 	Suggestion map[string]any `json:"suggestion"`
 	AIDecision map[string]any `json:"ai_decision"`
+	Files      []struct {
+		ItemID      string  `json:"item_id"`
+		Index       int     `json:"index"`
+		Name        string  `json:"name"`
+		ContentType string  `json:"content_type"`
+		Status      string  `json:"status"`
+		Size        *int64  `json:"size"`
+		Error       *string `json:"error"`
+	} `json:"files"`
 }
 
 type intakeCandidateJSON struct {
@@ -216,7 +229,12 @@ func intakeCardOut(card intakeCardJSON) map[string]any {
 			untrusted["place_name"] = *card.Place.Name
 		}
 	}
-	return map[string]any{"id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID,
+	files := make([]map[string]any, 0, len(card.Files))
+	for _, file := range card.Files {
+		files = append(files, map[string]any{"item_id": file.ItemID, "file_index": file.Index, "content_type": file.ContentType, "status": file.Status,
+			"size": file.Size, "error": file.Error, "untrusted_customer_content": map[string]any{"name": file.Name}})
+	}
+	return map[string]any{"files": files, "id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID,
 		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID, "conversation_ref": card.ConversationRef,
 		"decided_by": card.DecidedBy, "decided_at": card.DecidedAt, "decided_by_agent_id": card.DecidedByAgent, "ignore_reason": card.IgnoreReason,
 		"fallback": card.Fallback, "opened_at": card.OpenedAt, "closed_at": card.ClosedAt, "decide_by": card.DecideBy, "item_count": card.ItemCount,

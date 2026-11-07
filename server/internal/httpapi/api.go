@@ -759,6 +759,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/channel-thread-items", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/intake/gatherings", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/intake/gatherings/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}", auth.PermissionSession},
 		{http.MethodPost, intakeDecideRoute, auth.PermissionSession},
 		{http.MethodPost, "/api/v1/intake/gatherings/{id}/requeue", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/intake/summary", auth.PermissionSession},

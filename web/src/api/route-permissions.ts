@@ -59,6 +59,7 @@ export const routePermissions: ReadonlyArray<readonly [string, string]> = [
   ['/api/v1/inbox/activity', 'conversations:read'],
   ['/api/v1/intake/gatherings', 'messages:read'],
   ['/api/v1/intake/gatherings/{id}', 'messages:read'],
+  ['/api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}', 'messages:read'],
   ['/api/v1/intake/stats', 'conversations:read'],
   ['/api/v1/intake/summary', 'conversations:read'],
   ['/api/v1/kb/articles', 'kb_articles:read'],

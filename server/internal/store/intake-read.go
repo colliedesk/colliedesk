@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -47,6 +48,30 @@ type IntakeGathering struct {
 	AIDecision *IntakeAIDecision `json:"ai_decision"`
 	// ConversationRef is the code people know ConversationID by.
 	ConversationRef *string `json:"conversation_ref"`
+	// Files are the card's first files (at most IntakeCardFiles), in the order its items came, so a person sees a
+	// picture or a video without opening the card.
+	Files []IntakeCardFile `json:"files"`
+}
+
+// IntakeCardFiles is the most files a card of a list carries; the card's detail has every file.
+const IntakeCardFiles = 8
+
+// IntakeCardFile is one file of a card's item: index is its place among the item's files, as
+// GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index} reads it.
+type IntakeCardFile struct {
+	ItemID      string  `json:"item_id"`
+	Index       int     `json:"index"`
+	Name        string  `json:"name"`
+	ContentType string  `json:"content_type"`
+	Status      string  `json:"status"`
+	Size        *int64  `json:"size"`
+	Error       *string `json:"error"`
+}
+
+// IntakeFile is the stored file a card's item names: what the download route serves.
+type IntakeFile struct {
+	Name, ContentType, Status, SHA256, Key string
+	Size                                   int64
 }
 
 // IntakeAIDecision is what AI decided by itself of a card: how sure it was, why, the model the channel asked
@@ -197,7 +222,13 @@ const gatheringColumns = `g.id::text,g.channel_id::text,g.scope,g.thread_id::tex
 	s.id::text,s.action,s.target_conversation_id::text,s.target_subject,s.target_status,s.runner_up_conversation_id::text,s.runner_up_subject,
 	s.runner_up_confidence::float8,s.confidence::float8,s.command,s.subject,s.reply_kind,s.ignore_reason,s.reason,s.not_applied_reason,s.created_at,
 	(SELECT NULLIF(c.display_ref,'') FROM conversations c WHERE c.workspace_id=g.workspace_id AND c.id=g.conversation_id),
-	a.id::text,a.action,a.target_conversation_id::text,a.confidence::float8,a.runner_up_confidence::float8,a.reason,a.model,a.fallback_model,a.created_at`
+	a.id::text,a.action,a.target_conversation_id::text,a.confidence::float8,a.runner_up_confidence::float8,a.reason,a.model,a.fallback_model,a.created_at,
+	(SELECT COALESCE(json_agg(json_build_object('item_id',y.item_id,'index',y.n,'name',y.name,'content_type',y.content_type,'status',y.status,'size',y.size,'error',y.error)
+		ORDER BY y.at,y.item_id,y.n),'[]') FROM (SELECT i.id::text AS item_id,i.occurred_at AS at,x.n,x.name,x.content_type,x.status,x.size,x.error
+		FROM ` + gatheringItemRows + ` CROSS JOIN LATERAL ` + chatItemFileRows + ` x ORDER BY i.occurred_at,i.id,x.n LIMIT ` + intakeCardFilesSQL + `) y)`
+
+// intakeCardFilesSQL is IntakeCardFiles in the list query (TestIntakeCardFilesLimitMatches keeps them equal).
+const intakeCardFilesSQL = "8"
 
 const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM ` + gatheringItemRows + `
 	ORDER BY i.occurred_at,i.id LIMIT 1) f ON true
@@ -223,6 +254,7 @@ func scanGathering(row pgx.Row) (IntakeGathering, error) {
 	var decisionID, decisionAction *string
 	var decision IntakeAIDecision
 	var decidedAt *time.Time
+	var files []byte
 	err := row.Scan(&g.ID, &g.ChannelID, &g.Scope, &g.ThreadID, &g.LaneKey, &g.ContactID, &g.State, &g.ReviewReason, &g.Rules.Action, &g.Rules.Rule,
 		&g.Rules.Basis, &g.Rules.TargetConversationID, &g.ConversationID, &g.DecidedBy, &g.DecidedAt, &g.DecidedByAgentID, &g.IgnoreReason, &g.Fallback,
 		&g.OpenedAt, &g.ClosedAt, &g.DecideBy, &g.RequeuedAt, &g.RequeuedByAgentID, &g.ItemCount, &g.Sender.Kind, &g.Sender.Value, &g.Sender.Name,
@@ -231,7 +263,10 @@ func scanGathering(row pgx.Row) (IntakeGathering, error) {
 		&suggestion.RunnerUpSubject, &suggestion.RunnerUpConfidence, &suggestion.Confidence, &suggestion.Command, &suggestion.Subject, &suggestion.ReplyKind,
 		&suggestion.IgnoreReason, &suggestion.Reason, &notApplied, &suggestedAt, &g.ConversationRef,
 		&decisionID, &decisionAction, &decision.TargetConversationID, &decision.Confidence, &decision.RunnerUpConfidence, &decision.Reason, &decision.Model,
-		&decision.FallbackModel, &decidedAt)
+		&decision.FallbackModel, &decidedAt, &files)
+	if err == nil {
+		err = json.Unmarshal(files, &g.Files)
+	}
 	if placeKind != nil {
 		g.Place = &IntakePlace{Kind: *placeKind, Name: placeName}
 	}
@@ -319,6 +354,25 @@ func (s *Store) IntakeGatherings(ctx context.Context, workspaceID, list, channel
 
 // IntakeGatheringByID reads a card with its items, oldest first, its decisions, newest first, and,
 // while it is to be decided, the conversations it may join as of now and the channel's commands.
+// IntakeGatheringFile finds the file index (from 0) of the item itemID on the card id, as the card lists it;
+// ErrGatheringNotFound when the card, the item on it, or the file is not there.
+func (s *Store) IntakeGatheringFile(ctx context.Context, workspaceID, id, itemID string, index int) (IntakeFile, error) {
+	if !isID(id) || !isID(itemID) || index < 0 {
+		return IntakeFile{}, ErrGatheringNotFound
+	}
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (IntakeFile, error) {
+		var file IntakeFile
+		err := tx.QueryRow(ctx, `SELECT x.name,x.content_type,x.status,COALESCE(x.sha256,''),COALESCE(x.storage_key,''),COALESCE(x.size,0)
+			FROM intake_gatherings g CROSS JOIN LATERAL `+gatheringItemRows+` CROSS JOIN LATERAL `+chatItemFileRows+` x
+			WHERE g.workspace_id=$1 AND g.id=$2::uuid AND i.id=$3::uuid AND x.n=$4`, workspaceID, id, itemID, index).
+			Scan(&file.Name, &file.ContentType, &file.Status, &file.SHA256, &file.Key, &file.Size)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return file, ErrGatheringNotFound
+		}
+		return file, err
+	})
+}
+
 func (s *Store) IntakeGatheringByID(ctx context.Context, workspaceID, id string, now time.Time) (IntakeGatheringDetail, error) {
 	if !isID(id) {
 		return IntakeGatheringDetail{}, ErrGatheringNotFound

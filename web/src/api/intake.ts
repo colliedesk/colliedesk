@@ -55,6 +55,9 @@ export const intakeGatheringSchema = z.object({
   requeued_at: date.nullable(), requeued_by_agent_id: uuid.nullable(), item_count: z.number().int(), sender: chatSenderSchema,
   place: z.object({ kind: z.enum(['direct', 'group']), name: z.string().nullable() }).nullable(), preview: z.string(),
   suggestion: intakeSuggestionSchema.nullable(), ai_decision: intakeAIDecisionSchema.nullable(), conversation_ref: z.string().nullable(),
+  // The card's first files, so a picture or a video shows without opening it.
+  files: z.array(z.object({ item_id: uuid, index: z.number().int().nonnegative(), name: z.string(), content_type: z.string(), status: z.string(),
+    size: z.number().int().nullable(), error: z.string().nullable() })),
 }) satisfies z.ZodType<Generated<'IntakeGathering'>>;
 
 export const intakeDecisionSchema = z.object({

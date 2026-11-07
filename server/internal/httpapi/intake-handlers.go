@@ -121,6 +121,24 @@ func (a *API) getIntakeGathering(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, detail)
 }
 
+// getIntakeGatheringFile streams one file of an item on a card, so a person sees the picture or video a
+// customer sent before deciding the card. Like an attachment it is a download, never a page; a file the
+// channel could not fetch, or not yet, is 404.
+func (a *API) getIntakeGatheringFile(response http.ResponseWriter, request *http.Request) {
+	workspaceID := principal(request).Workspace.ID
+	index, err := strconv.Atoi(request.PathValue("index"))
+	if err != nil || index < 0 || index > 999 {
+		writeIntakeError(response, store.ErrGatheringNotFound)
+		return
+	}
+	file, err := a.store.IntakeGatheringFile(request.Context(), workspaceID, request.PathValue("id"), request.PathValue("itemId"), index)
+	if err != nil && !errors.Is(err, store.ErrGatheringNotFound) {
+		writeIntakeError(response, err)
+		return
+	}
+	a.streamDownload(response, request, err == nil && file.Status == "stored" && file.Key != "", workspaceID, request.PathValue("itemId"), file.Name, file.Size, file.SHA256, file.Key)
+}
+
 func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.Request) {
 	id := request.PathValue("id")
 	if !uuidShape.MatchString(id) {
