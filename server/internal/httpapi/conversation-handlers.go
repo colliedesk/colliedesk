@@ -159,7 +159,7 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 	}
 	identity := principal(request)
 	quiet := input.Notify != nil && !*input.Notify
-	if a.refuseStatusThatTells(response, request, identity, []string{request.PathValue("id")}, input.Status, quiet) {
+	if invalidStatusChange(response, input.Status) || a.refuseStatusThatTells(response, request, identity, []string{request.PathValue("id")}, input.Status, quiet) {
 		return
 	}
 	item, err := a.store.UpdateConversation(request.Context(), identity.Workspace.ID, request.PathValue("id"), store.ConversationUpdate{

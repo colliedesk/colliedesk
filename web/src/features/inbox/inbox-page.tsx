@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Conversation, ConversationViewer, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, Message, SavedReply, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { mayTellCustomers, noticesOf } from './status-tell';
@@ -21,6 +21,7 @@ import { TimelinePanel } from './timeline-panel';
 import { messageMovesPart } from './message-moves-part';
 import { Part } from '../../ui/lazy-part';
 import { messages } from '../../messages';
+import { XIcon } from '../../ui/icons';
 
 interface InboxPageProps {
   // The hosted cloud, where the server trusts a Cc line only on mail from the platform forwarder.
@@ -67,7 +68,9 @@ interface InboxPageProps {
   // notify false sets it without telling the customer in their chat.
   // The open chat conversation's statuses that would tell could not be read.
   noticesFailed?: boolean;
-  onSetStatus?: (conversationId: string, status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+  onSetStatus?: (conversationId: string, status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
+  // Files conversations in Spam (true) or takes them out where they were (false), with their senders.
+  onSpam?: (ids: string[], spam: boolean) => Promise<SpamResult>;
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;
   onCreateTag?: (conversationId: string, name: string) => void;
@@ -144,7 +147,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -194,6 +197,25 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
       setBulkBusy(false);
     }
   };
+  // What the last Spam or Not spam did, with Undo after a move into Spam (Undo is Not spam for the same ones).
+  const [spamToast, setSpamToast] = useState<{ text: string; undo?: string[] }>();
+  const [spamFailed, setSpamFailed] = useState(false);
+  const applySpam = async (ids: string[], spam: boolean) => {
+    if (!onSpam || bulkBusy || ids.length === 0) return;
+    setBulkBusy(true);
+    setSpamFailed(false);
+    setBulkNotice('');
+    try {
+      const result = await onSpam(ids, spam);
+      const senders = result.senders.map((sender) => sender.email || sender.name);
+      setChecked(new Set());
+      setSpamToast(spam ? { text: messages.movedToSpam(ids.length, senders), undo: ids } : { text: messages.movedOutOfSpam(ids.length, senders) });
+    } catch {
+      setSpamFailed(true);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
   // A refusal under a long timeline (a phone) is brought on screen with the reply drafts below it, whose
   // buttons are the next step, not left below the screen.
@@ -238,6 +260,8 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
               views={viewsMenu} />
           </div>
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
+          {spamFailed && <p role="alert" className="error-copy bulk-message">{messages.spamFailed}</p>}
+          {query.status === 'spam' && <p className="spam-note">{messages.spamNote}</p>}
           {/* A live region without role="status": it is mounted before the first result so screen readers
               announce it, while an idle inbox still exposes no status. */}
           <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
@@ -248,8 +272,11 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters}
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
           toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
-            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} viewers={viewers}
+            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onSpam={onSpam && ((spam) => void applySpam(checkedIds, spam))} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} viewers={viewers}
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onTestMessage={onTestMessage} />
+        {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>
+          {spamToast.undo && <button type="button" className="link-action" disabled={bulkBusy} onClick={() => void applySpam(spamToast.undo ?? [], false)}>{messages.undo}</button>}
+          <button type="button" className="icon-button" aria-label={messages.dismiss} onClick={() => setSpamToast(undefined)}><XIcon /></button></div>}
       </section>
       <div className="conversation-center panel">
         <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManage} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
@@ -260,7 +287,8 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           messageLabel={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeLabel conversation={selected} message={item} />} />)}
           messageNote={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeWhy conversation={selected} message={item} timezone={timezone} />} />)}
           messageMenu={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />)}
-          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
+          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined}
+          onSpam={selected && onSpam ? (spam) => applySpam([selected.id], spam) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
         {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
           {canManage && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
         {sendsFrom && <p className="composer-from">{sendsFrom}</p>}

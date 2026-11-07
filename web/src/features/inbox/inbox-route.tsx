@@ -278,6 +278,9 @@ export function InboxRoute() {
     },
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
+  // Spam moves conversations out of every list but Spam (or back) and stops (or restarts) their clocks.
+  const spam = useMutation({ mutationFn: ({ ids, spam }: { ids: string[]; spam: boolean }) => api.markSpam(ids, spam),
+    onSuccess: () => settleTargets(), onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const createTag = useCreateMutation({ create: ({ name }: { conversationId: string; name: string }, key: string) => api.createTag(name, key), onSuccess: (tag, variables) => {
@@ -346,6 +349,7 @@ export function InboxRoute() {
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
+    onSpam={(ids, value) => spam.mutateAsync({ ids, spam: value })}
     canManage={can(me.data, 'ai_settings:update')}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}

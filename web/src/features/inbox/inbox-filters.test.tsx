@@ -32,10 +32,10 @@ const openMenu = async () => {
   return screen.getByRole('group', { name: 'Filter' });
 };
 
-test('status is a row of tabs, All first, Open selected so the inbox starts on what needs an answer', () => {
+test('status is a row of tabs, All first, Spam last, Open selected so the inbox starts on what needs an answer', () => {
   render(<Harness />);
   const status = screen.getByRole('radiogroup', { name: 'Status' });
-  expect(within(status).getAllByRole('radio').map((item) => item.getAttribute('value'))).toEqual(['all', 'open', 'pending', 'resolved', 'closed']);
+  expect(within(status).getAllByRole('radio').map((item) => item.getAttribute('value'))).toEqual(['all', 'open', 'pending', 'resolved', 'closed', 'spam']);
   expect(within(status).getByRole('radio', { name: 'Open' })).toBeChecked();
 });
 

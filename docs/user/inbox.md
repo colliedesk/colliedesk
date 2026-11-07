@@ -31,11 +31,11 @@ cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
-  status. When nothing is open but the workspace has conversations, the list says so instead of
+  status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
   showing the new-workspace steps.
-- Pick a **Status** tab (All, Open, Pending, Resolved, Closed), and narrow further with **Filter** and
+- Pick a **Status** tab (All, Open, Pending, Resolved, Closed, Spam), and narrow further with **Filter** and
   **Sort**; see [Filter and sort](#filter-and-sort) below.
-- **Search conversations** matches the subject, message text and the customer's name and email, in every status unless you picked a
+- **Search conversations** matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
   status tab first, so imported closed tickets are found; the view stays on **All** after you clear
   the search. Characters such as `%` and `_` are matched
   literally.
@@ -210,7 +210,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - While at least one row is selected, the **Select all on this page** row becomes an action bar. It
   shows how many rows are selected and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
-  **Tags** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
+  **Tags**, **Spam** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
+  In the **Spam** tab the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
 - With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
   Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
   customer whose channel has words for the new status (see [Telling the customer](#telling-the-customer)).
@@ -344,6 +345,28 @@ In the details pane (**Show details** on a narrower screen):
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
+
+## Spam
+
+Junk that reached the support address (adverts, phishing) does not belong in the queue. **Spam** sits
+beside **Resolve** above the thread, and in the action bar when rows are selected.
+
+- **Spam** moves the conversation out of the inbox and every view, the **All** tab and search
+  included, into the **Spam** tab. Its [response clocks](response-targets.md) stop and
+  [Results](results.md) stop counting it. Nobody is told, the customer included.
+- The sender is marked too: their later mail opens (or joins) a conversation straight in **Spam**, with
+  no notification, no clock and no received notice. Mail from the same address to another workspace is
+  not touched.
+- A message at the foot of the list names the sender, with **Undo**. Undo is the same as **Not spam**.
+- The **Spam** tab lists these conversations under one line that says what Spam does. Open one and
+  press **Not spam** above the thread, or select several and press **Not spam** in the action bar: each
+  goes back to the status it had (a conversation that arrived in Spam goes to **Open**), and mail from its
+  sender reaches the inbox again.
+- A conversation in Spam keeps its status until it is taken out: **Resolve**, **Set status** and the
+  details' **Status** do not apply to it.
+- Spam is a status in the [export](export.md) (`spam`); a marked sender's contact carries `spam_since`.
+- AI agents use `colliedesk_conversations_spam` (permission `conversations:update`); the API is
+  `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
 
 **Move messages to another conversation**
 A customer's message that landed in the wrong conversation can be moved, with its files: to another

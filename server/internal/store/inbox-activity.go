@@ -87,14 +87,14 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID string, caller Pr
 		batch.Queue(`SELECT now()`)
 		batch.Queue(`SELECT c.id::text,c.subject,ct.name,c.created_at
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
-			WHERE c.workspace_id=$1 AND c.created_at>GREATEST($2::timestamptz,now()-$5::interval)-$4::interval AND c.created_at<=now()
+			WHERE c.workspace_id=$1 AND c.created_at>GREATEST($2::timestamptz,now()-$5::interval)-$4::interval AND c.created_at<=now() AND c.status<>'spam'
 			ORDER BY c.created_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, inboxActivityLookback, inboxActivityMaxAge)
 		batch.Queue(`SELECT c.id::text,c.subject,ct.name,c.assigned_at,
 				EXISTS (SELECT 1 FROM ai_triage_suggestions s WHERE s.workspace_id=c.workspace_id AND s.conversation_id=c.id
 					AND s.auto_applied_at IS NOT NULL AND s.auto_applied->>'assignee_agent_id'=c.assignee_id::text) AND c.assigned_by_agent_id IS NULL
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 			WHERE c.workspace_id=$1 AND c.assignee_id=$5 AND c.assigned_at>GREATEST($2::timestamptz,now()-$6::interval)-$4::interval AND c.assigned_at<=now()
-			AND c.assigned_by_agent_id IS DISTINCT FROM $5::uuid
+			AND c.assigned_by_agent_id IS DISTINCT FROM $5::uuid AND c.status<>'spam'
 			ORDER BY c.assigned_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, inboxActivityLookback, agentID, inboxActivityMaxAge)
 		// Conversations with a customer message come from their own bounded list and rank first, so a
 		// bulk change of many other conversations can never push a customer reply out of the capped list.
@@ -106,7 +106,7 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID string, caller Pr
 				SELECT c.id FROM conversations c
 				WHERE c.workspace_id=$1 AND c.updated_at>GREATEST($2::timestamptz,now()-$5::interval)-$4::interval AND c.updated_at<=now()
 				ORDER BY c.updated_at DESC LIMIT $3)
-			SELECT c.id::text,c.subject,ct.name,c.assignee_id::text,c.updated_at,i.incoming_at
+			SELECT c.id::text,c.subject,ct.name,c.assignee_id::text,c.updated_at,CASE WHEN c.status<>'spam' THEN i.incoming_at END
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 			LEFT JOIN incoming i ON i.conversation_id=c.id
 			WHERE c.workspace_id=$1 AND c.id IN (SELECT conversation_id FROM incoming UNION SELECT id FROM changed)

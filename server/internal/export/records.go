@@ -56,9 +56,11 @@ type Contact struct {
 	Email        *string `json:"email"`
 	Organization *string `json:"organization"`
 	// MergedIntoID is the contact this one was merged into; its conversations are there.
-	MergedIntoID *string   `json:"merged_into_id"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	MergedIntoID *string `json:"merged_into_id"`
+	// SpamSince is when the customer was marked as spam: their later mail is filed in Spam. Null otherwise.
+	SpamSince *time.Time `json:"spam_since"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 	// Identities are who the customer is on a channel (channel_id, kind, value, display_name).
 	Identities []domain.ContactIdentity `json:"identities"`
 }

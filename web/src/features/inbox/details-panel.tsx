@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { UpdateConversationRequest } from '../../api/client';
-import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
+import type { TeamMember, Conversation, ConversationOrigin, SettableStatus, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { clockLine, slaOf } from '../../lib/sla';
 import { messages } from '../../messages';
@@ -55,7 +55,8 @@ function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; o
   const told = others.filter((value) => notices?.includes(value));
   const quiet = others.filter((value) => !told.includes(value));
   return <div className="property-row status-pick-row"><span id={`${id}-label`}>{messages.status}</span>
-    <ActionMenu<Conversation['status']> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate}
+    {/* A conversation in Spam keeps its status until Not spam (the header) takes it out. */}
+    <ActionMenu<SettableStatus> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate || status === 'spam'}
       summary={<span id={`${id}-value`}><StatusLabel status={status} /></span>}
       onToggle={(open) => { if (open) setTell(true); }}
       onApply={(value) => conversation && onUpdate?.(conversation.id, !asks || tell ? { status: value } : { status: value, notify: false })}>
