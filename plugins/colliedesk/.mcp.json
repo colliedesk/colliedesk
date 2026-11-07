@@ -2,10 +2,7 @@
   "mcpServers": {
     "colliedesk": {
       "type": "http",
-      "url": "${user_config.url}",
-      "headers": {
-        "Authorization": "Bearer ${user_config.token}"
-      }
+      "url": "https://app.colliedesk.com/mcp"
     }
   }
 }

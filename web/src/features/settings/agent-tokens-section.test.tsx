@@ -130,14 +130,16 @@ test('each agent app has its steps with this address, a copy button, a guide and
   const hosts = screen.getByRole('radiogroup', { name: 'Agent app' });
   expect(within(hosts).getAllByRole('radio').map((radio) => radio.parentElement?.textContent)).toEqual(['Claude Code', 'Codex', 'Cursor', 'VS Code', 'Claude Desktop']);
   expect(screen.getByRole('radio', { name: 'Claude Code' })).toBeChecked();
+  // A self-hosted server: Claude Code adds this server's address and signs in with OAuth, no token.
   let panel = screen.getByRole('group', { name: 'Claude Code' });
-  expect(within(panel).getByText(/claude plugin install colliedesk/)).toHaveTextContent(`--config url=${origin}/mcp`);
+  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent(`claude mcp add --transport http colliedesk ${origin}/mcp`);
+  expect(within(panel).getByRole('group', { name: 'Then sign in' })).toHaveTextContent('claude mcp login colliedesk');
+  expect(panel).toHaveTextContent('needs no token');
+  expect(panel).not.toHaveTextContent('Authorization');
   expect(within(panel).getByRole('link', { name: 'Full guide' })).toHaveAttribute('href', 'https://colliedesk.com/docs/connect-claude-code');
-  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk');
+  expect(panel).toHaveTextContent('claude mcp remove colliedesk, then Disconnect it in Connected AI apps below.');
   expect(document.body.innerHTML).not.toContain('desk.example.com');
   expect(screen.getByRole('heading', { level: 3, name: 'Connect your agent' })).toBeInTheDocument();
-  // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
-  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent('claude plugin install colliedesk');
 
   fireEvent.click(screen.getByRole('radio', { name: 'Codex' }));
   expect(screen.queryByRole('group', { name: 'Claude Code' })).not.toBeInTheDocument();
@@ -236,4 +238,16 @@ test('a token may follow any role whose permissions the person all holds: every 
   expect(followableRoles(rolesOf('agent'), all, permissionsOf('agent')).map((role) => role.name)).toEqual(['Agent']);
   // Without the workspace's roles (no team:read), only the person's own.
   expect(followableRoles(rolesOf('agent'), undefined, permissionsOf('agent'))).toEqual(rolesOf('agent'));
+});
+
+test('on Colliedesk Cloud, Claude Code installs the plugin and signs in with OAuth, with no token', () => {
+  const roles = rolesOf('agent');
+  render(<AgentTokensSection roles={roles} rolePermissions={new Map([[roles[0].id, permissionsOf('agent')]])} held={permissionsOf('agent')}
+    origin="https://acme.colliedesk.com" mcpAddress="https://app.colliedesk.com/mcp" onCreate={vi.fn()} />);
+  const panel = screen.getByRole('group', { name: 'Claude Code' });
+  // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
+  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent(/^claude plugin install colliedesk --marketplace colliedesk\/colliedesk$/);
+  expect(within(panel).getByRole('group', { name: 'Then sign in' })).toHaveTextContent('claude mcp login plugin:colliedesk:colliedesk');
+  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk, then Disconnect it in Connected AI apps below.');
+  expect(panel).not.toHaveTextContent('acme.colliedesk.com');
 });

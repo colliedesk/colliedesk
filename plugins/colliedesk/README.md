@@ -7,32 +7,36 @@ server you run yourself.
 
 ## What it adds
 
-- **The Colliedesk MCP server** at the address you give (`https://<your Colliedesk>/mcp`). Claude
-  calls it with your agent token; what the token may do is set when you create it in Colliedesk.
+- **The Colliedesk MCP server** of Colliedesk Cloud, `https://app.colliedesk.com/mcp`. The first
+  time Claude uses it, you sign in to Colliedesk in your browser, choose the workspace and choose
+  **Allow**. Claude then acts as you, with what you may do in that workspace. No token to copy.
 - **Skills**: `colliedesk-triage` (sort and assign new conversations, never writes to a customer),
   `colliedesk-draft-reply` (drafts a reply, sends only the exact text you approve),
   `colliedesk-chase-pending` (follows up on stalled conversations) and `colliedesk-setup-channel`
   (adds or checks a support email, web form, help chat or Zalo channel).
-- **`/colliedesk-token`** in Claude Code: replaces the token after the old one was revoked or expired.
 
 ## Set up
 
-1. In Colliedesk, open **Settings → External AI agents** and create a token. It starts with
-   `cdk_agent_` and is shown once.
-2. Install the plugin with your address, then give it the token when Claude asks:
+1. Install the plugin:
 
    ```sh
-   claude plugin install colliedesk --marketplace colliedesk/colliedesk --config url=https://desk.example.com/mcp
+   claude plugin install colliedesk --marketplace colliedesk/colliedesk
    ```
+
+2. In Claude Code, run `/mcp`, choose `plugin:colliedesk:colliedesk` and **Authenticate**. Sign in,
+   choose the workspace and choose **Allow**.
+
+On a server you run yourself, keep the plugin for its skills, add your own address with
+`claude mcp add --transport http colliedesk https://desk.example.com/mcp`, authenticate it in `/mcp`,
+and turn the plugin's Cloud server off there.
 
 Full steps: [Connect Claude Code](https://colliedesk.com/docs/connect-claude-code).
 
 ## What it sends, and where
 
-Every call goes only to the Colliedesk address you configured, with your token in the
-`Authorization` header. `/colliedesk-token` runs `scripts/colliedesk-token.sh`, which checks a new
-token with one request to that same address before saving it, and never prints it. The plugin
-sends nothing anywhere else.
+The plugin runs no program on your computer. Claude calls only the Colliedesk address above (or the
+one you added), with the sign-in Claude keeps for it. You see and end each sign-in in Colliedesk
+under **Settings → Connected AI apps**. The plugin sends nothing anywhere else.
 
 ## Privacy and support
 

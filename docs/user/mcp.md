@@ -41,7 +41,8 @@ If a connection stops working (you disconnected it, it expired, or your account 
 app gets HTTP 401 and asks you to sign in again. To connect again:
 
 - **Claude** and **ChatGPT**: **Disconnect** the Colliedesk connector, then **Connect**.
-- **Claude Code**: run `/mcp`, choose `colliedesk` and **Authenticate**, or `claude mcp login colliedesk`.
+- **Claude Code**: run `/mcp`, choose `colliedesk` (`plugin:colliedesk:colliedesk` when it came with the
+  [Colliedesk plugin](connect-claude-code.md)) and **Authenticate**, or `claude mcp login <that name>`.
 - **Codex**: `codex mcp login colliedesk`.
 - **Cursor**: Settings → MCP, log in to `colliedesk` again.
 

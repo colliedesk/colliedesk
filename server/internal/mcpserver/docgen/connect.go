@@ -24,6 +24,13 @@ const (
 	Releases      = "https://github.com/colliedesk/colliedesk/releases/latest/download/"
 	Marketplace   = "colliedesk/colliedesk"
 	PluginID      = "colliedesk@colliedesk"
+	// PluginMCPURL is the MCP address the Claude Code and Cursor plugins connect to
+	// (plugins/colliedesk/.mcp.json and cursor-mcp.json): Colliedesk Cloud, one address for every
+	// workspace. The plugin directory needs a fixed public URL; a self-hosted server adds its own
+	// address next to the plugin instead.
+	PluginMCPURL = "https://app.colliedesk.com/mcp"
+	// PluginServer is the name Claude Code gives the plugin's server, plugin:<plugin>:<server>.
+	PluginServer = "plugin:colliedesk:colliedesk"
 )
 
 // Hosts are the AI hosts with a guide, docs/user/connect-<ID>.md, in the order the guides list them.
@@ -39,12 +46,12 @@ type Host struct{ ID, Name string }
 
 // Data is what the guide templates read.
 type Data struct {
-	Origin, MCPURL, ServerName, TokenEnv, URLEnv, TokenPrefix string
-	ProtocolVersions                                          []string
-	Tools                                                     int
-	Snippets                                                  map[string]string
-	Assets                                                    map[string]string // client-assets.txt: "darwin/arm64", "bundle", "checksums" to file name
-	Releases, Marketplace, PluginID                           string
+	Origin, MCPURL, ServerName, TokenEnv, URLEnv, TokenPrefix   string
+	ProtocolVersions                                            []string
+	Tools                                                       int
+	Snippets                                                    map[string]string
+	Assets                                                      map[string]string // client-assets.txt: "darwin/arm64", "bundle", "checksums" to file name
+	Releases, Marketplace, PluginID, PluginMCPURL, PluginServer string
 }
 
 // NewData reads the catalog and the asset list (the path of client-assets.txt).
@@ -58,7 +65,7 @@ func NewData(specs []mcpserver.Spec, assetList string) (Data, error) {
 		Origin: ExampleOrigin, MCPURL: ExampleOrigin + mcpserver.Path, ServerName: ServerName,
 		TokenEnv: mcpbridge.TokenEnv, URLEnv: mcpbridge.URLEnv, TokenPrefix: mcpbridge.TokenPrefix,
 		ProtocolVersions: mcp.SupportedProtocolVersions(), Tools: len(specs), Assets: assets,
-		Releases: Releases, Marketplace: Marketplace, PluginID: PluginID,
+		Releases: Releases, Marketplace: Marketplace, PluginID: PluginID, PluginMCPURL: PluginMCPURL, PluginServer: PluginServer,
 	}
 	data.Snippets = snippets(data)
 	return data, nil
@@ -75,13 +82,13 @@ func snippets(d Data) map[string]string {
 		_ = encoder.Encode(value)
 		return strings.TrimSuffix(out.String(), "\n")
 	}
-	bearerEnv := "Bearer ${" + d.TokenEnv + "}"
 	return map[string]string{
-		"claudeCodePlugin": "claude plugin install colliedesk --marketplace " + d.Marketplace + " --config url=" + d.MCPURL,
-		"claudeCodeToken":  "/plugin configure " + d.PluginID,
-		"claudeCodeCLI":    "claude mcp add --transport http " + d.ServerName + " " + d.MCPURL + " --header 'Authorization: " + bearerEnv + "'",
-		"tokenEnv":         "export " + d.TokenEnv + "=<your token>",
-		"codex":            "codex mcp add " + d.ServerName + " --url " + d.MCPURL + " --bearer-token-env-var " + d.TokenEnv,
+		"claudeCodePlugin":   "claude plugin install colliedesk --marketplace " + d.Marketplace,
+		"claudeCodeLogin":    "claude mcp login " + d.PluginServer,
+		"claudeCodeCLI":      "claude mcp add --transport http " + d.ServerName + " " + d.MCPURL,
+		"claudeCodeCLILogin": "claude mcp login " + d.ServerName,
+		"tokenEnv":           "export " + d.TokenEnv + "=<your token>",
+		"codex":              "codex mcp add " + d.ServerName + " --url " + d.MCPURL + " --bearer-token-env-var " + d.TokenEnv,
 		"cursor": jsonOf(map[string]any{"mcpServers": map[string]httpServer{
 			d.ServerName: {URL: d.MCPURL, Headers: authorization{"Bearer ${env:" + d.TokenEnv + "}"}},
 		}}),
@@ -217,6 +224,7 @@ func TypeScript(data Data) string {
 	}
 	fmt.Fprintf(&b, "export const exampleOrigin = %s;\n", str(data.Origin))
 	fmt.Fprintf(&b, "export const mcpServerName = %s;\n", str(data.ServerName))
+	fmt.Fprintf(&b, "export const pluginMCPURL = %s;\n", str(data.PluginMCPURL))
 	fmt.Fprintf(&b, "export const tokenEnv = %s;\n", str(data.TokenEnv))
 	fmt.Fprintf(&b, "export const tokenPrefix = %s;\n\n", str(data.TokenPrefix))
 	b.WriteString("export const connectHosts = [\n")

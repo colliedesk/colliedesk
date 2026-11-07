@@ -4,7 +4,7 @@ import { InvalidRequestError, PlanLimitError, UnauthorizedError } from '../../ap
 import type { AgentToken, Role, RoleRef, TokenPermission } from '../../api/schemas';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { CopyButton } from './copy-button';
-import { connectHosts, connectSnippets, exampleOrigin, mcpServerName } from './connect-snippets.generated';
+import { connectHosts, connectSnippets, exampleOrigin, mcpServerName, pluginMCPURL } from './connect-snippets.generated';
 import type { ConnectHostID } from './connect-snippets.generated';
 import { outsidePermissions, permissionSummary } from './token-permissions';
 import { PermissionMatrix } from './permission-matrix';
@@ -32,6 +32,9 @@ interface AgentTokensSectionProps {
   onCreate: (label: string, choice: TokenChoice) => Promise<AgentToken>;
   // origin is the address this app is open at; the steps use it in place of the guides' example.
   origin?: string;
+  // mcpAddress is where an app signs in with OAuth (APP_ORIGIN's /mcp). Claude Code uses it: when it is the
+  // address the Colliedesk plugin connects to (Cloud), the plugin; otherwise this server added by hand.
+  mcpAddress?: string;
 }
 
 // cursorInstallLink is Cursor's install deeplink (cursor.com/docs/context/mcp/install-links): the server
@@ -51,7 +54,7 @@ function refusal(error: unknown): string {
 
 // AgentTokensSection creates an agent token and shows it once, then how each AI host uses it. The token
 // lives in this component's state only: no query cache, no storage, gone once hidden or the page is left.
-export function AgentTokensSection({ roles, rolePermissions, held, onCreate, origin = window.location.origin }: AgentTokensSectionProps) {
+export function AgentTokensSection({ roles, rolePermissions, held, onCreate, origin = window.location.origin, mcpAddress = `${origin}/mcp` }: AgentTokensSectionProps) {
   const [label, setLabel] = useState('');
   const permissionsOf = (id: string | undefined): readonly string[] => (id === undefined ? [] : rolePermissions?.get(id) ?? []);
   // The role with the fewest permissions comes first, and is the one a new token follows by default.
@@ -193,7 +196,7 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
             {connectHosts.map((item) => <label key={item.id}><input type="radio" name="agent-host" value={item.id} checked={host === item.id}
               onChange={() => setHost(item.id)} />{item.name}</label>)}
           </div>
-          <HostSteps host={host} origin={origin} token={token} hidden={hidden} />
+          <HostSteps host={host} origin={origin} mcpAddress={mcpAddress} token={token} hidden={hidden} />
           <p className="muted-copy check-it">{text.checkIt}</p>
         </div>
       </div>
@@ -202,23 +205,27 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
 }
 
 // hidden is a token just created and hidden: the steps say so instead of asking for a first one.
-function HostSteps({ host, origin, token, hidden }: { host: ConnectHostID; origin: string; token?: string; hidden: boolean }) {
+function HostSteps({ host, origin, mcpAddress, token, hidden }: { host: ConnectHostID; origin: string; mcpAddress: string; token?: string; hidden: boolean }) {
   const item = connectHosts.find((candidate) => candidate.id === host)!;
   const snippet = (name: keyof typeof connectSnippets) => connectSnippets[name].replaceAll(exampleOrigin, origin);
-  const [before, command] = text.disconnects[host];
+  // Claude Code signs in with OAuth: the Colliedesk plugin on Cloud, this server's address elsewhere.
+  const plugin = mcpAddress === pluginMCPURL;
+  const [before, command] = host === 'claude-code' && !plugin ? text.claudeCodeRemove : text.disconnects[host];
+  const after = host === 'claude-code' ? text.disconnectAfter : text.revokeAfter;
   let steps: ReactNode;
   if (host === 'claude-code') {
     steps = <>
+      <p className="muted-copy">{text.claudeCodeOAuth}</p>
       <ol className="host-steps">
-        <li><Snippet label={text.runInTerminal} code={snippet('claudeCodePlugin')} /><p className="muted-copy">{text.pluginInstalls}</p></li>
-        <li><Snippet label={text.insideClaudeCode} code={snippet('claudeCodeToken')} /><p className="muted-copy">{text.pluginToken}</p></li>
+        {plugin ? <>
+          <li><Snippet label={text.runInTerminal} code={connectSnippets.claudeCodePlugin} /><p className="muted-copy">{text.pluginInstalls}</p></li>
+          <li><Snippet label={text.thenSignIn} code={connectSnippets.claudeCodeLogin} /><p className="muted-copy">{text.claudeCodeAllow}</p></li>
+        </> : <>
+          <li><Snippet label={text.runInTerminal} code={connectSnippets.claudeCodeCLI.replaceAll(`${exampleOrigin}/mcp`, mcpAddress)} /></li>
+          <li><Snippet label={text.thenSignIn} code={connectSnippets.claudeCodeCLILogin} /><p className="muted-copy">{text.claudeCodeAllow}</p></li>
+        </>}
       </ol>
-      <details className="host-alt"><summary>{text.withoutPlugin}</summary>
-        <ol className="host-steps">
-          <li><Snippet label={text.shellProfile} code={snippet('tokenEnv')} /></li>
-          <li><Snippet label={text.thenRun} code={snippet('claudeCodeCLI')} /></li>
-        </ol>
-      </details>
+      {!plugin && <p className="muted-copy">{text.claudeCodeSkills}</p>}
     </>;
   } else if (host === 'codex') {
     steps = <ol className="host-steps">
@@ -259,7 +266,7 @@ function HostSteps({ host, origin, token, hidden }: { host: ConnectHostID; origi
     <div className="host-panel" role="group" aria-label={item.name}>
       {steps}
       <p className="muted-copy host-foot"><a href={item.guide} target="_blank" rel="noopener noreferrer">{text.fullGuide}</a>
-        {' · '}{text.disconnect}{before}{command && <code>{command}</code>}{text.revokeAfter}</p>
+        {' · '}{text.disconnect}{before}{command && <code>{command}</code>}{after}</p>
     </div>
   );
 }
