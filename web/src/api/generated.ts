@@ -9314,15 +9314,34 @@ export interface components {
              */
             trial_expires_at?: string;
         };
+        /**
+         * @description The code of a message the operator console shows from the server, beside its English text: the console translates by code and params, and falls back to the text (docs/internals/operator-console.md › Message codes). A code is stable.
+         * @enum {string}
+         */
+        OperatorMessageCode: "ai_server_allowance_format" | "ai_server_allowance_not_number" | "ai_server_allowance_unknown" | "ai_server_allowance_unpriced" | "ai_server_base_url_invalid" | "ai_server_half_configured" | "ai_server_label_too_long" | "ai_server_models_bad_model" | "ai_server_models_format" | "ai_server_models_twice" | "ai_server_prices_format" | "ai_server_prices_not_number" | "ai_server_prices_twice" | "ai_server_provider_invalid" | "secret_not_valid" | "test_ai_models_failed" | "test_ai_models_needs_base_url" | "test_ai_models_needs_key" | "test_ai_models_needs_provider" | "test_ai_models_ok" | "test_ai_models_refused" | "test_ai_needs_settings" | "test_ai_ok" | "test_ai_refused" | "test_reenter_secret";
+        /** @description What the message names (a setting, a model, a count). Never a secret's value. */
+        OperatorMessageParams: {
+            [key: string]: string | number;
+        };
+        OperatorCodedMessage: {
+            code: components["schemas"]["OperatorMessageCode"];
+            params?: components["schemas"]["OperatorMessageParams"];
+        };
         OperatorConfigCheck: {
             ok: boolean;
             errors: {
                 [key: string]: string;
             };
+            /** @description The code of each message of `errors` that has one, by the same key */
+            field_errors?: {
+                [key: string]: components["schemas"]["OperatorCodedMessage"];
+            };
             test?: {
                 name: string;
                 ok: boolean;
                 message: string;
+                code?: components["schemas"]["OperatorMessageCode"];
+                params?: components["schemas"]["OperatorMessageParams"];
                 /** @description The models listed, for `ai_models` */
                 models?: string[];
                 /** @description For `ai_models`: what the provider lists each model to cost (OpenRouter), in US dollars per million tokens; a model without a listed price is left out */
@@ -9348,6 +9367,10 @@ export interface components {
             trial?: boolean;
             /** @description Why the change cannot be saved as it is */
             refused?: string;
+            preview_code?: components["schemas"]["OperatorMessageCode"];
+            preview_params?: components["schemas"]["OperatorMessageParams"];
+            refused_code?: components["schemas"]["OperatorMessageCode"];
+            refused_params?: components["schemas"]["OperatorMessageParams"];
         };
         OperatorTrial: {
             version: number;
@@ -9471,6 +9494,14 @@ export interface components {
                 /** @description Present on validation errors (422), one message per bad field name */
                 fields?: {
                     [key: string]: string;
+                };
+                /** @description Only on the operator console's routes: the code of `message`, when it has one */
+                message_code?: components["schemas"]["OperatorMessageCode"];
+                /** @description With message_code: what the message names */
+                params?: components["schemas"]["OperatorMessageParams"];
+                /** @description Only on the operator console's routes: the code of each message of `fields` that has one, by the same key */
+                field_errors?: {
+                    [key: string]: components["schemas"]["OperatorCodedMessage"];
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;

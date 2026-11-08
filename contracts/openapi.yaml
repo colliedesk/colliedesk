@@ -13123,12 +13123,55 @@ components:
         applies: {type: string, enum: [at_once, in_seconds, trial]}
         changed: {type: array, items: {type: string}}
         trial_expires_at: {type: string, format: date-time, description: 'A trial: when it reverts by itself unless confirmed'}
+    OperatorMessageCode:
+      type: string
+      description: 'The code of a message the operator console shows from the server, beside its English text: the console translates by code and params, and falls back to the text (docs/internals/operator-console.md › Message codes). A code is stable.'
+      enum:
+        - ai_server_allowance_format
+        - ai_server_allowance_not_number
+        - ai_server_allowance_unknown
+        - ai_server_allowance_unpriced
+        - ai_server_base_url_invalid
+        - ai_server_half_configured
+        - ai_server_label_too_long
+        - ai_server_models_bad_model
+        - ai_server_models_format
+        - ai_server_models_twice
+        - ai_server_prices_format
+        - ai_server_prices_not_number
+        - ai_server_prices_twice
+        - ai_server_provider_invalid
+        - secret_not_valid
+        - test_ai_models_failed
+        - test_ai_models_needs_base_url
+        - test_ai_models_needs_key
+        - test_ai_models_needs_provider
+        - test_ai_models_ok
+        - test_ai_models_refused
+        - test_ai_needs_settings
+        - test_ai_ok
+        - test_ai_refused
+        - test_reenter_secret
+    OperatorMessageParams:
+      type: object
+      description: 'What the message names (a setting, a model, a count). Never a secret''s value.'
+      additionalProperties: {oneOf: [{type: string}, {type: number}]}
+    OperatorCodedMessage:
+      type: object
+      required: [code]
+      properties:
+        code: {$ref: '#/components/schemas/OperatorMessageCode'}
+        params: {$ref: '#/components/schemas/OperatorMessageParams'}
     OperatorConfigCheck:
       type: object
       required: [ok, errors]
       properties:
         ok: {type: boolean}
         errors: {type: object, additionalProperties: {type: string}}
+        field_errors:
+          type: object
+          description: 'The code of each message of `errors` that has one, by the same key'
+          additionalProperties: {$ref: '#/components/schemas/OperatorCodedMessage'}
         test:
           type: object
           required: [name, ok, message]
@@ -13136,6 +13179,8 @@ components:
             name: {type: string}
             ok: {type: boolean}
             message: {type: string}
+            code: {$ref: '#/components/schemas/OperatorMessageCode'}
+            params: {$ref: '#/components/schemas/OperatorMessageParams'}
             models: {type: array, items: {type: string}, description: 'The models listed, for `ai_models`'}
             prices:
               type: object
@@ -13159,6 +13204,10 @@ components:
         phrase: {type: string, description: 'What to type in `confirm[key]`'}
         trial: {type: boolean, description: 'The change is tried and reverts by itself unless confirmed (D12)'}
         refused: {type: string, description: Why the change cannot be saved as it is}
+        preview_code: {$ref: '#/components/schemas/OperatorMessageCode'}
+        preview_params: {$ref: '#/components/schemas/OperatorMessageParams'}
+        refused_code: {$ref: '#/components/schemas/OperatorMessageCode'}
+        refused_params: {$ref: '#/components/schemas/OperatorMessageParams'}
     OperatorTrial:
       type: object
       required: [version, parent_version, started_at, expires_at, started_by, keys, evidence]
@@ -13278,6 +13327,12 @@ components:
               type: object
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
+            message_code: {$ref: '#/components/schemas/OperatorMessageCode', description: 'Only on the operator console''s routes: the code of `message`, when it has one'}
+            params: {$ref: '#/components/schemas/OperatorMessageParams', description: 'With message_code: what the message names'}
+            field_errors:
+              type: object
+              description: 'Only on the operator console''s routes: the code of each message of `fields` that has one, by the same key'
+              additionalProperties: {$ref: '#/components/schemas/OperatorCodedMessage'}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
             missing_permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks.'}
             missing_from: {type: string, enum: [token, person], description: 'Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.'}

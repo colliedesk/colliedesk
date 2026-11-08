@@ -15,6 +15,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/retention"
@@ -523,15 +524,15 @@ func fetchStatus(ctx context.Context, address string) (int, error) {
 func (a *API) tryAI(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	server, err := ai.ServerProviderFromEnv(snap.Getenv)
 	if err != nil || server == nil {
-		return map[string]any{"name": "ai", "ok": false, "message": "Set the provider, its key or address and the models first."}
+		return testSaid("ai", false, configerr.Say("test_ai_needs_settings", nil))
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	model, err := a.ai.PingServer(callCtx, server)
 	if err != nil {
-		return map[string]any{"name": "ai", "ok": false, "message": "The provider refused " + model + ": " + redactSecretsIn(err.Error(), snap)}
+		return testSaid("ai", false, configerr.Say("test_ai_refused", configerr.Params{"model": model, "detail": redactSecretsIn(err.Error(), snap)}))
 	}
-	return map[string]any{"name": "ai", "ok": true, "message": "The provider answered with " + model + ". Nothing was saved."}
+	return testSaid("ai", true, configerr.Say("test_ai_ok", configerr.Params{"model": model}))
 }
 
 // listServerAIModels asks the server AI provider of the change which models its key may use. Nothing is saved; an
@@ -539,16 +540,16 @@ func (a *API) tryAI(ctx context.Context, snap serverconfig.Snapshot) map[string]
 func (a *API) listServerAIModels(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	value := func(key string) string { return strings.TrimSpace(snap.Getenv(key)) }
 	kind, base, key := aiprovider.Kind(value("AI_SERVER_PROVIDER")), value("AI_SERVER_BASE_URL"), value("AI_SERVER_API_KEY")
-	refuse := func(message string) map[string]any {
-		return map[string]any{"name": "ai_models", "ok": false, "message": message}
+	refuseCoded := func(code string, params configerr.Params) map[string]any {
+		return testSaid("ai_models", false, configerr.Say(code, params))
 	}
 	switch {
 	case kind != aiprovider.KindAnthropic && kind != aiprovider.KindOpenAICompatible:
-		return refuse("Pick a provider first.")
+		return refuseCoded("test_ai_models_needs_provider", nil)
 	case kind == aiprovider.KindOpenAICompatible && base == "":
-		return refuse("Enter the base URL first.")
+		return refuseCoded("test_ai_models_needs_base_url", nil)
 	case kind == aiprovider.KindAnthropic && key == "":
-		return refuse("Enter the API key first.")
+		return refuseCoded("test_ai_models_needs_key", nil)
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -556,11 +557,13 @@ func (a *API) listServerAIModels(ctx context.Context, snap serverconfig.Snapshot
 	if err != nil {
 		var check *ai.CheckError
 		if errors.As(err, &check) {
-			return refuse("The provider refused to list its models (" + string(check.Code) + "). Check the key and the address, or type the model names.")
+			return refuseCoded("test_ai_models_refused", configerr.Params{"check_code": string(check.Code)})
 		}
-		return refuse("The models could not be listed: " + redactSecretsIn(err.Error(), snap))
+		return refuseCoded("test_ai_models_failed", configerr.Params{"detail": redactSecretsIn(err.Error(), snap)})
 	}
-	return map[string]any{"name": "ai_models", "ok": true, "message": fmt.Sprintf("The provider offers %d %s. Nothing was saved.", len(models), plural(len(models), "model", "models")), "models": models, "prices": prices}
+	out := testSaid("ai_models", true, configerr.Say("test_ai_models_ok", configerr.Params{"count": len(models)}))
+	out["models"], out["prices"] = models, prices
+	return out
 }
 
 // switchGuard is what switching a feature on or off asks: who it stops, counted, and for billing and cloud

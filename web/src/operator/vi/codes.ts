@@ -1,0 +1,31 @@
+import type { CodeTable } from '../codes';
+
+// Vietnamese for the server's message codes (../codes.ts): the same {placeholders} as the English
+// (../codes.en.json). Setting keys, model names and what a provider answered stay as they are.
+export const codes: CodeTable = {
+  ai_server_allowance_format: 'ai.server.monthly_allowance phải là số đô la cho mỗi workspace (10) hoặc cho mỗi agent kèm mức cho thời gian dùng thử (agent=3,trial=2)',
+  ai_server_allowance_not_number: 'ai.server.monthly_allowance phải là một số đô la',
+  ai_server_allowance_unknown: 'ai.server.monthly_allowance chỉ nhận workspace, agent và trial, không nhận {"key"}',
+  ai_server_allowance_unpriced: 'ai.server.monthly_allowance cần giá trong ai.server.prices cho {models}',
+  ai_server_base_url_invalid: 'ai.server.base_url phải là URL http hoặc https, không kèm thông tin đăng nhập',
+  ai_server_half_configured: 'Nhà cung cấp AI của máy chủ mới cấu hình một nửa: hãy đặt {missing}, hoặc bỏ mọi biến AI_SERVER_',
+  ai_server_label_too_long: 'ai.server.label tối đa {max} ký tự',
+  ai_server_models_bad_model: 'ai.server.models có mô hình rỗng hoặc quá dài cho {slot}',
+  ai_server_models_format: 'ai.server.models phải viết dạng triage=model,draft=model (một tính năng có thể liệt kê nhiều mô hình, cách nhau bằng |)',
+  ai_server_models_twice: 'ai.server.models liệt kê {slot} hai lần',
+  ai_server_prices_format: 'ai.server.prices phải viết dạng model=input:output[:cache_read[:cache_write]] theo đô la Mỹ cho mỗi triệu token, cách nhau bằng dấu phẩy',
+  ai_server_prices_not_number: 'ai.server.prices có giá cho {model} không phải là số đô la',
+  ai_server_prices_twice: 'ai.server.prices liệt kê {model} hai lần',
+  ai_server_provider_invalid: 'ai.server.provider phải là anthropic hoặc openai_compatible',
+  secret_not_valid: '{keys}: không hợp lệ',
+  test_ai_models_failed: 'Không liệt kê được các mô hình: {detail}',
+  test_ai_models_needs_base_url: 'Hãy nhập base URL trước.',
+  test_ai_models_needs_key: 'Hãy nhập API key trước.',
+  test_ai_models_needs_provider: 'Hãy chọn nhà cung cấp trước.',
+  test_ai_models_ok: 'Nhà cung cấp có {count} mô hình. Chưa có gì được lưu.',
+  test_ai_models_refused: 'Nhà cung cấp từ chối liệt kê mô hình ({check_code}). Hãy kiểm tra key và địa chỉ, hoặc gõ tên mô hình.',
+  test_ai_needs_settings: 'Hãy đặt nhà cung cấp, key hoặc địa chỉ của nó và các mô hình trước.',
+  test_ai_ok: 'Nhà cung cấp đã trả lời bằng {model}. Chưa có gì được lưu.',
+  test_ai_refused: 'Nhà cung cấp từ chối {model}: {detail}',
+  test_reenter_secret: 'Hãy nhập lại {secret}: phép thử gửi tới {key} mới.',
+};

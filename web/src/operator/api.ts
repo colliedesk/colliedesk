@@ -1,4 +1,5 @@
 import type { components } from '../api/generated';
+import { lazyWords } from './lang';
 
 // The console's client: same-origin fetch with the operator cookie. It never imports the workspace app's
 // client, messages or query cache, so the app's first bundle and the console's stay apart.
@@ -53,6 +54,7 @@ export async function call<T>(method: string, path: string, body?: unknown, head
   const response = await fetch(path, init);
   const text = await response.text();
   const parsed = text ? JSON.parse(text) as Record<string, unknown> : {};
+  lazyWords.coded?.(parsed);
   if (!response.ok) {
     if (response.status === 401 && signedIn) sessionEnded();
     const error = (parsed.error ?? {}) as Record<string, unknown>;

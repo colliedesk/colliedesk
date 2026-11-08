@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/jackc/pgx/v5"
@@ -59,11 +60,8 @@ func (a *API) operatorCurrent(ctx context.Context) (serverconfig.Loaded, error) 
 	return a.config.ServerConfig.Current(ctx)
 }
 
-// friendlyConfigError turns a build error into one message per setting: the parsers name variables, the
-// console names settings.
-func friendlyConfigError(err error) (string, map[string]string) {
-	text := err.Error()
-	fields := map[string]string{}
+// friendly names settings where the parsers name variables: the console names settings.
+func friendly(text string) string {
 	// A product has no setting of its own: name it as the products table does.
 	for _, product := range serverconfig.ProductEnvs {
 		text = strings.ReplaceAll(text, product.Env, "the "+product.Plan+" "+product.Period+" product (Billing › Products)")
@@ -74,16 +72,83 @@ func friendlyConfigError(err error) (string, map[string]string) {
 			text = strings.ReplaceAll(text, key.Env, key.Name)
 		}
 	}
-	for _, line := range strings.Split(text, "\n") {
-		for _, key := range serverconfig.Keys() {
-			if strings.Contains(line, key.Name) {
-				if _, seen := fields[key.Name]; !seen {
-					fields[key.Name] = line
+	return text
+}
+
+// friendlyCoded is a configuration error's code with its params in the console's words, as its text is.
+func friendlyCoded(coded *configerr.Error) configerr.Coded {
+	params := configerr.Params{}
+	for name, value := range coded.Params {
+		if text, ok := value.(string); ok {
+			value = friendly(text)
+		}
+		params[name] = value
+	}
+	if len(params) == 0 {
+		params = nil
+	}
+	return configerr.Coded{Code: coded.Code, Params: params}
+}
+
+// friendlyConfigError turns a build error into one message per setting, and the code of each message the
+// parser coded (field_errors; docs/internals/operator-console.md › Message codes). The setting a message is
+// about is found as before codes: every setting its line names.
+func friendlyConfigError(err error) (string, map[string]string, map[string]configerr.Coded) {
+	text := friendly(err.Error())
+	fields := map[string]string{}
+	codes := map[string]configerr.Coded{}
+	leaves := configerr.Leaves(err)
+	for _, leaf := range leaves {
+		coded, isCoded := configerr.As(leaf)
+		for _, line := range strings.Split(friendly(leaf.Error()), "\n") {
+			for _, key := range serverconfig.Keys() {
+				if strings.Contains(line, key.Name) {
+					if _, seen := fields[key.Name]; !seen {
+						fields[key.Name] = line
+						if isCoded {
+							codes[key.Name] = friendlyCoded(coded)
+						}
+					}
 				}
 			}
 		}
 	}
-	return text, fields
+	// A message about no setting goes under "".
+	if len(fields) == 0 && len(leaves) == 1 {
+		if coded, ok := configerr.As(leaves[0]); ok {
+			codes[""] = friendlyCoded(coded)
+		}
+	}
+	return text, fields, codes
+}
+
+// writeConfigRefusal refuses a change that does not build: a message per setting and its code.
+func writeConfigRefusal(response http.ResponseWriter, err error) {
+	message, fields, codes := friendlyConfigError(err)
+	body := map[string]any{"code": "config_invalid", "message": message}
+	if len(fields) > 0 {
+		body["fields"] = fields
+	}
+	if said, ok := codes[""]; ok {
+		body["message_code"] = said.Code
+		if len(said.Params) > 0 {
+			body["params"] = said.Params
+		}
+		delete(codes, "")
+	}
+	if len(codes) > 0 {
+		body["field_errors"] = codes
+	}
+	writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": body})
+}
+
+// testSaid is a live test's answer: its English and its code.
+func testSaid(name string, ok bool, said *configerr.Error) map[string]any {
+	out := map[string]any{"name": name, "ok": ok, "message": said.Text, "code": said.Code}
+	if len(said.Params) > 0 {
+		out["params"] = said.Params
+	}
+	return out
 }
 
 // confirmMatches compares a typed phrase as the console does: trimmed, case-insensitive.
@@ -178,8 +243,7 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	next := current.With(set, unset)
 	if a.config.CheckConfig != nil {
 		if err := a.config.CheckConfig(next); err != nil {
-			message, fields := friendlyConfigError(err)
-			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", message, fields)
+			writeConfigRefusal(response, err)
 			return
 		}
 	}
@@ -469,16 +533,17 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 	}
 	next := current.With(set, input.Unset)
 	out := map[string]any{"ok": true, "errors": map[string]string{}}
+	fieldCodes := map[string]configerr.Coded{}
 	// Listing the server provider's models comes before any model is picked: the change need not be
 	// complete, only its provider, address and key are used.
 	listing := input.Test == "ai_models"
 	if a.config.CheckConfig != nil && !listing {
 		if err := a.config.CheckConfig(next); err != nil {
-			text, fields := friendlyConfigError(err)
+			text, fields, codes := friendlyConfigError(err)
 			if len(fields) == 0 {
 				fields = map[string]string{"": text}
 			}
-			out["ok"], out["errors"] = false, fields
+			out["ok"], out["errors"], fieldCodes = false, fields, codes
 		}
 	}
 	if refused := switchesRefused(current.Snapshot, next); refused != nil && out["ok"] == true && !listing {
@@ -523,7 +588,8 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			if _, stored := current.Get(key.Reenter); stored && before != set[key.Name] {
 				if value, typed := input.Secrets[key.Reenter]; !typed || value == nil || *value == "" {
 					out["ok"] = false
-					out["test"] = map[string]any{"name": input.Test, "ok": false, "message": "Enter " + key.Reenter + " again: the test goes to the new " + key.Name + "."}
+					out["test"] = testSaid(input.Test, false, configerr.Say("test_reenter_secret", configerr.Params{"secret": key.Reenter, "key": key.Name}))
+					out["field_errors"] = fieldCodes
 					writeJSON(response, http.StatusOK, out)
 					return
 				}
@@ -544,6 +610,7 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			out["test"] = a.listServerAIModels(request.Context(), next)
 		}
 	}
+	out["field_errors"] = fieldCodes
 	writeJSON(response, http.StatusOK, out)
 }
 
@@ -684,8 +751,7 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 	}
 	if a.config.CheckConfig != nil {
 		if err := a.config.CheckConfig(old.Snapshot); err != nil {
-			message, fields := friendlyConfigError(err)
-			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", message, fields)
+			writeConfigRefusal(response, err)
 			return
 		}
 	}

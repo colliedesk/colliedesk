@@ -1,0 +1,149 @@
+{
+  "ai_server_allowance_format": {
+    "text": "ai.server.monthly_allowance must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)",
+    "message": "ai.server.monthly_allowance must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)"
+  },
+  "ai_server_allowance_not_number": {
+    "text": "ai.server.monthly_allowance must be a number of dollars",
+    "message": "ai.server.monthly_allowance must be a number of dollars"
+  },
+  "ai_server_allowance_unknown": {
+    "text": "ai.server.monthly_allowance knows workspace, agent and trial, not {\"key\"}",
+    "params": {
+      "key": "seat"
+    },
+    "message": "ai.server.monthly_allowance knows workspace, agent and trial, not \"seat\""
+  },
+  "ai_server_allowance_unpriced": {
+    "text": "ai.server.monthly_allowance needs a price in ai.server.prices for {models}",
+    "params": {
+      "models": "claude-haiku-5-5, gpt-5"
+    },
+    "message": "ai.server.monthly_allowance needs a price in ai.server.prices for claude-haiku-5-5, gpt-5"
+  },
+  "ai_server_base_url_invalid": {
+    "text": "ai.server.base_url must be an http or https URL without credentials",
+    "message": "ai.server.base_url must be an http or https URL without credentials"
+  },
+  "ai_server_half_configured": {
+    "text": "the server AI provider is half configured: set {missing}, or unset every AI_SERVER_ variable",
+    "params": {
+      "missing": "ai.server.api_key, ai.server.models"
+    },
+    "message": "the server AI provider is half configured: set ai.server.api_key, ai.server.models, or unset every AI_SERVER_ variable"
+  },
+  "ai_server_label_too_long": {
+    "text": "ai.server.label must be at most {max} characters",
+    "params": {
+      "max": 80
+    },
+    "message": "ai.server.label must be at most 80 characters"
+  },
+  "ai_server_models_bad_model": {
+    "text": "ai.server.models has an empty or too long model for {slot}",
+    "params": {
+      "slot": "draft"
+    },
+    "message": "ai.server.models has an empty or too long model for draft"
+  },
+  "ai_server_models_format": {
+    "text": "ai.server.models must be written triage=model,draft=model (a slot may list more models separated by |)",
+    "message": "ai.server.models must be written triage=model,draft=model (a slot may list more models separated by |)"
+  },
+  "ai_server_models_twice": {
+    "text": "ai.server.models lists {slot} twice",
+    "params": {
+      "slot": "triage"
+    },
+    "message": "ai.server.models lists triage twice"
+  },
+  "ai_server_prices_format": {
+    "text": "ai.server.prices must be written model=input:output[:cache_read[:cache_write]] in US dollars per million tokens, separated by commas",
+    "message": "ai.server.prices must be written model=input:output[:cache_read[:cache_write]] in US dollars per million tokens, separated by commas"
+  },
+  "ai_server_prices_not_number": {
+    "text": "ai.server.prices has a price for {model} that is not a number of dollars",
+    "params": {
+      "model": "claude-haiku-5-5"
+    },
+    "message": "ai.server.prices has a price for claude-haiku-5-5 that is not a number of dollars"
+  },
+  "ai_server_prices_twice": {
+    "text": "ai.server.prices lists {model} twice",
+    "params": {
+      "model": "claude-haiku-5-5"
+    },
+    "message": "ai.server.prices lists claude-haiku-5-5 twice"
+  },
+  "ai_server_provider_invalid": {
+    "text": "ai.server.provider must be anthropic or openai_compatible",
+    "message": "ai.server.provider must be anthropic or openai_compatible"
+  },
+  "secret_not_valid": {
+    "text": "{keys}: not valid",
+    "params": {
+      "keys": "ai.server.api_key, smtp.password"
+    },
+    "message": "ai.server.api_key, smtp.password: not valid"
+  },
+  "test_ai_models_failed": {
+    "text": "The models could not be listed: {detail}",
+    "params": {
+      "detail": "connection refused"
+    },
+    "message": "The models could not be listed: connection refused"
+  },
+  "test_ai_models_needs_base_url": {
+    "text": "Enter the base URL first.",
+    "message": "Enter the base URL first."
+  },
+  "test_ai_models_needs_key": {
+    "text": "Enter the API key first.",
+    "message": "Enter the API key first."
+  },
+  "test_ai_models_needs_provider": {
+    "text": "Pick a provider first.",
+    "message": "Pick a provider first."
+  },
+  "test_ai_models_ok": {
+    "text": "The provider offers {count} {count?model|models}. Nothing was saved.",
+    "params": {
+      "count": 2
+    },
+    "message": "The provider offers 2 models. Nothing was saved."
+  },
+  "test_ai_models_refused": {
+    "text": "The provider refused to list its models ({check_code}). Check the key and the address, or type the model names.",
+    "params": {
+      "check_code": "auth"
+    },
+    "message": "The provider refused to list its models (auth). Check the key and the address, or type the model names."
+  },
+  "test_ai_needs_settings": {
+    "text": "Set the provider, its key or address and the models first.",
+    "message": "Set the provider, its key or address and the models first."
+  },
+  "test_ai_ok": {
+    "text": "The provider answered with {model}. Nothing was saved.",
+    "params": {
+      "model": "claude-haiku-5-5"
+    },
+    "message": "The provider answered with claude-haiku-5-5. Nothing was saved."
+  },
+  "test_ai_refused": {
+    "text": "The provider refused {model}: {detail}",
+    "params": {
+      "detail": "401 invalid x-api-key [secret]",
+      "model": "claude-haiku-5-5"
+    },
+    "message": "The provider refused claude-haiku-5-5: 401 invalid x-api-key [secret]"
+  },
+  "test_reenter_secret": {
+    "text": "Enter {secret} again: the test goes to the new {key}.",
+    "params": {
+      "key": "smtp.host",
+      "secret": "smtp.password"
+    },
+    "message": "Enter smtp.password again: the test goes to the new smtp.host."
+  }
+}

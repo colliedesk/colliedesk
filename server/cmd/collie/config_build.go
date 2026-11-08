@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/github"
@@ -147,7 +148,15 @@ func redactSecrets(err error, snap serverconfig.Snapshot) error {
 	if err == nil {
 		return nil
 	}
+	// A param is checked as its text is: the console shows params too.
 	text := err.Error()
+	for _, leaf := range configerr.Leaves(err) {
+		if coded, ok := configerr.As(leaf); ok {
+			for _, value := range coded.Params {
+				text += "\n" + configerr.Text(value)
+			}
+		}
+	}
 	var leaked []string
 	for _, key := range serverconfig.Keys() {
 		if !key.Secret {
@@ -161,7 +170,7 @@ func redactSecrets(err error, snap serverconfig.Snapshot) error {
 	if len(leaked) == 0 {
 		return err
 	}
-	return fmt.Errorf("%s: not valid", strings.Join(leaked, ", "))
+	return configerr.Say("secret_not_valid", configerr.Params{"keys": strings.Join(leaked, ", ")})
 }
 
 // importGroupCheck validates one import group the way serve parses it, from getenv alone.
