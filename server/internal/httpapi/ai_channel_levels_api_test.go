@@ -12,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
@@ -591,6 +592,51 @@ func TestALevelThatCannotRunIsRefusedBeforeItIsFiled(t *testing.T) {
 		"options": map[string]any{"instructions": strings.Repeat("密", 4000), "redact_keywords": cjk}})
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body, "16 KiB") {
 		t.Fatalf("CJK options over 16 KiB: %+v", response)
+	}
+}
+
+// On the server's provider the operator picks intake's model: when the operator moves it to another
+// model, a workspace's channels at auto go back to suggest and say why, as when an admin picks another
+// model; a workspace on its own provider keeps its level.
+func TestTheOperatorMovingIntakeToAnotherModelLowersItsChannels(t *testing.T) {
+	ctx := context.Background()
+	server := func(models ...string) *ai.ServerProvider {
+		return &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "k", Models: map[string][]string{ai.SlotIntake: models}}
+	}
+	d := newLevelDesk(t, func(config *httpapi.Config) { config.AI.Server = server("claude-haiku-5-5") })
+	if slot := d.setSlot(t, d.adminA, "intake", map[string]any{"source": "server", "enabled": true}, http.StatusOK); *slot.Model != "claude-haiku-5-5" {
+		t.Fatalf("intake on the server = %+v", slot)
+	}
+	d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "auto"})
+	d.setLevel(t, d.adminB, d.chatB, "intake", map[string]any{"scope": "group", "level": "auto"})
+
+	keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+	same := ai.NewService(database.New(d.pool), ai.Config{Keys: keys, Server: server("claude-haiku-5-5")})
+	if err := ai.NewWorker(same, database.New(d.pool), ai.WorkerOptions{}).Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Level == nil || *item.Level != "auto" {
+		t.Fatalf("intake lowered while the operator kept its model: %+v", item)
+	}
+
+	moved := ai.NewService(database.New(d.pool), ai.Config{Keys: keys, Server: server("claude-sonnet-5-5")})
+	worker := ai.NewWorker(moved, database.New(d.pool), ai.WorkerOptions{})
+	for range 2 {
+		if err := worker.Tick(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Level == nil || *item.Level != "suggest" || item.Lowered == nil || item.Lowered.Reason != "model_changed" {
+		t.Fatalf("intake after the operator moved it = %+v", item)
+	}
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_settings_events WHERE workspace_id=$1 AND kind='channel_level_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
+		t.Fatalf("model_changed events = %s", got)
+	}
+	if got := queryString(t, d.pool, `SELECT model FROM ai_slots WHERE workspace_id=$1 AND slot='intake'`, d.workspaceA); got != "claude-sonnet-5-5" {
+		t.Fatalf("stored model = %s", got)
+	}
+	if item, _ := effective(d.levels(t, d.adminB, d.chatB), "group", "intake"); item.Level == nil || *item.Level != "auto" {
+		t.Fatalf("another workspace's intake on its own provider = %+v", item)
 	}
 }
 

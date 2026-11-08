@@ -289,13 +289,9 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 			}
 			next.usesServer = true
 			// The operator picks the server's models; a workspace picks only the provider.
+			// A model sent with it is ignored (it may be one the operator offered before): the answer
+			// names the model the feature runs.
 			next.model, next.fallbackModel = s.serverModels(slot)
-			if input.Model != "" && input.Model != *next.model {
-				return invalid("%s runs %s for this feature: its operator picks the model. Send no model.", s.config.Server.Label, *next.model)
-			}
-			if input.FallbackModel != nil && *input.FallbackModel != "" && !equalPointer(input.FallbackModel, next.fallbackModel) {
-				return invalid("%s picks intake's fallback model itself. Send no fallback_model.", s.config.Server.Label)
-			}
 			label = s.config.Server.Label
 		case SourceProvider:
 			if err := lockProviders(ctx, tx, workspaceID); err != nil {
@@ -586,4 +582,33 @@ func (s *Service) ActiveFeatures(ctx context.Context, workspaceID string) (map[s
 		return err
 	})
 	return active, err
+}
+
+// FollowServerModels brings a workspace's intake on the server's provider to the models its operator
+// sets now. The labels that let intake act by itself on a channel were earned by the models it ran: when
+// the operator moves intake to another model, each channel at auto goes back to suggest, as when an
+// admin picks another model, and the stored models record what it runs now.
+func (s *Service) FollowServerModels(ctx context.Context, workspaceID string) error {
+	model, fallback := s.serverModels(SlotIntake)
+	if model == nil {
+		return nil
+	}
+	now := s.now().UTC()
+	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		slots, err := scanSlots(ctx, tx, workspaceID, true)
+		if err != nil {
+			return err
+		}
+		row, found := slots[SlotIntake]
+		if !found || !row.usesServer || (equalPointer(row.model, model) && equalPointer(row.fallbackModel, fallback)) {
+			return nil
+		}
+		if row.enabled {
+			if err := lowerChannelLevels(ctx, tx, workspaceID, Actor{}, SlotIntake, "model_changed", now); err != nil {
+				return err
+			}
+		}
+		_, err = tx.Exec(ctx, `UPDATE ai_slots SET model=$3,fallback_model=$4 WHERE workspace_id=$1 AND slot=$2`, workspaceID, SlotIntake, *model, fallback)
+		return err
+	})
 }

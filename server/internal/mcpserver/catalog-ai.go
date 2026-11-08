@@ -164,8 +164,8 @@ func aiSlotSetSpec() Spec {
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/ai/slots/{slot}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":` + aiSlotName + `,` +
-			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200,"description":"One of the provider's models; left out, its first. On the server's provider (source server) its operator picks the model: leave it out."},` +
-			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept. On the server's provider its operator picks it: leave it out."},` +
+			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200,"description":"One of the provider's models; left out, its first. On the server's provider (source server) it is ignored: its operator picks the model."},` +
+			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept. On the server's provider it is ignored: its operator picks it."},` +
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},` +
 			`"default_level":` + aiLevelName + `,` +
 			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},` +

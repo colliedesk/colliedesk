@@ -6566,9 +6566,9 @@ export interface components {
              * @description With source provider.
              */
             provider_id?: string;
-            /** @description One of the provider's models; left out, its first. On the server's provider (source server) the operator picks the model: leave it out. */
+            /** @description One of the provider's models; left out, its first. On the server's provider (source server) it is ignored: the operator picks the model. */
             model?: string;
-            /** @description Intake only: another of the same provider's models; an empty string removes it. Left out: kept while the provider stays and still offers it. On the server's provider the operator picks it: leave it out. */
+            /** @description Intake only: another of the same provider's models; an empty string removes it. Left out: kept while the provider stays and still offers it. On the server's provider it is ignored: the operator picks it. */
             fallback_model?: string;
             /**
              * @description Low when left out.

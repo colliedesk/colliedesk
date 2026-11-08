@@ -127,7 +127,8 @@ const (
 	PrivilegeMailboxKeepAlive Privilege = "mailbox-keep-alive"
 	// PrivilegeAIJobClaim leases due AI tasks of every workspace for the AI worker; closes the usage rows
 	// a dead process left started; expires AI drafts and triage suggestions nobody decided on for a week and erases the text of
-	// drafts that ended 90 days ago. Only task ids, workspace ids and claim tokens leave the claim; each
+	// drafts that ended 90 days ago; finds the workspaces whose intake on the server's provider ran other models than the
+	// operator sets now. Only task ids, workspace ids and claim tokens leave the claim; each
 	// task is then read, run and recorded in its own workspace, and the sweeps return nothing.
 	PrivilegeAIJobClaim Privilege = "ai-job-claim"
 	// PrivilegeAIRetrievalQueue lists the workspaces that have knowledge base articles or conversations

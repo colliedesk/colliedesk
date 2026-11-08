@@ -241,9 +241,6 @@ func TestSlotsStartOffAndRecordConsent(t *testing.T) {
 	if err != nil || *moved.ProviderID != provider.ID || moved.Source != ai.SourceProvider || moved.ConsentedAt.Before(firstConsent) {
 		t.Fatalf("moved slot: %+v %v", moved, err)
 	}
-	if _, err := e.service.SetSlot(context.Background(), e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "gpt-unknown", Enabled: true}); err == nil {
-		t.Fatal("a model the server does not offer was accepted")
-	}
 	if _, err := e.service.SetSlot(context.Background(), e.a.id, e.actor(e.a), ai.SlotTriage, ai.SlotInput{Source: ai.SourceNone, Enabled: true}); err == nil {
 		t.Fatal("a slot without provider was turned on")
 	}
@@ -290,23 +287,16 @@ func TestAFeatureOnTheServerProviderRunsTheOperatorsModel(t *testing.T) {
 	server := &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "k",
 		Models: map[string][]string{ai.SlotDraft: {"claude-haiku-5-5", "claude-sonnet-5-5"}, ai.SlotIntake: {"claude-haiku-5-5", "claude-sonnet-5-5"}}}
 	e := newEnv(t, func(config *ai.Config) { config.Server = server })
-	var refused *ai.InvalidError
-	if _, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "claude-sonnet-5-5", Enabled: true}); !errors.As(err, &refused) ||
-		!strings.Contains(err.Error(), "runs claude-haiku-5-5") {
-		t.Fatalf("a workspace picked the server's model: %v", err)
-	}
-	fallback := "claude-sonnet-5-5"
-	intake, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotIntake, ai.SlotInput{Source: ai.SourceServer, FallbackModel: &fallback})
-	if err != nil || *intake.Model != "claude-haiku-5-5" || intake.FallbackModel == nil || *intake.FallbackModel != "claude-sonnet-5-5" {
-		t.Fatalf("intake on the server: %+v %v", intake, err)
-	}
-	other := "claude-opus-5-5"
-	if _, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotIntake, ai.SlotInput{Source: ai.SourceServer, FallbackModel: &other}); !errors.As(err, &refused) {
-		t.Fatalf("a workspace picked intake's fallback model on the server: %v", err)
-	}
-	draft, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "claude-haiku-5-5", Enabled: true})
+	// A model sent with the server's provider (an old one, or another it offers) is ignored: the
+	// answer names the operator's.
+	draft, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "claude-sonnet-5-5", Enabled: true})
 	if err != nil || !draft.Active || *draft.Model != "claude-haiku-5-5" {
 		t.Fatalf("draft on the server: %+v %v", draft, err)
+	}
+	other := "claude-opus-5-5"
+	intake, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotIntake, ai.SlotInput{Source: ai.SourceServer, Model: "gpt-old", FallbackModel: &other})
+	if err != nil || *intake.Model != "claude-haiku-5-5" || intake.FallbackModel == nil || *intake.FallbackModel != "claude-sonnet-5-5" {
+		t.Fatalf("intake on the server: %+v %v", intake, err)
 	}
 
 	// The operator moves drafts to another model, one the workspace never saw: the feature follows.
