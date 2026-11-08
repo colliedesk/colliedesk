@@ -594,10 +594,9 @@ func TestALevelThatCannotRunIsRefusedBeforeItIsFiled(t *testing.T) {
 	}
 }
 
-// Intake's gate is passed with one model's decisions, so another model of the same provider takes its
-// channels back to suggest; triage and drafts keep their level on another model, as before levels, and
-// so does every feature when only the effort changes.
-func TestAnotherModelLowersIntakeOnly(t *testing.T) {
+// Another model of the same provider changes nothing else: every feature keeps its channels' levels,
+// intake included (its gate counts labels of any model), and so does an effort change.
+func TestAnotherModelKeepsEveryLevel(t *testing.T) {
 	d := newLevelDesk(t)
 	two := create(t, d.api, d.adminA, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Two models", "api_key": "sk-level-0004",
 		"models": []string{"claude-haiku-5-5", "claude-sonnet-5-5"}})
@@ -619,30 +618,13 @@ func TestAnotherModelLowersIntakeOnly(t *testing.T) {
 		d.setSlot(t, d.adminA, slot, map[string]any{"source": "provider", "provider_id": two, "model": "claude-sonnet-5-5", "enabled": true}, http.StatusOK)
 	}
 	levels = d.levels(t, d.adminA, d.chatA)
-	if item, _ := effective(levels, "group", "triage"); item.EffectiveLevel != "auto" {
-		t.Fatalf("triage after another model = %+v", item)
+	for _, slot := range []string{"triage", "intake"} {
+		if item, _ := effective(levels, "group", slot); item.EffectiveLevel != "auto" || item.Lowered != nil {
+			t.Fatalf("%s after another model = %+v", slot, item)
+		}
 	}
-	if item, _ := effective(levels, "group", "intake"); item.Level == nil || *item.Level != "suggest" {
-		t.Fatalf("intake after another model = %+v", item)
-	}
-	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_settings_events WHERE workspace_id=$1 AND kind='channel_level_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
-		t.Fatalf("model_changed events = %s", got)
-	}
-	if got := queryString(t, d.pool, `SELECT count(*)::text FROM channel_events WHERE workspace_id=$1 AND kind='ai_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
-		t.Fatalf("channel model_changed events = %s", got)
-	}
-	// The channel says when and why the server lowered it, until a person changes the level again.
-	if item, _ := effective(levels, "group", "intake"); item.Lowered == nil || item.Lowered.Reason != "model_changed" {
-		t.Fatalf("intake lowered = %+v", item.Lowered)
-	}
-	if item, _ := effective(levels, "group", "triage"); item.Lowered != nil {
-		t.Fatalf("triage lowered = %+v", item.Lowered)
-	}
-	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "off"}); response.Code != http.StatusOK {
-		t.Fatalf("a person turns intake off: %+v", response)
-	}
-	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Lowered != nil {
-		t.Fatalf("lowered after a person's change = %+v", item.Lowered)
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_settings_events WHERE workspace_id=$1 AND kind='channel_level_changed' AND detail->>'reason' IS NOT NULL`, d.workspaceA); got != "0" {
+		t.Fatalf("the server changed %s levels", got)
 	}
 }
 

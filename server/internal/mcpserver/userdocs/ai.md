@@ -240,9 +240,8 @@ on each chat channel's scope, where its readiness is known.
 
 When a feature moves to another provider, or is turned on again, its consent is new: every channel
 that ran it by itself goes a step down (Auto to Suggest; drafts written by themselves to drafts asked
-for), and the history says why. Intake also goes back to Suggest on a channel when it moves to
-another model, since what it was checked on was the old model's decisions. Restoring a workspace from
-a backup does the same.
+for), and the history says why. Another model of the same provider changes nothing else: levels stay,
+and intake's labels keep counting. Restoring a workspace from a backup lowers levels as a new provider does.
 
 People with `ai_settings:update` (the Admin role has it) set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
 column per scope, each set to the default it follows or to Off, Suggest or Auto; under it, what the level
@@ -291,7 +290,7 @@ gets right on that channel's scope (it never writes to the customer: a conversat
 channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card, which waits
 for a person in Review. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
 otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
-the model intake runs and this server's prompt version (`collie intake-eval`, see
+this server's prompt version, on whichever model they ran (`collie intake-eval`, see
 [Score AI intake on your own cases](../self-host/intake-eval.md)). A decision nobody looked at counts for nothing: silence
 is not a label.
 
@@ -301,8 +300,8 @@ is not a label.
 | Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (by people's labels in the last 30 days, or in an evaluation) |
 | Set aside | 30 labels, 95 % right | a request set aside (by people's labels in the last 30 days, or in an evaluation) |
 
-People's labels count for 30 days; an evaluation counts only for the model and prompt version it ran, and
-a newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
+People's labels count for 30 days, and an evaluation for the prompt version it ran; both keep counting when
+intake moves to another model. A newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
 never reach a person: in practice a gate opens with an evaluation, or with an admin's override.
 An admin may open an action by hand before its labels do (`gate_override` with a `gate_override_reason`,
 which needs `ai_settings:update`). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
@@ -317,10 +316,9 @@ Raising intake to **Auto** on a scope opens a dialog first: each action with whe
 and for an admin, **Let it … alone anyway** with the reason the history keeps. The level and the override
 are saved together. Lowering a level never asks.
 
-When intake moves to another model or provider, a scope at Auto goes back to Suggest and the AI tab says
-so ("Groups: Auto was lowered to Suggest on Oct 24, 2026: intake moved to another model, so what it was
-checked on no longer holds", or for a provider, "intake moved to another provider, which needs consent
-again") with **Turn Auto back on**, which asks with the same dialog.
+When intake moves to another provider, a scope at Auto goes back to Suggest and the AI tab says so
+("Groups: Auto was lowered to Suggest on Oct 24, 2026: intake moved to another provider, which needs
+consent again") with **Turn Auto back on**, which asks with the same dialog. Another model keeps the level.
 
 ## When intake's model fails
 
@@ -329,8 +327,7 @@ times out, is busy, refuses for its rate, is gone, or answers what Colliedesk ca
 or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
 with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set` (an empty string
 removes it); Settings does not show it yet. The provider cannot
-drop a model intake uses this way. A new fallback model takes intake back to Suggest on every channel,
-as another model does.
+drop a model intake uses this way. A new fallback model keeps intake's levels, as another model does.
 
 ## Limits
 

@@ -443,7 +443,7 @@ func channelAIIntakeReadinessSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_ai_intake_readiness_get", Title: "Show whether intake's AI may act on its own",
 		Description: `Show, for a chat channel's scope, whether intake's AI may take each action (create, attach, ignore) on its own at auto: its gate (open, closed, overridden by an admin), ` +
-			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the model and prompt it runs), what keeps it closed (labels, accuracy, severe, junk), ` +
+			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the prompt it runs, on any model), what keeps it closed (labels, accuracy, severe, junk), ` +
 			`how much of what AI did on its own people corrected, and what a month costs. A closed action stays a suggestion.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/readiness"},
@@ -457,7 +457,7 @@ func channelAIIntakeEvaluationsListSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_ai_intake_evaluations_list", Title: "List intake's offline evaluations",
 		Description: `List the offline evaluations recorded for a chat channel's intake, newest first: the model and prompt version each ran, the dataset's SHA-256 and the counts per action. ` +
-			`Only a run of the model and prompt intake runs now counts towards readiness.`,
+			`Only a run of the prompt version intake runs now counts towards readiness, whichever model it ran.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/evaluations"},
 		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
@@ -471,7 +471,7 @@ func channelAIIntakeEvaluationRecordSpec() Spec {
 		Name:  "colliedesk_channel_ai_intake_evaluation_record",
 		Title: "Record an intake evaluation",
 		Description: `Record the counts of an offline evaluation of a chat channel's scope (run with collie intake-eval): model, prompt_version, dataset_sha256 and, per action, ` +
-			`labels, correct, severe and light. It counts towards readiness only for that model and prompt version, and can open a gate, so record only counts you ran yourself.`,
+			`labels, correct, severe and light. It counts towards readiness while intake runs that prompt version, on any model, and can open a gate, so record only counts you ran yourself.`,
 		REST: []string{"POST /api/v1/channels/{id}/ai/intake/evaluations"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","scope","model","prompt_version","dataset_sha256","counts"],"properties":{` + channelIDInput + `,` +
 			`"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"model":{"type":"string","minLength":1,"maxLength":200},"prompt_version":{"type":"string","minLength":1,"maxLength":80},` +

@@ -351,17 +351,10 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 			}
 			return invalid("This server has no price for %s, so it cannot count what AI chat spends. Ask its operator to add one to the setting ai.server.prices.", *next.model)
 		}
-		switch {
-		case renewed:
-			// What channels let the feature do by itself was agreed for another recipient.
+		// What channels let the feature do by itself was agreed for another recipient. Another model of
+		// the same provider changes nothing else: intake's labels count for any model.
+		if renewed {
 			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "recipient_changed", now); err != nil {
-				return err
-			}
-		case slot == SlotIntake && found && current.enabled && next.enabled &&
-			(!equalPointer(current.model, next.model) || (next.fallbackModel != nil && !equalPointer(current.fallbackModel, next.fallbackModel))):
-			// Intake's gate was passed with these models' labels; another model (or a new fallback
-			// model) starts over at suggest. Taking the fallback model away leaves fewer models.
-			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "model_changed", now); err != nil {
 				return err
 			}
 		}

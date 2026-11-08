@@ -760,8 +760,7 @@ func recordChannelLevel(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 
 // lowerChannelLevels takes back what channels let a feature do by itself when the admin's consent is
 // recorded anew (the feature moved to another provider, or was turned on again; reason
-// recipient_changed), or when intake moves to another model, whose gate it has not passed
-// (model_changed): auto becomes suggest, and a draft written by itself becomes a draft asked for by
+// recipient_changed): auto becomes suggest, and a draft written by itself becomes a draft asked for by
 // hand, as the workspace's level does.
 func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, slot, reason string, now time.Time) error {
 	lowered := LevelSuggest

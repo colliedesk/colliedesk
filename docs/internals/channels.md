@@ -214,7 +214,8 @@ Email and web forms declare none, so their path gains no row and no query beyond
    Version and the requested model (`run.Binding.Model`, not the id a provider answers with) it ran on.
 13. **Gates open on explicit labels only.** `readinessGate` (the default of `intake.New`) asks
    `store.IntakeReadinessOf` for the scope, the model the binding asks for and `prompt.Version`: people's
-   follows and corrections of the last 30 days plus the newest run of each dataset of that model and prompt.
+   follows and corrections of the last 30 days plus the newest run of each dataset of that prompt, on any
+   model (a model change keeps what intake earned; decided 2026-11-08).
    A decision nobody looked at is no label: at auto most cards go to the rules unseen, so silence would
    read as accuracy. `gate_override` opens an action by hand.
 
