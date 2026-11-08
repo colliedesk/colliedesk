@@ -15,6 +15,8 @@ import type { Part } from './ai-level-dialogs';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
 import { selfHostGuide } from '../../lib/self-host-guide';
+import { aiModelMatches as modelMatches, aiServices as services, aiServiceURL as serviceURL } from '../../lib/ai-services';
+import type { AIService as Service } from '../../lib/ai-services';
 import './ai-settings.css';
 
 // Icons only this page uses stay in its chunk.
@@ -676,11 +678,8 @@ const maxProviderModels = 20;
 // Above this many listed models, the list gets a search box.
 const modelSearchFrom = 8;
 
-// What Add provider offers: Anthropic, two OpenAI-compatible services whose address is filled in, and
-// any other OpenAI-compatible server, whose address the person types.
-type Service = 'anthropic' | 'openai' | 'openrouter' | 'self_hosted';
-const services: Service[] = ['anthropic', 'openai', 'openrouter', 'self_hosted'];
-const serviceURL: Partial<Record<Service, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' };
+// What Add provider offers (lib/ai-services): Anthropic, two OpenAI-compatible services whose address is
+// filled in, and any other OpenAI-compatible server, whose address the person types.
 const serviceText: Record<Service, [string, string]> = {
   anthropic: [m.kindAnthropic, m.kindAnthropicHelp], openai: [m.serviceOpenAI, m.serviceOpenAIHelp],
   openrouter: [m.serviceOpenRouter, m.serviceOpenRouterHelp], self_hosted: [m.serviceSelfHosted, m.serviceSelfHostedHelp],
@@ -788,15 +787,6 @@ function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISet
         : <button type="button" className="link-button ai-models-switch" onClick={() => { setError(undefined); setTyped(picked.join(', ')); setList({ state: 'typing' }); }}>{m.modelsTypeInstead}</button>}
     </Dialog>
   );
-}
-
-// modelMatches finds a model whatever the punctuation, spacing, case or word order typed:
-// "gpt5 mini", "GPT-5-mini" and "mini gpt5" all find gpt-5-mini; "sonnet 4.6" finds claude-sonnet-4-6.
-function modelMatches(model: string, query: string): boolean {
-  const compact = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
-  const name = compact(model);
-  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return name.includes(compact(query)) || words.every((word) => name.includes(word));
 }
 
 // ModelPicker lists the models the provider offers this key, to tick instead of typing ids. The picked

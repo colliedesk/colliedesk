@@ -17,10 +17,11 @@ export interface Section {
 }
 
 export const fields: Record<string, FieldInfo> = {
-  'ai.server.provider': { label: 'Provider', kind: 'select', options: [['', 'Off'], ['anthropic', 'Anthropic'], ['openai_compatible', 'OpenAI-compatible']] },
+  // The server provider's on/off, service and models have their own form (ai-provider.tsx).
+  'ai.server.provider': { label: 'Provider', kind: 'text' },
   'ai.server.api_key': { label: 'API key', kind: 'secret' },
   'ai.server.base_url': { label: 'Base URL', kind: 'text', help: "Leave empty for the provider's own address; an OpenAI-compatible server needs its version path." },
-  'ai.server.models': { label: 'Models by feature', kind: 'text', help: 'triage=model,draft=model; every workspace on this provider runs the first model of each feature (intake tries its second when the first fails).' },
+  'ai.server.models': { label: 'Models by feature', kind: 'text', help: 'triage=model,draft=model,chat=model,intake=model|second model' },
   'ai.server.label': { label: 'Name shown to workspaces', kind: 'text' },
   'ai.server.prices': { label: 'Prices per million tokens', kind: 'textarea', help: 'model=input:output[:cache_read[:cache_write]], comma separated, in US dollars.' },
   'ai.server.monthly_allowance': { label: 'Monthly allowance per workspace', kind: 'text', help: 'US dollars, or agent=3,trial=2. Empty: no limit.' },

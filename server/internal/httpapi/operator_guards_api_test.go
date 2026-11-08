@@ -401,6 +401,49 @@ func TestCheckAsksTheAIProviderOnce(t *testing.T) {
 	}
 }
 
+// Load models lists what the change's provider offers before any model is picked: a change that is not
+// complete yet (no models) still lists, through the address and key of the change, and a refusal never
+// repeats the key.
+func TestLoadModelsListsTheServerProvidersModelsBeforeAnyIsPicked(t *testing.T) {
+	fake := &aiprovider.Fake{FakeModels: []string{"claude-haiku-5-5", "claude-sonnet-5-5"}}
+	var built []ai.Spec
+	e := newOperatorEnvWith(t, false, func(snap serverconfig.Snapshot) error {
+		_, err := ai.ServerProviderFromEnv(snap.Getenv)
+		return err
+	}, func(config *httpapi.Config) {
+		config.AI.Build = func(spec ai.Spec) (aiprovider.Provider, error) { built = append(built, spec); return fake, nil }
+	})
+	cookie := e.signIn("ops@example.com")
+	const key = "sk-ant-canary-never-echoed"
+	body := map[string]any{"set": map[string]any{"ai.server.provider": "anthropic"}, "secrets": map[string]any{"ai.server.api_key": key}, "test": "ai_models"}
+	listed := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", body, cookie)
+	var answer struct {
+		OK   bool `json:"ok"`
+		Test struct {
+			OK     bool     `json:"ok"`
+			Models []string `json:"models"`
+		} `json:"test"`
+	}
+	decode(t, listed, &answer)
+	if !answer.OK || !answer.Test.OK || strings.Join(answer.Test.Models, ",") != "claude-haiku-5-5,claude-sonnet-5-5" ||
+		len(built) != 1 || built[0].APIKey != key || !built[0].Server || built[0].Kind != aiprovider.KindAnthropic {
+		t.Fatalf("listed: %s %+v", listed.Body.String(), built)
+	}
+	// The same incomplete change is refused by a save check: listing does not loosen it.
+	if check := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", map[string]any{"set": body["set"], "secrets": body["secrets"]}, cookie); !strings.Contains(check.Body.String(), `"ok":false`) {
+		t.Fatalf("an incomplete change was accepted: %s", check.Body.String())
+	}
+	fake.ModelsErr = &aiprovider.Error{Code: aiprovider.ErrorAuth}
+	refused := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", body, cookie)
+	if strings.Contains(refused.Body.String(), key) || !strings.Contains(refused.Body.String(), `"name":"ai_models","ok":false`) {
+		t.Fatalf("a refusal: %s", refused.Body.String())
+	}
+	noProvider := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", map[string]any{"test": "ai_models"}, cookie)
+	if !strings.Contains(noProvider.Body.String(), "Pick a provider first") {
+		t.Fatalf("no provider: %s", noProvider.Body.String())
+	}
+}
+
 // Review ADR round 2: a live test never sends a stored secret somewhere new. A token runs no live test at
 // all (it only reads); a person who moves an endpoint types its secret again for the test, as for a save.
 func TestALiveTestNeverSendsAStoredSecretToANewAddress(t *testing.T) {

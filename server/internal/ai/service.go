@@ -878,6 +878,33 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 	return turnedOff, err
 }
 
+// ListServerModels asks a server provider not saved yet which models its key may use, so the operator picks
+// the models of each feature instead of typing their ids. Nothing is stored and nothing is metered.
+func (s *Service) ListServerModels(ctx context.Context, kind aiprovider.Kind, baseURL, apiKey string) ([]string, error) {
+	provider, err := s.build(Spec{Kind: kind, BaseURL: baseURL, APIKey: apiKey, Server: true})
+	if err != nil {
+		return nil, err
+	}
+	lister, ok := provider.(aiprovider.ModelLister)
+	if !ok {
+		return nil, &CheckError{Code: aiprovider.ErrorBadRequest}
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.config.CheckTimeout)
+	defer cancel()
+	models, err := lister.Models(ctx)
+	var providerErr *aiprovider.Error
+	if errors.As(err, &providerErr) {
+		return nil, &CheckError{Code: providerErr.Code}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if models == nil {
+		models = []string{}
+	}
+	return models, nil
+}
+
 // PingServer sends one provider check to a server provider (the operator console's check before a change is
 // saved) with the first model of the first slot that has one. It returns the model asked.
 func (s *Service) PingServer(ctx context.Context, server *ServerProvider) (string, error) {

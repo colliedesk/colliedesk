@@ -969,7 +969,9 @@ paths:
         (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address
         through the relay of the change; `polar` asks Polar about the Team and Founding products with the
         change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI
-        provider of the change (its first model, a few output tokens). A help center domain without a
+        provider of the change (its first model, a few output tokens); `ai_models` lists the models the
+        change's server AI provider offers its key (`test.models`), before any model is picked, so it runs on a
+        change that is not complete yet. A help center domain without a
         wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored
         secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an
         endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored).
@@ -985,7 +987,7 @@ paths:
                 set: {type: object, additionalProperties: {type: string}}
                 unset: {type: array, items: {type: string}}
                 secrets: {type: object, additionalProperties: {type: [string, 'null']}}
-                test: {type: string, enum: [smtp, polar, jwks, ai]}
+                test: {type: string, enum: [smtp, polar, jwks, ai, ai_models]}
       responses:
         '200':
           description: The result of the checks
@@ -13133,6 +13135,7 @@ components:
             name: {type: string}
             ok: {type: boolean}
             message: {type: string}
+            models: {type: array, items: {type: string}, description: 'The models listed, for `ai_models`'}
         guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}}
     OperatorConfigGuard:
       type: object
