@@ -5,6 +5,7 @@ import type { ServerProviderProps } from './config-page';
 import type { Draft } from './guards';
 import { m } from './messages';
 import { am } from './ai-provider-messages';
+import { when } from './copy';
 // Its stylesheet loads with it (a link, as the console's CSP allows), so the first bundle carries neither the
 // styles nor a stylesheet loader.
 import stylesheet from './ai-provider.css?url';
@@ -222,7 +223,7 @@ export default function ServerProvider({ byKey, draft, setDraft, errors, groupOf
   return <>
     <link rel="stylesheet" href={stylesheet} />
     {credit && on && <div className="ops-strip ops-ai-credit" data-tone="danger" role="alert">
-      <span><strong>{am.outOfCredit}</strong> {am.outOfCreditBody(credit.detail ?? '', credit.since ? new Date(credit.since).toLocaleString() : '')}</span></div>}
+      <span><strong>{am.outOfCredit}</strong> {am.outOfCreditBody(credit.detail ?? '', credit.since ? when(credit.since) : '')}</span></div>}
     <div className="setting field">
       <span className="field-label" id={`${id}-on-label`}>{am.serverProviderOn}</span>
       <code className="setting-key">ai.server.provider</code>

@@ -78,6 +78,10 @@ A dark band on top is always there: the console's host and the version every pro
 (**Running v12 · 2 of 2 processes**, **Applying v13…** while a save reaches them, **v13 refused** when a
 process could not use it). On a phone it keeps the host and the version.
 
+The console speaks English or Vietnamese. It follows the browser's language until an operator picks one in
+the account menu (**Tiếng Việt** / **English**); that choice is kept in this browser. Setting keys, commands
+and messages from the server stay as they are.
+
 - **Overview**: the release and database, the version to run and how many processes run it, what needs
   attention (a variable that still differs from the database, a secret sealed with an old key, a request
   waiting), each process, and the server environment (read at start; change it in `.env` and restart).
