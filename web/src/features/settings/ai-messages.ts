@@ -147,6 +147,7 @@ export const aiMessages = {
   pickProvider: 'Pick a provider',
   providerFor: (slot: string) => `${slot} provider`,
   modelFor: (slot: string) => `${slot} model`,
+  modelByServer: 'Set by the server',
   switchFor: (slot: string) => `${slot} on`,
   addFirst: 'Add a provider first, then turn this on.',
   saving: 'Saving…',

@@ -241,9 +241,6 @@ func TestSlotsStartOffAndRecordConsent(t *testing.T) {
 	if err != nil || *moved.ProviderID != provider.ID || moved.Source != ai.SourceProvider || moved.ConsentedAt.Before(firstConsent) {
 		t.Fatalf("moved slot: %+v %v", moved, err)
 	}
-	if _, err := e.service.SetSlot(context.Background(), e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "gpt-unknown", Enabled: true}); err == nil {
-		t.Fatal("a model the server does not offer was accepted")
-	}
 	if _, err := e.service.SetSlot(context.Background(), e.a.id, e.actor(e.a), ai.SlotTriage, ai.SlotInput{Source: ai.SourceNone, Enabled: true}); err == nil {
 		t.Fatal("a slot without provider was turned on")
 	}
@@ -280,6 +277,51 @@ func TestASlotOnTheServerProviderStopsWhenTheOperatorRemovesIt(t *testing.T) {
 	triage := settings.Slots[0]
 	if !triage.Enabled || triage.Active || triage.OffReason == nil || *triage.OffReason != ai.OffServerProviderMissing {
 		t.Fatalf("triage after the server provider was removed: %+v", triage)
+	}
+}
+
+// A workspace picks the server's provider, never its model: every feature on it runs the model the
+// operator sets now, and follows the operator when it changes.
+func TestAFeatureOnTheServerProviderRunsTheOperatorsModel(t *testing.T) {
+	ctx := context.Background()
+	server := &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "k",
+		Models: map[string][]string{ai.SlotDraft: {"claude-haiku-5-5", "claude-sonnet-5-5"}, ai.SlotIntake: {"claude-haiku-5-5", "claude-sonnet-5-5"}}}
+	e := newEnv(t, func(config *ai.Config) { config.Server = server })
+	// A model sent with the server's provider (an old one, or another it offers) is ignored: the
+	// answer names the operator's.
+	draft, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "claude-sonnet-5-5", Enabled: true})
+	if err != nil || !draft.Active || *draft.Model != "claude-haiku-5-5" {
+		t.Fatalf("draft on the server: %+v %v", draft, err)
+	}
+	other := "claude-opus-5-5"
+	intake, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotIntake, ai.SlotInput{Source: ai.SourceServer, Model: "gpt-old", FallbackModel: &other})
+	if err != nil || *intake.Model != "claude-haiku-5-5" || intake.FallbackModel == nil || *intake.FallbackModel != "claude-sonnet-5-5" {
+		t.Fatalf("intake on the server: %+v %v", intake, err)
+	}
+
+	// The operator moves drafts to another model, one the workspace never saw: the feature follows.
+	changed := &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "k",
+		Models: map[string][]string{ai.SlotDraft: {"claude-opus-5-5"}, ai.SlotIntake: {"claude-opus-5-5"}}}
+	restarted := ai.NewService(database.New(e.pool), ai.Config{Keys: ring(t), Server: changed})
+	model, err := restarted.SlotModel(ctx, e.a.id, ai.SlotDraft)
+	if err != nil || model != "claude-opus-5-5" {
+		t.Fatalf("draft runs %q after the operator's change (%v)", model, err)
+	}
+	settings, err := restarted.Settings(ctx, e.a.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, slot := range settings.Slots {
+		switch slot.Slot {
+		case ai.SlotDraft:
+			if !slot.Active || slot.OffReason != nil || *slot.Model != "claude-opus-5-5" {
+				t.Fatalf("draft after the operator's change: %+v", slot)
+			}
+		case ai.SlotIntake:
+			if *slot.Model != "claude-opus-5-5" || slot.FallbackModel != nil {
+				t.Fatalf("intake after the operator's change: %+v", slot)
+			}
+		}
 	}
 }
 

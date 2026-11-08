@@ -54,6 +54,8 @@
 .ai-slot-what > span { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
 .ai-slot select { width: 100%; }
 .ai-cell-label { display: none; }
+.ai-slot-model-fixed { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-small); }
+.ai-model-name { overflow-wrap: anywhere; color: var(--text-1); }
 .ai-slot-limit { display: grid; gap: 0; justify-items: start; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .ai-server-meter { grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 22rem); }
 .ai-meter { display: grid; gap: 6px; min-width: 0; }

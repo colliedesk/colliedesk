@@ -213,8 +213,8 @@ the fallback model after a timeout, rate limit, overload, server error, `model_n
 `invalid_response`, or a schema answer that is not JSON. Errors another model would get too (a key,
 credit, a request too large) are not tried again. Each call is its own usage row and passes the budget
 on its own. The provider cannot drop the fallback model (`ai_model_in_use`); moving intake to another
-provider drops it, and a new one lowers intake's channel levels as another model does
-(`model_changed`), since the gate's labels were the old models' decisions.
+provider drops it. A new one, like another model, keeps intake's channel levels: the gate counts labels of
+any model (decided 2026-11-08; `model_changed` stays only in older histories).
 
 `ai_usage.cost_micro_usd` is computed when a call of the server's provider finishes, per hop at the
 served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,
@@ -403,9 +403,9 @@ feature does by itself: `off`, `suggest`, `auto`.
    provider or model, or the feature turned on again), the workspace's level starts over (triage
    `suggest`, others `off`) and `lowerChannelLevels` lowers every channel row a step (auto → suggest,
    drafts suggest → off) in the same transaction, with `reason: recipient_changed` in both histories.
-   Another model of the same provider changes no consent and, for triage and drafts, nothing else (as
-   before levels); for intake it lowers the channels' `auto` (`model_changed`), since its gate was
-   passed with that model's decisions. A call that could never run (a scope the channel lacks, intake
+   Another model of the same provider changes no consent and nothing else, intake included: its gate
+   counts labels of any model (decided 2026-11-08; before, it lowered intake's `auto` with
+   `model_changed`, which older histories still show). A call that could never run (a scope the channel lacks, intake
    on email) is refused before a token's request is filed (`CheckChannelLevel`).
    Deleting a provider sets the slot off; channel rows stay and read `workspace_off`. A restore lowers
    both the same way.

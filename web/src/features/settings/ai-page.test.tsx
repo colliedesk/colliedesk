@@ -71,9 +71,17 @@ test('the consent banner turns both features on with the server provider, or goe
 test('a feature is switched on with its provider and model, and moving it sends the new provider', () => {
   const { onSetSlot } = page({ settings: settings({ server, providers: [provider()], slots: [slot({ source: 'server', model: 'claude-haiku-5-5' }), slot({ slot: 'draft' })] }) });
   fireEvent.click(screen.getByRole('switch', { name: 'Triage suggestions on' }));
-  expect(onSetSlot).toHaveBeenLastCalledWith('triage', { source: 'server', model: 'claude-haiku-5-5', effort: 'low', enabled: true });
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', { source: 'server', effort: 'low', enabled: true });
   fireEvent.change(screen.getByRole('combobox', { name: 'Reply drafts provider' }), { target: { value: providerID } });
   expect(onSetSlot).toHaveBeenLastCalledWith('draft', { source: 'provider', provider_id: providerID, effort: 'low', enabled: false });
+});
+
+test('on the server provider a feature shows the operator’s model and offers no model to pick', () => {
+  page({ settings: settings({ server, providers: [provider()], slots: [slot({ source: 'server', model: 'claude-haiku-5-5' }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5' })] }) });
+  expect(screen.queryByRole('combobox', { name: 'Triage suggestions model' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: 'Reply drafts model' })).not.toBeInTheDocument();
+  expect(screen.getAllByText('Set by the server')).toHaveLength(2);
+  expect(screen.getByText('claude-sonnet-5-5')).toBeInTheDocument();
 });
 
 test('a feature on a server provider the operator removed says it stopped and why', () => {

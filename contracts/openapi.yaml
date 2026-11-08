@@ -2394,9 +2394,9 @@ paths:
       x-permission: channels:read
       description: >
         Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach,
-        ignore), for the model intake runs and the prompt version of this server: people's explicit
+        ignore), for the prompt version of this server, whichever model intake runs: people's explicit
         labels of the last 30 days (a person following or correcting AI on a card or by moving its
-        messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action
+        messages) plus the newest recorded evaluation of each dataset of that prompt, on any model. An action
         opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for
         attach and ignore, and at most one conversation opened for chatter a week for create; someone with `ai_settings:update`
         may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on
@@ -2439,8 +2439,8 @@ paths:
       description: >
         Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and
         prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got
-        right, and its severe and light errors. It counts towards readiness only for that model and prompt
-        version, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it
+        right, and its severe and light errors. It counts towards readiness for that prompt version, on any
+        model, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it
         can open a gate.
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
@@ -8955,7 +8955,7 @@ components:
                     lowered:
                       type: [object, 'null']
                       required: [at, reason]
-                      description: 'The server''s last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider).'
+                      description: 'The server''s last lowering of this level, while no person changed it since: recipient_changed (the feature moved to another provider), or model_changed in a history from before another model stopped lowering levels.'
                       properties:
                         at: {type: string, format: date-time}
                         reason: {type: string, enum: [model_changed, recipient_changed]}
@@ -9191,7 +9191,7 @@ components:
       properties:
         channel_id: {type: string, format: uuid}
         scope: {type: string}
-        model: {type: string, description: 'The model intake runs; empty while intake is off (evaluations then count for nothing).'}
+        model: {type: string, description: 'The model intake runs now; empty while intake is off (evaluations then count for nothing). Labels and evaluations of any model count.'}
         prompt_version: {type: string}
         actions:
           type: array
@@ -10094,8 +10094,8 @@ components:
       properties:
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: string, format: uuid, description: With source provider.}
-        model: {type: string, maxLength: 200}
-        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it.'}
+        model: {type: string, maxLength: 200, description: 'One of the provider''s models; left out, its first. On the server''s provider (source server) it is ignored: the operator picks the model.'}
+        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it. On the server''s provider it is ignored: the operator picks it.'}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
         default_level: {$ref: '#/components/schemas/AILevel'}

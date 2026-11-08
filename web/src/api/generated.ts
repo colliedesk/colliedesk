@@ -1431,7 +1431,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the model intake runs and the prompt version of this server: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; someone with `ai_settings:update` may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
+        /** @description Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach, ignore), for the prompt version of this server, whichever model intake runs: people's explicit labels of the last 30 days (a person following or correcting AI on a card or by moving its messages) plus the newest recorded evaluation of each dataset of that prompt, on any model. An action opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for attach and ignore, and at most one conversation opened for chatter a week for create; someone with `ai_settings:update` may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on its own and how much people corrected, and what the last 30 days say a month costs. Nothing here calls a model. */
         get: operations["getIntakeReadiness"];
         put?: never;
         post?: never;
@@ -1453,7 +1453,7 @@ export interface paths {
         /** @description The offline evaluations recorded for a chat channel's intake, newest first (at most 100); scope narrows them. */
         get: operations["listIntakeEvaluations"];
         put?: never;
-        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness only for that model and prompt version, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it can open a gate. */
+        /** @description Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got right, and its severe and light errors. It counts towards readiness for that prompt version, on any model, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it can open a gate. */
         post: operations["recordIntakeEvaluation"];
         delete?: never;
         options?: never;
@@ -5205,7 +5205,7 @@ export interface components {
                     off_reason: "workspace_off" | null;
                     /** @description Intake only, with the defaults filled in. */
                     options: components["schemas"]["IntakeOptions"] | null;
-                    /** @description The server's last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider). */
+                    /** @description The server's last lowering of this level, while no person changed it since: recipient_changed (the feature moved to another provider), or model_changed in a history from before another model stopped lowering levels. */
                     lowered?: {
                         /** Format: date-time */
                         at: string;
@@ -5515,7 +5515,7 @@ export interface components {
             /** Format: uuid */
             channel_id: string;
             scope: string;
-            /** @description The model intake runs; empty while intake is off (evaluations then count for nothing). */
+            /** @description The model intake runs now; empty while intake is off (evaluations then count for nothing). Labels and evaluations of any model count. */
             model: string;
             prompt_version: string;
             actions: {
@@ -6566,8 +6566,9 @@ export interface components {
              * @description With source provider.
              */
             provider_id?: string;
+            /** @description One of the provider's models; left out, its first. On the server's provider (source server) it is ignored: the operator picks the model. */
             model?: string;
-            /** @description Intake only: another of the same provider's models; an empty string removes it. Left out: kept while the provider stays and still offers it. */
+            /** @description Intake only: another of the same provider's models; an empty string removes it. Left out: kept while the provider stays and still offers it. On the server's provider it is ignored: the operator picks it. */
             fallback_model?: string;
             /**
              * @description Low when left out.

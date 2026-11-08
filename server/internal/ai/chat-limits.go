@@ -19,7 +19,7 @@ func (s *Service) chatRoom(ctx context.Context, tx pgx.Tx, call Call, model stri
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-chat:"+call.WorkspaceID); err != nil {
 		return nil, err
 	}
-	slots, err := readSlots(ctx, tx, call.WorkspaceID, false)
+	slots, err := s.readSlots(ctx, tx, call.WorkspaceID, false)
 	if err != nil {
 		return nil, err
 	}

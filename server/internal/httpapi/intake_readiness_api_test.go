@@ -69,7 +69,7 @@ func (d levelDesk) labelled(t *testing.T, card, action string, followed, wrong i
 
 // An action opens with 30 explicit labels at its accuracy and no severe error: 29 right attaches and one
 // that merged a new request into an old conversation keep attach closed; an evaluation counts only for
-// the model and prompt intake runs; an admin may open a gate by hand, with a reason, and taking an
+// the prompt intake runs, on any model; an admin may open a gate by hand, with a reason, and taking an
 // evaluation's word from a token waits for a person.
 func TestReadinessOpensAGateOnlyOnExplicitLabels(t *testing.T) {
 	d := newLevelDesk(t)
@@ -115,6 +115,16 @@ func TestReadinessOpensAGateOnlyOnExplicitLabels(t *testing.T) {
 	if _, _, labels, _ := gateOf(d.readiness(t, d.adminA, d.chatA), "create"); labels != 40 {
 		t.Fatalf("a dataset run twice counts %d labels", labels)
 	}
+	// A run on another model counts too: a model change keeps what intake earned.
+	other := request(t, d.api, http.MethodPost, "/api/v1/channels/"+d.chatA+"/ai/intake/evaluations", map[string]any{"scope": "group", "model": "claude-sonnet-5-5",
+		"prompt_version": prompt.Version, "dataset_sha256": strings.Repeat("d", 64),
+		"counts": map[string]any{"create": map[string]any{"labels": 10, "correct": 10, "severe": 0, "light": 0}}}, d.adminA, nil)
+	if other.Code != http.StatusCreated {
+		t.Fatalf("record another model's run: %d %s", other.Code, other.Body.String())
+	}
+	if _, _, labels, _ := gateOf(d.readiness(t, d.adminA, d.chatA), "create"); labels != 50 {
+		t.Fatalf("another model's run: create counts %d labels, want 50", labels)
+	}
 	token := issueCustomToken(t, d.api, d.adminA, "scorer", "ai_settings:update").Token
 	if got := record(token, prompt.Version); got.Code != http.StatusCreated {
 		t.Fatalf("a token records an evaluation: %+v", got)
@@ -147,7 +157,7 @@ func TestReadinessOpensAGateOnlyOnExplicitLabels(t *testing.T) {
 	}
 
 	list := request(t, d.api, http.MethodGet, "/api/v1/channels/"+d.chatA+"/ai/intake/evaluations?scope=group", nil, d.adminA, nil)
-	if list.Code != http.StatusOK || strings.Count(list.Body.String(), `"dataset_sha256"`) != 5 {
+	if list.Code != http.StatusOK || strings.Count(list.Body.String(), `"dataset_sha256"`) != 6 {
 		t.Fatalf("evaluations: %d %s", list.Code, list.Body.String())
 	}
 }
