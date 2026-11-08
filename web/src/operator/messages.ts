@@ -163,7 +163,6 @@ export const m = {
   discardMine: 'Discard mine',
   secretNotSet: 'Not set',
   secretIsSet: 'Set · write only',
-  onOtherPages: (n: number) => `(${n} on ${n === 1 ? 'another page' : 'other pages'})`,
   replace: 'Replace',
   remove: 'Remove',
   removed: 'Removed',

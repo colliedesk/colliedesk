@@ -90,7 +90,8 @@ commands and what a provider or relay itself answered stay as they are.
 - **Configuration pages** (AI and pricing, Email, Mailboxes and GitHub, Billing and retention, Sign-ups,
   Security and network, Limits and telemetry): each setting with its key, where its value comes from, and
   when a save applies. Lists (team addresses, networks, proxies) take one value per box, and sizes are
-  in MB or GB. Changes stay in the tab until **Save**, which checks them first: a change that cannot be
+  in MB or GB. Changes stay in the tab until **Save**, each page's apart: a page counts, saves and discards only its own,
+  and another page's wait there untouched. **Save** checks them first: a change that cannot be
   saved says why beside its setting, and one that asks for nothing more is saved at once. One that does
   opens a review that lists every change and asks for what it needs (your code, a secret entered again, a
   typed confirmation); **Escape** or **Cancel** applies nothing. Email has **Send a test email**, which tries the settings on the page

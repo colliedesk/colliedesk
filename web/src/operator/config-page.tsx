@@ -6,7 +6,7 @@ import type { ConsoleData } from './app';
 import { when } from './copy';
 import { fields, sections } from './fields';
 import type { Draft } from './guards';
-import { changedKeys, emptyDraft, mayAskToType, needs } from './guards';
+import { changedKeys, mayAskToType, needs } from './guards';
 import { m } from './messages';
 import { href, navigate } from './router';
 
@@ -199,8 +199,16 @@ const ServerPricing = lazy(() => import('./ai-provider').then((module) => ({ def
 // The dialog that asks what a save needs (a code, a secret again, a phrase), only when it needs one.
 const Review = lazy(() => import('./review'));
 
-export function ConfigPage({ group, data, draft, setDraft }: { group: string; data: ConsoleData; draft: Draft; setDraft: SetDraft }) {
+export function ConfigPage({ group, data, draft: all, setDraft }: { group: string; data: ConsoleData; draft: Draft; setDraft: SetDraft }) {
   const settings = data.config.settings;
+  // A page counts, checks, saves and discards its own changes only; another page's wait there, untouched.
+  const here = new Set((sections[group] ?? []).flatMap((section) => section.keys));
+  const part = (d: Draft, on: boolean): Draft => {
+    const keep = ([key]: [string, unknown]) => here.has(key) === on;
+    return { set: Object.fromEntries(Object.entries(d.set).filter(keep)), unset: d.unset.filter((key) => here.has(key) === on), secrets: Object.fromEntries(Object.entries(d.secrets).filter(keep)) };
+  };
+  const draft = part(all, true);
+  const clear = () => setDraft((current) => part(current, false));
   const byKey = new Map(settings.map((setting) => [setting.key, setting]));
   const [review, setReview] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -211,7 +219,7 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
   const [checked, setChecked] = useState<Guard[] | undefined>();
   const [saving, setSaving] = useState(false);
   const changed = changedKeys(draft);
-  const done = (version: number, applies: string) => { setReview(false); setDraft(emptyDraft()); setErrors({}); setSaved({ version, applies }); void data.reload(); };
+  const done = (version: number, applies: string) => { setReview(false); clear(); setErrors({}); setSaved({ version, applies }); void data.reload(); };
   const invalid = (fieldErrors: Record<string, string>) => {
     setReview(false);
     // An error of a setting on another page, or of none, shows at the top.
@@ -245,9 +253,6 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
       setSaving(false);
     }
   };
-  // A draft spans pages: say how many of its changes are not on this one.
-  const here = new Set((sections[group] ?? []).flatMap((section) => section.keys));
-  const elsewhere = changed.filter((key) => !here.has(key)).length;
   const runTest = async (kind: 'smtp' | 'polar' | 'jwks' | 'ai') => {
     setTesting(true);
     try {
@@ -270,7 +275,7 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
       <a className="link-button" href={href('/history')} onClick={(event) => { event.preventDefault(); navigate('/history'); }}>{m.undoInHistory}</a></p>}
     {conflict && <section className="ops-strip" data-tone="danger" role="alert"><span><strong>{m.conflictTitle}.</strong> {m.conflictLead}</span>
       <div className="button-row"><button type="button" className="primary-action" onClick={() => { setConflict(false); void save(); }}>{m.applyMine}</button>
-        <button type="button" onClick={() => { setConflict(false); setDraft(emptyDraft()); }}>{m.discardMine}</button></div></section>}
+        <button type="button" onClick={() => { setConflict(false); clear(); }}>{m.discardMine}</button></div></section>}
     {(sections[group] ?? []).map((section) => <section className="settings-card" key={section.title}>
       <div className="section-heading"><h2>{section.title}</h2><p>{section.lead}</p></div>
       <div className="settings-body">
@@ -289,9 +294,9 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
     </section>)}
     {group === 'billing' && <Suspense fallback={null}><ProductsSection totp={data.me.operator.totp_enabled} /></Suspense>}
     {changed.length > 0 && <div className="save-bar" role="region" aria-label={m.unsavedChanges(changed.length)}>
-      <span><strong>{m.unsavedChanges(changed.length)}</strong>{elsewhere > 0 && <> {m.onOtherPages(elsewhere)}</>}
+      <span><strong>{m.unsavedChanges(changed.length)}</strong>
         {asks(draft, settings).length > 0 && <span className="save-asks"> · {m.savingAsksFor} {asks(draft, settings).join(' · ')}</span>}</span>
-      <div className="button-row"><button type="button" onClick={() => { setDraft(emptyDraft()); setErrors({}); }}>{m.discard}</button>
+      <div className="button-row"><button type="button" onClick={() => { clear(); setErrors({}); }}>{m.discard}</button>
         <button type="button" className="primary-action" disabled={saving} onClick={() => void save()}>{saving ? m.saving : m.save}</button></div>
     </div>}
     {review && <Suspense fallback={null}><Review data={data} draft={draft} checked={checked} onClose={() => setReview(false)} onSaved={done} onInvalid={invalid}
