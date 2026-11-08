@@ -718,6 +718,18 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	conversationID := decision.ConversationID
+	// A channel that joins only open conversations never adds to a resolved or closed one, whoever decided
+	// (the rules, AI intake, a person accepting a suggestion made before it was resolved): a new conversation
+	// starts. A reopen command naming it is the one way back.
+	if conversationID != "" && channel.Settings.JoinPolicy.JoinsOnlyOpen() && decision.Rule != rules.CommandReopen {
+		var open bool
+		if err := tx.QueryRow(ctx, `SELECT status IN ('open','pending') FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&open); err != nil {
+			return result, fmt.Errorf("read the joined conversation's status: %w", err)
+		}
+		if !open {
+			conversationID = ""
+		}
+	}
 	// What intake said the batch adds to a conversation it joins; the rules never say.
 	replyKind := ""
 	if request.Intake != nil && conversationID != "" {
@@ -1055,6 +1067,9 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 		return found, nil
 	}
 	joins := func(status string, updatedAt time.Time) bool {
+		if policy.JoinsOnlyOpen() {
+			return status == "open" || status == "pending"
+		}
 		if policy.Kind != channels.JoinWithinDays || (status != "resolved" && status != "closed") {
 			return true
 		}

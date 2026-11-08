@@ -12681,7 +12681,7 @@ components:
       type: object
       description: >-
         The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days
-        (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits`
+        (days), never, open_only (joins only an open or pending conversation: a resolved or closed one is never added to by a reply, the place's thread or AI intake, and a new one starts; only a reopen command reopens it; Zalo's default)}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits`
         {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
         {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
