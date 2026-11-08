@@ -1,6 +1,9 @@
 // The strings of the server provider's form (AI & pricing). They load with the form, on that page only, so the
-// console's first bundle stays in its budget (docs/internals/performance.md); like messages.ts otherwise.
-export const am = {
+// console's first bundle stays in its budget (docs/internals/performance.md); like messages.ts otherwise. Another
+// language's words wait in lazyWords (lang.ts) and replace these as the form loads.
+import { lazyWords } from './lang';
+
+const en = {
   serverProviderOn: "The server's provider",
   serverProviderOnHelp: 'Workspaces can pick it. Off stops it and keeps everything below for when it is on again.',
   serverProviderOffHelp: 'Off: no workspace can pick it, and features set to it stop and say why. Its settings are kept.',
@@ -55,3 +58,5 @@ export const am = {
   allowanceTrialHelp: 'Empty: the same as the others.',
   dollarsPerMonth: '$ / month',
 } as const;
+
+export const am: typeof en = Object.assign(en, lazyWords.am);

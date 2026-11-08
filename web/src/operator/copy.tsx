@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { locale } from './lang';
 import { m } from './messages';
 
 // CommandLine shows a command to run on the server, with a copy button.
@@ -12,9 +13,10 @@ export function CommandLine({ command, label = m.copy }: { command: string; labe
   );
 }
 
-// when formats a UTC time in the browser's time zone (the operator has no workspace time zone).
+// when formats a UTC time in the browser's time zone (the operator has no workspace time zone), in the
+// console's language.
 export function when(value?: string | null): string {
   if (!value) return '';
   const date = new Date(value);
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return date.toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 }

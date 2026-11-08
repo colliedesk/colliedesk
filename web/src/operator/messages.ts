@@ -14,6 +14,8 @@ export const m = {
   signOut: 'Sign out',
   darkTheme: 'Dark theme',
   lightTheme: 'Light theme',
+  // The other language, named in itself: the account menu switches to it (lang.ts).
+  otherLanguage: 'Tiếng Việt',
   requestsWaiting: (n: number) => `${n} waiting`,
   // Navigation
   navServer: 'Server',
@@ -134,6 +136,9 @@ export const m = {
   confirmItsYou: "Confirm it's you",
   reauthCLI: 'Confirming needs a fresh sign-in. Run this on the server and open the link in this tab; your changes are kept:',
   fillEveryCheck: (what: string) => `Still needed: ${what}.`,
+  needReenter: (key: string) => `enter ${key} again`,
+  needType: (phrase: string) => `type ${phrase}`,
+  needCode: 'your 6-digit code',
   saveAndApply: 'Save and apply',
   saving: 'Saving…',
   save: 'Save',
