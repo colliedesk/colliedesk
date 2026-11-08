@@ -42,8 +42,8 @@ func (openGate) Open(context.Context, GateQuery) bool { return true }
 // OpenGate opens every gate: for tests and evaluation, never a default.
 var OpenGate Gate = openGate{}
 
-// readinessGate opens an action's gate when the scope's readiness for the model and the prompt's
-// Version does (people's explicit labels and offline evaluations), or an admin opened it by hand.
+// readinessGate opens an action's gate when the scope's readiness for the prompt's Version (labels and
+// evaluations of any model) does (people's explicit labels and offline evaluations), or an admin opened it by hand.
 type readinessGate struct {
 	store *store.Store
 	now   func() time.Time
