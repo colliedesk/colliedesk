@@ -1,0 +1,33 @@
+// The strings of the server provider's form (AI & pricing). They load with the form, on that page only, so the
+// console's first bundle stays in its budget (docs/internals/performance.md); like messages.ts otherwise.
+export const am = {
+  serverProviderOn: "The server's provider",
+  serverProviderOnHelp: 'Workspaces can pick it. Off stops it and keeps everything below for when it is on again.',
+  serverProviderOffHelp: 'Off: no workspace can pick it, and features set to it stop and say why. Its settings are kept.',
+  serverProviderService: 'Service',
+  aiService: {
+    anthropic: ['Anthropic', 'Claude models, with an Anthropic API key'],
+    openai: ['OpenAI', 'GPT models, with an OpenAI API key'],
+    openrouter: ['OpenRouter', 'Hundreds of models, with one OpenRouter key'],
+    self_hosted: ['Other or self-hosted', 'Any OpenAI-compatible server: vLLM, Ollama, LM Studio…'],
+  } as Record<string, readonly [string, string]>,
+  serverModels: 'Models',
+  serverModelsHelp: 'Every workspace on this provider runs these models; a workspace picks the provider, never its model.',
+  modelsBeforeLoad: 'Enter the key, then load the models it may use.',
+  modelsListed: (n: number) => `${n} ${n === 1 ? 'model' : 'models'} listed.`,
+  modelsSearch: 'Search models',
+  loadModels: 'Load models',
+  loadingModels: 'Loading…',
+  reloadModels: 'Load again',
+  loadModelsFirst: 'Load the models first',
+  pickModel: 'Pick a model',
+  modelEveryFeature: 'Model for every feature',
+  serverSlot: { triage: 'Triage suggestions', draft: 'Reply drafts', chat: 'AI chat', intake: 'Chat intake' } as Record<string, string>,
+  intakeFallback: 'Chat intake, when its model fails',
+  notOffered: 'Not offered',
+  noFallback: 'No second model',
+  modelPerFeature: 'Choose a model per feature',
+  oneModelForAll: 'One model for every feature',
+  modelsTypeInstead: 'Type model names instead',
+  modelsPickInstead: 'Pick from the list instead',
+} as const;

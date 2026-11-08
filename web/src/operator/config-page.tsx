@@ -13,6 +13,13 @@ import { href, navigate } from './router';
 
 type SetDraft = Dispatch<SetStateAction<Draft>>;
 
+// What the server provider's form (ai-provider, loaded on the AI page only) is given: the page's own rows
+// and draft helpers, passed in so the console's first bundle exports nothing for it.
+export interface ServerProviderProps {
+  byKey: Map<string, Setting>; draft: Draft; setDraft: SetDraft; errors: Record<string, string>; groupOf: (key: string) => string | undefined;
+  SettingRow: typeof SettingRow; change: typeof change; currentValue: typeof currentValue;
+}
+
 function sourceText(setting: Setting): string {
   const at = when(setting.set_at);
   const by = setting.set_by ?? '';
@@ -151,6 +158,8 @@ function asks(draft: Draft, settings: Setting[]): string[] {
 
 // The products table, on the billing page only.
 const ProductsSection = lazy(() => import('./products'));
+// The server provider's form, on the AI page only.
+const ServerProvider = lazy(() => import('./ai-provider'));
 
 export function ConfigPage({ group, data, draft, setDraft }: { group: string; data: ConsoleData; draft: Draft; setDraft: SetDraft }) {
   const settings = data.config.settings;
@@ -191,7 +200,9 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
     {(sections[group] ?? []).map((section) => <section className="settings-card" key={section.title}>
       <div className="section-heading"><h2>{section.title}</h2><p>{section.lead}</p></div>
       <div className="settings-body">
-        {section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
+        {section.keys.includes('ai.server.provider') && <Suspense fallback={null}><ServerProvider byKey={byKey} draft={draft} setDraft={setDraft} errors={errors} groupOf={(key) => byKey.get(key)?.group}
+          SettingRow={SettingRow} change={change} currentValue={currentValue} /></Suspense>}
+        {!section.keys.includes('ai.server.provider') && section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
           <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]}
             feature={data.config.features?.find((feature) => feature.switch_key === setting.key)} groupOf={(key) => byKey.get(key)?.group} />)}
         {section.test && <div className="ops-check">

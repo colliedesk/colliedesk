@@ -651,7 +651,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address through the relay of the change; `polar` asks Polar about the Team and Founding products with the change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI provider of the change (its first model, a few output tokens). A help center domain without a wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored). */
+        /** @description Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address through the relay of the change; `polar` asks Polar about the Team and Founding products with the change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI provider of the change (its first model, a few output tokens); `ai_models` lists the models the change's server AI provider offers its key (`test.models`), before any model is picked, so it runs on a change that is not complete yet. A help center domain without a wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored). */
         post: operations["checkOperatorConfig"];
         delete?: never;
         options?: never;
@@ -9317,6 +9317,8 @@ export interface components {
                 name: string;
                 ok: boolean;
                 message: string;
+                /** @description The models listed, for `ai_models` */
+                models?: string[];
             };
             guards?: components["schemas"]["OperatorConfigGuard"][];
         };
@@ -11536,7 +11538,7 @@ export interface operations {
                         [key: string]: string | null;
                     };
                     /** @enum {string} */
-                    test?: "smtp" | "polar" | "jwks" | "ai";
+                    test?: "smtp" | "polar" | "jwks" | "ai" | "ai_models";
                 };
             };
         };

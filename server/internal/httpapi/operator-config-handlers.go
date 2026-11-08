@@ -462,7 +462,10 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 	}
 	next := current.With(set, input.Unset)
 	out := map[string]any{"ok": true, "errors": map[string]string{}}
-	if a.config.CheckConfig != nil {
+	// Listing the server provider's models comes before any model is picked: the change need not be
+	// complete, only its provider, address and key are used.
+	listing := input.Test == "ai_models"
+	if a.config.CheckConfig != nil && !listing {
 		if err := a.config.CheckConfig(next); err != nil {
 			text, fields := friendlyConfigError(err)
 			if len(fields) == 0 {
@@ -471,10 +474,10 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			out["ok"], out["errors"] = false, fields
 		}
 	}
-	if refused := switchesRefused(current.Snapshot, next); refused != nil && out["ok"] == true {
+	if refused := switchesRefused(current.Snapshot, next); refused != nil && out["ok"] == true && !listing {
 		out["ok"], out["errors"] = false, refused.Fields
 	}
-	if out["ok"] == true {
+	if out["ok"] == true && !listing {
 		var names []string
 		for name := range set {
 			names = append(names, name)
@@ -530,6 +533,8 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			out["test"] = tryJWKS(request.Context(), next)
 		case "ai":
 			out["test"] = a.tryAI(request.Context(), next)
+		case "ai_models":
+			out["test"] = a.listServerAIModels(request.Context(), next)
 		}
 	}
 	writeJSON(response, http.StatusOK, out)

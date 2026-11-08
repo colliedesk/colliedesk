@@ -89,6 +89,12 @@ process could not use it). On a phone it keeps the host and the version.
   **Cancel** applies nothing. Email has **Send a test email**, which tries the settings on the page
   before anything is saved. If someone saved another version meanwhile, nothing is saved and your
   changes are kept to apply on the newest one. A session that ends keeps them in the tab too.
+- **AI and pricing** sets the server's provider the way a workspace adds one: a switch to turn it on or
+  off (off keeps its key, address and models for when it is on again), the service (Anthropic, OpenAI,
+  OpenRouter, or another OpenAI-compatible server, whose address you type), the name workspaces see and
+  the key. **Load models** lists the models the key may use (nothing is saved); pick one model for every
+  feature, or one per feature with a second for chat intake, or type the names. Every workspace on the
+  server's provider runs these models.
 - **Requests**: changes an operator token asked for; approve (with your code and any secret it needs)
   or reject.
 - **History**: every version, who saved it and which keys changed (secret values never show). Restoring
