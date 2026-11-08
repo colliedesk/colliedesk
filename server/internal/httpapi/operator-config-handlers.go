@@ -618,7 +618,7 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 func (a *API) sendTestEmail(ctx context.Context, snap serverconfig.Snapshot, to string) map[string]any {
 	config, err := email.ConfigFromEnv(snap.Getenv)
 	if err != nil || !config.SMTP.Configured() {
-		return map[string]any{"name": "smtp", "ok": false, "message": "Set the relay host first."}
+		return testSaid("smtp", false, configerr.Say("test_smtp_needs_host", nil))
 	}
 	from := to
 	if config.MailFromDomain != "" {
@@ -626,19 +626,19 @@ func (a *API) sendTestEmail(ctx context.Context, snap serverconfig.Snapshot, to 
 	}
 	messageID, err := email.NewMessageID(strings.SplitN(from, "@", 2)[1])
 	if err != nil {
-		return map[string]any{"name": "smtp", "ok": false, "message": "The test email could not be written."}
+		return testSaid("smtp", false, configerr.Say("test_smtp_unwritable", nil))
 	}
 	message, err := email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: to, Subject: "Colliedesk test email",
 		Body: "This is a test from the operator console. Nothing was saved.", MessageID: messageID, Date: a.now(), Standalone: true})
 	if err != nil {
-		return map[string]any{"name": "smtp", "ok": false, "message": "The test email could not be written."}
+		return testSaid("smtp", false, configerr.Say("test_smtp_unwritable", nil))
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	if err := (email.SMTPSender{Config: config.SMTP}).Send(sendCtx, from, []string{to}, message); err != nil {
-		return map[string]any{"name": "smtp", "ok": false, "message": "The relay refused the test email: " + redactSecretsIn(err.Error(), snap)}
+		return testSaid("smtp", false, configerr.Say("test_smtp_refused", configerr.Params{"detail": redactSecretsIn(err.Error(), snap)}))
 	}
-	return map[string]any{"name": "smtp", "ok": true, "message": "Sent a test email to " + to + ". Nothing was saved."}
+	return testSaid("smtp", true, configerr.Say("test_smtp_ok", configerr.Params{"to": to}))
 }
 
 // redactSecretsIn hides any secret value a provider's error repeats.

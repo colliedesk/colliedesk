@@ -179,3 +179,35 @@ func TestSignUpAndNetworkErrorsAndTheSignInKeysTestCarryCodes(t *testing.T) {
 		t.Fatalf("jwks: %+v", jwks.Test)
 	}
 }
+
+func TestEmailErrorsAndTheTestEmailCarryCodes(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	const password = "relay-password-canary"
+	cases := []struct {
+		set        map[string]any
+		key, code  string
+		param, val string
+	}{
+		{map[string]any{"smtp.port": "smtp"}, "smtp.port", "smtp_port_invalid", "value", "smtp"},
+		{map[string]any{"smtp.port": "465"}, "smtp.port", "smtp_port_implicit_tls", "", ""},
+		{map[string]any{"smtp.starttls": "maybe"}, "smtp.starttls", "smtp_starttls_invalid", "value", "maybe"},
+		{map[string]any{"email.from_policy": "everyone"}, "email.from_policy", "email_from_policy_invalid", "value", "everyone"},
+		{map[string]any{"mail_from.domain": "not a domain"}, "mail_from.domain", "mail_from_domain_invalid", "value", "not a domain"},
+		{map[string]any{"hosted_mail.domain": "mail.example.com"}, "hosted_mail.domain", "hosted_mail_needs_inbound_secret", "", ""},
+	}
+	for _, c := range cases {
+		answer := checkCoded(t, e, cookie, map[string]any{"set": c.set, "secrets": map[string]any{"smtp.password": password}}, password)
+		if coded := fieldCode(t, answer, c.key, c.code); c.param != "" && coded.Params[c.param] != c.val {
+			t.Fatalf("%s: %+v", c.code, coded)
+		}
+	}
+	// A secret refused by its own rule names itself, never its value.
+	short := checkCoded(t, e, cookie, map[string]any{"secrets": map[string]any{"mail_from.inbound_secret": "short-inbound-canary"}}, "short-inbound-canary")
+	if coded := fieldCode(t, short, "mail_from.inbound_secret", "mail_from_inbound_secret_needs"); coded.Params["min"] != float64(32) {
+		t.Fatalf("inbound secret: %+v", coded)
+	}
+	if test := checkCoded(t, e, cookie, map[string]any{"test": "smtp"}, ""); test.Test.Code != "test_smtp_needs_host" || test.Test.Message != "Set the relay host first." {
+		t.Fatalf("smtp test: %+v", test.Test)
+	}
+}

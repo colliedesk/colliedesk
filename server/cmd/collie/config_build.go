@@ -130,7 +130,7 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	}
 	if value := strings.TrimSpace(getenv("SMTP_PORT")); value != "" {
 		if port, err := strconv.Atoi(value); err != nil || port < 1 || port > 65535 {
-			keep(errors.New("smtp.port must be a port number between 1 and 65535"))
+			keep(configerr.Say("smtp_port_range", nil))
 		}
 	}
 	return built, errors.Join(errs...)
