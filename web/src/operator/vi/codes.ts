@@ -28,4 +28,12 @@ export const codes: CodeTable = {
   test_ai_ok: 'Nhà cung cấp đã trả lời bằng {model}. Chưa có gì được lưu.',
   test_ai_refused: 'Nhà cung cấp từ chối {model}: {detail}',
   test_reenter_secret: 'Hãy nhập lại {secret}: phép thử gửi tới {key} mới.',
+  internal_signup_email_invalid: 'Mục {"entry"} của internal_signup.emails không phải @tên-miền hay một địa chỉ email',
+  network_entry_invalid: 'Mục {"entry"} của {name} không phải CIDR hay địa chỉ IP',
+  ai_allow_private_invalid: 'ai.allow_private_base_urls phải là true hoặc false',
+  help_center_domain_invalid: 'help_center.domain phải là tên miền, ví dụ example.com; giá trị nhận được: {"domain"}',
+  test_jwks_needs_settings: 'Hãy đặt issuer và địa chỉ JWKS trước.',
+  test_jwks_failed: 'Địa chỉ JWKS không trả về key: {detail}',
+  test_jwks_no_rsa: 'Địa chỉ JWKS không trả về key RSA nào: không lượt đăng nhập cloud nào xác minh được.',
+  test_jwks_ok: 'Địa chỉ JWKS đã trả về {count} key. Chưa có gì được lưu.',
 };

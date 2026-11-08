@@ -1,4 +1,8 @@
 {
+  "ai_allow_private_invalid": {
+    "text": "ai.allow_private_base_urls must be true or false",
+    "message": "ai.allow_private_base_urls must be true or false"
+  },
   "ai_server_allowance_format": {
     "text": "ai.server.monthly_allowance must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)",
     "message": "ai.server.monthly_allowance must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)"
@@ -79,6 +83,28 @@
     "text": "ai.server.provider must be anthropic or openai_compatible",
     "message": "ai.server.provider must be anthropic or openai_compatible"
   },
+  "help_center_domain_invalid": {
+    "text": "help_center.domain must be a domain name such as example.com, got {\"domain\"}",
+    "params": {
+      "domain": "localhost"
+    },
+    "message": "help_center.domain must be a domain name such as example.com, got \"localhost\""
+  },
+  "internal_signup_email_invalid": {
+    "text": "internal_signup.emails entry {\"entry\"} is not @domain or an email address",
+    "params": {
+      "entry": "colliedesk.com"
+    },
+    "message": "internal_signup.emails entry \"colliedesk.com\" is not @domain or an email address"
+  },
+  "network_entry_invalid": {
+    "text": "{name} entry {\"entry\"} is not a CIDR or an IP address",
+    "params": {
+      "entry": "10.0.0.0/33",
+      "name": "trusted_proxies"
+    },
+    "message": "trusted_proxies entry \"10.0.0.0/33\" is not a CIDR or an IP address"
+  },
   "secret_not_valid": {
     "text": "{keys}: not valid",
     "params": {
@@ -137,6 +163,28 @@
       "model": "claude-haiku-5-5"
     },
     "message": "The provider refused claude-haiku-5-5: 401 invalid x-api-key [secret]"
+  },
+  "test_jwks_failed": {
+    "text": "The JWKS address did not answer with keys: {detail}",
+    "params": {
+      "detail": "GET https://auth.example.com/.well-known/jwks.json: 404"
+    },
+    "message": "The JWKS address did not answer with keys: GET https://auth.example.com/.well-known/jwks.json: 404"
+  },
+  "test_jwks_needs_settings": {
+    "text": "Set the issuer and the JWKS address first.",
+    "message": "Set the issuer and the JWKS address first."
+  },
+  "test_jwks_no_rsa": {
+    "text": "The JWKS address answered with no RSA key: no cloud sign-in would verify.",
+    "message": "The JWKS address answered with no RSA key: no cloud sign-in would verify."
+  },
+  "test_jwks_ok": {
+    "text": "The JWKS address answered with {count} keys. Nothing was saved.",
+    "params": {
+      "count": 2
+    },
+    "message": "The JWKS address answered with 2 keys. Nothing was saved."
   },
   "test_reenter_secret": {
     "text": "Enter {secret} again: the test goes to the new {key}.",

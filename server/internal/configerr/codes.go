@@ -34,6 +34,11 @@ var Config = map[string]string{
 	"ai_server_allowance_unknown":    `AI_SERVER_MONTHLY_ALLOWANCE knows workspace, agent and trial, not {"key"}`,
 	// Any setting: a refusal that would have repeated a secret names the secrets instead.
 	"secret_not_valid": "{keys}: not valid",
+	// Sign-ups, security and network.
+	"internal_signup_email_invalid": `INTERNAL_SIGNUP_EMAILS entry {"entry"} is not @domain or an email address`,
+	"network_entry_invalid":         `{name} entry {"entry"} is not a CIDR or an IP address`,
+	"ai_allow_private_invalid":      "ai.allow_private_base_urls must be true or false",
+	"help_center_domain_invalid":    `HELP_CENTER_DOMAIN must be a domain name such as example.com, got {"domain"}`,
 }
 
 // Messages are the codes of everything else the console shows from the server: live tests, what a change does
@@ -50,4 +55,8 @@ var Messages = map[string]string{
 	"test_ai_models_refused":        "The provider refused to list its models ({check_code}). Check the key and the address, or type the model names.",
 	"test_ai_models_failed":         "The models could not be listed: {detail}",
 	"test_ai_models_ok":             "The provider offers {count} {count?model|models}. Nothing was saved.",
+	"test_jwks_needs_settings":      "Set the issuer and the JWKS address first.",
+	"test_jwks_failed":              "The JWKS address did not answer with keys: {detail}",
+	"test_jwks_no_rsa":              "The JWKS address answered with no RSA key: no cloud sign-in would verify.",
+	"test_jwks_ok":                  "The JWKS address answered with {count} keys. Nothing was saved.",
 }

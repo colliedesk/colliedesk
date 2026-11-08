@@ -455,18 +455,18 @@ func (a *API) tryPolar(ctx context.Context, snap serverconfig.Snapshot) map[stri
 func tryJWKS(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	config := cloudauth.ConfigFromEnv(snap.Getenv)
 	if !config.Enabled() {
-		return map[string]any{"name": "jwks", "ok": false, "message": "Set the issuer and the JWKS address first."}
+		return testSaid("jwks", false, configerr.Say("test_jwks_needs_settings", nil))
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	count, err := cloudauth.New(config).CheckKeys(callCtx)
 	if err != nil {
-		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address did not answer with keys: " + err.Error()}
+		return testSaid("jwks", false, configerr.Say("test_jwks_failed", configerr.Params{"detail": err.Error()}))
 	}
 	if count == 0 {
-		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address answered with no RSA key: no cloud sign-in would verify."}
+		return testSaid("jwks", false, configerr.Say("test_jwks_no_rsa", nil))
 	}
-	return map[string]any{"name": "jwks", "ok": true, "message": fmt.Sprintf("The JWKS address answered with %d keys. Nothing was saved.", count)}
+	return testSaid("jwks", true, configerr.Say("test_jwks_ok", configerr.Params{"count": count}))
 }
 
 // wildcardMissing says why the help center domain cannot be used yet: every workspace's help center is

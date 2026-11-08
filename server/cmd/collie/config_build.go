@@ -93,7 +93,7 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	case "1", "true":
 		built.AllowPrivateBaseURLs = true
 	default:
-		keep(errors.New("ai.allow_private_base_urls must be true or false"))
+		keep(configerr.Say("ai_allow_private_invalid", nil))
 	}
 	built.TrustedProxies, err = httpapi.ParseTrustedProxies(getenv("TRUSTED_PROXIES"))
 	keep(err)

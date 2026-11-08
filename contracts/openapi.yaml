@@ -13127,6 +13127,7 @@ components:
       type: string
       description: 'The code of a message the operator console shows from the server, beside its English text: the console translates by code and params, and falls back to the text (docs/internals/operator-console.md › Message codes). A code is stable.'
       enum:
+        - ai_allow_private_invalid
         - ai_server_allowance_format
         - ai_server_allowance_not_number
         - ai_server_allowance_unknown
@@ -13141,6 +13142,9 @@ components:
         - ai_server_prices_not_number
         - ai_server_prices_twice
         - ai_server_provider_invalid
+        - help_center_domain_invalid
+        - internal_signup_email_invalid
+        - network_entry_invalid
         - secret_not_valid
         - test_ai_models_failed
         - test_ai_models_needs_base_url
@@ -13151,6 +13155,10 @@ components:
         - test_ai_needs_settings
         - test_ai_ok
         - test_ai_refused
+        - test_jwks_failed
+        - test_jwks_needs_settings
+        - test_jwks_no_rsa
+        - test_jwks_ok
         - test_reenter_secret
     OperatorMessageParams:
       type: object

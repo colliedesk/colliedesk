@@ -11,6 +11,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
@@ -95,7 +96,9 @@ func fieldCode(t *testing.T, answer codedCheck, key, code string) codedMessage {
 func TestTheServerAIProvidersErrorsAndTestsCarryCodes(t *testing.T) {
 	fake := &aiprovider.Fake{}
 	e := newOperatorEnvWith(t, false, func(snap serverconfig.Snapshot) error { _, err := ai.ServerProviderFromEnv(snap.Getenv); return err },
-		func(config *httpapi.Config) { config.AI.Build = func(ai.Spec) (aiprovider.Provider, error) { return fake, nil } })
+		func(config *httpapi.Config) {
+			config.AI.Build = func(ai.Spec) (aiprovider.Provider, error) { return fake, nil }
+		})
 	cookie := e.signIn("ops@example.com")
 	const key = "sk-ant-canary-never-echoed"
 	secrets := map[string]any{"ai.server.api_key": key}
@@ -145,5 +148,34 @@ func TestTheServerAIProvidersErrorsAndTestsCarryCodes(t *testing.T) {
 	listed := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"ai.server.provider": "anthropic"}, "secrets": secrets, "test": "ai_models"}, key)
 	if listed.Test.Code != "test_ai_models_ok" || listed.Test.Params["count"] != float64(1) || listed.Test.Message != "The provider offers 1 model. Nothing was saved." {
 		t.Fatalf("models: %+v", listed.Test)
+	}
+}
+
+func TestSignUpAndNetworkErrorsAndTheSignInKeysTestCarryCodes(t *testing.T) {
+	e := newOperatorEnvChecking(t, false, func(snap serverconfig.Snapshot) error {
+		_, signups := httpapi.ParseInternalSignups(snap.Getenv("INTERNAL_SIGNUP_EMAILS"), snap.Getenv("INTERNAL_SIGNUP_NETWORKS"))
+		_, proxies := httpapi.ParseTrustedProxies(snap.Getenv("TRUSTED_PROXIES"))
+		_, domain := helpcenter.DomainFromEnv(snap.Getenv)
+		return errors.Join(signups, proxies, domain)
+	})
+	cookie := e.signIn("ops@example.com")
+	answer := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"internal_signup.emails": "colliedesk.com",
+		"trusted_proxies": "not-an-ip", "help_center.domain": "localhost"}}, "")
+	if coded := fieldCode(t, answer, "internal_signup.emails", "internal_signup_email_invalid"); coded.Params["entry"] != "colliedesk.com" {
+		t.Fatalf("emails: %+v", coded)
+	}
+	// One parser serves two settings: its params name the setting, as its text does.
+	networks := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"internal_signup.networks": "10.0.0.0/33"}}, "")
+	if coded := fieldCode(t, networks, "internal_signup.networks", "network_entry_invalid"); coded.Params["name"] != "internal_signup.networks" || coded.Params["entry"] != "10.0.0.0/33" {
+		t.Fatalf("networks: %+v", coded)
+	}
+	if coded := fieldCode(t, answer, "trusted_proxies", "network_entry_invalid"); coded.Params["name"] != "trusted_proxies" {
+		t.Fatalf("proxies: %+v", coded)
+	}
+	if coded := fieldCode(t, answer, "help_center.domain", "help_center_domain_invalid"); coded.Params["domain"] != "localhost" {
+		t.Fatalf("domain: %+v", coded)
+	}
+	if jwks := checkCoded(t, e, cookie, map[string]any{"test": "jwks"}, ""); jwks.Test.Code != "test_jwks_needs_settings" || jwks.Test.Message != "Set the issuer and the JWKS address first." {
+		t.Fatalf("jwks: %+v", jwks.Test)
 	}
 }
