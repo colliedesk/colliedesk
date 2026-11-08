@@ -164,7 +164,6 @@ export const m: Translation<typeof en> = {
   discardMine: 'Bỏ thay đổi của tôi',
   secretNotSet: 'Chưa đặt',
   secretIsSet: 'Đã đặt · chỉ ghi',
-  onOtherPages: (n: number) => `(${n} ở trang khác)`,
   replace: 'Thay',
   remove: 'Xoá',
   removed: 'Đã xoá',
