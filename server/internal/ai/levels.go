@@ -545,7 +545,7 @@ func (s *Service) ChannelAI(ctx context.Context, workspaceID string, channel Cha
 
 func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, channel ChannelRef) (ChannelAI, error) {
 	result := ChannelAI{ChannelID: channel.ID, Scopes: []ChannelAIScope{}}
-	slots, err := readSlots(ctx, tx, workspaceID, false)
+	slots, err := s.readSlots(ctx, tx, workspaceID, false)
 	if err != nil {
 		return result, err
 	}
@@ -635,7 +635,7 @@ func (s *Service) SetChannelLevel(ctx context.Context, workspaceID string, actor
 	now := s.now().UTC()
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		// The order SetSlot takes them: a recipient change lowering the channels meanwhile is seen.
-		slots, err := readSlots(ctx, tx, workspaceID, true)
+		slots, err := s.readSlots(ctx, tx, workspaceID, true)
 		if err != nil {
 			return err
 		}

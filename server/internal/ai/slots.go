@@ -39,7 +39,38 @@ func (r slotRow) source() string {
 	return SourceNone
 }
 
-func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
+// readSlots reads a workspace's features. A feature on the server's provider runs the models its
+// operator sets (ai.server.models), whatever model was stored when the workspace picked it: the first
+// model of the feature, and for intake the second as its fallback model.
+func (s *Service) readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
+	slots, err := scanSlots(ctx, tx, workspaceID, lock)
+	if err != nil {
+		return nil, err
+	}
+	for slot, row := range slots {
+		if row.usesServer {
+			row.model, row.fallbackModel = s.serverModels(slot)
+			slots[slot] = row
+		}
+	}
+	return slots, nil
+}
+
+// serverModels is the model the server's provider runs for a feature (nil when it offers none) and
+// intake's fallback model, the feature's second model.
+func (s *Service) serverModels(slot string) (model, fallback *string) {
+	models := s.config.Server.ModelsFor(slot)
+	if len(models) == 0 {
+		return nil, nil
+	}
+	model = &models[0]
+	if slot == SlotIntake && len(models) > 1 {
+		fallback = &models[1]
+	}
+	return model, fallback
+}
+
+func scanSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
 	query := `SELECT slot,uses_server,provider_id::text,model,fallback_model,effort,enabled,default_level,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
 		monthly_cap_micro_usd FROM ai_slots WHERE workspace_id=$1`
 	if lock {
@@ -69,7 +100,7 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 func (s *Service) SlotModel(ctx context.Context, workspaceID, slot string) (string, error) {
 	model := ""
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		slots, err := readSlots(ctx, tx, workspaceID, false)
+		slots, err := s.readSlots(ctx, tx, workspaceID, false)
 		if err != nil {
 			return err
 		}
@@ -135,7 +166,7 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 		if err != nil {
 			return err
 		}
-		slots, err := readSlots(ctx, tx, workspaceID, false)
+		slots, err := s.readSlots(ctx, tx, workspaceID, false)
 		if err != nil {
 			return err
 		}
@@ -257,15 +288,14 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 				return ErrNoServerProvider
 			}
 			next.usesServer = true
-			model := input.Model
-			if model == "" {
-				model = models[0]
+			// The operator picks the server's models; a workspace picks only the provider.
+			next.model, next.fallbackModel = s.serverModels(slot)
+			if input.Model != "" && input.Model != *next.model {
+				return invalid("%s runs %s for this feature: its operator picks the model. Send no model.", s.config.Server.Label, *next.model)
 			}
-			if !slices.Contains(models, model) {
-				return invalid("The server's provider offers %v for this feature.", models)
+			if input.FallbackModel != nil && *input.FallbackModel != "" && !equalPointer(input.FallbackModel, next.fallbackModel) {
+				return invalid("%s picks intake's fallback model itself. Send no fallback_model.", s.config.Server.Label)
 			}
-			next.model = &model
-			offered = models
 			label = s.config.Server.Label
 		case SourceProvider:
 			if err := lockProviders(ctx, tx, workspaceID); err != nil {
@@ -295,14 +325,16 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		default:
 			return invalid("source is server, provider or none.")
 		}
-		slots, err := readSlots(ctx, tx, workspaceID, true)
+		slots, err := s.readSlots(ctx, tx, workspaceID, true)
 		if err != nil {
 			return err
 		}
 		current, found := slots[slot]
 		sameRecipient := found && current.usesServer == next.usesServer && equalPointer(current.providerID, next.providerID)
-		if next.fallbackModel, err = fallbackModel(slot, input.FallbackModel, current, sameRecipient, next.model, offered); err != nil {
-			return err
+		if !next.usesServer {
+			if next.fallbackModel, err = fallbackModel(slot, input.FallbackModel, current, sameRecipient, next.model, offered); err != nil {
+				return err
+			}
 		}
 		next.consentedBy, next.consentedAt = current.consentedBy, current.consentedAt
 		renewed := next.enabled && !(found && current.enabled && sameRecipient)
@@ -547,7 +579,7 @@ func (s *Service) ActiveFeatures(ctx context.Context, workspaceID string) (map[s
 		active[slot] = false
 	}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		slots, err := readSlots(ctx, tx, workspaceID, false)
+		slots, err := s.readSlots(ctx, tx, workspaceID, false)
 		for slot, row := range slots {
 			active[slot] = s.view(slot, row, true).Active
 		}

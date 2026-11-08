@@ -10094,8 +10094,8 @@ components:
       properties:
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: string, format: uuid, description: With source provider.}
-        model: {type: string, maxLength: 200}
-        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it.'}
+        model: {type: string, maxLength: 200, description: 'One of the provider''s models; left out, its first. On the server''s provider (source server) the operator picks the model: leave it out.'}
+        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it. On the server''s provider the operator picks it: leave it out.'}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
         default_level: {$ref: '#/components/schemas/AILevel'}

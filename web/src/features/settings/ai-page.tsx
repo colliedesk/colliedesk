@@ -210,7 +210,8 @@ const sourceOf = (slot: AISlot) => (slot.source === 'server' ? 'server' : slot.p
 function slotInput(slot: AISlot): AISlotInput {
   const input: AISlotInput = slot.source === 'server' ? { source: 'server', enabled: slot.enabled }
     : slot.provider_id ? { source: 'provider', provider_id: slot.provider_id, enabled: slot.enabled } : { source: 'none', enabled: false };
-  if (slot.model && input.source !== 'none') input.model = slot.model;
+  // The server's provider runs the model its operator picks; only a workspace provider takes one.
+  if (slot.model && input.source === 'provider') input.model = slot.model;
   input.effort = slot.effort;
   return input;
 }
@@ -233,7 +234,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
     const input: AISlotInput = source === 'server' ? { source: 'server', enabled: next.enabled ?? slot.enabled }
       : source ? { source: 'provider', provider_id: source, enabled: next.enabled ?? slot.enabled } : { source: 'none', enabled: false };
     const model = next.model ?? (next.source ? undefined : slot.model ?? undefined);
-    if (model && input.source !== 'none') input.model = model;
+    if (model && input.source === 'provider') input.model = model;
     input.effort = slot.effort;
     onSetSlot(slot.slot, input);
   };
@@ -255,11 +256,14 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
           {choices.length > 0 && !choice && <option value="">{m.pickProvider}</option>}
           {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select></label>
-      <label className="ai-slot-model"><span className="ai-cell-label">{m.columnModel}</span>
-        <select aria-label={m.modelFor(name)} value={slot.model ?? ''} disabled={locked || !choice} onChange={(event) => save({ model: event.target.value })}>
-          {models.length === 0 && <option value="">—</option>}
-          {models.map((model) => <option key={model} value={model}>{model}</option>)}
-        </select></label>
+      {chosen === 'server'
+        ? <div className="ai-slot-model ai-slot-model-fixed"><span className="ai-cell-label">{m.columnModel}</span>
+          <span className="ai-model-name">{serverModels[0]}</span><span className="muted-copy">{m.modelByServer}</span></div>
+        : <label className="ai-slot-model"><span className="ai-cell-label">{m.columnModel}</span>
+          <select aria-label={m.modelFor(name)} value={slot.model ?? ''} disabled={locked || !choice} onChange={(event) => save({ model: event.target.value })}>
+            {models.length === 0 && <option value="">—</option>}
+            {models.map((model) => <option key={model} value={model}>{model}</option>)}
+          </select></label>}
       <div className="ai-slot-limit"><span className="ai-cell-label">{m.columnAutomatic}</span>
         {slot.slot === 'triage' || slot.slot === 'intake' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
           : slot.slot === 'intake' ? m.intakeLimits(settings.automatic.intake_per_day) : m.draftLimits(settings.automatic.draft_per_day)}</span>

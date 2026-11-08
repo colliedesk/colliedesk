@@ -149,7 +149,7 @@ func (s *Service) ChatActive(ctx context.Context, workspaceID string) (bool, err
 
 // ChatActiveIn is ChatActive read in the caller's transaction, which is in the workspace.
 func (s *Service) ChatActiveIn(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
-	slots, err := readSlots(ctx, tx, workspaceID, false)
+	slots, err := s.readSlots(ctx, tx, workspaceID, false)
 	if err != nil {
 		return false, err
 	}

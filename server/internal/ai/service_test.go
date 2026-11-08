@@ -283,6 +283,58 @@ func TestASlotOnTheServerProviderStopsWhenTheOperatorRemovesIt(t *testing.T) {
 	}
 }
 
+// A workspace picks the server's provider, never its model: every feature on it runs the model the
+// operator sets now, and follows the operator when it changes.
+func TestAFeatureOnTheServerProviderRunsTheOperatorsModel(t *testing.T) {
+	ctx := context.Background()
+	server := &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "k",
+		Models: map[string][]string{ai.SlotDraft: {"claude-haiku-5-5", "claude-sonnet-5-5"}, ai.SlotIntake: {"claude-haiku-5-5", "claude-sonnet-5-5"}}}
+	e := newEnv(t, func(config *ai.Config) { config.Server = server })
+	var refused *ai.InvalidError
+	if _, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "claude-sonnet-5-5", Enabled: true}); !errors.As(err, &refused) ||
+		!strings.Contains(err.Error(), "runs claude-haiku-5-5") {
+		t.Fatalf("a workspace picked the server's model: %v", err)
+	}
+	fallback := "claude-sonnet-5-5"
+	intake, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotIntake, ai.SlotInput{Source: ai.SourceServer, FallbackModel: &fallback})
+	if err != nil || *intake.Model != "claude-haiku-5-5" || intake.FallbackModel == nil || *intake.FallbackModel != "claude-sonnet-5-5" {
+		t.Fatalf("intake on the server: %+v %v", intake, err)
+	}
+	other := "claude-opus-5-5"
+	if _, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotIntake, ai.SlotInput{Source: ai.SourceServer, FallbackModel: &other}); !errors.As(err, &refused) {
+		t.Fatalf("a workspace picked intake's fallback model on the server: %v", err)
+	}
+	draft, err := e.service.SetSlot(ctx, e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Model: "claude-haiku-5-5", Enabled: true})
+	if err != nil || !draft.Active || *draft.Model != "claude-haiku-5-5" {
+		t.Fatalf("draft on the server: %+v %v", draft, err)
+	}
+
+	// The operator moves drafts to another model, one the workspace never saw: the feature follows.
+	changed := &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "k",
+		Models: map[string][]string{ai.SlotDraft: {"claude-opus-5-5"}, ai.SlotIntake: {"claude-opus-5-5"}}}
+	restarted := ai.NewService(database.New(e.pool), ai.Config{Keys: ring(t), Server: changed})
+	model, err := restarted.SlotModel(ctx, e.a.id, ai.SlotDraft)
+	if err != nil || model != "claude-opus-5-5" {
+		t.Fatalf("draft runs %q after the operator's change (%v)", model, err)
+	}
+	settings, err := restarted.Settings(ctx, e.a.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, slot := range settings.Slots {
+		switch slot.Slot {
+		case ai.SlotDraft:
+			if !slot.Active || slot.OffReason != nil || *slot.Model != "claude-opus-5-5" {
+				t.Fatalf("draft after the operator's change: %+v", slot)
+			}
+		case ai.SlotIntake:
+			if *slot.Model != "claude-opus-5-5" || slot.FallbackModel != nil {
+				t.Fatalf("intake after the operator's change: %+v", slot)
+			}
+		}
+	}
+}
+
 func TestRemovingAProviderTurnsItsFeaturesOffAndKeepsHistory(t *testing.T) {
 	e := newEnv(t, nil)
 	provider := e.add(t, e.a, "Team key")

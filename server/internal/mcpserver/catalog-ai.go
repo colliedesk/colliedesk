@@ -157,15 +157,15 @@ func aiSlotSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_slot_set",
 		Title: "Set an AI feature",
-		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. ` +
+		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model (a workspace provider's; the server's provider runs the model its operator picks), effort, and on or off. ` +
 			`default_level is what it does by itself where no channel says otherwise: off (only when someone asks), suggest (triage suggests for every new conversation; drafts are written when a customer writes, never sent; intake suggests in Review) ` +
 			`or auto (triage only: suggestions apply the auto_parts, filling only what nobody set). Left out, it stays as it is; turned on, or moved to another provider, the feature starts at suggest (triage) or off. ` +
 			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets: say so to the person you work for before you turn one on.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/ai/slots/{slot}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":` + aiSlotName + `,` +
-			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200},` +
-			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept."},` +
+			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200,"description":"One of the provider's models; left out, its first. On the server's provider (source server) its operator picks the model: leave it out."},` +
+			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept. On the server's provider its operator picks it: leave it out."},` +
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},` +
 			`"default_level":` + aiLevelName + `,` +
 			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},` +
