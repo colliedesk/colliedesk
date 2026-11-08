@@ -6502,10 +6502,15 @@ export interface components {
             server: null | {
                 kind: components["schemas"]["AIProviderKind"];
                 label: string;
-                /** @description Per feature, the models a workspace may pick; the first is the default. */
+                /** @description Per feature, the models the operator set; a feature on this provider runs the first (intake tries the second when the first fails). */
                 models: {
                     [key: string]: string[];
                 };
+            };
+            /** @description Set while the operator switched the server's provider off (`server` is then null); no workspace can pick it, and a feature set to it does not run until it is on again. Null otherwise. */
+            server_off: null | {
+                /** @description The name workspaces know the server's provider by. */
+                label: string;
             };
             providers: components["schemas"]["AIProvider"][];
             slots: components["schemas"]["AISlot"][];

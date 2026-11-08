@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { ConflictError } from '../../api/client';
 import type { AIProvider, AISettings, AISlot } from '../../api/ai';
@@ -20,7 +20,7 @@ function provider(change: Partial<AIProvider> = {}): AIProvider {
 }
 
 function settings(change: Partial<AISettings> = {}): AISettings {
-  return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
+  return { server: null, server_off: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
     allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null }, allowance: null,
     auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, channels: [], source_consents: [], ...change };
 }
@@ -82,6 +82,23 @@ test('on the server provider a feature shows the operator’s model and offers n
   expect(screen.queryByRole('combobox', { name: 'Reply drafts model' })).not.toBeInTheDocument();
   expect(screen.getAllByText('Set by the server')).toHaveLength(2);
   expect(screen.getByText('claude-sonnet-5-5')).toBeInTheDocument();
+});
+
+test('a feature on the server provider the operator switched off shows it greyed, says why on hover, and moves to another provider', async () => {
+  const { onSetSlot } = page({ settings: settings({ server_off: { label: 'Colliedesk AI' }, providers: [provider()],
+    slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: false, off_reason: 'server_provider_off' }), slot({ slot: 'draft' })] }) });
+  const triage = screen.getByRole('combobox', { name: 'Triage suggestions provider' });
+  expect(triage).toHaveClass('ai-select-off');
+  expect(within(triage).getByRole('option', { name: 'Colliedesk AI' })).toBeDisabled();
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  fireEvent.focus(triage);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent("Colliedesk AI, the server's default AI provider, is turned off.");
+  fireEvent.keyDown(triage, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+  // Nobody can pick it for another feature.
+  expect(within(screen.getByRole('combobox', { name: 'Reply drafts provider' })).queryByRole('option', { name: 'Colliedesk AI' })).not.toBeInTheDocument();
+  fireEvent.change(triage, { target: { value: providerID } });
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', { source: 'provider', provider_id: providerID, effort: 'low', enabled: true });
 });
 
 test('a feature on a server provider the operator removed says it stopped and why', () => {

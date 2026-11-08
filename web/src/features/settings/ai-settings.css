@@ -55,6 +55,10 @@
 .ai-slot select { width: 100%; }
 .ai-cell-label { display: none; }
 .ai-slot-model-fixed { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-small); }
+.ai-select-off { color: var(--text-3); background-color: var(--surface-1); border-style: dashed; }
+.ai-off-text { color: var(--text-3); }
+.ai-tip-anchor { display: block; min-width: 0; }
+.ai-tip-anchor > select { width: 100%; }
 .ai-model-name { overflow-wrap: anywhere; color: var(--text-1); }
 .ai-slot-limit { display: grid; gap: 0; justify-items: start; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .ai-server-meter { grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 22rem); }
