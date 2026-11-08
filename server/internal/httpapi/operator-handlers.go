@@ -267,7 +267,7 @@ func signInError(response http.ResponseWriter, step auth.SignInStep, left int, e
 	case errors.Is(err, auth.ErrOperatorLink):
 		writeSaid(response, http.StatusNotFound, "operator_link_invalid", configerr.Say("link_invalid", nil))
 	case errors.Is(err, auth.ErrOperatorNoRing):
-		writeSaid(response, http.StatusConflict, "secret_keys_missing", configerr.Say("authenticator_needs_key_ring", nil))
+		writeSaid(response, http.StatusConflict, "secret_keys_missing", configerr.Say("authenticator_needs_key_ring", configerr.Params{"env": "MAILBOX_TOKEN_KEYS"}))
 	default:
 		slog.Error("operator sign-in", "error", err)
 		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("sign_in_failed", nil))

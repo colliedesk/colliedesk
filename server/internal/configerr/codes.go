@@ -126,7 +126,7 @@ var Messages = map[string]string{
 	"guard_workspace_unlooked":      "The workspace could not be looked up; try again.",
 	// Refused requests and their fields.
 	"audit_unreadable":             "The audit log could not be read.",
-	"authenticator_needs_key_ring": "An authenticator needs MAILBOX_TOKEN_KEYS on the server.",
+	"authenticator_needs_key_ring": "An authenticator needs {env} on the server.",
 	"body_invalid":                 "The body is not valid.",
 	"body_not_a_change":            "The body is not a configuration change.",
 	"body_not_a_product":           "The body is not a product.",
@@ -195,7 +195,7 @@ var Messages = map[string]string{
 	"secret_in_request":            "A token cannot send a secret. Ask for it with null in secrets; the person who approves types it.",
 	"secret_in_request_example":    `A token cannot send a secret. Ask for it with null ("secrets": {"smtp.password": null}); the person who approves types it.`,
 	"secret_in_set":                "Secrets go in secrets, never in set. Nothing was saved.",
-	"secret_keys_missing":          "Secrets can be saved only with a key ring (MAILBOX_TOKEN_KEYS). Nothing was saved.",
+	"secret_keys_missing":          "Secrets can be saved only with a key ring ({env}). Nothing was saved.",
 	"secret_missing":               "Enter the secret. Nothing was saved.",
 	"secret_not_asked":             "The request does not ask for that secret.",
 	"send_base_version":            "Send the version you read (base_version).",

@@ -231,7 +231,7 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 			return
 		}
 		if !current.Ring() {
-			writeRefusedSaid(response, http.StatusBadRequest, "secret_keys_missing", configerr.Say("secret_keys_missing", nil), map[string]*configerr.Error{key.Name: configerr.Say("field_no_key_ring", nil)})
+			writeRefusedSaid(response, http.StatusBadRequest, "secret_keys_missing", configerr.Say("secret_keys_missing", configerr.Params{"env": "MAILBOX_TOKEN_KEYS"}), map[string]*configerr.Error{key.Name: configerr.Say("field_no_key_ring", nil)})
 			return
 		}
 		set[key.Name] = *value

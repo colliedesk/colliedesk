@@ -88,7 +88,10 @@
     "message": "The audit log could not be read."
   },
   "authenticator_needs_key_ring": {
-    "text": "An authenticator needs MAILBOX_TOKEN_KEYS on the server.",
+    "text": "An authenticator needs {env} on the server.",
+    "params": {
+      "env": "MAILBOX_TOKEN_KEYS"
+    },
     "message": "An authenticator needs MAILBOX_TOKEN_KEYS on the server."
   },
   "billing_alert_email_invalid": {
@@ -685,7 +688,10 @@
     "message": "Secrets go in secrets, never in set. Nothing was saved."
   },
   "secret_keys_missing": {
-    "text": "Secrets can be saved only with a key ring (MAILBOX_TOKEN_KEYS). Nothing was saved.",
+    "text": "Secrets can be saved only with a key ring ({env}). Nothing was saved.",
+    "params": {
+      "env": "MAILBOX_TOKEN_KEYS"
+    },
     "message": "Secrets can be saved only with a key ring (MAILBOX_TOKEN_KEYS). Nothing was saved."
   },
   "secret_missing": {

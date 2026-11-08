@@ -13,6 +13,8 @@ import (
 
 // codeExamples are the params of one example of each message code, for the console's table of codes.
 var codeExamples = map[string]configerr.Params{
+	"secret_keys_missing":            {"env": "MAILBOX_TOKEN_KEYS"},
+	"authenticator_needs_key_ring":   {"env": "MAILBOX_TOKEN_KEYS"},
 	"ai_server_half_configured":      {"missing": "AI_SERVER_API_KEY, AI_SERVER_MODELS"},
 	"ai_server_label_too_long":       {"max": 80},
 	"ai_server_allowance_unpriced":   {"models": "claude-haiku-5-5, gpt-5"},
