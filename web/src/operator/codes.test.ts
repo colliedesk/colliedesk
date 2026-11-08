@@ -6,7 +6,7 @@ import { codes as viCodes } from './vi/codes';
 // The console's message codes (codes.ts). codes.en.json is written from the server's templates with one example
 // each (TestTheConsoleTableOfCodesIsTheServersEnglish): the console renders each example as the server wrote it.
 const en = table as Record<string, { text: string; params?: Record<string, string | number>; message: string }>;
-const names = (template: string) => [...new Set([...template.matchAll(/\{"?([a-z_]+)/g)].map((match) => match[1]))].sort();
+const names = (template: string) => [...new Set([...template.matchAll(/\{"?([a-z_]+)"?(?:\?[^|}]*\|[^}]*)?\}/g)].map((match) => match[1]))].sort();
 
 beforeEach(() => { vi.resetModules(); });
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); document.documentElement.lang = 'en'; });

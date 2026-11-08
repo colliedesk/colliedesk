@@ -50,6 +50,27 @@ var codeExamples = map[string]configerr.Params{
 	"retention_max_range":            {"max": 20},
 	"test_polar_refused":             {"detail": "401 Unauthorized"},
 	"test_polar_archived":            {"product": "prod_123"},
+	"feature_switch_invalid":         {"key": "features.gmail"},
+	"feature_needs_settings":         {"feature": "gmail", "label": "Gmail", "missing": "google.client_id, google.client_secret"},
+	"guard_refused_nothing_saved":    {"refused": "No workspace has the address acme."},
+	"field_reenter":                  {"key": "smtp.host"},
+	"field_type_phrase":              {"phrase": "billing on"},
+	"guard_billing_on":               {"workspaces": 3},
+	"guard_billing_on_again":         {"workspaces": 1},
+	"guard_retention_on":             {"workspaces": 1, "per_day": "5"},
+	"guard_mail_domain_moves":        {"before": "mail.example.com"},
+	"guard_proxies_none":             {"trial": 10, "seconds": 0},
+	"guard_proxies_read":             {"address": "203.0.113.7", "trial": 10, "seconds": 0},
+	"guard_cloud_auth":               {"trial": 30, "seconds": 1},
+	"guard_help_center_back":         {"origin": "https://app.example.com", "trial": 10, "seconds": 0},
+	"guard_help_center_moves":        {"domain": "help.example.com", "trial": 10, "seconds": 0},
+	"guard_help_center_no_wildcard":  {"probe": "dns-check-abc.help.example.com", "domain": "help.example.com"},
+	"guard_no_workspace":             {"slug": "acme"},
+	"guard_problem_reports":          {"slug": "acme"},
+	"guard_mailbox_uncountable":      {"label": "Gmail"},
+	"guard_mailbox_off":              {"label": "Gmail", "channels": 1, "workspaces": 2},
+	"guard_ai_server_off":            {"workspaces": 4},
+	"guard_cloud_sign_in_off":        {"trial": 10, "seconds": 0},
 }
 
 const codesTable = "../../../web/src/operator/codes.en.json"
@@ -69,7 +90,7 @@ func TestTheConsoleTableOfCodesIsTheServersEnglish(t *testing.T) {
 	for code, template := range configerr.Templates {
 		codes = append(codes, code)
 		params := codeExamples[code]
-		if _, listed := codeExamples[code]; !listed && strings.Contains(template, "{") {
+		if _, listed := codeExamples[code]; !listed && configerr.Render(template, nil) != template {
 			t.Errorf("%s: no example in codeExamples", code)
 		}
 		said := configerr.Say(code, params)

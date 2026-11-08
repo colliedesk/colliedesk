@@ -242,3 +242,61 @@ func TestMailboxBillingAndLimitErrorsAndThePolarTestCarryCodes(t *testing.T) {
 		t.Fatalf("polar test: %+v", test.Test)
 	}
 }
+
+func TestGuardsSwitchesAndRefusedRequestsCarryCodes(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	const canary = "polar_oat_canary-never-echoed"
+
+	// What a change does: the preview's code, with its numbers.
+	billing := checkCoded(t, e, cookie, map[string]any{"secrets": map[string]any{"polar.access_token": canary}}, canary)
+	if len(billing.Guards) != 1 || billing.Guards[0].PreviewCode != "guard_billing_on" || billing.Guards[0].PreviewParams["workspaces"] != float64(0) {
+		t.Fatalf("billing on: %+v", billing.Guards)
+	}
+	proxies := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"trusted_proxies": "10.0.0.0/8"}}, "")
+	if len(proxies.Guards) != 1 || proxies.Guards[0].PreviewCode != "guard_proxies_read" || proxies.Guards[0].PreviewParams["address"] == nil ||
+		proxies.Guards[0].PreviewParams["trial"] != float64(10) || !strings.Contains(proxies.Guards[0].Preview, "It is tried for 10 minutes;") {
+		t.Fatalf("proxies: %+v", proxies.Guards)
+	}
+	// Why it cannot be saved: the refusal's code, beside the error of its setting.
+	nobody := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"problem_report.workspace": "nobody-here"}}, "")
+	if coded := fieldCode(t, nobody, "problem_report.workspace", "guard_no_workspace"); coded.Params["slug"] != "nobody-here" {
+		t.Fatalf("problem reports: %+v", coded)
+	}
+	// A switch turned on before its settings.
+	gmail := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"features.gmail": "true"}}, "")
+	if coded := fieldCode(t, gmail, "features.gmail", "feature_needs_settings"); coded.Params["missing"] != "google.client_id, google.client_secret" || coded.Params["feature"] != "gmail" {
+		t.Fatalf("gmail: %+v", coded)
+	}
+	var switched codedRefusal
+	refused := e.patch(cookie, map[string]any{"base_version": e.version(cookie), "set": map[string]any{"features.gmail": "true"}})
+	decode(t, refused, &switched)
+	if switched.Error.MessageCode != "feature_incomplete_refused" || switched.Error.FieldErrors["features.gmail"].Code != "feature_needs_settings" {
+		t.Fatalf("gmail save: %s", refused.Body.String())
+	}
+
+	// A refused request: the message's code and each field's.
+	var unknown codedRefusal
+	decode(t, e.patch(cookie, map[string]any{"base_version": e.version(cookie), "set": map[string]any{"no.such": "x"}}), &unknown)
+	if unknown.Error.MessageCode != "unknown_setting" || unknown.Error.Message != "Unknown setting. Nothing was saved." || unknown.Error.FieldErrors["no.such"].Code != "field_unknown_setting" {
+		t.Fatalf("unknown setting: %+v", unknown.Error)
+	}
+	var typed codedRefusal
+	mismatch := e.patch(cookie, map[string]any{"base_version": e.version(cookie), "set": map[string]any{"email.from_policy": "any"}})
+	noSecretIn(t, mismatch, canary)
+	decode(t, mismatch, &typed)
+	if typed.Error.Code != "confirm_mismatch" || typed.Error.MessageCode != "confirm_mismatch" || typed.Error.FieldErrors["email.from_policy"].Code != "field_type_phrase" ||
+		typed.Error.FieldErrors["email.from_policy"].Params["phrase"] != "any" || !strings.Contains(mismatch.Body.String(), `"preview_code":"guard_from_policy_any"`) {
+		t.Fatalf("phrase: %s", mismatch.Body.String())
+	}
+	var stale codedRefusal
+	decode(t, e.patch(cookie, map[string]any{"base_version": e.version(cookie) + 5, "set": map[string]any{"smtp.host": "smtp.example.net"}}), &stale)
+	if stale.Error.Code != "config_changed" || stale.Error.MessageCode != "config_changed" {
+		t.Fatalf("stale: %+v", stale.Error)
+	}
+	var invite codedRefusal
+	decode(t, operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/operators", map[string]any{"email": "nobody"}, cookie), &invite)
+	if invite.Error.MessageCode != "send_operator_email" {
+		t.Fatalf("invite: %+v", invite.Error)
+	}
+}

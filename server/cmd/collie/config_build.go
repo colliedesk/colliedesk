@@ -125,7 +125,7 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 		case "false":
 			built.SwitchedOff[feature.Name] = true
 		default:
-			keep(fmt.Errorf("%s must be true or false", serverconfig.SwitchKey(feature.Name)))
+			keep(configerr.Say("feature_switch_invalid", configerr.Params{"key": serverconfig.SwitchKey(feature.Name)}))
 		}
 	}
 	if value := strings.TrimSpace(getenv("SMTP_PORT")); value != "" {

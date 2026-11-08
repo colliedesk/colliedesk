@@ -44,7 +44,7 @@ func TestLeavesAndAsFindEveryCodedErrorOfAJoin(t *testing.T) {
 
 // Every code the server says is in the table of templates, and every template is said somewhere.
 func TestEveryCodeSaidIsATemplateAndEveryTemplateIsSaid(t *testing.T) {
-	said := regexp.MustCompile(`(?:configerr\.Say|\brefuseCoded)\("([a-z0-9_]+)"`)
+	said := regexp.MustCompile(`(?:configerr\.Say|\brefuseCoded|\.previews|\.refuses)\("([a-z0-9_]+)"`)
 	used := map[string]bool{}
 	err := filepath.WalkDir("../..", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
