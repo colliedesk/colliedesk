@@ -109,14 +109,14 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	keep(err)
 	if value := getenv("RETENTION_MAX_DELETIONS_PER_DAY"); value != "" && err == nil {
 		if count, _ := strconv.Atoi(value); count < 1 || count > maxRetentionDeletionsPerDay {
-			keep(fmt.Errorf("retention.max_deletions_per_day must be between 1 and %d", maxRetentionDeletionsPerDay))
+			keep(configerr.Say("retention_max_range", configerr.Params{"max": maxRetentionDeletionsPerDay}))
 		}
 	}
 	built.ProblemReportWorkspace = strings.TrimSpace(getenv("PROBLEM_REPORT_WORKSPACE"))
 	built.RequireTOTP = strings.TrimSpace(getenv("operator.require_totp")) == "true"
 	built.BillingAlertEmail = strings.TrimSpace(getenv("BILLING_ALERT_EMAIL"))
 	if built.BillingAlertEmail != "" && !strings.Contains(built.BillingAlertEmail, "@") {
-		keep(errors.New("billing.alert_email must be an email address"))
+		keep(configerr.Say("billing_alert_email_invalid", nil))
 	}
 	built.SwitchedOff = map[string]bool{}
 	for _, feature := range serverconfig.Features() {

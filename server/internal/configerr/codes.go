@@ -46,6 +46,19 @@ var Config = map[string]string{
 	"smtp_port_implicit_tls":           "SMTP_PORT 465 (implicit TLS) is not supported; use port 587 with STARTTLS",
 	"smtp_starttls_invalid":            `SMTP_STARTTLS must be true or false, got {"value"}`,
 	"smtp_port_range":                  "smtp.port must be a port number between 1 and 65535",
+	// Mailboxes and GitHub.
+	"microsoft_tenant_invalid":   `MICROSOFT_OAUTH_TENANT: {"value"} is not common, organizations, consumers, a tenant id or a domain`,
+	"github_private_key_invalid": "GITHUB_APP_PRIVATE_KEY: {detail}",
+	// Billing and retention.
+	"polar_partly_configured":     "billing is partly configured; also set {missing} (or unset every POLAR_* variable to turn billing off)",
+	"polar_api_url_invalid":       "POLAR_API_URL must be an http(s) URL such as {example}",
+	"retention_delete_invalid":    "RETENTION_DELETE must be on or off",
+	"retention_max_invalid":       "RETENTION_MAX_DELETIONS_PER_DAY must be a whole number from 0 to {max}",
+	"retention_max_range":         "retention.max_deletions_per_day must be between 1 and {max}",
+	"billing_alert_email_invalid": "billing.alert_email must be an email address",
+	// Limits.
+	"mail_image_cache_invalid": "MAIL_IMAGE_CACHE_BYTES must be a whole number of bytes above zero",
+	"kb_video_max_invalid":     "KB_VIDEO_MAX_BYTES must be a whole number of bytes above zero",
 	// Sign-ups, security and network.
 	"internal_signup_email_invalid": `INTERNAL_SIGNUP_EMAILS entry {"entry"} is not @domain or an email address`,
 	"network_entry_invalid":         `{name} entry {"entry"} is not a CIDR or an IP address`,
@@ -71,6 +84,10 @@ var Messages = map[string]string{
 	"test_smtp_unwritable":          "The test email could not be written.",
 	"test_smtp_refused":             "The relay refused the test email: {detail}",
 	"test_smtp_ok":                  "Sent a test email to {to}. Nothing was saved.",
+	"test_polar_needs_settings":     "Set the Polar token, its webhook secret and the Team and Founding products first.",
+	"test_polar_refused":            "Polar refused: {detail}",
+	"test_polar_archived":           "Product {product} is archived at Polar: nobody can buy it.",
+	"test_polar_ok":                 "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved.",
 	"test_jwks_needs_settings":      "Set the issuer and the JWKS address first.",
 	"test_jwks_failed":              "The JWKS address did not answer with keys: {detail}",
 	"test_jwks_no_rsa":              "The JWKS address answered with no RSA key: no cloud sign-in would verify.",

@@ -83,12 +83,23 @@
     "text": "ai.server.provider must be anthropic or openai_compatible",
     "message": "ai.server.provider must be anthropic or openai_compatible"
   },
+  "billing_alert_email_invalid": {
+    "text": "billing.alert_email must be an email address",
+    "message": "billing.alert_email must be an email address"
+  },
   "email_from_policy_invalid": {
     "text": "email.from_policy must be verified or any, got {\"value\"}",
     "params": {
       "value": "everyone"
     },
     "message": "email.from_policy must be verified or any, got \"everyone\""
+  },
+  "github_private_key_invalid": {
+    "text": "github.private_key: {detail}",
+    "params": {
+      "detail": "no PEM block"
+    },
+    "message": "github.private_key: no PEM block"
   },
   "help_center_domain_invalid": {
     "text": "help_center.domain must be a domain name such as example.com, got {\"domain\"}",
@@ -115,6 +126,10 @@
     },
     "message": "internal_signup.emails entry \"colliedesk.com\" is not @domain or an email address"
   },
+  "kb_video_max_invalid": {
+    "text": "kb_video.max_bytes must be a whole number of bytes above zero",
+    "message": "kb_video.max_bytes must be a whole number of bytes above zero"
+  },
   "mail_from_domain_invalid": {
     "text": "mail_from.domain must be a domain name, got {\"value\"}",
     "params": {
@@ -136,6 +151,17 @@
     },
     "message": "mail_from.inbound_secret needs mail_from.domain or hosted_mail.domain and at least 32 characters"
   },
+  "mail_image_cache_invalid": {
+    "text": "mail_image_cache.max_bytes must be a whole number of bytes above zero",
+    "message": "mail_image_cache.max_bytes must be a whole number of bytes above zero"
+  },
+  "microsoft_tenant_invalid": {
+    "text": "microsoft.tenant: {\"value\"} is not common, organizations, consumers, a tenant id or a domain",
+    "params": {
+      "value": "my tenant"
+    },
+    "message": "microsoft.tenant: \"my tenant\" is not common, organizations, consumers, a tenant id or a domain"
+  },
   "network_entry_invalid": {
     "text": "{name} entry {\"entry\"} is not a CIDR or an IP address",
     "params": {
@@ -144,9 +170,41 @@
     },
     "message": "trusted_proxies entry \"10.0.0.0/33\" is not a CIDR or an IP address"
   },
+  "polar_api_url_invalid": {
+    "text": "polar.api_url must be an http(s) URL such as {example}",
+    "params": {
+      "example": "https://api.polar.sh"
+    },
+    "message": "polar.api_url must be an http(s) URL such as https://api.polar.sh"
+  },
+  "polar_partly_configured": {
+    "text": "billing is partly configured; also set {missing} (or remove the Polar settings to turn billing off)",
+    "params": {
+      "missing": "polar.webhook_secret, the team monthly product (Billing › Products)"
+    },
+    "message": "billing is partly configured; also set polar.webhook_secret, the team monthly product (Billing › Products) (or remove the Polar settings to turn billing off)"
+  },
   "resend_webhook_needs_mail_from": {
     "text": "resend.webhook_secret needs mail_from.domain",
     "message": "resend.webhook_secret needs mail_from.domain"
+  },
+  "retention_delete_invalid": {
+    "text": "retention.delete must be on or off",
+    "message": "retention.delete must be on or off"
+  },
+  "retention_max_invalid": {
+    "text": "retention.max_deletions_per_day must be a whole number from 0 to {max}",
+    "params": {
+      "max": 20
+    },
+    "message": "retention.max_deletions_per_day must be a whole number from 0 to 20"
+  },
+  "retention_max_range": {
+    "text": "retention.max_deletions_per_day must be between 1 and {max}",
+    "params": {
+      "max": 20
+    },
+    "message": "retention.max_deletions_per_day must be between 1 and 20"
   },
   "secret_not_valid": {
     "text": "{keys}: not valid",
@@ -250,6 +308,28 @@
       "count": 2
     },
     "message": "The JWKS address answered with 2 keys. Nothing was saved."
+  },
+  "test_polar_archived": {
+    "text": "Product {product} is archived at Polar: nobody can buy it.",
+    "params": {
+      "product": "prod_123"
+    },
+    "message": "Product prod_123 is archived at Polar: nobody can buy it."
+  },
+  "test_polar_needs_settings": {
+    "text": "Set the Polar token, its webhook secret and the Team and Founding products first.",
+    "message": "Set the Polar token, its webhook secret and the Team and Founding products first."
+  },
+  "test_polar_ok": {
+    "text": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved.",
+    "message": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved."
+  },
+  "test_polar_refused": {
+    "text": "Polar refused: {detail}",
+    "params": {
+      "detail": "401 Unauthorized"
+    },
+    "message": "Polar refused: 401 Unauthorized"
   },
   "test_reenter_secret": {
     "text": "Enter {secret} again: the test goes to the new {key}.",

@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // Config is the operator's own GitHub App. All six settings are needed; with
@@ -109,7 +111,7 @@ func (c Config) Check() error {
 		return nil
 	}
 	if _, err := c.SigningKey(); err != nil {
-		return fmt.Errorf("%s: %w", EnvPrivateKey, err)
+		return configerr.Say("github_private_key_invalid", configerr.Params{"detail": err.Error()})
 	}
 	return nil
 }

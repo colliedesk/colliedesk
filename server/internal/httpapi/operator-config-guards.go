@@ -434,7 +434,7 @@ func (a *API) setOperatorProductOnSale(response http.ResponseWriter, request *ht
 func (a *API) tryPolar(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	config, err := polar.ConfigFromEnv(snap.Getenv)
 	if err != nil || !config.Enabled() {
-		return map[string]any{"name": "polar", "ok": false, "message": "Set the Polar token, its webhook secret and the Team and Founding products first."}
+		return testSaid("polar", false, configerr.Say("test_polar_needs_settings", nil))
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -442,13 +442,13 @@ func (a *API) tryPolar(ctx context.Context, snap serverconfig.Snapshot) map[stri
 	for _, id := range []string{config.Products.TeamMonthly, config.Products.TeamYearly, config.Products.Founding} {
 		archived, err := client.ProductArchived(callCtx, id)
 		if err != nil {
-			return map[string]any{"name": "polar", "ok": false, "message": "Polar refused: " + redactSecretsIn(err.Error(), snap)}
+			return testSaid("polar", false, configerr.Say("test_polar_refused", configerr.Params{"detail": redactSecretsIn(err.Error(), snap)}))
 		}
 		if archived {
-			return map[string]any{"name": "polar", "ok": false, "message": "Product " + id + " is archived at Polar: nobody can buy it."}
+			return testSaid("polar", false, configerr.Say("test_polar_archived", configerr.Params{"product": id}))
 		}
 	}
-	return map[string]any{"name": "polar", "ok": true, "message": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved."}
+	return testSaid("polar", true, configerr.Say("test_polar_ok", nil))
 }
 
 // tryJWKS fetches the cloud sign-in keys of the change once. Nothing is saved.

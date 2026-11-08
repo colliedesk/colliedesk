@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
@@ -98,7 +99,7 @@ func ConfigFromEnv(getenv func(string) string, keys tokenseal.Keys) (Config, err
 		tenant = DefaultTenant
 	}
 	if !tenantShape.MatchString(tenant) {
-		return Config{}, fmt.Errorf("%s: %q is not common, organizations, consumers, a tenant id or a domain", EnvTenant, tenant)
+		return Config{}, configerr.Say("microsoft_tenant_invalid", configerr.Params{"value": tenant})
 	}
 	return Config{ClientID: strings.TrimSpace(getenv(EnvClientID)), ClientSecret: strings.TrimSpace(getenv(EnvClientSecret)), Tenant: tenant, Keys: keys}, nil
 }

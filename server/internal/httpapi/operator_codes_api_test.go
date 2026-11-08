@@ -11,9 +11,13 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
+	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
 // The operator console translates what the server says by code (docs/internals/operator-console.md › Message
@@ -209,5 +213,32 @@ func TestEmailErrorsAndTheTestEmailCarryCodes(t *testing.T) {
 	}
 	if test := checkCoded(t, e, cookie, map[string]any{"test": "smtp"}, ""); test.Test.Code != "test_smtp_needs_host" || test.Test.Message != "Set the relay host first." {
 		t.Fatalf("smtp test: %+v", test.Test)
+	}
+}
+
+func TestMailboxBillingAndLimitErrorsAndThePolarTestCarryCodes(t *testing.T) {
+	e := newOperatorEnvChecking(t, false, func(snap serverconfig.Snapshot) error {
+		_, tenant := microsoft.ConfigFromEnv(snap.Getenv, tokenseal.Keys{})
+		_, billing := polar.ConfigFromEnv(snap.Getenv)
+		return errors.Join(tenant, github.ConfigFromEnv(snap.Getenv).Check(), billing)
+	})
+	cookie := e.signIn("ops@example.com")
+	const token = "polar-token-canary"
+	answer := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"microsoft.tenant": "my tenant"},
+		"secrets": map[string]any{"github.private_key": "not-a-key-canary", "polar.access_token": token}}, token)
+	if coded := fieldCode(t, answer, "microsoft.tenant", "microsoft_tenant_invalid"); coded.Params["value"] != "my tenant" {
+		t.Fatalf("tenant: %+v", coded)
+	}
+	fieldCode(t, answer, "github.private_key", "github_private_key_invalid")
+	if strings.Contains(answer.FieldErrors["github.private_key"].Params["detail"].(string), "canary") {
+		t.Fatalf("the key's value in params: %+v", answer.FieldErrors)
+	}
+	// Billing names its settings and its products as the console does, in the params too.
+	billing := fieldCode(t, answer, "polar.webhook_secret", "polar_partly_configured")
+	if missing := billing.Params["missing"].(string); !strings.Contains(missing, "polar.webhook_secret") || !strings.Contains(missing, "the team monthly product") || strings.Contains(missing, "POLAR_") {
+		t.Fatalf("billing: %+v", billing)
+	}
+	if test := checkCoded(t, e, cookie, map[string]any{"test": "polar"}, ""); test.Test.Code != "test_polar_needs_settings" {
+		t.Fatalf("polar test: %+v", test.Test)
 	}
 }

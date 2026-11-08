@@ -42,6 +42,14 @@ var codeExamples = map[string]configerr.Params{
 	"smtp_starttls_invalid":          {"value": "maybe"},
 	"test_smtp_refused":              {"detail": "SMTP AUTH: 535 authentication failed"},
 	"test_smtp_ok":                   {"to": "ops@example.com"},
+	"microsoft_tenant_invalid":       {"value": "my tenant"},
+	"github_private_key_invalid":     {"detail": "no PEM block"},
+	"polar_partly_configured":        {"missing": "POLAR_WEBHOOK_SECRET, POLAR_PRODUCT_TEAM_MONTHLY"},
+	"polar_api_url_invalid":          {"example": "https://api.polar.sh"},
+	"retention_max_invalid":          {"max": 20},
+	"retention_max_range":            {"max": 20},
+	"test_polar_refused":             {"detail": "401 Unauthorized"},
+	"test_polar_archived":            {"product": "prod_123"},
 }
 
 const codesTable = "../../../web/src/operator/codes.en.json"
