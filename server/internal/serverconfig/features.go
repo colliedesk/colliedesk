@@ -1,9 +1,10 @@
 package serverconfig
 
 import (
-	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // A Feature is something workspaces see that only works once its settings are complete. Its switch
@@ -173,8 +174,11 @@ func SwitchedOff(snap Snapshot) map[string]bool {
 }
 
 // SwitchError refuses a change that turns a feature on while it misses settings; Fields maps each switch
-// to what it misses.
-type SwitchError struct{ Fields map[string]string }
+// to what it misses, and Said to the same with its code (configerr).
+type SwitchError struct {
+	Fields map[string]string
+	Said   map[string]*configerr.Error
+}
 
 func (e *SwitchError) Error() string {
 	names := make([]string, 0, len(e.Fields))
@@ -193,17 +197,18 @@ func (e *SwitchError) Error() string {
 // settings. A change that only makes a switched-on feature miss a setting is not refused: the feature reads
 // as off until the setting is back. Restores and imports are not checked (the effective state covers them).
 func CheckSwitches(current, next Snapshot) error {
-	fields := map[string]string{}
+	fields, said := map[string]string{}, map[string]*configerr.Error{}
 	for _, feature := range features {
 		if requested(next, feature.Name) != "on" || requested(current, feature.Name) == "on" {
 			continue
 		}
 		if missing := feature.missing(next); len(missing) > 0 {
-			fields[SwitchKey(feature.Name)] = fmt.Sprintf("%s cannot be turned on yet: set %s first", feature.Label, strings.Join(missing, ", "))
+			refused := configerr.Say("feature_needs_settings", configerr.Params{"feature": feature.Name, "label": feature.Label, "missing": strings.Join(missing, ", ")})
+			fields[SwitchKey(feature.Name)], said[SwitchKey(feature.Name)] = refused.Text, refused
 		}
 	}
 	if len(fields) == 0 {
 		return nil
 	}
-	return &SwitchError{Fields: fields}
+	return &SwitchError{Fields: fields, Said: said}
 }

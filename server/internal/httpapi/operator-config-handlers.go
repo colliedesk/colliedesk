@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/jackc/pgx/v5"
@@ -29,11 +30,11 @@ import (
 // numbers, a typed phrase or a 10-minute trial (billing, retention, mail domains in use, trusted proxies,
 // cloud sign-in, the help center domain, private AI addresses, any sender) are changed with the CLI until
 // their guards ship; a version that would change them is refused here.
-func consoleEditable(key serverconfig.Key, value string) (bool, string) {
+func consoleEditable(key serverconfig.Key, value string) (bool, *configerr.Error) {
 	if key.Name == "operator.require_totp" && strings.TrimSpace(value) != "true" {
-		return false, "an authenticator can be turned off only with collie config, and never on the hosted cloud"
+		return false, configerr.Say("field_totp_cli_only", nil)
 	}
-	return true, ""
+	return true, nil
 }
 
 type operatorConfigChange struct {
@@ -44,6 +45,33 @@ type operatorConfigChange struct {
 	Confirm     map[string]string  `json:"confirm"`
 	ReauthCode  string             `json:"reauth_code"`
 	Note        string             `json:"note"`
+}
+
+// saidBody is an error object with the code of its message and of each field's (docs/internals/operator-console.md
+// › Message codes).
+func saidBody(code string, said *configerr.Error, fields map[string]*configerr.Error) map[string]any {
+	body := map[string]any{"code": code, "message": said.Text, "message_code": said.Code}
+	if len(said.Params) > 0 {
+		body["params"] = said.Params
+	}
+	if len(fields) > 0 {
+		texts, codes := map[string]string{}, map[string]configerr.Coded{}
+		for key, field := range fields {
+			texts[key], codes[key] = field.Text, field.Coded()
+		}
+		body["fields"], body["field_errors"] = texts, codes
+	}
+	return body
+}
+
+// writeSaid is writeError with the message's code, on a route the console shows.
+func writeSaid(response http.ResponseWriter, status int, code string, said *configerr.Error) {
+	writeJSON(response, status, map[string]any{"error": errorBody(response, saidBody(code, said, nil))})
+}
+
+// writeRefusedSaid is writeRefused with the codes of its message and fields.
+func writeRefusedSaid(response http.ResponseWriter, status int, code string, said *configerr.Error, fields map[string]*configerr.Error) {
+	writeJSON(response, status, map[string]any{"error": saidBody(code, said, fields)})
 }
 
 func writeRefused(response http.ResponseWriter, status int, code, message string, fields map[string]string) {
@@ -59,11 +87,8 @@ func (a *API) operatorCurrent(ctx context.Context) (serverconfig.Loaded, error) 
 	return a.config.ServerConfig.Current(ctx)
 }
 
-// friendlyConfigError turns a build error into one message per setting: the parsers name variables, the
-// console names settings.
-func friendlyConfigError(err error) (string, map[string]string) {
-	text := err.Error()
-	fields := map[string]string{}
+// friendly names settings where the parsers name variables: the console names settings.
+func friendly(text string) string {
 	// A product has no setting of its own: name it as the products table does.
 	for _, product := range serverconfig.ProductEnvs {
 		text = strings.ReplaceAll(text, product.Env, "the "+product.Plan+" "+product.Period+" product (Billing › Products)")
@@ -74,16 +99,83 @@ func friendlyConfigError(err error) (string, map[string]string) {
 			text = strings.ReplaceAll(text, key.Env, key.Name)
 		}
 	}
-	for _, line := range strings.Split(text, "\n") {
-		for _, key := range serverconfig.Keys() {
-			if strings.Contains(line, key.Name) {
-				if _, seen := fields[key.Name]; !seen {
-					fields[key.Name] = line
+	return text
+}
+
+// friendlyCoded is a configuration error's code with its params in the console's words, as its text is.
+func friendlyCoded(coded *configerr.Error) configerr.Coded {
+	params := configerr.Params{}
+	for name, value := range coded.Params {
+		if text, ok := value.(string); ok {
+			value = friendly(text)
+		}
+		params[name] = value
+	}
+	if len(params) == 0 {
+		params = nil
+	}
+	return configerr.Coded{Code: coded.Code, Params: params}
+}
+
+// friendlyConfigError turns a build error into one message per setting, and the code of each message the
+// parser coded (field_errors; docs/internals/operator-console.md › Message codes). The setting a message is
+// about is found as before codes: every setting its line names.
+func friendlyConfigError(err error) (string, map[string]string, map[string]configerr.Coded) {
+	text := friendly(err.Error())
+	fields := map[string]string{}
+	codes := map[string]configerr.Coded{}
+	leaves := configerr.Leaves(err)
+	for _, leaf := range leaves {
+		coded, isCoded := configerr.As(leaf)
+		for _, line := range strings.Split(friendly(leaf.Error()), "\n") {
+			for _, key := range serverconfig.Keys() {
+				if strings.Contains(line, key.Name) {
+					if _, seen := fields[key.Name]; !seen {
+						fields[key.Name] = line
+						if isCoded {
+							codes[key.Name] = friendlyCoded(coded)
+						}
+					}
 				}
 			}
 		}
 	}
-	return text, fields
+	// A message about no setting goes under "".
+	if len(fields) == 0 && len(leaves) == 1 {
+		if coded, ok := configerr.As(leaves[0]); ok {
+			codes[""] = friendlyCoded(coded)
+		}
+	}
+	return text, fields, codes
+}
+
+// writeConfigRefusal refuses a change that does not build: a message per setting and its code.
+func writeConfigRefusal(response http.ResponseWriter, err error) {
+	message, fields, codes := friendlyConfigError(err)
+	body := map[string]any{"code": "config_invalid", "message": message}
+	if len(fields) > 0 {
+		body["fields"] = fields
+	}
+	if said, ok := codes[""]; ok {
+		body["message_code"] = said.Code
+		if len(said.Params) > 0 {
+			body["params"] = said.Params
+		}
+		delete(codes, "")
+	}
+	if len(codes) > 0 {
+		body["field_errors"] = codes
+	}
+	writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": body})
+}
+
+// testSaid is a live test's answer: its English and its code.
+func testSaid(name string, ok bool, said *configerr.Error) map[string]any {
+	out := map[string]any{"name": name, "ok": ok, "message": said.Text, "code": said.Code}
+	if len(said.Params) > 0 {
+		out["params"] = said.Params
+	}
+	return out
 }
 
 // confirmMatches compares a typed phrase as the console does: trimmed, case-insensitive.
@@ -94,13 +186,13 @@ func confirmMatches(typed, phrase string) bool {
 func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.Request) {
 	var input operatorConfigChange
 	if err := decodeJSON(request, &input); err != nil {
-		writeRefused(response, http.StatusBadRequest, "invalid_json", "The body is not a configuration change.", nil)
+		writeRefusedSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("body_not_a_change", nil), nil)
 		return
 	}
 	current, err := a.operatorCurrent(request.Context())
 	if err != nil {
 		slog.Error("read the configuration", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The configuration could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("config_unreadable", nil))
 		return
 	}
 	set, unset := map[string]string{}, []string{}
@@ -109,11 +201,11 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	for name, value := range input.Set {
 		key, ok := serverconfig.Lookup(name)
 		if !ok {
-			writeRefused(response, http.StatusBadRequest, "unknown_setting", "Unknown setting. Nothing was saved.", map[string]string{name: "Unknown setting."})
+			writeRefusedSaid(response, http.StatusBadRequest, "unknown_setting", configerr.Say("unknown_setting", nil), map[string]*configerr.Error{name: configerr.Say("field_unknown_setting", nil)})
 			return
 		}
 		if key.Secret {
-			writeRefused(response, http.StatusBadRequest, "secret_in_set", "Secrets go in secrets, never in set. Nothing was saved.", map[string]string{key.Name: "A secret goes in secrets."})
+			writeRefusedSaid(response, http.StatusBadRequest, "secret_in_set", configerr.Say("secret_in_set", nil), map[string]*configerr.Error{key.Name: configerr.Say("field_secret_goes_in_secrets", nil)})
 			return
 		}
 		set[key.Name] = strings.TrimSpace(value)
@@ -122,7 +214,7 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	for _, name := range input.Unset {
 		key, ok := serverconfig.Lookup(name)
 		if !ok {
-			writeRefused(response, http.StatusBadRequest, "unknown_setting", "Unknown setting. Nothing was saved.", map[string]string{name: "Unknown setting."})
+			writeRefusedSaid(response, http.StatusBadRequest, "unknown_setting", configerr.Say("unknown_setting", nil), map[string]*configerr.Error{name: configerr.Say("field_unknown_setting", nil)})
 			return
 		}
 		unset = append(unset, key.Name)
@@ -131,15 +223,15 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	for name, value := range input.Secrets {
 		key, ok := serverconfig.Lookup(name)
 		if !ok || !key.Secret {
-			writeRefused(response, http.StatusBadRequest, "unknown_setting", "Not a secret setting. Nothing was saved.", map[string]string{name: "Not a secret."})
+			writeRefusedSaid(response, http.StatusBadRequest, "unknown_setting", configerr.Say("not_a_secret_setting", nil), map[string]*configerr.Error{name: configerr.Say("field_not_a_secret", nil)})
 			return
 		}
 		if value == nil || strings.TrimSpace(*value) == "" {
-			writeRefused(response, http.StatusBadRequest, "secret_missing", "Enter the secret. Nothing was saved.", map[string]string{key.Name: "Enter it."})
+			writeRefusedSaid(response, http.StatusBadRequest, "secret_missing", configerr.Say("secret_missing", nil), map[string]*configerr.Error{key.Name: configerr.Say("field_enter_it", nil)})
 			return
 		}
 		if !current.Ring() {
-			writeRefused(response, http.StatusBadRequest, "secret_keys_missing", "Secrets can be saved only with a key ring (MAILBOX_TOKEN_KEYS). Nothing was saved.", map[string]string{key.Name: "No key ring."})
+			writeRefusedSaid(response, http.StatusBadRequest, "secret_keys_missing", configerr.Say("secret_keys_missing", configerr.Params{"env": "MAILBOX_TOKEN_KEYS"}), map[string]*configerr.Error{key.Name: configerr.Say("field_no_key_ring", nil)})
 			return
 		}
 		set[key.Name] = *value
@@ -147,14 +239,14 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 		touched = append(touched, key)
 	}
 	if len(touched) == 0 {
-		writeRefused(response, http.StatusBadRequest, "nothing_to_save", "The change is empty.", nil)
+		writeRefusedSaid(response, http.StatusBadRequest, "nothing_to_save", configerr.Say("change_empty", nil), nil)
 		return
 	}
-	reenter := map[string]string{}
+	reenter := map[string]*configerr.Error{}
 	for _, key := range touched {
 		value := set[key.Name]
 		if ok, why := consoleEditable(key, value); !ok {
-			writeRefused(response, http.StatusBadRequest, "setting_not_changeable", "This setting is not changed in the console yet. Nothing was saved.", map[string]string{key.Name: why})
+			writeRefusedSaid(response, http.StatusBadRequest, "setting_not_changeable", configerr.Say("setting_not_changeable", nil), map[string]*configerr.Error{key.Name: why})
 			return
 		}
 		if slices.Contains(key.Guards, serverconfig.GuardReauth) {
@@ -166,25 +258,24 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 		if slices.Contains(key.Guards, serverconfig.GuardReenterSecret) && key.Reenter != "" && before != value && !slices.Contains(unset, key.Reenter) {
 			if _, isSet := current.Get(key.Reenter); isSet {
 				if _, given := input.Secrets[key.Reenter]; !given {
-					reenter[key.Reenter] = "Enter it again: it goes to the new " + key.Name + "."
+					reenter[key.Reenter] = configerr.Say("field_reenter", configerr.Params{"key": key.Name})
 				}
 			}
 		}
 	}
 	if len(reenter) > 0 {
-		writeRefused(response, http.StatusBadRequest, "reenter_secret", "Enter the secret again for the new address. Nothing was saved.", reenter)
+		writeRefusedSaid(response, http.StatusBadRequest, "reenter_secret", configerr.Say("reenter_secret", nil), reenter)
 		return
 	}
 	next := current.With(set, unset)
 	if a.config.CheckConfig != nil {
 		if err := a.config.CheckConfig(next); err != nil {
-			message, fields := friendlyConfigError(err)
-			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", message, fields)
+			writeConfigRefusal(response, err)
 			return
 		}
 	}
 	if refused := switchesRefused(current.Snapshot, next); refused != nil {
-		writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", "A feature cannot be turned on before its settings are complete. Nothing was saved.", refused.Fields)
+		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": saidBody("config_invalid", configerr.Say("feature_incomplete_refused", nil), refused.Said)})
 		return
 	}
 	names := make([]string, 0, len(touched))
@@ -194,14 +285,15 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	guards := a.configGuards(request.Context(), request, current.Snapshot, next, names)
 	for _, guard := range guards {
 		if guard.Refused != "" {
-			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", guard.Refused+" Nothing was saved.", map[string]string{guard.Key: guard.Refused})
+			writeRefusedSaid(response, http.StatusUnprocessableEntity, "config_invalid", configerr.Say("guard_refused_nothing_saved", configerr.Params{"refused": guard.Refused}), map[string]*configerr.Error{guard.Key: guard.refusedSaid()})
 			return
 		}
 	}
 	for _, guard := range guards {
 		if guard.Phrase != "" && !confirmMatches(input.Confirm[guard.Key], guard.Phrase) {
-			writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
-				"message": "Type the phrase to confirm. Nothing was saved.", "fields": map[string]string{guard.Key: "Type " + guard.Phrase + " to confirm."}, "guards": guards}})
+			body := saidBody("confirm_mismatch", configerr.Say("confirm_mismatch", nil), map[string]*configerr.Error{guard.Key: configerr.Say("field_type_phrase", configerr.Params{"phrase": guard.Phrase})})
+			body["guards"] = guards
+			writeJSON(response, http.StatusBadRequest, map[string]any{"error": body})
 			return
 		}
 		// A phrase or a trial is a decision that needs the code; a preview alone only informs.
@@ -224,18 +316,19 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	version, err := a.config.ServerConfig.Save(request.Context(), change)
 	switch {
 	case errors.Is(err, serverconfig.ErrTrialPending):
-		writeRefused(response, http.StatusConflict, "trial_pending", "A trial change runs: confirm or revert it before saving another. Nothing was saved.", nil)
+		writeRefusedSaid(response, http.StatusConflict, "trial_pending", configerr.Say("trial_pending", nil), nil)
 		return
 	case errors.Is(err, serverconfig.ErrConflict):
-		writeJSON(response, http.StatusConflict, map[string]any{"error": map[string]any{"code": "config_changed",
-			"message": "Someone saved another version since you read this one. Nothing was saved.", "version": current.Version}})
+		body := saidBody("config_changed", configerr.Say("config_changed", nil), nil)
+		body["version"] = current.Version
+		writeJSON(response, http.StatusConflict, map[string]any{"error": body})
 		return
 	case errors.Is(err, serverconfig.ErrNoChange):
-		writeRefused(response, http.StatusBadRequest, "nothing_to_save", "Every setting already has that value.", nil)
+		writeRefusedSaid(response, http.StatusBadRequest, "nothing_to_save", configerr.Say("nothing_changes", nil), nil)
 		return
 	case err != nil:
 		slog.Error("save the configuration", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The configuration could not be saved.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("config_unsaved", nil))
 		return
 	}
 	changed := make([]string, 0, len(touched))
@@ -274,7 +367,7 @@ func (a *API) getOperatorConfig(response http.ResponseWriter, request *http.Requ
 	current, err := a.operatorCurrent(request.Context())
 	if err != nil {
 		slog.Error("read the configuration", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The configuration could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("config_unreadable", nil))
 		return
 	}
 	environ := a.environ()
@@ -358,12 +451,12 @@ func (a *API) getOperatorStatus(response http.ResponseWriter, request *http.Requ
 	current, err := a.operatorCurrent(ctx)
 	if err != nil {
 		slog.Error("read the configuration", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The status could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("status_unreadable", nil))
 		return
 	}
 	processes, err := a.config.ServerConfig.Processes(ctx)
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The status could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("status_unreadable", nil))
 		return
 	}
 	migration, _ := a.config.ServerConfig.LatestMigration(ctx)
@@ -448,12 +541,12 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 		Test    string             `json:"test"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_json", "The body is not a configuration change.")
+		writeSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("body_not_a_change", nil))
 		return
 	}
 	current, err := a.operatorCurrent(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The configuration could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("config_unreadable", nil))
 		return
 	}
 	set := map[string]string{}
@@ -469,20 +562,24 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 	}
 	next := current.With(set, input.Unset)
 	out := map[string]any{"ok": true, "errors": map[string]string{}}
+	fieldCodes := map[string]configerr.Coded{}
 	// Listing the server provider's models comes before any model is picked: the change need not be
 	// complete, only its provider, address and key are used.
 	listing := input.Test == "ai_models"
 	if a.config.CheckConfig != nil && !listing {
 		if err := a.config.CheckConfig(next); err != nil {
-			text, fields := friendlyConfigError(err)
+			text, fields, codes := friendlyConfigError(err)
 			if len(fields) == 0 {
 				fields = map[string]string{"": text}
 			}
-			out["ok"], out["errors"] = false, fields
+			out["ok"], out["errors"], fieldCodes = false, fields, codes
 		}
 	}
 	if refused := switchesRefused(current.Snapshot, next); refused != nil && out["ok"] == true && !listing {
 		out["ok"], out["errors"] = false, refused.Fields
+		for key, said := range refused.Said {
+			fieldCodes[key] = said.Coded()
+		}
 	}
 	if out["ok"] == true && !listing {
 		var names []string
@@ -500,6 +597,7 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			if guard.Refused != "" {
 				out["ok"] = false
 				out["errors"].(map[string]string)[guard.Key] = guard.Refused
+				fieldCodes[guard.Key] = guard.refusedSaid().Coded()
 			}
 		}
 		if guards == nil {
@@ -511,7 +609,7 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 		// A live test sends the stored secrets: never at a token's word (it only reads), and never to an
 		// address the change moves without the secret typed again, as a save would ask.
 		if operatorPrincipal(request).IsToken() {
-			writeError(response, http.StatusForbidden, "test_needs_a_person", "A live test sends the server's secrets; only a person runs it in the console. Without test, the change is checked.")
+			writeSaid(response, http.StatusForbidden, "test_needs_a_person", configerr.Say("test_needs_a_person", nil))
 			return
 		}
 		for name := range set {
@@ -523,7 +621,8 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			if _, stored := current.Get(key.Reenter); stored && before != set[key.Name] {
 				if value, typed := input.Secrets[key.Reenter]; !typed || value == nil || *value == "" {
 					out["ok"] = false
-					out["test"] = map[string]any{"name": input.Test, "ok": false, "message": "Enter " + key.Reenter + " again: the test goes to the new " + key.Name + "."}
+					out["test"] = testSaid(input.Test, false, configerr.Say("test_reenter_secret", configerr.Params{"secret": key.Reenter, "key": key.Name}))
+					out["field_errors"] = fieldCodes
 					writeJSON(response, http.StatusOK, out)
 					return
 				}
@@ -544,6 +643,7 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			out["test"] = a.listServerAIModels(request.Context(), next)
 		}
 	}
+	out["field_errors"] = fieldCodes
 	writeJSON(response, http.StatusOK, out)
 }
 
@@ -551,7 +651,7 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 func (a *API) sendTestEmail(ctx context.Context, snap serverconfig.Snapshot, to string) map[string]any {
 	config, err := email.ConfigFromEnv(snap.Getenv)
 	if err != nil || !config.SMTP.Configured() {
-		return map[string]any{"name": "smtp", "ok": false, "message": "Set the relay host first."}
+		return testSaid("smtp", false, configerr.Say("test_smtp_needs_host", nil))
 	}
 	from := to
 	if config.MailFromDomain != "" {
@@ -559,19 +659,19 @@ func (a *API) sendTestEmail(ctx context.Context, snap serverconfig.Snapshot, to 
 	}
 	messageID, err := email.NewMessageID(strings.SplitN(from, "@", 2)[1])
 	if err != nil {
-		return map[string]any{"name": "smtp", "ok": false, "message": "The test email could not be written."}
+		return testSaid("smtp", false, configerr.Say("test_smtp_unwritable", nil))
 	}
 	message, err := email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: to, Subject: "Colliedesk test email",
 		Body: "This is a test from the operator console. Nothing was saved.", MessageID: messageID, Date: a.now(), Standalone: true})
 	if err != nil {
-		return map[string]any{"name": "smtp", "ok": false, "message": "The test email could not be written."}
+		return testSaid("smtp", false, configerr.Say("test_smtp_unwritable", nil))
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	if err := (email.SMTPSender{Config: config.SMTP}).Send(sendCtx, from, []string{to}, message); err != nil {
-		return map[string]any{"name": "smtp", "ok": false, "message": "The relay refused the test email: " + redactSecretsIn(err.Error(), snap)}
+		return testSaid("smtp", false, configerr.Say("test_smtp_refused", configerr.Params{"detail": redactSecretsIn(err.Error(), snap)}))
 	}
-	return map[string]any{"name": "smtp", "ok": true, "message": "Sent a test email to " + to + ". Nothing was saved."}
+	return testSaid("smtp", true, configerr.Say("test_smtp_ok", configerr.Params{"to": to}))
 }
 
 // redactSecretsIn hides any secret value a provider's error repeats.
@@ -598,19 +698,19 @@ func (a *API) listOperatorConfigVersions(response http.ResponseWriter, request *
 	if raw := request.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > 200 {
-			writeError(response, http.StatusBadRequest, "invalid_limit", "limit is 1 to 200.")
+			writeSaid(response, http.StatusBadRequest, "invalid_limit", configerr.Say("invalid_limit", nil))
 			return
 		}
 		limit = parsed
 	}
 	versions, err := a.config.ServerConfig.History(request.Context(), limit)
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The history could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("history_unreadable", nil))
 		return
 	}
 	current, err := a.operatorCurrent(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The history could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("history_unreadable", nil))
 		return
 	}
 	items := make([]map[string]any, 0, len(versions))
@@ -623,7 +723,7 @@ func (a *API) listOperatorConfigVersions(response http.ResponseWriter, request *
 func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request *http.Request) {
 	from, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
 	if err != nil || from < 1 {
-		writeError(response, http.StatusNotFound, "not_found", "No such version.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_version", nil))
 		return
 	}
 	var input struct {
@@ -633,21 +733,21 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 		Confirm     map[string]string `json:"confirm"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_json", "Send the version you read (base_version).")
+		writeSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("send_base_version", nil))
 		return
 	}
 	old, err := a.config.ServerConfig.Load(request.Context(), from)
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The version could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("version_unreadable", nil))
 		return
 	}
 	current, err := a.operatorCurrent(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The configuration could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("config_unreadable", nil))
 		return
 	}
 	if history, _ := a.config.ServerConfig.History(request.Context(), 200); !slices.ContainsFunc(history, func(v serverconfig.Version) bool { return v.ID == from }) && from > current.Version {
-		writeError(response, http.StatusNotFound, "not_found", "No such version.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_version", nil))
 		return
 	}
 	var names []string
@@ -655,7 +755,7 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 		key, _ := serverconfig.Lookup(name)
 		value, _ := old.Get(name)
 		if ok, why := consoleEditable(key, value); !ok {
-			writeRefused(response, http.StatusBadRequest, "setting_not_changeable", "This version changes a setting the console does not change yet; restore it with collie config restore. Nothing was saved.", map[string]string{key.Name: why})
+			writeRefusedSaid(response, http.StatusBadRequest, "setting_not_changeable", configerr.Say("restore_not_changeable", nil), map[string]*configerr.Error{key.Name: why})
 			return
 		}
 		names = append(names, name)
@@ -666,12 +766,13 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 	guards := a.configGuards(request.Context(), request, current.Snapshot, old.Snapshot, names)
 	for _, guard := range guards {
 		if guard.Refused != "" {
-			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", guard.Refused+" Nothing was saved.", map[string]string{guard.Key: guard.Refused})
+			writeRefusedSaid(response, http.StatusUnprocessableEntity, "config_invalid", configerr.Say("guard_refused_nothing_saved", configerr.Params{"refused": guard.Refused}), map[string]*configerr.Error{guard.Key: guard.refusedSaid()})
 			return
 		}
 		if guard.Phrase != "" && !confirmMatches(input.Confirm[guard.Key], guard.Phrase) {
-			writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
-				"message": "Type the phrase to confirm. Nothing was saved.", "fields": map[string]string{guard.Key: "Type " + guard.Phrase + " to confirm."}, "guards": guards}})
+			body := saidBody("confirm_mismatch", configerr.Say("confirm_mismatch", nil), map[string]*configerr.Error{guard.Key: configerr.Say("field_type_phrase", configerr.Params{"phrase": guard.Phrase})})
+			body["guards"] = guards
+			writeJSON(response, http.StatusBadRequest, map[string]any{"error": body})
 			return
 		}
 	}
@@ -684,8 +785,7 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 	}
 	if a.config.CheckConfig != nil {
 		if err := a.config.CheckConfig(old.Snapshot); err != nil {
-			message, fields := friendlyConfigError(err)
-			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", message, fields)
+			writeConfigRefusal(response, err)
 			return
 		}
 	}
@@ -725,7 +825,7 @@ func (a *API) listOperatorAudit(response http.ResponseWriter, request *http.Requ
 	if raw := query.Get("since"); raw != "" {
 		parsed, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
-			writeError(response, http.StatusBadRequest, "invalid_since", "since is an RFC 3339 time.")
+			writeSaid(response, http.StatusBadRequest, "invalid_since", configerr.Say("invalid_since", nil))
 			return
 		}
 		since = parsed
@@ -733,7 +833,7 @@ func (a *API) listOperatorAudit(response http.ResponseWriter, request *http.Requ
 	limit, _ := strconv.Atoi(query.Get("limit"))
 	entries, err := a.config.ServerConfig.AuditLog(request.Context(), query.Get("key"), query.Get("actor"), since, limit)
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The audit log could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("audit_unreadable", nil))
 		return
 	}
 	if entries == nil {
@@ -784,7 +884,7 @@ func operatorRequestJSON(request auth.OperatorRequest) map[string]any {
 func (a *API) listOperatorRequests(response http.ResponseWriter, request *http.Request) {
 	requests, err := a.config.Operators.Requests(request.Context(), operatorPrincipal(request))
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The requests could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("requests_unreadable", nil))
 		return
 	}
 	items := make([]map[string]any, 0, len(requests))
@@ -797,11 +897,11 @@ func (a *API) listOperatorRequests(response http.ResponseWriter, request *http.R
 func (a *API) getOperatorRequest(response http.ResponseWriter, request *http.Request) {
 	found, err := a.config.Operators.Request(request.Context(), operatorPrincipal(request), request.PathValue("id"))
 	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(response, http.StatusNotFound, "not_found", "No such request.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_request", nil))
 		return
 	}
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("request_unreadable", nil))
 		return
 	}
 	writeJSON(response, http.StatusOK, a.operatorRequestShown(request, found))
@@ -832,11 +932,11 @@ func (a *API) cancelOperatorRequest(response http.ResponseWriter, request *http.
 	found, err := a.config.Operators.CancelRequest(request.Context(), operatorPrincipal(request), request.PathValue("id"))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		writeError(response, http.StatusNotFound, "not_found", "No such request.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_request", nil))
 	case errors.Is(err, auth.ErrOperatorRequestDecided):
-		writeError(response, http.StatusConflict, "request_decided", "The request was decided, cancelled or expired.")
+		writeSaid(response, http.StatusConflict, "request_decided", configerr.Say("request_decided", nil))
 	case err != nil:
-		writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be cancelled.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("request_uncancelled", nil))
 	default:
 		writeJSON(response, http.StatusOK, operatorRequestJSON(found))
 	}
@@ -845,12 +945,12 @@ func (a *API) cancelOperatorRequest(response http.ResponseWriter, request *http.
 func (a *API) listOperators(response http.ResponseWriter, request *http.Request) {
 	operators, err := a.config.Operators.Operators(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The operators could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("operators_unreadable", nil))
 		return
 	}
 	sessions, err := a.config.Operators.Sessions(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The sessions could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("sessions_unreadable", nil))
 		return
 	}
 	rows := make([]map[string]any, 0, len(sessions))
@@ -869,7 +969,7 @@ func (a *API) inviteOperator(response http.ResponseWriter, request *http.Request
 		ReauthCode string `json:"reauth_code"`
 	}
 	if err := decodeJSON(request, &input); err != nil || !strings.Contains(input.Email, "@") {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the operator's email address.")
+		writeSaid(response, http.StatusBadRequest, "invalid_request", configerr.Say("send_operator_email", nil))
 		return
 	}
 	if !a.reauthorized(response, request, input.ReauthCode) {
@@ -894,9 +994,9 @@ func (a *API) revokeOperator(response http.ResponseWriter, request *http.Request
 	found, err := a.config.Operators.RevokeOperator(request.Context(), request.PathValue("id"), actorKindOf(who), who.Operator.Email)
 	switch {
 	case err != nil:
-		writeError(response, http.StatusInternalServerError, "internal_error", "The operator could not be revoked.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("operator_unrevoked", nil))
 	case !found:
-		writeError(response, http.StatusNotFound, "not_found", "No such operator.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_operator", nil))
 	default:
 		response.WriteHeader(http.StatusNoContent)
 	}
@@ -911,9 +1011,9 @@ func (a *API) revokeOperatorSession(response http.ResponseWriter, request *http.
 	found, err := a.config.Operators.RevokeSession(request.Context(), id, actorKindOf(who), who.Operator.Email)
 	switch {
 	case err != nil:
-		writeError(response, http.StatusInternalServerError, "internal_error", "The session could not be ended.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("session_unended", nil))
 	case !found:
-		writeError(response, http.StatusNotFound, "not_found", "No such session.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_session", nil))
 	default:
 		if id == who.SessionID && who.ViaCookie {
 			a.setOperatorCookie(response, "", -1)
@@ -940,20 +1040,20 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 		response.Header().Set("Cache-Control", "no-store")
 		raw, viaCookie, ok := operatorCredential(request, a.operatorCookie())
 		if !ok {
-			writeError(response, http.StatusUnauthorized, "unauthorized", "An operator session is required.")
+			writeSaid(response, http.StatusUnauthorized, "unauthorized", configerr.Say("operator_session_required", nil))
 			return
 		}
 		who, err := a.config.Operators.Authenticate(request.Context(), raw, viaCookie)
 		if err != nil {
-			writeError(response, http.StatusUnauthorized, "unauthorized", "An operator session is required.")
+			writeSaid(response, http.StatusUnauthorized, "unauthorized", configerr.Say("operator_session_required", nil))
 			return
 		}
 		if who.IsToken() {
-			writeError(response, http.StatusForbidden, "person_only", "Only a person decides an operator request; an approval by a token would mean nothing.")
+			writeSaid(response, http.StatusForbidden, "person_only", configerr.Say("person_only", nil))
 			return
 		}
 		if writes(request.Method) && request.Header.Get("Origin") != a.operatorOrigin() {
-			writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match the operator console.")
+			writeSaid(response, http.StatusForbidden, "csrf_rejected", configerr.Say("csrf_rejected", nil))
 			return
 		}
 		ctx := context.WithValue(request.Context(), operatorPrincipalKey{}, who)
@@ -966,29 +1066,30 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 		}
 		if request.ContentLength != 0 {
 			if err := decodeJSON(request, &input); err != nil {
-				writeError(response, http.StatusBadRequest, "invalid_json", "The body is not valid.")
+				writeSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("body_invalid", nil))
 				return
 			}
 		}
 		id := request.PathValue("id")
 		pending, err := a.config.Operators.Request(ctx, who, id)
 		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(response, http.StatusNotFound, "not_found", "No such request.")
+			writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_request", nil))
 			return
 		}
 		if err != nil {
-			writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be read.")
+			writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("request_unreadable", nil))
 			return
 		}
 		if pending.Status != "pending" {
-			writeError(response, http.StatusConflict, "request_decided", "The request was decided, cancelled or expired.")
+			writeSaid(response, http.StatusConflict, "request_decided", configerr.Say("request_decided", nil))
 			return
 		}
 		// The phrases are checked before the code is spent: a wrong phrase costs no authenticator code.
 		if approve && pending.Route == "PATCH /api/v1/operator/config" {
 			if guards, mismatch := a.requestGuards(request, pending.Body, input.Secrets, input.Confirm); mismatch != "" {
-				writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
-					"message": "Type the phrase to confirm. The request keeps waiting.", "fields": map[string]string{mismatch: "Type the phrase to confirm."}, "guards": guards}})
+				body := saidBody("confirm_mismatch", configerr.Say("confirm_mismatch_request", nil), map[string]*configerr.Error{mismatch: configerr.Say("field_type_the_phrase", nil)})
+				body["guards"] = guards
+				writeJSON(response, http.StatusBadRequest, map[string]any{"error": body})
 				return
 			}
 		}
@@ -998,7 +1099,7 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 		if !approve {
 			rejected, err := a.config.Operators.RejectRequest(ctx, who, id)
 			if err != nil {
-				writeError(response, http.StatusConflict, "request_decided", "The request was decided, cancelled or expired.")
+				writeSaid(response, http.StatusConflict, "request_decided", configerr.Say("request_decided", nil))
 				return
 			}
 			writeJSON(response, http.StatusOK, operatorRequestJSON(rejected))
@@ -1006,13 +1107,13 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 		}
 		for name := range input.Secrets {
 			if !slices.Contains(pending.NeedsSecrets, name) {
-				writeError(response, http.StatusBadRequest, "secret_not_asked", "The request does not ask for that secret.")
+				writeSaid(response, http.StatusBadRequest, "secret_not_asked", configerr.Say("secret_not_asked", nil))
 				return
 			}
 		}
 		claimed, err := a.config.Operators.ClaimRequest(ctx, who, id)
 		if err != nil {
-			writeError(response, http.StatusConflict, "request_decided", "The request was decided, cancelled or expired.")
+			writeSaid(response, http.StatusConflict, "request_decided", configerr.Say("request_decided", nil))
 			return
 		}
 		status, body := a.replayOperatorRequest(ctx, who, claimed, input.Secrets, input.Confirm)

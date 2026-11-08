@@ -11,7 +11,8 @@ const key = 'colliedesk.operator.lang';
 export let lang: Lang = 'en';
 
 // The words of the lazy parts in the chosen language, kept here until their part loads and reads them.
-export const lazyWords: { am?: Translation<typeof am>; cloud?: Translation<typeof cloudMessages> } = {};
+// coded rewrites an API answer's coded texts in the chosen language (codes.ts); English has none.
+export const lazyWords: { am?: Translation<typeof am>; cloud?: Translation<typeof cloudMessages>; coded?: (body: Record<string, unknown>) => void } = {};
 
 export function pickLang(): Lang {
   try {

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/retention"
@@ -39,6 +39,30 @@ type configGuard struct {
 	Trial   bool   `json:"trial,omitempty"`
 	// Refused is set when the change cannot be saved as it is (a product missing, a slug nobody has).
 	Refused string `json:"refused,omitempty"`
+	// The codes of Preview and Refused, for the console (docs/internals/operator-console.md › Message codes).
+	PreviewCode   string           `json:"preview_code,omitempty"`
+	PreviewParams configerr.Params `json:"preview_params,omitempty"`
+	RefusedCode   string           `json:"refused_code,omitempty"`
+	RefusedParams configerr.Params `json:"refused_params,omitempty"`
+}
+
+// previews is the guard with the preview said.
+func (g configGuard) previews(code string, params configerr.Params) configGuard {
+	said := configerr.Say(code, params)
+	g.Preview, g.PreviewCode, g.PreviewParams = said.Text, said.Code, said.Params
+	return g
+}
+
+// refuses is the guard refused for what is said.
+func (g configGuard) refuses(code string, params configerr.Params) configGuard {
+	said := configerr.Say(code, params)
+	g.Refused, g.RefusedCode, g.RefusedParams = said.Text, said.Code, said.Params
+	return g
+}
+
+// refusedSaid is the guard's refusal with its code.
+func (g configGuard) refusedSaid() *configerr.Error {
+	return &configerr.Error{Code: g.RefusedCode, Params: g.RefusedParams, Text: g.Refused}
 }
 
 func enabled(value string) bool {
@@ -83,40 +107,36 @@ func (a *API) configGuards(ctx context.Context, request *http.Request, current, 
 			if on {
 				locked, err := a.preview.LockedWithBilling(ctx, a.now())
 				if err != nil {
-					add(configGuard{Key: "polar.access_token", Refused: "The workspaces billing would lock could not be counted; try again."})
+					add(configGuard{Key: "polar.access_token"}.refuses("guard_billing_uncountable", nil))
 					continue
 				}
-				add(configGuard{Key: "polar.access_token", Phrase: "billing on", Preview: fmt.Sprintf("Billing turns this server into the hosted cloud: "+
-					"%s whose trial ended without a plan lock at once, and every new workspace starts a trial.", workspacesText(locked))})
+				add(configGuard{Key: "polar.access_token", Phrase: "billing on"}.previews("guard_billing_on", configerr.Params{"workspaces": locked}))
 			} else {
-				add(configGuard{Key: "polar.access_token", Phrase: "billing off", Preview: "Billing turns off: every workspace gets full access " +
-					"with no trial and no lock, and retention deletes nothing."})
+				add(configGuard{Key: "polar.access_token", Phrase: "billing off"}.previews("guard_billing_off", nil))
 			}
 		case name == "retention.delete":
 			if !enabled(after) || enabled(before) {
 				continue
 			}
 			if valueOf(next, "polar.access_token") == "" {
-				add(configGuard{Key: name, Preview: "Billing is off, so no workspace is locked and nothing is deleted while it stays off."})
+				add(configGuard{Key: name}.previews("guard_retention_billing_off", nil))
 				continue
 			}
 			due, err := a.retentionDue(ctx)
 			if err != nil {
-				add(configGuard{Key: name, Refused: "The workspaces due for deletion could not be counted; try again."})
+				add(configGuard{Key: name}.refuses("guard_retention_uncountable", nil))
 				continue
 			}
 			perDay := valueOf(next, "retention.max_deletions_per_day")
 			if perDay == "" {
 				perDay = "5"
 			}
-			add(configGuard{Key: name, Phrase: strconv.Itoa(due), Preview: fmt.Sprintf("Deletion starts: %s locked for 12 months %s due now, "+
-				"deleted at most %s a day after a last check with Polar. A deleted workspace cannot be brought back.", workspacesText(due), isAre(due), perDay)})
+			add(configGuard{Key: name, Phrase: strconv.Itoa(due)}.previews("guard_retention_on", configerr.Params{"workspaces": due, "per_day": perDay}))
 		case name == "email.from_policy":
 			if after != "any" {
 				continue
 			}
-			add(configGuard{Key: name, Phrase: "any", Preview: "Every workspace may send as any address through your relay. " +
-				"On a relay you share with others, one customer can then pose as another."})
+			add(configGuard{Key: name, Phrase: "any"}.previews("guard_from_policy_any", nil))
 		case name == "mail_from.domain" || name == "hosted_mail.domain":
 			if before == "" {
 				continue
@@ -125,40 +145,35 @@ func (a *API) configGuards(ctx context.Context, request *http.Request, current, 
 			if phrase == "" {
 				phrase = "remove " + before
 			}
-			add(configGuard{Key: name, Phrase: phrase, Preview: fmt.Sprintf("Replies to mail sent before go to addresses at %s: once it changes, "+
-				"they no longer thread into their conversations.", before)})
+			add(configGuard{Key: name, Phrase: phrase}.previews("guard_mail_domain_moves", configerr.Params{"before": before}))
 		case name == "ai.allow_private_base_urls":
 			if !enabled(after) || enabled(before) {
 				continue
 			}
-			add(configGuard{Key: name, Phrase: "allow private addresses", Preview: "A workspace admin can then point the AI provider at an " +
-				"address inside your network, and the server will call it (server-side request forgery)."})
+			add(configGuard{Key: name, Phrase: "allow private addresses"}.previews("guard_private_addresses", nil))
 		case name == "trusted_proxies":
-			preview := "No proxy is trusted: every visitor's address is the connection's own."
+			guard := configGuard{Key: name, Trial: true}.previews("guard_proxies_none", trialParams(nil))
 			if proxies, err := ParseTrustedProxies(after); err == nil && len(proxies) > 0 {
-				preview = "Under this list your own address reads as " + clientIP(request, proxies) + "."
+				guard = guard.previews("guard_proxies_read", trialParams(configerr.Params{"address": clientIP(request, proxies)}))
 			}
-			add(configGuard{Key: name, Trial: true, Preview: preview + " It is tried for " + minutes(TrialDuration) +
-				"; confirm it from a page that still works, or it reverts by itself."})
+			add(guard)
 		case strings.HasPrefix(name, "cloud_auth.") || name == "clerk.publishable_key":
 			issuer := valueOf(next, "cloud_auth.issuer")
 			phrase := issuer
 			if phrase == "" {
 				phrase = "cloud sign-in off"
 			}
-			add(configGuard{Key: "cloud_auth.issuer", Phrase: phrase, Trial: true, Preview: "Who can sign in to the hosted cloud changes. Operators " +
-				"do not sign in through it, so the console counts the cloud sign-ins that work and fail meanwhile. It is tried for " +
-				minutes(TrialDuration) + " and reverts by itself unless you confirm it."})
+			add(configGuard{Key: "cloud_auth.issuer", Phrase: phrase, Trial: true}.previews("guard_cloud_auth", trialParams(nil)))
 		case name == "help_center.domain":
-			preview := "Help centers move back to " + strings.TrimRight(a.config.Origin, "/") + "/help/<slug>."
+			guard := configGuard{Key: name, Trial: true}.previews("guard_help_center_back", trialParams(configerr.Params{"origin": strings.TrimRight(a.config.Origin, "/")}))
 			if after != "" {
-				if refused := a.wildcardMissing(ctx, after); refused != "" {
-					add(configGuard{Key: name, Refused: refused})
+				if probe := a.wildcardMissing(ctx, after); probe != "" {
+					add(configGuard{Key: name}.refuses("guard_help_center_no_wildcard", configerr.Params{"probe": probe, "domain": after}))
 					continue
 				}
-				preview = "Every public help center moves to <slug>." + after + "; old links stop working unless redirected, and your reverse proxy needs certificates for them."
+				guard = guard.previews("guard_help_center_moves", trialParams(configerr.Params{"domain": after}))
 			}
-			add(configGuard{Key: name, Trial: true, Preview: preview + " It is tried for " + minutes(TrialDuration) + " and reverts by itself unless you confirm it."})
+			add(guard)
 		case name == "problem_report.workspace":
 			if after == "" {
 				continue
@@ -166,14 +181,14 @@ func (a *API) configGuards(ctx context.Context, request *http.Request, current, 
 			exists, err := a.preview.WorkspaceExists(ctx, after)
 			switch {
 			case err != nil:
-				add(configGuard{Key: name, Refused: "The workspace could not be looked up; try again."})
+				add(configGuard{Key: name}.refuses("guard_workspace_unlooked", nil))
 			case !exists:
-				add(configGuard{Key: name, Refused: "No workspace has the address " + after + "."})
+				add(configGuard{Key: name}.refuses("guard_no_workspace", configerr.Params{"slug": after}))
 			default:
-				add(configGuard{Key: name, Preview: "Problem reports from every workspace become conversations in " + after + "."})
+				add(configGuard{Key: name}.previews("guard_problem_reports", configerr.Params{"slug": after}))
 			}
 		case name == "kb_video.max_bytes":
-			add(configGuard{Key: name, Preview: "Videos up to this size upload in parts of 8 MiB: your reverse proxy must accept bodies that large."})
+			add(configGuard{Key: name}.previews("guard_kb_video", nil))
 		}
 	}
 	return guards
@@ -194,25 +209,17 @@ func (a *API) retentionDue(ctx context.Context) (int, error) {
 	return due, nil
 }
 
-func workspacesText(n int) string {
-	if n == 1 {
-		return "1 workspace"
+// trialParams adds how long a trial runs to params: trial in minutes, or in seconds (seconds = 1) when end-to-end
+// builds shorten it below a minute.
+func trialParams(params configerr.Params) configerr.Params {
+	if params == nil {
+		params = configerr.Params{}
 	}
-	return strconv.Itoa(n) + " workspaces"
-}
-
-func isAre(n int) string {
-	if n == 1 {
-		return "is"
+	params["trial"], params["seconds"] = int(TrialDuration.Minutes()), 0
+	if TrialDuration < time.Minute {
+		params["trial"], params["seconds"] = int(TrialDuration.Seconds()), 1
 	}
-	return "are"
-}
-
-func minutes(d time.Duration) string {
-	if d < time.Minute {
-		return strconv.Itoa(int(d.Seconds())) + " seconds"
-	}
-	return strconv.Itoa(int(d.Minutes())) + " minutes"
+	return params
 }
 
 // guardsTrial reports whether any guard tries the change first.
@@ -237,7 +244,7 @@ func (a *API) decideTrial(response http.ResponseWriter, request *http.Request, k
 		Note       string `json:"note"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Version < 1 {
-		writeRefused(response, http.StatusBadRequest, "invalid_json", "Send the version of the trial.", nil)
+		writeRefusedSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("send_trial_version", nil), nil)
 		return
 	}
 	if !a.reauthorized(response, request, input.ReauthCode) {
@@ -331,7 +338,7 @@ func (e *trialEvidence) read(version int64) (addresses, ok, refused int) {
 func (a *API) listOperatorProducts(response http.ResponseWriter, request *http.Request) {
 	products, err := a.config.ServerConfig.Products(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The products could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("products_unreadable", nil))
 		return
 	}
 	if products == nil {
@@ -353,31 +360,31 @@ func (a *API) addOperatorProduct(response http.ResponseWriter, request *http.Req
 		ReauthCode string `json:"reauth_code"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeRefused(response, http.StatusBadRequest, "invalid_json", "The body is not a product.", nil)
+		writeRefusedSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("body_not_a_product", nil), nil)
 		return
 	}
 	row := serverconfig.ProductRow{ProductID: strings.TrimSpace(input.ProductID), Plan: input.Plan, Period: input.Period, OnSale: input.OnSale == nil || *input.OnSale}
-	fields := map[string]string{}
+	fields := map[string]*configerr.Error{}
 	if row.ProductID == "" || len(row.ProductID) > 200 {
-		fields["product_id"] = "Enter the product's id in Polar."
+		fields["product_id"] = configerr.Say("field_product_id", nil)
 	}
 	if !slices.Contains(productPlans, row.Plan) {
-		fields["plan"] = "Choose a plan."
+		fields["plan"] = configerr.Say("field_choose_plan", nil)
 	}
 	if !slices.Contains(productPeriods, row.Period) {
-		fields["period"] = "Choose a period."
+		fields["period"] = configerr.Say("field_choose_period", nil)
 	}
 	if len(fields) > 0 {
-		writeRefused(response, http.StatusBadRequest, "invalid_product", "Nothing was added.", fields)
+		writeRefusedSaid(response, http.StatusBadRequest, "invalid_product", configerr.Say("nothing_added", nil), fields)
 		return
 	}
 	existing, err := a.config.ServerConfig.Products(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The products could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("products_unreadable", nil))
 		return
 	}
 	if slices.ContainsFunc(existing, func(product serverconfig.ProductRow) bool { return product.ProductID == row.ProductID }) {
-		writeError(response, http.StatusConflict, "product_exists", "That product is listed already; a product is never changed, only taken off sale.")
+		writeSaid(response, http.StatusConflict, "product_exists", configerr.Say("product_exists", nil))
 		return
 	}
 	if !a.reauthorized(response, request, input.ReauthCode) {
@@ -400,18 +407,18 @@ func (a *API) setOperatorProductOnSale(response http.ResponseWriter, request *ht
 		ReauthCode string `json:"reauth_code"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.OnSale == nil {
-		writeRefused(response, http.StatusBadRequest, "invalid_json", "Send on_sale.", nil)
+		writeRefusedSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("send_on_sale", nil), nil)
 		return
 	}
 	id := request.PathValue("id")
 	products, err := a.config.ServerConfig.Products(request.Context())
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The products could not be read.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("products_unreadable", nil))
 		return
 	}
 	index := slices.IndexFunc(products, func(product serverconfig.ProductRow) bool { return product.ProductID == id })
 	if index < 0 {
-		writeError(response, http.StatusNotFound, "not_found", "No such product.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("no_such_product", nil))
 		return
 	}
 	if !a.reauthorized(response, request, input.ReauthCode) {
@@ -420,7 +427,7 @@ func (a *API) setOperatorProductOnSale(response http.ResponseWriter, request *ht
 	who := operatorPrincipal(request)
 	if err := a.config.ServerConfig.SetOnSale(request.Context(), id, *input.OnSale, serverconfig.Actor{Kind: "operator", Name: who.Operator.Email, IP: clientIP(request, a.config.TrustedProxies)}); err != nil {
 		slog.Error("set a product on sale", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The product could not be changed.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("product_unchanged", nil))
 		return
 	}
 	row := products[index]
@@ -433,7 +440,7 @@ func (a *API) setOperatorProductOnSale(response http.ResponseWriter, request *ht
 func (a *API) tryPolar(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	config, err := polar.ConfigFromEnv(snap.Getenv)
 	if err != nil || !config.Enabled() {
-		return map[string]any{"name": "polar", "ok": false, "message": "Set the Polar token, its webhook secret and the Team and Founding products first."}
+		return testSaid("polar", false, configerr.Say("test_polar_needs_settings", nil))
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -441,36 +448,36 @@ func (a *API) tryPolar(ctx context.Context, snap serverconfig.Snapshot) map[stri
 	for _, id := range []string{config.Products.TeamMonthly, config.Products.TeamYearly, config.Products.Founding} {
 		archived, err := client.ProductArchived(callCtx, id)
 		if err != nil {
-			return map[string]any{"name": "polar", "ok": false, "message": "Polar refused: " + redactSecretsIn(err.Error(), snap)}
+			return testSaid("polar", false, configerr.Say("test_polar_refused", configerr.Params{"detail": redactSecretsIn(err.Error(), snap)}))
 		}
 		if archived {
-			return map[string]any{"name": "polar", "ok": false, "message": "Product " + id + " is archived at Polar: nobody can buy it."}
+			return testSaid("polar", false, configerr.Say("test_polar_archived", configerr.Params{"product": id}))
 		}
 	}
-	return map[string]any{"name": "polar", "ok": true, "message": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved."}
+	return testSaid("polar", true, configerr.Say("test_polar_ok", nil))
 }
 
 // tryJWKS fetches the cloud sign-in keys of the change once. Nothing is saved.
 func tryJWKS(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	config := cloudauth.ConfigFromEnv(snap.Getenv)
 	if !config.Enabled() {
-		return map[string]any{"name": "jwks", "ok": false, "message": "Set the issuer and the JWKS address first."}
+		return testSaid("jwks", false, configerr.Say("test_jwks_needs_settings", nil))
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	count, err := cloudauth.New(config).CheckKeys(callCtx)
 	if err != nil {
-		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address did not answer with keys: " + err.Error()}
+		return testSaid("jwks", false, configerr.Say("test_jwks_failed", configerr.Params{"detail": err.Error()}))
 	}
 	if count == 0 {
-		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address answered with no RSA key: no cloud sign-in would verify."}
+		return testSaid("jwks", false, configerr.Say("test_jwks_no_rsa", nil))
 	}
-	return map[string]any{"name": "jwks", "ok": true, "message": fmt.Sprintf("The JWKS address answered with %d keys. Nothing was saved.", count)}
+	return testSaid("jwks", true, configerr.Say("test_jwks_ok", configerr.Params{"count": count}))
 }
 
 // wildcardMissing says why the help center domain cannot be used yet: every workspace's help center is
-// <slug>.<domain>, so a name nobody created must resolve (a wildcard record). It looks up one made-up name;
-// "" when it resolves.
+// <slug>.<domain>, so a name nobody created must resolve (a wildcard record). It looks up one made-up name and
+// returns it when it does not resolve; "" when it resolves.
 func (a *API) wildcardMissing(ctx context.Context, domain string) string {
 	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -479,7 +486,7 @@ func (a *API) wildcardMissing(ctx context.Context, domain string) string {
 		return ""
 	}
 	if _, err := a.config.LookupCNAME(lookupCtx, probe); err != nil {
-		return "No DNS record answers for " + probe + ": add a wildcard record *." + domain + " that points at this server first."
+		return probe
 	}
 	return ""
 }
@@ -523,15 +530,15 @@ func fetchStatus(ctx context.Context, address string) (int, error) {
 func (a *API) tryAI(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	server, err := ai.ServerProviderFromEnv(snap.Getenv)
 	if err != nil || server == nil {
-		return map[string]any{"name": "ai", "ok": false, "message": "Set the provider, its key or address and the models first."}
+		return testSaid("ai", false, configerr.Say("test_ai_needs_settings", nil))
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	model, err := a.ai.PingServer(callCtx, server)
 	if err != nil {
-		return map[string]any{"name": "ai", "ok": false, "message": "The provider refused " + model + ": " + redactSecretsIn(err.Error(), snap)}
+		return testSaid("ai", false, configerr.Say("test_ai_refused", configerr.Params{"model": model, "detail": redactSecretsIn(err.Error(), snap)}))
 	}
-	return map[string]any{"name": "ai", "ok": true, "message": "The provider answered with " + model + ". Nothing was saved."}
+	return testSaid("ai", true, configerr.Say("test_ai_ok", configerr.Params{"model": model}))
 }
 
 // listServerAIModels asks the server AI provider of the change which models its key may use. Nothing is saved; an
@@ -539,16 +546,16 @@ func (a *API) tryAI(ctx context.Context, snap serverconfig.Snapshot) map[string]
 func (a *API) listServerAIModels(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 	value := func(key string) string { return strings.TrimSpace(snap.Getenv(key)) }
 	kind, base, key := aiprovider.Kind(value("AI_SERVER_PROVIDER")), value("AI_SERVER_BASE_URL"), value("AI_SERVER_API_KEY")
-	refuse := func(message string) map[string]any {
-		return map[string]any{"name": "ai_models", "ok": false, "message": message}
+	refuseCoded := func(code string, params configerr.Params) map[string]any {
+		return testSaid("ai_models", false, configerr.Say(code, params))
 	}
 	switch {
 	case kind != aiprovider.KindAnthropic && kind != aiprovider.KindOpenAICompatible:
-		return refuse("Pick a provider first.")
+		return refuseCoded("test_ai_models_needs_provider", nil)
 	case kind == aiprovider.KindOpenAICompatible && base == "":
-		return refuse("Enter the base URL first.")
+		return refuseCoded("test_ai_models_needs_base_url", nil)
 	case kind == aiprovider.KindAnthropic && key == "":
-		return refuse("Enter the API key first.")
+		return refuseCoded("test_ai_models_needs_key", nil)
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -556,11 +563,13 @@ func (a *API) listServerAIModels(ctx context.Context, snap serverconfig.Snapshot
 	if err != nil {
 		var check *ai.CheckError
 		if errors.As(err, &check) {
-			return refuse("The provider refused to list its models (" + string(check.Code) + "). Check the key and the address, or type the model names.")
+			return refuseCoded("test_ai_models_refused", configerr.Params{"check_code": string(check.Code)})
 		}
-		return refuse("The models could not be listed: " + redactSecretsIn(err.Error(), snap))
+		return refuseCoded("test_ai_models_failed", configerr.Params{"detail": redactSecretsIn(err.Error(), snap)})
 	}
-	return map[string]any{"name": "ai_models", "ok": true, "message": fmt.Sprintf("The provider offers %d %s. Nothing was saved.", len(models), plural(len(models), "model", "models")), "models": models, "prices": prices}
+	out := testSaid("ai_models", true, configerr.Say("test_ai_models_ok", configerr.Params{"count": len(models)}))
+	out["models"], out["prices"] = models, prices
+	return out
 }
 
 // switchGuard is what switching a feature on or off asks: who it stops, counted, and for billing and cloud
@@ -577,10 +586,9 @@ func (a *API) switchGuard(ctx context.Context, feature string, current, next ser
 		}
 		locked, err := a.preview.LockedWithBilling(ctx, a.now())
 		if err != nil {
-			return configGuard{Key: key, Refused: "The workspaces billing would lock could not be counted; try again."}, true
+			return configGuard{Key: key}.refuses("guard_billing_uncountable", nil), true
 		}
-		return configGuard{Key: key, Phrase: "billing on", Preview: fmt.Sprintf("Billing turns on again: %s whose trial ended without a plan lock at once, "+
-			"and every new workspace starts a trial.", workspacesText(locked))}, true
+		return configGuard{Key: key, Phrase: "billing on"}.previews("guard_billing_on_again", configerr.Params{"workspaces": locked}), true
 	}
 	switch feature {
 	case serverconfig.FeatureGmail, serverconfig.FeatureMicrosoft:
@@ -590,37 +598,29 @@ func (a *API) switchGuard(ctx context.Context, feature string, current, next ser
 		}
 		channels, workspaces, err := a.preview.MailboxConnections(ctx, provider)
 		if err != nil {
-			return configGuard{Key: key, Refused: "The channels sending through " + label + " could not be counted; try again."}, true
+			return configGuard{Key: key}.refuses("guard_mailbox_uncountable", configerr.Params{"label": label}), true
 		}
-		preview := fmt.Sprintf("No workspace can connect %s. %d email %s in %s %s through it: their replies wait in the outbox, "+
-			"with the reason on the conversation, and are sent once %s is on again. Nothing is disconnected.", label, channels, plural(channels, "channel", "channels"),
-			workspacesText(workspaces), plural(channels, "sends", "send"), label)
-		if channels == 0 {
-			return configGuard{Key: key, Preview: preview}, true
+		guard := configGuard{Key: key}.previews("guard_mailbox_off", configerr.Params{"label": label, "channels": channels, "workspaces": workspaces})
+		if channels > 0 {
+			guard.Phrase = feature + " off"
 		}
-		return configGuard{Key: key, Phrase: feature + " off", Preview: preview}, true
+		return guard, true
 	case serverconfig.FeatureAIServer:
 		workspaces, err := a.preview.ServerAIWorkspaces(ctx)
 		if err != nil {
-			return configGuard{Key: key, Refused: "The workspaces using the server's AI provider could not be counted; try again."}, true
+			return configGuard{Key: key}.refuses("guard_ai_server_uncountable", nil), true
 		}
-		return configGuard{Key: key, Preview: fmt.Sprintf("%s %s an AI feature on the server's provider: those features stop, and say why, until it is on again. "+
-			"Workspaces with their own provider are not affected.", workspacesText(workspaces), plural(workspaces, "runs", "run"))}, true
+		return configGuard{Key: key}.previews("guard_ai_server_off", configerr.Params{"workspaces": workspaces}), true
 	case serverconfig.FeatureAutofix:
-		return configGuard{Key: key, Preview: "Autofix disappears from every workspace and no fix is sent; connected repositories and fixes stay, and GitHub's webhook is still received."}, true
+		return configGuard{Key: key}.previews("guard_autofix_off", nil), true
 	case serverconfig.FeatureHostedMail:
-		return configGuard{Key: key, Preview: "New workspaces get no hosted support address and the address is no longer shown; mail to existing hosted addresses still arrives."}, true
+		return configGuard{Key: key}.previews("guard_hosted_mail_off", nil), true
 	case serverconfig.FeatureSignup:
-		return configGuard{Key: key, Preview: "Nobody can start a new trial; existing workspaces are not affected."}, true
+		return configGuard{Key: key}.previews("guard_signup_off", nil), true
 	case serverconfig.FeatureCloudSignIn:
-		return configGuard{Key: key, Phrase: "cloud sign-in off", Trial: true, Preview: "Every person who signs in to the app with cloud sign-in is refused, " +
-			"and nobody can sign up, until it is on again; sessions already open keep working. The operator console still opens with a " +
-			"one-time link (collie operator pair) and with its own cloud sign-in. It is tried for " + minutes(TrialDuration) +
-			" and reverts by itself unless you confirm it."}, true
+		return configGuard{Key: key, Phrase: "cloud sign-in off", Trial: true}.previews("guard_cloud_sign_in_off", trialParams(nil)), true
 	case serverconfig.FeatureBilling:
-		return configGuard{Key: key, Phrase: "billing off", Preview: "Billing turns off: no workspace is billed or locked, trials are not enforced, " +
-			"and retention deletes nothing. Subscriptions stay as they are at Polar and their webhooks are still received; " +
-			"switching billing on again locks the workspaces whose trial ended without a plan."}, true
+		return configGuard{Key: key, Phrase: "billing off"}.previews("guard_billing_switch_off", nil), true
 	}
 	return configGuard{}, false
 }
@@ -632,11 +632,4 @@ func featureEnabled(snap serverconfig.Snapshot, feature string) bool {
 		}
 	}
 	return false
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

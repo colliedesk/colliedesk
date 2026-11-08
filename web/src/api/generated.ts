@@ -9314,15 +9314,34 @@ export interface components {
              */
             trial_expires_at?: string;
         };
+        /**
+         * @description The code of a message the operator console shows from the server, beside its English text: the console translates by code and params, and falls back to the text (docs/internals/operator-console.md › Message codes). A code is stable.
+         * @enum {string}
+         */
+        OperatorMessageCode: "ai_allow_private_invalid" | "ai_server_allowance_format" | "ai_server_allowance_not_number" | "ai_server_allowance_unknown" | "ai_server_allowance_unpriced" | "ai_server_base_url_invalid" | "ai_server_half_configured" | "ai_server_label_too_long" | "ai_server_models_bad_model" | "ai_server_models_format" | "ai_server_models_twice" | "ai_server_prices_format" | "ai_server_prices_not_number" | "ai_server_prices_twice" | "ai_server_provider_invalid" | "audit_unreadable" | "authenticator_needs_key_ring" | "billing_alert_email_invalid" | "body_invalid" | "body_not_a_change" | "body_not_a_product" | "body_not_json" | "body_unreadable" | "change_empty" | "change_unsaved" | "cloud_sign_in_not_configured" | "code_unchecked" | "config_changed" | "config_unreadable" | "config_unsaved" | "confirm_mismatch" | "confirm_mismatch_request" | "csrf_rejected" | "email_from_policy_invalid" | "feature_incomplete_refused" | "feature_needs_settings" | "feature_switch_invalid" | "field_choose_period" | "field_choose_plan" | "field_enter_it" | "field_no_key_ring" | "field_not_a_secret" | "field_product_id" | "field_reenter" | "field_secret_goes_in_secrets" | "field_totp_cli_only" | "field_type_phrase" | "field_type_the_phrase" | "field_unknown_setting" | "github_private_key_invalid" | "guard_ai_server_off" | "guard_ai_server_uncountable" | "guard_autofix_off" | "guard_billing_off" | "guard_billing_on" | "guard_billing_on_again" | "guard_billing_switch_off" | "guard_billing_uncountable" | "guard_cloud_auth" | "guard_cloud_sign_in_off" | "guard_from_policy_any" | "guard_help_center_back" | "guard_help_center_moves" | "guard_help_center_no_wildcard" | "guard_hosted_mail_off" | "guard_kb_video" | "guard_mail_domain_moves" | "guard_mailbox_off" | "guard_mailbox_uncountable" | "guard_no_workspace" | "guard_private_addresses" | "guard_problem_reports" | "guard_proxies_none" | "guard_proxies_read" | "guard_refused_nothing_saved" | "guard_retention_billing_off" | "guard_retention_on" | "guard_retention_uncountable" | "guard_signup_off" | "guard_workspace_unlooked" | "help_center_domain_invalid" | "history_unreadable" | "hosted_mail_domain_invalid" | "hosted_mail_needs_inbound_secret" | "idempotency_key_reused" | "internal_signup_email_invalid" | "invalid_limit" | "invalid_since" | "kb_video_max_invalid" | "link_expired" | "link_invalid" | "link_used" | "mail_from_domain_invalid" | "mail_from_domain_slug" | "mail_from_inbound_secret_needs" | "mail_image_cache_invalid" | "microsoft_tenant_invalid" | "network_entry_invalid" | "no_such_operator" | "no_such_product" | "no_such_request" | "no_such_session" | "no_such_version" | "no_trial" | "not_a_secret_setting" | "nothing_added" | "nothing_changes" | "operator_locked" | "operator_session_required" | "operator_unrevoked" | "operators_unreadable" | "person_only" | "polar_api_url_invalid" | "polar_partly_configured" | "product_exists" | "product_unchanged" | "products_unreadable" | "reauth_code_invalid" | "reauth_needs_new_link" | "reauth_required" | "reenter_secret" | "request_decided" | "request_in_progress" | "request_uncancelled" | "request_unreadable" | "request_unstored" | "requests_unreadable" | "resend_webhook_needs_mail_from" | "restore_not_changeable" | "retention_delete_invalid" | "retention_max_invalid" | "retention_max_range" | "secret_in_request" | "secret_in_request_example" | "secret_in_set" | "secret_keys_missing" | "secret_missing" | "secret_not_asked" | "secret_not_valid" | "send_base_version" | "send_link_token" | "send_on_sale" | "send_operator_email" | "send_trial_version" | "session_unended" | "sessions_unreadable" | "setting_not_changeable" | "sign_in_failed" | "sign_in_refused" | "smtp_port_implicit_tls" | "smtp_port_invalid" | "smtp_port_range" | "smtp_starttls_invalid" | "status_unreadable" | "test_ai_models_failed" | "test_ai_models_needs_base_url" | "test_ai_models_needs_key" | "test_ai_models_needs_provider" | "test_ai_models_ok" | "test_ai_models_refused" | "test_ai_needs_settings" | "test_ai_ok" | "test_ai_refused" | "test_jwks_failed" | "test_jwks_needs_settings" | "test_jwks_no_rsa" | "test_jwks_ok" | "test_needs_a_person" | "test_polar_archived" | "test_polar_needs_settings" | "test_polar_ok" | "test_polar_refused" | "test_reenter_secret" | "test_smtp_needs_host" | "test_smtp_ok" | "test_smtp_refused" | "test_smtp_unwritable" | "token_needs_name" | "too_many_tries" | "trial_pending" | "trial_pending_first" | "unknown_setting" | "version_runs_already" | "version_unreadable";
+        /** @description What the message names (a setting, a model, a count). Never a secret's value. */
+        OperatorMessageParams: {
+            [key: string]: string | number;
+        };
+        OperatorCodedMessage: {
+            code: components["schemas"]["OperatorMessageCode"];
+            params?: components["schemas"]["OperatorMessageParams"];
+        };
         OperatorConfigCheck: {
             ok: boolean;
             errors: {
                 [key: string]: string;
             };
+            /** @description The code of each message of `errors` that has one, by the same key */
+            field_errors?: {
+                [key: string]: components["schemas"]["OperatorCodedMessage"];
+            };
             test?: {
                 name: string;
                 ok: boolean;
                 message: string;
+                code?: components["schemas"]["OperatorMessageCode"];
+                params?: components["schemas"]["OperatorMessageParams"];
                 /** @description The models listed, for `ai_models` */
                 models?: string[];
                 /** @description For `ai_models`: what the provider lists each model to cost (OpenRouter), in US dollars per million tokens; a model without a listed price is left out */
@@ -9348,6 +9367,10 @@ export interface components {
             trial?: boolean;
             /** @description Why the change cannot be saved as it is */
             refused?: string;
+            preview_code?: components["schemas"]["OperatorMessageCode"];
+            preview_params?: components["schemas"]["OperatorMessageParams"];
+            refused_code?: components["schemas"]["OperatorMessageCode"];
+            refused_params?: components["schemas"]["OperatorMessageParams"];
         };
         OperatorTrial: {
             version: number;
@@ -9471,6 +9494,14 @@ export interface components {
                 /** @description Present on validation errors (422), one message per bad field name */
                 fields?: {
                     [key: string]: string;
+                };
+                /** @description Only on the operator console's routes: the code of `message`, when it has one */
+                message_code?: components["schemas"]["OperatorMessageCode"];
+                /** @description With message_code: what the message names */
+                params?: components["schemas"]["OperatorMessageParams"];
+                /** @description Only on the operator console's routes: the code of each message of `fields` that has one, by the same key */
+                field_errors?: {
+                    [key: string]: components["schemas"]["OperatorCodedMessage"];
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;

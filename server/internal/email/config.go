@@ -1,9 +1,10 @@
 package email
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // From policies decide which address replies are sent from.
@@ -54,26 +55,26 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		config.FromPolicy = value
 	}
 	if config.FromPolicy != FromPolicyVerified && config.FromPolicy != FromPolicyAny {
-		return Config{}, fmt.Errorf("EMAIL_FROM_POLICY must be verified or any, got %q", config.FromPolicy)
+		return Config{}, configerr.Say("email_from_policy_invalid", configerr.Params{"value": config.FromPolicy})
 	}
 	if config.MailFromDomain != "" && !hostnamePattern.MatchString(config.MailFromDomain) {
-		return Config{}, fmt.Errorf("MAIL_FROM_DOMAIN must be a domain name, got %q", config.MailFromDomain)
+		return Config{}, configerr.Say("mail_from_domain_invalid", configerr.Params{"value": config.MailFromDomain})
 	}
 	if config.HostedMailDomain != "" && !hostnamePattern.MatchString(config.HostedMailDomain) {
-		return Config{}, fmt.Errorf("HOSTED_MAIL_DOMAIN must be a domain name, got %q", config.HostedMailDomain)
+		return Config{}, configerr.Say("hosted_mail_domain_invalid", configerr.Params{"value": config.HostedMailDomain})
 	}
 	if config.PlatformInboundSecret != "" && (len(config.PlatformInboundSecret) < 32 || (config.MailFromDomain == "" && config.HostedMailDomain == "")) {
-		return Config{}, fmt.Errorf("MAIL_FROM_INBOUND_SECRET needs MAIL_FROM_DOMAIN or HOSTED_MAIL_DOMAIN and at least 32 characters")
+		return Config{}, configerr.Say("mail_from_inbound_secret_needs", configerr.Params{"min": 32})
 	}
 	if config.HostedMailDomain != "" && config.PlatformInboundSecret == "" {
-		return Config{}, fmt.Errorf("HOSTED_MAIL_DOMAIN needs MAIL_FROM_INBOUND_SECRET for its forwarder")
+		return Config{}, configerr.Say("hosted_mail_needs_inbound_secret", nil)
 	}
 	if config.MailFromDomain != "" && HostedSlug("reply@"+config.MailFromDomain, config.HostedMailDomain) != "" {
-		return Config{}, fmt.Errorf("MAIL_FROM_DOMAIN %q is below HOSTED_MAIL_DOMAIN and not a reserved name, so a workspace could own it as its slug; use a reserved label such as mail", config.MailFromDomain)
+		return Config{}, configerr.Say("mail_from_domain_slug", configerr.Params{"value": config.MailFromDomain})
 	}
 	if config.ResendWebhookSecret != "" && config.MailFromDomain == "" {
 		// The webhook finds the reply by the reply+<token>@MAIL_FROM_DOMAIN address it was sent from.
-		return Config{}, fmt.Errorf("RESEND_WEBHOOK_SECRET needs MAIL_FROM_DOMAIN")
+		return Config{}, configerr.Say("resend_webhook_needs_mail_from", nil)
 	}
 	return config, nil
 }
