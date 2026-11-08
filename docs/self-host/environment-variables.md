@@ -159,7 +159,9 @@ docker compose exec -T server /app/collie config set-secret ai.server.api_key < 
 provider runs: a workspace picks the provider, never its model. Change it and every workspace follows at once.
 After a `|`, intake's second model is the one it tries when the first fails or answers what cannot be read;
 the other features use only the first. A feature left out cannot use the server's provider. A change that
-sets some of these settings but not all that are needed is refused and says which are missing. The server's provider can reach any address, your own network included: you chose it. No
+sets a provider but not all it needs is refused and says which are missing. Setting the provider to Off
+(`ai.server.provider` empty) turns the server's provider off and keeps the other settings for when it is on again:
+features set to it stop, and their admins see it greyed with the reason. The server's provider can reach any address, your own network included: you chose it. No
 workspace uses it until one of its admins turns a feature on.
 
 To bound what the server's provider spends, price its models and give each workspace a monthly

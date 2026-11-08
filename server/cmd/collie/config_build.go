@@ -35,13 +35,15 @@ const maxRetentionDeletionsPerDay = 20
 // builtConfig is every setting parsed, as serve starts with it. buildConfig is the one place that turns a
 // snapshot into it: serve, the CLI's checks and the import all call it, so they agree on what is valid.
 type builtConfig struct {
-	Billing                polar.Config
-	Email                  email.Config
-	Google                 google.Config
-	Microsoft              microsoft.Config
-	GitHub                 github.Config
-	HelpCenterDomain       string
-	AIServer               *ai.ServerProvider
+	Billing          polar.Config
+	Email            email.Config
+	Google           google.Config
+	Microsoft        microsoft.Config
+	GitHub           github.Config
+	HelpCenterDomain string
+	AIServer         *ai.ServerProvider
+	// AIServerOffLabel names the server's provider while the operator set it to Off and kept its models.
+	AIServerOffLabel       string
 	AllowPrivateBaseURLs   bool
 	TrustedProxies         []netip.Prefix
 	InternalSignups        httpapi.InternalSignups
@@ -84,6 +86,7 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	keep(err)
 	built.AIServer, err = ai.ServerProviderFromEnv(getenv)
 	keep(err)
+	built.AIServerOffLabel, _ = ai.ServerTurnedOff(getenv)
 	switch value := strings.TrimSpace(getenv("AI_ALLOW_PRIVATE_BASE_URLS")); value {
 	case "", "0", "false":
 	case "1", "true":

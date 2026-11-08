@@ -53,6 +53,20 @@ func (s *ServerProvider) PriceOf(model string) (Price, bool) {
 	return price, ok
 }
 
+// ServerTurnedOff says whether the operator set the server's provider to Off while keeping its other values
+// (AI_SERVER_MODELS above all), and the name workspaces knew it by. Workspaces that picked it then see it
+// greyed, as with features.ai_server off.
+func ServerTurnedOff(getenv func(string) string) (label string, off bool) {
+	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
+	if value("AI_SERVER_PROVIDER") != "" || value("AI_SERVER_MODELS") == "" {
+		return "", false
+	}
+	if label = value("AI_SERVER_LABEL"); label == "" {
+		label = DefaultServerLabel
+	}
+	return label, true
+}
+
 // ModelsFor returns the models the server offers for a slot.
 func (s *ServerProvider) ModelsFor(slot string) []string {
 	if s == nil {
@@ -63,14 +77,15 @@ func (s *ServerProvider) ModelsFor(slot string) []string {
 
 // ServerProviderFromEnv reads AI_SERVER_PROVIDER (anthropic or openai_compatible), AI_SERVER_API_KEY,
 // AI_SERVER_BASE_URL, AI_SERVER_MODELS (triage=model|other,draft=model), AI_SERVER_LABEL,
-// AI_SERVER_PRICES and AI_SERVER_MONTHLY_ALLOWANCE. None set means the server has no provider; an
+// AI_SERVER_PRICES and AI_SERVER_MONTHLY_ALLOWANCE. No AI_SERVER_PROVIDER means the server has no provider: the
+// operator turned it off (the console's "Off") and the other values wait, unused, until it is on again. An
 // allowance needs a price for every model it offers. A partial setting is an error that names what is missing or
 // wrong (never a value), so a half-configured server never starts.
 func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) {
 	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
 	kind, key, base, models, label := value("AI_SERVER_PROVIDER"), value("AI_SERVER_API_KEY"), value("AI_SERVER_BASE_URL"), value("AI_SERVER_MODELS"), value("AI_SERVER_LABEL")
 	prices, allowance := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_ALLOWANCE")
-	if kind == "" && key == "" && base == "" && models == "" && label == "" && prices == "" && allowance == "" {
+	if kind == "" {
 		return nil, nil
 	}
 	server := &ServerProvider{Kind: aiprovider.Kind(kind), Label: label, APIKey: key, BaseURL: base}
@@ -87,8 +102,6 @@ func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) 
 		if base == "" {
 			missing = append(missing, "AI_SERVER_BASE_URL")
 		}
-	case "":
-		missing = append(missing, "AI_SERVER_PROVIDER")
 	default:
 		return nil, fmt.Errorf("AI_SERVER_PROVIDER must be anthropic or openai_compatible")
 	}

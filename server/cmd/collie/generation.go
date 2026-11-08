@@ -285,6 +285,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: config.AllowPrivateBaseURLs, PlanLimits: billingOn}
+	if aiServer == nil && config.AIServerOffLabel != "" {
+		// Provider set to Off with its models kept: workspaces that picked it see it greyed, as when switched off.
+		aiConfig.ServerOff, aiConfig.ServerOffLabel = true, config.AIServerOffLabel
+	}
 	apiConfig := httpapi.Config{Cursor: p.cursor, AI: aiConfig, ImportKeys: p.importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth,
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
