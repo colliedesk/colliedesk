@@ -163,13 +163,14 @@ func TestSignUpAndNetworkErrorsAndTheSignInKeysTestCarryCodes(t *testing.T) {
 		return errors.Join(signups, proxies, domain)
 	})
 	cookie := e.signIn("ops@example.com")
+	const canary = "relay-password-canary"
 	answer := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"internal_signup.emails": "colliedesk.com",
-		"trusted_proxies": "not-an-ip", "help_center.domain": "localhost"}}, "")
+		"trusted_proxies": "not-an-ip", "help_center.domain": "localhost"}, "secrets": map[string]any{"smtp.password": canary}}, canary)
 	if coded := fieldCode(t, answer, "internal_signup.emails", "internal_signup_email_invalid"); coded.Params["entry"] != "colliedesk.com" {
 		t.Fatalf("emails: %+v", coded)
 	}
 	// One parser serves two settings: its params name the setting, as its text does.
-	networks := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"internal_signup.networks": "10.0.0.0/33"}}, "")
+	networks := checkCoded(t, e, cookie, map[string]any{"set": map[string]any{"internal_signup.networks": "10.0.0.0/33"}, "secrets": map[string]any{"smtp.password": canary}}, canary)
 	if coded := fieldCode(t, networks, "internal_signup.networks", "network_entry_invalid"); coded.Params["name"] != "internal_signup.networks" || coded.Params["entry"] != "10.0.0.0/33" {
 		t.Fatalf("networks: %+v", coded)
 	}

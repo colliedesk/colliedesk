@@ -79,8 +79,9 @@ A dark band on top is always there: the console's host and the version every pro
 process could not use it). On a phone it keeps the host and the version.
 
 The console speaks English or Vietnamese. It follows the browser's language until an operator picks one in
-the account menu (**Tiếng Việt** / **English**); that choice is kept in this browser. Setting keys, commands
-and messages from the server stay as they are.
+the account menu (**Tiếng Việt** / **English**); that choice is kept in this browser. The server's messages
+(why a setting is refused, what a test answered, what a change does) show in that language too; setting keys,
+commands and what a provider or relay itself answered stay as they are.
 
 - **Overview**: the release and database, the version to run and how many processes run it, what needs
   attention (a variable that still differs from the database, a secret sealed with an old key, a request
