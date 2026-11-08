@@ -393,12 +393,36 @@ func (s *Store) IntakeGatheringByID(ctx context.Context, workspaceID, id string,
 		if detail.Decisions, err = gatheringDecisions(ctx, tx, workspaceID, []string{id}); err != nil {
 			return detail, err
 		}
-		if detail.Candidates, err = gatheringCandidates(ctx, tx, workspaceID, g, now); err != nil {
+		if detail.Candidates, err = s.gatheringCandidates(ctx, tx, workspaceID, g, now); err != nil {
 			return detail, err
 		}
 		detail.Commands, err = s.openCommands(ctx, tx, workspaceID, g.ChannelID)
 		return detail, err
 	})
+}
+
+// joinsOnlyOpen says whether the channel's join policy, for the scope, adds messages only to open or pending
+// conversations (channels.JoinOpenOnly), over its type's defaults.
+func (s *Store) joinsOnlyOpen(ctx context.Context, tx pgx.Tx, workspaceID, channelID, scope string) (bool, error) {
+	var kind channels.Type
+	var settings json.RawMessage
+	err := tx.QueryRow(ctx, `SELECT type,settings FROM channels WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, channelID).Scan(&kind, &settings)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the channel's join policy: %w", err)
+	}
+	adapter, err := s.adapterOf(kind)
+	if err != nil {
+		return false, nil
+	}
+	merged, err := adapter.Definition().Defaults.Merge(settings)
+	if err != nil {
+		return false, nil
+	}
+	merged, _ = merged.ForScope(scope)
+	return merged.JoinPolicy.JoinsOnlyOpen(), nil
 }
 
 // candidateLimit is the most conversations a card offers to join.
@@ -409,10 +433,15 @@ const candidateLimit = 30
 // conversations of the same place active in the last 72 hours; in a one-to-one chat, the same
 // customer's on the same channel; then the ones resolved within the scope's reopen window. A closed
 // conversation is never one. The rules' target comes first, then the newest.
-func gatheringCandidates(ctx context.Context, tx pgx.Tx, workspaceID string, g IntakeGathering, now time.Time) ([]IntakeCandidate, error) {
+func (s *Store) gatheringCandidates(ctx context.Context, tx pgx.Tx, workspaceID string, g IntakeGathering, now time.Time) ([]IntakeCandidate, error) {
 	candidates := []IntakeCandidate{}
 	if g.State != GatheringDeciding && g.State != GatheringReview {
 		return candidates, nil
+	}
+	// A channel that joins only open conversations offers no resolved one, not even the rules' target.
+	openOnly, err := s.joinsOnlyOpen(ctx, tx, workspaceID, g.ChannelID, g.Scope)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := tx.Query(ctx, `WITH card AS (
 			SELECT g.workspace_id,g.channel_id,g.thread_id,g.rules_target,t.kind,COALESCE(g.contact_id,t.contact_id) AS contact_id,
@@ -425,17 +454,18 @@ func gatheringCandidates(ctx context.Context, tx pgx.Tx, workspaceID string, g I
 				JOIN conversation_thread_items l ON l.workspace_id=i.workspace_id AND l.item_id=i.id AND l.unlinked_at IS NULL
 				JOIN conversations c ON c.workspace_id=l.workspace_id AND c.id=l.conversation_id
 				WHERE card.kind='group' AND ((c.status IN ('open','pending') AND GREATEST(c.updated_at,c.last_public_at)>=$3::timestamptz-interval '72 hours')
-					OR (c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
+					OR (NOT $5 AND c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
 			UNION
 			SELECT c.id FROM conversations c, card WHERE c.workspace_id=card.workspace_id AND card.kind IS DISTINCT FROM 'group'
 				AND c.contact_id=card.contact_id AND c.channel_id=card.channel_id
-				AND (c.status IN ('open','pending') OR (c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
+				AND (c.status IN ('open','pending') OR (NOT $5 AND c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
 			UNION
-			SELECT c.id FROM conversations c, card WHERE c.workspace_id=card.workspace_id AND c.id=card.rules_target AND c.status<>'closed')
+			SELECT c.id FROM conversations c, card WHERE c.workspace_id=card.workspace_id AND c.id=card.rules_target AND c.status<>'closed'
+				AND (NOT $5 OR c.status IN ('open','pending')))
 		SELECT c.id::text,c.subject,c.status,c.contact_id::text,COALESCE(NULLIF(p.name,''),p.email,''),c.channel_id::text,c.updated_at,c.status='resolved'
 		FROM found JOIN conversations c ON c.workspace_id=$1 AND c.id=found.id JOIN contacts p ON p.workspace_id=c.workspace_id AND p.id=c.contact_id, card
 		ORDER BY c.id IS DISTINCT FROM card.rules_target, c.status='resolved', GREATEST(c.updated_at,c.last_public_at) DESC, c.id DESC
-		LIMIT $4`, workspaceID, g.ID, now, candidateLimit)
+		LIMIT $4`, workspaceID, g.ID, now, candidateLimit, openOnly)
 	if err != nil {
 		return nil, fmt.Errorf("read intake candidates: %w", err)
 	}
