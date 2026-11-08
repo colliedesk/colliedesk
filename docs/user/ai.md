@@ -26,9 +26,7 @@ Each feature (**Triage suggestions**, **Reply drafts**, and **Chat intake** for 
    own server it is whatever the operator configured (see
    [environment variables](../self-host/environment-variables.md#ai-provider)); without one, Settings
    explains the two ways to get started. You pick only the provider: the operator picks the model each
-   feature runs on it, Settings shows it, and when the operator changes it your features follow. When
-   intake moves to another model that way, its channels at Auto go back to Suggest and say why, as when
-   you pick another model yourself. If the operator switches the server's provider off, the features
+   feature runs on it, Settings shows it, and when the operator changes it your features follow. If the operator switches the server's provider off, the features
    set to it stop and Settings says so; they run again once it is on, or pick another provider.
 2. **A provider you add.** Your workspace pays that provider directly.
 3. **None.** The feature stays off.

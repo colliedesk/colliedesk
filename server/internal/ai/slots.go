@@ -583,32 +583,3 @@ func (s *Service) ActiveFeatures(ctx context.Context, workspaceID string) (map[s
 	})
 	return active, err
 }
-
-// FollowServerModels brings a workspace's intake on the server's provider to the models its operator
-// sets now. The labels that let intake act by itself on a channel were earned by the models it ran: when
-// the operator moves intake to another model, each channel at auto goes back to suggest, as when an
-// admin picks another model, and the stored models record what it runs now.
-func (s *Service) FollowServerModels(ctx context.Context, workspaceID string) error {
-	model, fallback := s.serverModels(SlotIntake)
-	if model == nil {
-		return nil
-	}
-	now := s.now().UTC()
-	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		slots, err := scanSlots(ctx, tx, workspaceID, true)
-		if err != nil {
-			return err
-		}
-		row, found := slots[SlotIntake]
-		if !found || !row.usesServer || (equalPointer(row.model, model) && equalPointer(row.fallbackModel, fallback)) {
-			return nil
-		}
-		if row.enabled {
-			if err := lowerChannelLevels(ctx, tx, workspaceID, Actor{}, SlotIntake, "model_changed", now); err != nil {
-				return err
-			}
-		}
-		_, err = tx.Exec(ctx, `UPDATE ai_slots SET model=$3,fallback_model=$4 WHERE workspace_id=$1 AND slot=$2`, workspaceID, SlotIntake, *model, fallback)
-		return err
-	})
-}

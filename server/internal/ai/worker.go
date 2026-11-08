@@ -93,13 +93,10 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
-// Tick closes usage rows a dead process left started, brings intake on the server's provider to the
-// operator's models, then starts the due tasks there is room for. Tests call it and Wait instead of Run.
+// Tick closes usage rows a dead process left started, then starts the due tasks there is room for.
+// Tests call it and Wait instead of Run.
 func (w *Worker) Tick(ctx context.Context) error {
 	if err := w.sweep(ctx); err != nil {
-		return err
-	}
-	if err := w.followServerModels(ctx); err != nil {
 		return err
 	}
 	w.mu.Lock()
@@ -220,34 +217,6 @@ func (w *Worker) sweep(ctx context.Context) error {
 		}
 		return sweepChats(ctx, tx, now)
 	})
-}
-
-// followServerModels finds the workspaces whose intake on the server's provider last ran other models
-// than the operator sets now; only their ids leave the lookup, and each follows in its own workspace.
-func (w *Worker) followServerModels(ctx context.Context) error {
-	model, fallback := w.service.serverModels(SlotIntake)
-	if model == nil {
-		return nil
-	}
-	var ids []string
-	err := w.db.Privileged(ctx, database.PrivilegeAIJobClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM ai_slots WHERE slot=$1 AND uses_server
-			AND (model IS DISTINCT FROM $2 OR fallback_model IS DISTINCT FROM $3)`, SlotIntake, *model, fallback)
-		if err != nil {
-			return err
-		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		if err := w.service.FollowServerModels(ctx, id); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // chatSessionKept is how long a chat's numbers stay after its last turn; its texts go after
