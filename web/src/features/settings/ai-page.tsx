@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { AIEvent, AILevel, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import { Tooltip } from '../../ui/tooltip';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { Choice } from '../../ui/choice';
 import { Dialog as SharedDialog, Field } from '../../ui/dialog';
@@ -220,11 +221,14 @@ function slotInput(slot: AISlot): AISlotInput {
 function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto, onSourceConsent }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
   const serverModels = settings.server?.models[slot.slot] ?? [];
+  const chosen = sourceOf(slot);
+  // While the operator switched the server's provider off, nobody can pick it; a feature already set to
+  // it still shows it, greyed, with why.
+  const serverOff = chosen === 'server' && !settings.server && settings.server_off ? settings.server_off : null;
   const choices = [
     ...(serverModels.length > 0 && settings.server ? [{ value: 'server', label: settings.server.label, models: serverModels }] : []),
     ...settings.providers.map((provider) => ({ value: provider.id, label: provider.label, models: provider.models })),
   ];
-  const chosen = sourceOf(slot);
   const choice = choices.find((item) => item.value === chosen);
   const models = choice?.models ?? (slot.model ? [slot.model] : []);
   const saving = busySlot === slot.slot;
@@ -251,12 +255,22 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
         <span>{m.slotHelp[slot.slot]}</span>
       </div>
       <label className="ai-slot-provider"><span className="ai-cell-label">{m.columnProvider}</span>
-        <select aria-label={m.providerFor(name)} value={chosen} disabled={locked || choices.length === 0} onChange={(event) => save({ source: event.target.value })}>
-          {choices.length === 0 && <option value="">{m.noProvider}</option>}
-          {choices.length > 0 && !choice && <option value="">{m.pickProvider}</option>}
-          {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select></label>
-      {chosen === 'server'
+        {serverOff
+          // A disabled select gets no pointer events: the tooltip hangs on its wrapper, which takes focus then.
+          ? <Tooltip text={m.serverOffTip(serverOff.label)}>
+            <span className="ai-tip-anchor" tabIndex={locked ? 0 : undefined}>
+              <select aria-label={m.providerFor(name)} className="ai-select-off" value="server" disabled={locked} onChange={(event) => save({ source: event.target.value })}>
+                <option value="server" disabled>{serverOff.label}</option>
+                {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select></span></Tooltip>
+          : <select aria-label={m.providerFor(name)} value={chosen} disabled={locked || choices.length === 0} onChange={(event) => save({ source: event.target.value })}>
+            {choices.length === 0 && <option value="">{m.noProvider}</option>}
+            {choices.length > 0 && !choice && <option value="">{m.pickProvider}</option>}
+            {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>}</label>
+      {chosen === 'server' && serverOff
+        ? <div className="ai-slot-model ai-slot-model-fixed ai-off-text"><span className="ai-cell-label">{m.columnModel}</span><span>—</span></div>
+        : chosen === 'server'
         ? <div className="ai-slot-model ai-slot-model-fixed"><span className="ai-cell-label">{m.columnModel}</span>
           <span className="ai-model-name">{serverModels[0]}</span><span className="muted-copy">{m.modelByServer}</span></div>
         : <label className="ai-slot-model"><span className="ai-cell-label">{m.columnModel}</span>

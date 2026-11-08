@@ -420,6 +420,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	aiConfig.PlanLimits = limits
 	if config.SwitchedOff[serverconfig.FeatureAIServer] {
+		if aiConfig.Server != nil {
+			aiConfig.ServerOffLabel = aiConfig.Server.Label
+		}
 		aiConfig.Server, aiConfig.ServerOff = nil, true
 	}
 	if aiConfig.ChatGate == nil {

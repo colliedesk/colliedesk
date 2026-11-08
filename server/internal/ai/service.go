@@ -53,6 +53,8 @@ type Config struct {
 	// ServerOff is true when the operator switched the server's provider off (features.ai_server): Server
 	// is nil, and the features set to it say so until it is on again.
 	ServerOff bool
+	// ServerOffLabel is the name workspaces knew the server's provider by while it is off.
+	ServerOffLabel string
 	// Keys seal workspace keys (MAILBOX_TOKEN_KEYS); without one no key can be stored.
 	Keys tokenseal.Keys
 	// AllowPrivateBaseURLs lets a workspace provider use a private or loopback address and plain

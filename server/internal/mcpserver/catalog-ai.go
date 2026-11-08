@@ -52,7 +52,7 @@ func aiSettingsGetSpec() Spec {
 		REST:     []string{"GET /api/v1/ai"},
 		Input:    noArguments,
 		Output: `{"type":"object","required":["settings"],"properties":{"settings":{"type":"object","required":["server","providers","slots","events"],"properties":{` +
-			`"server":{"type":["object","null"]},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
+			`"server":{"type":["object","null"]},"server_off":{"type":["object","null"],"description":"Set (with the provider's label) while the operator switched the server's provider off: no feature can pick source server then."},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
 			`"events":{"type":"array","items":{"type":"object"}},"provider_limit":{"type":"integer"},"can_store_keys":{"type":"boolean"},"allow_private_base_urls":{"type":"boolean"}}}}}`,
 		run: aiSettingsGet,
 	}

@@ -10017,7 +10017,7 @@ components:
         assignee_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
-      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate, channels, source_consents]
+      required: [server, server_off, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate, channels, source_consents]
       properties:
         server:
           description: The server's provider, set by the operator in the operator console → AI (ai.server.*); null when the server has none.
@@ -10030,8 +10030,16 @@ components:
                 label: {type: string}
                 models:
                   type: object
-                  description: Per feature, the models a workspace may pick; the first is the default.
+                  description: Per feature, the models the operator set; a feature on this provider runs the first (intake tries the second when the first fails).
                   additionalProperties: {type: array, items: {type: string}}
+        server_off:
+          description: Set while the operator switched the server's provider off (`server` is then null); no workspace can pick it, and a feature set to it does not run until it is on again. Null otherwise.
+          anyOf:
+            - type: 'null'
+            - type: object
+              required: [label]
+              properties:
+                label: {type: string, description: The name workspaces know the server's provider by.}
         providers: {type: array, items: {$ref: '#/components/schemas/AIProvider'}}
         slots: {type: array, items: {$ref: '#/components/schemas/AISlot'}}
         channels: {type: array, items: {$ref: '#/components/schemas/AIChannelLevel'}, description: 'The levels live channels set apart from the workspace''s default, by channel name.'}

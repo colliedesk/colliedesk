@@ -157,6 +157,13 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 	if server := s.config.Server; server != nil {
 		settings.Server = &Server{Kind: string(server.Kind), Label: server.Label, Models: server.Models}
 	}
+	if s.config.ServerOff {
+		label := s.config.ServerOffLabel
+		if label == "" {
+			label = "Server provider"
+		}
+		settings.ServerOff = &ServerOff{Label: label}
+	}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT `+providerColumns+` FROM ai_providers WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 		if err != nil {
