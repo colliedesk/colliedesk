@@ -84,17 +84,24 @@ process could not use it). On a phone it keeps the host and the version.
 - **Features**: a switch for each feature workspaces see (see [Features](#features) below).
 - **Configuration pages** (AI and pricing, Email, Mailboxes and GitHub, Billing and retention, Sign-ups,
   Security and network, Limits and telemetry): each setting with its key, where its value comes from, and
-  when a save applies. Changes stay in the tab until **Review and save**; the review lists every change
-  and asks for what it needs (your code, a secret entered again, a typed confirmation). **Escape** or
-  **Cancel** applies nothing. Email has **Send a test email**, which tries the settings on the page
+  when a save applies. Lists (team addresses, networks, proxies) take one value per box, and sizes are
+  in MB or GB. Changes stay in the tab until **Save**, which checks them first: a change that cannot be
+  saved says why beside its setting, and one that asks for nothing more is saved at once. One that does
+  opens a review that lists every change and asks for what it needs (your code, a secret entered again, a
+  typed confirmation); **Escape** or **Cancel** applies nothing. Email has **Send a test email**, which tries the settings on the page
   before anything is saved. If someone saved another version meanwhile, nothing is saved and your
   changes are kept to apply on the newest one. A session that ends keeps them in the tab too.
 - **AI and pricing** sets the server's provider the way a workspace adds one: a switch to turn it on or
   off (off keeps its key, address and models for when it is on again), the service (Anthropic, OpenAI,
   OpenRouter, or another OpenAI-compatible server, whose address you type), the name workspaces see and
-  the key. **Load models** lists the models the key may use (nothing is saved); pick one model for every
-  feature, or one per feature with a second for chat intake, or type the names. Every workspace on the
-  server's provider runs these models.
+  the key. The models the key may use are listed by themselves (nothing is saved): type in a model box to
+  search them, or type a name the list does not have; pick one model for every feature, or one per
+  feature with a second for chat intake. Every workspace on the server's provider runs these models.
+  **Pricing and allowance** shows a price for each model in use, filled in with the price the provider
+  lists (OpenRouter) when you pick it, and the monthly allowance: no limit, the same for every
+  workspace, or per active agent, with its own amount for a workspace on its trial. When the provider's
+  account refuses calls for want of credit, the page and the overview warn (how many calls, since when)
+  until a call answers again; features on it fail and say why, and settings still save.
 - **Requests**: changes an operator token asked for; approve (with your code and any secret it needs)
   or reject.
 - **History**: every version, who saved it and which keys changed (secret values never show). Restoring

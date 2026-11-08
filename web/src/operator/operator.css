@@ -450,3 +450,6 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .form-dialog .diff-row { align-items: center; }
 .form-dialog .diff-vals { color: var(--text-2); font-family: var(--font-sans); font-size: var(--fs-small); text-align: right; }
 @media (max-width: 56rem) { .ops-env > div { grid-template-columns: minmax(0, 1fr); } }
+.list-edit { display: grid; gap: 4px; justify-items: start; max-width: 32rem }
+.list-row, .size-edit { display: flex; gap: 4px; width: 100% }
+.setting .size-edit select { width: 6rem }

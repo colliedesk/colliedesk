@@ -552,7 +552,7 @@ func (a *API) listServerAIModels(ctx context.Context, snap serverconfig.Snapshot
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	models, err := a.ai.ListServerModels(callCtx, kind, base, key)
+	models, prices, err := a.ai.ListServerModels(callCtx, kind, base, key)
 	if err != nil {
 		var check *ai.CheckError
 		if errors.As(err, &check) {
@@ -560,7 +560,7 @@ func (a *API) listServerAIModels(ctx context.Context, snap serverconfig.Snapshot
 		}
 		return refuse("The models could not be listed: " + redactSecretsIn(err.Error(), snap))
 	}
-	return map[string]any{"name": "ai_models", "ok": true, "message": fmt.Sprintf("The provider offers %d %s. Nothing was saved.", len(models), plural(len(models), "model", "models")), "models": models}
+	return map[string]any{"name": "ai_models", "ok": true, "message": fmt.Sprintf("The provider offers %d %s. Nothing was saved.", len(models), plural(len(models), "model", "models")), "models": models, "prices": prices}
 }
 
 // switchGuard is what switching a feature on or off asks: who it stops, counted, and for billing and cloud

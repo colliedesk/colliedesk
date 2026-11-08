@@ -6,12 +6,14 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -405,7 +407,8 @@ func TestCheckAsksTheAIProviderOnce(t *testing.T) {
 // complete yet (no models) still lists, through the address and key of the change, and a refusal never
 // repeats the key.
 func TestLoadModelsListsTheServerProvidersModelsBeforeAnyIsPicked(t *testing.T) {
-	fake := &aiprovider.Fake{FakeModels: []string{"claude-haiku-5-5", "claude-sonnet-5-5"}}
+	fake := &aiprovider.Fake{FakeModels: []string{"claude-haiku-5-5", "claude-sonnet-5-5"},
+		FakePrices: map[string]aiprovider.ListedPrice{"claude-haiku-5-5": {Input: 0.1, Output: 0.5, CacheRead: 0.01}, "retired-model": {Input: 9, Output: 9}}}
 	var built []ai.Spec
 	e := newOperatorEnvWith(t, false, func(snap serverconfig.Snapshot) error {
 		_, err := ai.ServerProviderFromEnv(snap.Getenv)
@@ -420,11 +423,16 @@ func TestLoadModelsListsTheServerProvidersModelsBeforeAnyIsPicked(t *testing.T) 
 	var answer struct {
 		OK   bool `json:"ok"`
 		Test struct {
-			OK     bool     `json:"ok"`
-			Models []string `json:"models"`
+			OK     bool                              `json:"ok"`
+			Models []string                          `json:"models"`
+			Prices map[string]aiprovider.ListedPrice `json:"prices"`
 		} `json:"test"`
 	}
 	decode(t, listed, &answer)
+	// Prices come for the models listed only, so they fill in what the operator picks.
+	if len(answer.Test.Prices) != 1 || answer.Test.Prices["claude-haiku-5-5"].Output != 0.5 {
+		t.Fatalf("prices: %s", listed.Body.String())
+	}
 	if !answer.OK || !answer.Test.OK || strings.Join(answer.Test.Models, ",") != "claude-haiku-5-5,claude-sonnet-5-5" ||
 		len(built) != 1 || built[0].APIKey != key || !built[0].Server || built[0].Kind != aiprovider.KindAnthropic {
 		t.Fatalf("listed: %s %+v", listed.Body.String(), built)
@@ -586,5 +594,42 @@ func TestARequestOnAnOlderVersionStillApplies(t *testing.T) {
 	config := operatorRequest(t, e.api, http.MethodGet, "/api/v1/operator/config", nil, cookie).Body.String()
 	if !strings.Contains(config, `"value":"@agent.example"`) || !strings.Contains(config, `"value":"10.0.0.0/8"`) {
 		t.Fatal("the approved change did not apply on the newer version, or replaced it")
+	}
+}
+
+// While the server's AI provider refuses its calls for want of credit, the status warns the operator (with
+// how many and since when), until a call answers again; saving settings is never refused for it.
+func TestTheStatusWarnsWhileTheServerAIProviderIsOutOfCredit(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	usage := func(status, code string, ago time.Duration) {
+		t.Helper()
+		if err := database.New(e.pool).Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
+			_, err := tx.Exec(context.Background(), `INSERT INTO ai_usage(workspace_id, feature, billed_to, provider_kind, provider_label, model, status, error_code, started_at, finished_at)
+				SELECT id, 'triage', 'server', 'openai_compatible', 'Colliedesk AI', 'm', $1, NULLIF($2, ''), now() - $3::interval, now() - $3::interval FROM workspaces ORDER BY created_at LIMIT 1`,
+				status, code, fmt.Sprintf("%d seconds", int(ago.Seconds())))
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	warned := func() bool {
+		status := operatorRequest(t, e.api, http.MethodGet, "/api/v1/operator/status", nil, cookie)
+		return strings.Contains(status.Body.String(), `"code":"ai_server_out_of_credit"`)
+	}
+	usage("ok", "", 3*time.Hour)
+	usage("error", "rate_limited", 2*time.Hour)
+	if warned() {
+		t.Fatal("warned without a refusal for credit")
+	}
+	usage("error", "quota_exhausted", time.Hour)
+	usage("error", "quota_exhausted", time.Minute)
+	status := operatorRequest(t, e.api, http.MethodGet, "/api/v1/operator/status", nil, cookie)
+	if !strings.Contains(status.Body.String(), `"code":"ai_server_out_of_credit","detail":"2"`) && !strings.Contains(status.Body.String(), `"detail":"2"`) {
+		t.Fatalf("status while out of credit: %s", status.Body.String())
+	}
+	usage("ok", "", 0)
+	if warned() {
+		t.Fatal("still warned after a call answered")
 	}
 }
