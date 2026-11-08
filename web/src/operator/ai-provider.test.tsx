@@ -16,7 +16,7 @@ let shown: Draft = emptyDraft();
 function page(settings: Setting[]) {
   const data = {
     me: { operator: { id: 'o1', email: 'ops@example.com', totp_enabled: true }, session: { id: 's1' }, console: { origin: '', path_mode: true } },
-    status: { desired_version: 4 },
+    status: { desired_version: 4, warnings: [] },
     config: { version: 4, settings, bootstrap: [], key_ring: { configured: true, key_ids: ['k1'] }, features: [] },
     reload: async () => {},
   } as unknown as ConsoleData;

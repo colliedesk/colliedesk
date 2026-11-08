@@ -9181,14 +9181,20 @@ export interface components {
         };
         OperatorWarning: {
             /** @enum {string} */
-            code: "env_differs" | "env_same" | "env_dead" | "no_key_ring" | "secret_stale_key" | "version_refused" | "waiting_for_import" | "path_mode" | "origin_invalid" | "requests_waiting" | "feature_incomplete";
+            code: "env_differs" | "env_same" | "env_dead" | "no_key_ring" | "secret_stale_key" | "version_refused" | "waiting_for_import" | "path_mode" | "origin_invalid" | "requests_waiting" | "feature_incomplete" | "ai_server_out_of_credit";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description The environment variable it is about, as data (never written in the web app) */
             env_name?: string;
             key?: string;
             version?: number;
+            /** @description For ai_server_out_of_credit: how many of its calls the provider refused since the last that answered */
             detail?: string;
+            /**
+             * Format: date-time
+             * @description For ai_server_out_of_credit: when the provider first refused for want of credit
+             */
+            since?: string;
         };
         OperatorProcess: {
             instance_id: string;

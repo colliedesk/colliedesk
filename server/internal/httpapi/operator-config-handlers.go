@@ -369,6 +369,13 @@ func (a *API) getOperatorStatus(response http.ResponseWriter, request *http.Requ
 	migration, _ := a.config.ServerConfig.LatestMigration(ctx)
 	waiting, _ := a.config.Operators.PendingRequests(ctx)
 	warnings := []map[string]any{}
+	// The server's AI provider out of credit: its calls fail (each says so where it ran) until someone adds
+	// credit or picks another provider; saving settings is never refused for it.
+	if failures, since, err := a.preview.ServerAIOutOfCredit(ctx); err != nil {
+		slog.Error("count the server AI provider's refusals for credit", "error", err)
+	} else if failures > 0 {
+		warnings = append(warnings, map[string]any{"code": "ai_server_out_of_credit", "severity": "error", "detail": strconv.Itoa(failures), "since": since})
+	}
 	for _, leftover := range serverconfig.Leftovers(current.Snapshot, a.environ()) {
 		code, severity := "env_differs", "error"
 		if leftover.Same {

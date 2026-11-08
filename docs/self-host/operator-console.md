@@ -99,7 +99,9 @@ process could not use it). On a phone it keeps the host and the version.
   feature with a second for chat intake. Every workspace on the server's provider runs these models.
   **Pricing and allowance** shows a price for each model in use, filled in with the price the provider
   lists (OpenRouter) when you pick it, and the monthly allowance: no limit, the same for every
-  workspace, or per active agent, with its own amount for a workspace on its trial.
+  workspace, or per active agent, with its own amount for a workspace on its trial. When the provider's
+  account refuses calls for want of credit, the page and the overview warn (how many calls, since when)
+  until a call answers again; features on it fail and say why, and settings still save.
 - **Requests**: changes an operator token asked for; approve (with your code and any secret it needs)
   or reject.
 - **History**: every version, who saved it and which keys changed (secret values never show). Restoring

@@ -158,7 +158,7 @@ function listKeyOf(kind: string, base: string, draft: Draft): string {
 // ServerProvider is the server provider's part of AI & pricing: on or off, which service (as a workspace adds
 // a provider), its name, key and address, and the model of each feature, searched in what the key may use.
 // Off keeps every other value, so turning it on again needs nothing typed.
-export default function ServerProvider({ byKey, draft, setDraft, errors, groupOf, SettingRow, change, currentValue }: ServerProviderProps) {
+export default function ServerProvider({ byKey, draft, setDraft, errors, groupOf, SettingRow, change, currentValue, credit }: ServerProviderProps) {
   const id = useId();
   const provider = byKey.get('ai.server.provider');
   const baseSetting = byKey.get('ai.server.base_url');
@@ -221,6 +221,8 @@ export default function ServerProvider({ byKey, draft, setDraft, errors, groupOf
   const modelsError = errors['ai.server.models'];
   return <>
     <link rel="stylesheet" href={stylesheet} />
+    {credit && on && <div className="ops-strip ops-ai-credit" data-tone="danger" role="alert">
+      <span><strong>{am.outOfCredit}</strong> {am.outOfCreditBody(credit.detail ?? '', credit.since ? new Date(credit.since).toLocaleString() : '')}</span></div>}
     <div className="setting field">
       <span className="field-label" id={`${id}-on-label`}>{am.serverProviderOn}</span>
       <code className="setting-key">ai.server.provider</code>

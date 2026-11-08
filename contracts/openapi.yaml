@@ -13002,12 +13002,13 @@ components:
       type: object
       required: [code, severity]
       properties:
-        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting, feature_incomplete]}
+        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting, feature_incomplete, ai_server_out_of_credit]}
         severity: {type: string, enum: [error, warning]}
         env_name: {type: string, description: 'The environment variable it is about, as data (never written in the web app)'}
         key: {type: string}
         version: {type: integer}
-        detail: {type: string}
+        detail: {type: string, description: 'For ai_server_out_of_credit: how many of its calls the provider refused since the last that answered'}
+        since: {type: string, format: date-time, description: 'For ai_server_out_of_credit: when the provider first refused for want of credit'}
     OperatorProcess:
       type: object
       required: [instance_id, hostname, binary_version, running_version, started_at, heartbeat_at]

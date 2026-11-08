@@ -171,7 +171,8 @@ const (
 	PrivilegeOperator Privilege = "operator"
 	// PrivilegeOperatorPreview counts, for the operator console's previews, what a change would do across
 	// workspaces: how many lock when billing turns on, whether a workspace slug exists, and how many channels
-	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI). Only a count or
+	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI), and how many of
+	// the server's AI calls its provider refused for want of credit. Only a count, a time or
 	// a yes or no leaves the transaction; no row is returned.
 	PrivilegeOperatorPreview Privilege = "operator-preview"
 	// PrivilegeMetaConversionClaim gives up the Meta Conversions API events of every workspace that are too

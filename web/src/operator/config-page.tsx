@@ -17,6 +17,8 @@ type SetDraft = Dispatch<SetStateAction<Draft>>;
 export interface ServerProviderProps {
   byKey: Map<string, Setting>; draft: Draft; setDraft: SetDraft; errors: Record<string, string>; groupOf: (key: string) => string | undefined;
   SettingRow: typeof SettingRow; change: typeof change; currentValue: typeof currentValue;
+  // The server's provider out of credit (status warning ai_server_out_of_credit), shown on its card.
+  credit?: { detail?: string; since?: string };
 }
 
 function sourceText(setting: Setting): string {
@@ -273,7 +275,8 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
       <div className="section-heading"><h2>{section.title}</h2><p>{section.lead}</p></div>
       <div className="settings-body">
         {group === 'ai' && <Suspense fallback={null}>{createElement(section.keys.includes('ai.server.provider') ? ServerProvider : ServerPricing,
-          { byKey, draft, setDraft, errors, groupOf: (key: string) => byKey.get(key)?.group, SettingRow, change, currentValue })}</Suspense>}
+          { byKey, draft, setDraft, errors, groupOf: (key: string) => byKey.get(key)?.group, SettingRow, change, currentValue,
+            credit: data.status.warnings?.find((warning) => warning.code === 'ai_server_out_of_credit') })}</Suspense>}
         {group !== 'ai' && section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
           <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]}
             feature={data.config.features?.find((feature) => feature.switch_key === setting.key)} groupOf={(key) => byKey.get(key)?.group} />)}

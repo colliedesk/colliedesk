@@ -5,6 +5,8 @@ export const am = {
   serverProviderOnHelp: 'Workspaces can pick it. Off stops it and keeps everything below for when it is on again.',
   serverProviderOffHelp: 'Off: no workspace can pick it, and features set to it stop and say why. Its settings are kept.',
   serverProviderService: 'Service',
+  outOfCredit: 'The provider account is out of credit.',
+  outOfCreditBody: (n: string, since: string) => `It refused ${n} AI ${n === '1' ? 'call' : 'calls'} since ${since}: features on it fail, and each says why. Add credit to the account (or raise the key's limit), or pick another service or key below. Saving is not affected.`,
   aiService: {
     anthropic: ['Anthropic', 'Claude models, with an Anthropic API key'],
     openai: ['OpenAI', 'GPT models, with an OpenAI API key'],

@@ -116,6 +116,7 @@ export const m = {
     path_mode: (env: string) => `The console shares the workspace app's address. Give it its own host with ${env}.`,
     requests_waiting: (n: string) => `${n} operator request${n === '1' ? '' : 's'} waiting for you.`,
     feature_incomplete: (key: string, needs: string) => `${key} is switched on but off until these are set: ${needs}.`,
+    ai_server_out_of_credit: (n: string, since: string) => `The server's AI provider is out of credit: it refused ${n} AI calls since ${since}. Add credit to its account, or pick another provider in AI & pricing. Settings still save.`,
   },
   // Configuration
   unsavedChanges: (n: number) => `${n} unsaved change${n === 1 ? '' : 's'}`,
