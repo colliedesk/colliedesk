@@ -9319,6 +9319,15 @@ export interface components {
                 message: string;
                 /** @description The models listed, for `ai_models` */
                 models?: string[];
+                /** @description For `ai_models`: what the provider lists each model to cost (OpenRouter), in US dollars per million tokens; a model without a listed price is left out */
+                prices?: {
+                    [key: string]: {
+                        input: number;
+                        output: number;
+                        cache_read: number;
+                        cache_write: number;
+                    };
+                };
             };
             guards?: components["schemas"]["OperatorConfigGuard"][];
         };

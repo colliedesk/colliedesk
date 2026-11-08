@@ -1,12 +1,17 @@
 // How each setting shows on its page: a label people read, the control, and the section it sits in. The keys
 // and what saving them asks for come from the API (GET /api/v1/operator/config); this only words them.
-export type Kind = 'text' | 'number' | 'textarea' | 'switch' | 'select' | 'secret' | 'pem' | 'feature';
+// list: several values, one box each (written comma separated); bytes: a size in MB or GB (written in bytes).
+export type Kind = 'text' | 'number' | 'textarea' | 'switch' | 'select' | 'secret' | 'pem' | 'feature' | 'list' | 'bytes';
 
 export interface FieldInfo {
   label: string;
   kind: Kind;
   help?: string;
   options?: Array<[string, string]>;
+  // A select that also takes a value of its own, typed after picking "Other".
+  other?: string;
+  // What one value of a list looks like.
+  placeholder?: string;
 }
 
 export interface Section {
@@ -41,7 +46,7 @@ export const fields: Record<string, FieldInfo> = {
   'google.client_secret': { label: 'Google client secret', kind: 'secret' },
   'microsoft.client_id': { label: 'Microsoft client ID', kind: 'text', help: 'Off while empty.' },
   'microsoft.client_secret': { label: 'Microsoft client secret', kind: 'secret' },
-  'microsoft.tenant': { label: 'Tenant', kind: 'text', help: 'common, organizations, consumers, or one tenant.' },
+  'microsoft.tenant': { label: 'Who may connect', kind: 'select', options: [['common', 'Work, school and personal accounts'], ['organizations', 'Work and school accounts'], ['consumers', 'Personal accounts (Outlook.com)']], other: 'One tenant (its ID or domain)' },
   'github.app_id': { label: 'GitHub App ID', kind: 'text' },
   'github.slug': { label: 'App slug', kind: 'text' },
   'github.client_id': { label: 'Client ID', kind: 'text' },
@@ -54,18 +59,18 @@ export const fields: Record<string, FieldInfo> = {
   'billing.alert_email': { label: 'Billing alert email', kind: 'text' },
   'retention.delete': { label: 'Delete workspaces locked for 12 months', kind: 'select', options: [['off', 'Off'], ['on', 'On']] },
   'retention.max_deletions_per_day': { label: 'Most deletions a day', kind: 'number' },
-  'internal_signup.emails': { label: 'Team addresses', kind: 'text', help: '@domain or one mailbox, comma separated: their sign-ups are the team\'s own tests.' },
-  'internal_signup.networks': { label: 'Team networks', kind: 'text', help: 'CIDR ranges, comma separated.' },
-  'trusted_proxies': { label: 'Trusted proxies', kind: 'text', help: 'The reverse proxies whose X-Forwarded-For is believed.' },
+  'internal_signup.emails': { label: 'Team addresses', kind: 'list', placeholder: '@company.com or name@company.com', help: 'A whole domain (@company.com) or one mailbox: their sign-ups are the team\'s own tests.' },
+  'internal_signup.networks': { label: 'Team networks', kind: 'list', placeholder: '203.0.113.0/24', help: 'An address range (CIDR) each.' },
+  'trusted_proxies': { label: 'Trusted proxies', kind: 'list', placeholder: '172.16.0.0/12', help: 'The reverse proxies whose X-Forwarded-For is believed: an address or range (CIDR) each.' },
   'cloud_auth.issuer': { label: 'Issuer', kind: 'text' },
   'cloud_auth.jwks_url': { label: 'JWKS address', kind: 'text' },
-  'cloud_auth.authorized_parties': { label: 'Authorized parties', kind: 'text' },
+  'cloud_auth.authorized_parties': { label: 'Authorized parties', kind: 'list', placeholder: 'https://app.example.com' },
   'cloud_auth.email_claim': { label: 'Email claim', kind: 'text' },
   'clerk.publishable_key': { label: 'Clerk publishable key', kind: 'text' },
   'help_center.domain': { label: 'Help center domain', kind: 'text', help: 'Each workspace gets <slug>.<domain>.' },
   'ai.allow_private_base_urls': { label: 'Let workspaces use private AI addresses', kind: 'switch' },
-  'mail_image_cache.max_bytes': { label: 'Email image cache (bytes)', kind: 'number' },
-  'kb_video.max_bytes': { label: 'Largest knowledge base video (bytes)', kind: 'number', help: 'Your reverse proxy must accept parts of 8 MiB.' },
+  'mail_image_cache.max_bytes': { label: 'Email image cache', kind: 'bytes' },
+  'kb_video.max_bytes': { label: 'Largest knowledge base video', kind: 'bytes', help: 'Your reverse proxy must accept parts of 8 MiB.' },
   'problem_report.workspace': { label: 'Problem reports go to workspace', kind: 'text', help: "A workspace's address (slug); empty sends nothing." },
   'telemetry.enabled': { label: 'Usage report', kind: 'switch' },
   'operator.require_totp': { label: 'Require an authenticator', kind: 'switch', help: 'Can be turned off only on the server, never on the hosted cloud.' },

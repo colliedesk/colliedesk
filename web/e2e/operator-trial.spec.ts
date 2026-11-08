@@ -26,8 +26,11 @@ test.afterAll(async () => {
 
 async function tryProxies(page: import('@playwright/test').Page, value: string) {
   await page.getByRole('link', { name: 'Security & network', exact: true }).click();
-  await page.getByLabel('Trusted proxies').fill(value);
-  await page.getByRole('button', { name: 'Review and save' }).click();
+  // Trusted proxies is a list: one box per range.
+  const first = page.getByRole('textbox', { name: 'Trusted proxies 1' });
+  if (!(await first.isVisible())) await page.getByRole('button', { name: 'Add to Trusted proxies' }).click();
+  await first.fill(value);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   const review = page.getByRole('dialog');
   await expect(review.getByText(/Under this list your own address reads as/)).toBeVisible();
   await expect(review.getByText(/reverts by itself/)).toBeVisible();

@@ -405,7 +405,8 @@ func TestCheckAsksTheAIProviderOnce(t *testing.T) {
 // complete yet (no models) still lists, through the address and key of the change, and a refusal never
 // repeats the key.
 func TestLoadModelsListsTheServerProvidersModelsBeforeAnyIsPicked(t *testing.T) {
-	fake := &aiprovider.Fake{FakeModels: []string{"claude-haiku-5-5", "claude-sonnet-5-5"}}
+	fake := &aiprovider.Fake{FakeModels: []string{"claude-haiku-5-5", "claude-sonnet-5-5"},
+		FakePrices: map[string]aiprovider.ListedPrice{"claude-haiku-5-5": {Input: 0.1, Output: 0.5, CacheRead: 0.01}, "retired-model": {Input: 9, Output: 9}}}
 	var built []ai.Spec
 	e := newOperatorEnvWith(t, false, func(snap serverconfig.Snapshot) error {
 		_, err := ai.ServerProviderFromEnv(snap.Getenv)
@@ -420,11 +421,16 @@ func TestLoadModelsListsTheServerProvidersModelsBeforeAnyIsPicked(t *testing.T) 
 	var answer struct {
 		OK   bool `json:"ok"`
 		Test struct {
-			OK     bool     `json:"ok"`
-			Models []string `json:"models"`
+			OK     bool                              `json:"ok"`
+			Models []string                          `json:"models"`
+			Prices map[string]aiprovider.ListedPrice `json:"prices"`
 		} `json:"test"`
 	}
 	decode(t, listed, &answer)
+	// Prices come for the models listed only, so they fill in what the operator picks.
+	if len(answer.Test.Prices) != 1 || answer.Test.Prices["claude-haiku-5-5"].Output != 0.5 {
+		t.Fatalf("prices: %s", listed.Body.String())
+	}
 	if !answer.OK || !answer.Test.OK || strings.Join(answer.Test.Models, ",") != "claude-haiku-5-5,claude-sonnet-5-5" ||
 		len(built) != 1 || built[0].APIKey != key || !built[0].Server || built[0].Kind != aiprovider.KindAnthropic {
 		t.Fatalf("listed: %s %+v", listed.Body.String(), built)
