@@ -509,7 +509,7 @@ func TestACardsPicturesReachAModelThatReadsThem(t *testing.T) {
 	if n, manifest := imagesOf(); n != 0 || manifest != "model_text_only/0" {
 		t.Fatalf("a model that reads no pictures: %d pictures, manifest %s", n, manifest)
 	}
-	d.fake.ImageModels = []string{"claude-haiku-5-5"}
+	d.fake.ImageModels = []string{"claude-haiku-5-5", "fallback-model"} // the operator's second intake model is the fallback
 	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Group: "g1", Links: picture})
 	d.flush(t)
 	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.95})
@@ -577,7 +577,7 @@ func TestBrokenPicturesNeitherReachTheModelNorPauseIntake(t *testing.T) {
 	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_source_consents(workspace_id,source_class) VALUES($1,'images')`, d.workspaceID); err != nil {
 		t.Fatal(err)
 	}
-	d.fake.ImageModels = []string{"claude-haiku-5-5"}
+	d.fake.ImageModels = []string{"claude-haiku-5-5", "fallback-model"} // the operator's second intake model is the fallback
 	refused := 0
 	d.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
 		if len(request.Messages[0].Images) > 0 || strings.Contains(request.Messages[0].Text, "refuse me") {
