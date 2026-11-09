@@ -84,7 +84,7 @@ func (a *API) protectedResourceMetadata(response http.ResponseWriter, request *h
 		"authorization_servers":    []string{a.oauthIssuer()},
 		"bearer_methods_supported": []string{"header"},
 		"resource_name":            "Colliedesk",
-		"resource_documentation":   "https://colliedesk.com/docs/user/mcp",
+		"resource_documentation":   "https://colliedesk.com/docs/mcp",
 	})
 }
 
@@ -109,7 +109,7 @@ func (a *API) authorizationServerMetadata(response http.ResponseWriter, request 
 		"token_endpoint_auth_methods_supported":          []string{"none"},
 		"client_id_metadata_document_supported":          true,
 		"authorization_response_iss_parameter_supported": true,
-		"service_documentation":                          "https://colliedesk.com/docs/user/mcp",
+		"service_documentation":                          "https://colliedesk.com/docs/mcp",
 	})
 }
 
