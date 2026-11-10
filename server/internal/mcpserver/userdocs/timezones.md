@@ -11,7 +11,8 @@ Colliedesk stores every time in UTC and shows it in your timezone.
   browser's, so the team's times and business hours match their clock. They follow the workspace
   (**Same as workspace**). This happens only while nobody has chosen the workspace timezone: a timezone an
   admin chose, `UTC` included, is kept, and so is the timezone of every workspace created before this
-  change. Change it at any time in **Settings → General**.
+  change. A browser set to `UTC` or another name of it (`GMT`, `Etc/UTC`, `Zulu`) changes nothing.
+  Change it at any time in **Settings → General**.
 - **Your first sign-in** to a workspace still on `UTC` (as a teammate, or when the admin chose `UTC`)
   sets only your own timezone to your browser's, so times match your clock. It never changes the
   workspace timezone. It happens only at your first sign-in: choose **Same as workspace** to go back, and

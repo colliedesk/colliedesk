@@ -10,6 +10,8 @@ const origin = `http://localhost:${port}`;
 const database = `colliedesk_onboard_fresh_${process.pid}`;
 const freshURL = withDatabase(databaseURL, database);
 let server: ChildProcess | undefined;
+// The owner's browser is in London: their first sign-in starts the new workspace there (docs/user/timezones.md).
+test.use({ timezoneId: 'Europe/London' });
 
 test.beforeAll(async () => {
   psql(`DROP DATABASE IF EXISTS ${database}`, withDatabase(databaseURL, 'postgres'));
@@ -36,6 +38,9 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
   await redeemLink(page, pairingURL);
   await expect(appNavigationWith(page, 'Acme Support')).toHaveCount(1);
   await expect(appNavigationWith(page, `owner-${suffix}@example.com`)).toHaveCount(1);
+  const me = await page.request.get(`${origin}/api/v1/auth/me`);
+  expect(me.status()).toBe(200);
+  expect((await me.json()).workspace.timezone, "the workspace starts on the creator's browser timezone").toBe('Europe/London');
 
   const empty = page.getByRole('region', { name: 'Get started' });
   await expect(empty).toContainText('No conversations yet');
