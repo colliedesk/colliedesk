@@ -1,5 +1,7 @@
 # Colliedesk
 
+[![mcptry](https://mcptry.com/badge/io.github.colliedesk/colliedesk)](https://mcptry.com/servers/io.github.colliedesk/colliedesk)
+
 **The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams.
 Leave Freshdesk with all your data. AI that actually answers tickets is included, not an add-on.
 Flat price, no per-agent fees.

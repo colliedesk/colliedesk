@@ -5,6 +5,22 @@
   "description": "Work a Colliedesk helpdesk inbox: find, triage and answer customer conversations.",
   "version": "0.0.0",
   "websiteUrl": "https://colliedesk.com/docs/mcp",
+  "icons": [
+    {
+      "src": "https://app.colliedesk.com/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    },
+    {
+      "src": "https://app.colliedesk.com/apple-touch-icon.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "180x180"
+      ]
+    }
+  ],
   "repository": {
     "url": "https://github.com/colliedesk/colliedesk",
     "source": "github"
