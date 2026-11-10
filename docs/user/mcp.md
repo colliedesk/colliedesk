@@ -27,6 +27,10 @@ token that holds `messages:send` only when you want it to write to customers.
 
 ### Connect an app with OAuth
 
+On Colliedesk Cloud, Claude (web, desktop and mobile) lists Colliedesk in its connectors directory:
+open [Colliedesk in the Claude directory](https://claude.ai/directory/connectors/colliedesk), choose
+**Connect**, and go on at step 2. Every other app, and a self-hosted Colliedesk, starts at step 1.
+
 1. In the app, add a remote MCP server (a "custom connector" in Claude and ChatGPT) with the URL
    `https://<your-colliedesk>/mcp`. On Colliedesk Cloud the URL is `https://app.colliedesk.com/mcp` for
    every workspace. Leave any token or header field empty.
