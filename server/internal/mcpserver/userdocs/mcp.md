@@ -35,8 +35,15 @@ open [Colliedesk in the Claude directory](https://claude.ai/directory/connectors
    `https://<your-colliedesk>/mcp`. On Colliedesk Cloud the URL is `https://app.colliedesk.com/mcp` for
    every workspace. Leave any token or header field empty.
 2. The app opens a Colliedesk page in your browser. Sign in if it asks (on Cloud, choose the workspace
-   there), check the app's name and the workspace, and choose **Allow**. **Cancel** tells the app no.
+   there), check the app's name, the workspace and where the answer goes, and choose **Allow**.
+   **Cancel** tells the app no. When the answer goes to a program on your computer (Claude Code,
+   Codex), the page warns you: allow only if you just started connecting from that computer.
 3. The app is connected. It shows in **Settings → External AI agents → Connected AI apps**.
+
+If you build your own app: an app that registers itself (dynamic client registration) can send people
+back only to this computer (`localhost`), to its own app scheme (`cursor://…`), or to a known AI app's
+website (Claude, ChatGPT, OpenAI, Anthropic, Cursor). Any other website publishes a client ID metadata
+document and uses its https address as `client_id`.
 
 Each sign-in is its own connection: the same app on two computers shows twice, and disconnecting one
 leaves the other. An app you do not use for 30 days is disconnected; it asks you to sign in again.

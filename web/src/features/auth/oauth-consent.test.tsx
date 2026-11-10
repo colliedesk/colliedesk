@@ -95,3 +95,15 @@ test('Allow and Cancel sit apart from the text and from each other', async () =>
   expect(rules.some((rule) => rule.style.getPropertyValue('gap'))).toBe(true);
   expect(rules.some((rule) => rule.style.getPropertyValue('margin-top'))).toBe(true);
 });
+
+// Any program on the computer can listen on a loopback port and claim to be the app (MCP authorization,
+// "Localhost Redirect URI Risks"), so a loopback return is warned about; a web callback is not.
+test('an app that returns to this computer is warned about; one that returns to its website is not', async () => {
+  const { unmount } = show();
+  expect(await screen.findByText('The answer goes to a program on this computer. Allow only if you just started connecting from an app on this computer.')).toBeTruthy();
+  unmount();
+  api.describeOAuthClient.mockResolvedValue({ ...app, redirect_uri: 'https://claude.ai/api/mcp/auth_callback', host: 'claude.ai' });
+  show();
+  expect(await screen.findByText('After your answer you go back to claude.ai.')).toBeTruthy();
+  expect(screen.queryByText(/a program on this computer/)).toBeNull();
+});
