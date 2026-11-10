@@ -81,6 +81,12 @@ func TestResponseTargetsAreOneDocumentAnAdminSets(t *testing.T) {
 		!strings.Contains(response.Body.String(), `"urgent":{"first_response_minutes":15,"resolution_minutes":7}`) || !strings.Contains(response.Body.String(), `"warn_before_minutes":5`) {
 		t.Fatalf("minutes: %d %s", response.Code, response.Body.String())
 	}
+	// A refused target names both limits.
+	minutes["targets"].(map[string]any)["urgent"] = map[string]any{"first_response_minutes": 525601}
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", minutes, admin, nil); response.Code != http.StatusBadRequest ||
+		!strings.Contains(response.Body.String(), "Use 1 to 525600 business minutes (a year), or no target.") {
+		t.Fatalf("over a year: %d %s", response.Code, response.Body.String())
+	}
 	// A part of a minute is no target.
 	minutes["targets"].(map[string]any)["urgent"] = map[string]any{"first_response_minutes": 1.5}
 	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", minutes, admin, nil); response.Code != http.StatusBadRequest {

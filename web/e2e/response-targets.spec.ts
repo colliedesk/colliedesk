@@ -27,8 +27,8 @@ test('response targets: an admin turns them on, a new conversation is due soon o
   await hours.getByRole('button', { name: 'Save business hours' }).click();
   await expect(hours.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   const targets = page.getByRole('region', { name: 'Targets' });
-  await targets.getByLabel('First reply target for Normal, in business hours').fill('1');
-  await targets.getByLabel('Due soon, in business hours before the target').fill('1');
+  await targets.getByLabel('First reply target for Normal, in business time').fill('1');
+  await targets.getByLabel('Due soon, in business time before the target').fill('1');
   await targets.getByRole('button', { name: 'Save targets' }).click();
   await expect(targets.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.getByRole('region', { name: 'Targets on' }).getByRole('switch', { name: 'Measure response targets' }).check();

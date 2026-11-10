@@ -12,7 +12,7 @@ import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
-import { durationOf, minutesOf, spoken, targetOK, units, warnOK } from './target-duration';
+import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
 import type { Duration, Unit } from './target-duration';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
@@ -235,27 +235,31 @@ function TargetsCard({ doc, canManage }: CardProps) {
   const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
   if (!canManage) {
     const read = (minutes: number | null) => (minutes === null ? m.none : spoken(minutes));
-    return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}><dl className="tg-dl">
+    return <Card id={id} title={m.targetsHeading} lead={m.targetsReadLead}><dl className="tg-dl">
       {priorities.map((priority) => <Row key={priority} label={priorityName(priority)}
         value={`${m.firstReply}: ${read(doc.targets[priority].first_response_minutes)} · ${m.resolve}: ${read(doc.targets[priority].resolution_minutes)}`} />)}
-      <Row label={m.dueSoon} value={`${spoken(doc.warn_before_minutes)} ${m.beforeTarget}`} />
+      <Row label={m.dueSoon} value={doc.warn_before_minutes === 0 ? m.noReminder : `${spoken(doc.warn_before_minutes)} ${m.beforeTarget}`} />
     </dl><p className="muted-copy">{m.targetsNote}</p></Card>;
   }
+  // Checked on save; the limit is named in the unit the box shows.
+  const targetError = (value: Duration) => (!checked ? undefined
+    : { rule: m.targetRule, max: m.targetMax(limitIn(maxTargetMinutes, value.unit)), none: undefined }[targetProblem(value) ?? 'none']);
   const cell = (priority: Priority, which: 'first' | 'resolve', field: string) => {
     const value = valueOf(priority, which);
-    const error = (checked && !targetOK(value) ? m.targetRule : undefined) ?? server[`targets.${priority}.${field}`];
+    const error = targetError(value) ?? server[`targets.${priority}.${field}`];
     const errorId = `${id}-${priority}-${which}`;
     const what = which === 'first' ? m.firstReply : m.resolve;
     return <td data-label={what}><span className="tg-cell">
       <DurationField label={m.targetFor(what, priorityName(priority))} unitLabel={m.unitFor(what, priorityName(priority))} value={value} errorId={error ? errorId : undefined} onChange={edit(`${priority}.${which}`)} /></span>
       {error && <span className="error-copy field-note" id={errorId}>{error}</span>}</td>;
   };
-  const warnError = server.warn_before_minutes ?? (checked && !warnOK(warn) ? m.warnRule : undefined);
+  const warnError = server.warn_before_minutes ?? (!checked ? undefined
+    : { rule: m.warnRule, max: m.warnMax(limitIn(maxWarnMinutes, warn.unit)), none: undefined }[warnProblem(warn) ?? 'none']);
   return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}>
     <form className="stacked-form" noValidate onSubmit={(event) => {
       event.preventDefault();
       setChecked(true);
-      const bad = priorities.some((priority) => !targetOK(valueOf(priority, 'first')) || !targetOK(valueOf(priority, 'resolve'))) || !warnOK(warn);
+      const bad = priorities.some((priority) => targetProblem(valueOf(priority, 'first')) || targetProblem(valueOf(priority, 'resolve'))) || warnProblem(warn);
       if (bad || feedback.pending) return;
       // Checked above: each is whole minutes, or null for an empty target box.
       const minutes = (value: Duration) => minutesOf(value) ?? null;
