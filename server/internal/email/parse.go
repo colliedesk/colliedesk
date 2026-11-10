@@ -48,7 +48,11 @@ type Inbound struct {
 	Authentication string
 	// Platform is true when the message arrived through the platform forwarder (the hosted MX), not
 	// through a workspace inbound secret whose holder writes the raw message.
-	Platform   bool
+	Platform bool
+	// Direct is true when the message reached Colliedesk without passing the support mailbox: an answer
+	// to a platform reply address, or a test message the product wrote. It does not show that the
+	// support mailbox forwards here.
+	Direct     bool
 	DropReason string
 	// BouncedMessageIDs are the Message-IDs named in a delivery status report's returned headers.
 	BouncedMessageIDs []string

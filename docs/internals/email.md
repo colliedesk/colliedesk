@@ -47,6 +47,15 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   worker sends `"<workspace> via Colliedesk" <reply+<conversation token>@MAIL_FROM_DOMAIN>` as
   From and envelope sender, with `Reply-To: support+r-<token>@<support domain>`; replies thread
   through Reply-To and In-Reply-To. Without `MAIL_FROM_DOMAIN` an unverified workspace cannot send.
+- **Reply-To before forwarding.** Until the channel has decided on mail that passed the support
+  mailbox, every reply (any From, any transport) carries `Reply-To: reply+<token>@MAIL_FROM_DOMAIN`:
+  the mailbox may still forward to the old help desk, which would keep the customer's answer. The
+  worker reads it per delivery (`store.Delivery.Forwarded`): a journal entry of the channel, not
+  `received`/`failed`, whose envelope is not `direct`. A test message and mail to a platform reply
+  address are `direct` (`email.Inbound.Direct`); a channel without a journal counts a customer message
+  from before it. The channel's shown state is not used: a test message turns it `working`. Without
+  `MAIL_FROM_DOMAIN` and `MAIL_FROM_INBOUND_SECRET` (`Options.ReceivesPlatformReplies`) the support
+  plus address is used, as before: nothing would receive the answer.
   `any` keeps the support address always (self-host, operator owns the relay).
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is

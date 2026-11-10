@@ -286,6 +286,9 @@ type Envelope struct {
 	From      string   `json:"from"`
 	Platform  bool     `json:"platform"`
 	Cc        []string `json:"cc,omitempty"`
+	// Direct marks mail that did not pass the support mailbox (email.Inbound.Direct): it does not show
+	// that the mailbox forwards here.
+	Direct bool `json:"direct,omitempty"`
 }
 
 type inbound struct{ a *Adapter }
@@ -316,7 +319,7 @@ func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshotOf any, ra
 		if parsed, err = mailpkg.Parse(body, i.a.config.TrustedAuthServID); err != nil {
 			return nil, err
 		}
-		parsed.Platform, parsed.Cc = envelope.Platform, envelope.Cc
+		parsed.Platform, parsed.Direct, parsed.Cc = envelope.Platform, envelope.Direct, envelope.Cc
 	}
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
@@ -353,7 +356,7 @@ func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshotOf any, ra
 	}
 	in.EmailMeta = &domain.IncomingEmail{From: parsed.FromAddress, Authentication: parsed.Authentication, Via: via, Attachments: parsed.Attachments,
 		CC: copiedAddresses(parsed, supportAddress)}
-	in.Summary, _ = json.Marshal(Envelope{MessageID: parsed.MessageID, From: parsed.FromAddress, Platform: parsed.Platform, Cc: parsed.Cc})
+	in.Summary, _ = json.Marshal(Envelope{MessageID: parsed.MessageID, From: parsed.FromAddress, Platform: parsed.Platform, Direct: parsed.Direct, Cc: parsed.Cc})
 	switch {
 	case own.ownAddress(parsed.FromAddress):
 		in.DropReason = mailpkg.DropOwnAddress

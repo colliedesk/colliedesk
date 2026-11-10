@@ -71,6 +71,8 @@ func (a *API) deliverTestMessage(ctx context.Context, response http.ResponseWrit
 	}
 	// The product wrote this message for the signed-in agent; no sender check ran, and none is needed.
 	parsed.Authentication = email.AuthPass
+	// It never passed the support mailbox, so it proves nothing about forwarding.
+	parsed.Direct = true
 	channel, err := a.store.GetChannel(ctx, workspaceID, target.ChannelID)
 	if err != nil {
 		return nil, err

@@ -46,7 +46,17 @@ type Delivery struct {
 	Transport string
 	// Mailbox is the mailbox connected to the channel now; nil when none is connected.
 	Mailbox *DeliveryMailbox
+	// Forwarded is set once mail reached the channel through its support mailbox. A test message or an
+	// answer to a platform reply address does not count: neither shows that the mailbox forwards here.
+	Forwarded bool
 }
+
+// channelForwardedBefore is true for a channel that decided on mail which passed its support mailbox (a
+// journal entry not marked direct), or, for a channel without a journal, received a customer message
+// before the journal existed.
+const channelForwardedBefore = `SELECT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2
+		AND state NOT IN ('received','failed') AND NOT COALESCE((raw->>'direct')::boolean,false))
+	OR (NOT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2) AND (` + channelReceivedBefore + `))`
 
 // DeliveryMailbox is the connected mailbox a reply leaves through, with its sealed grant. Its provider is
 // Grant.Provider.
@@ -113,6 +123,11 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 		item.Mailbox = &mailbox
 	case !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("load mailbox connection: %w", err)
+	}
+	if item.ChannelID != "" {
+		if err := tx.QueryRow(ctx, channelForwardedBefore, item.WorkspaceID, item.ChannelID).Scan(&item.Forwarded); err != nil {
+			return fmt.Errorf("check forwarded mail: %w", err)
+		}
 	}
 	// Reply to the customer's latest message; without one, continue our own thread.
 	item.InReplyTo = lastIncoming
