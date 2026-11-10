@@ -48,8 +48,16 @@ func (f fixture) arrive(t *testing.T, raw string, platform, direct bool) {
 		t.Fatal(err)
 	}
 	parsed.Platform, parsed.Direct = platform, direct
-	if result, err := ingestEmail(t, context.Background(), f.store, f.workspaceID, parsed); err != nil || result.MessageID == nil {
-		t.Fatalf("ingest: %+v %v", result, err)
+	if _, err := ingestEmail(t, context.Background(), f.store, f.workspaceID, parsed); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+}
+
+// supportAddress saves the desk's support address, as Settings → Email does.
+func (f fixture) supportAddress(t *testing.T, address string) {
+	t.Helper()
+	if _, err := f.store.UpsertEmailChannel(context.Background(), f.workspaceID, address, nil); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -79,6 +87,12 @@ func TestReplyToIsThePlatformAddressUntilMailArrivesThroughTheSupportMailbox(t *
 		"Subject: Broken export\r\nMessage-ID: <forwarded-1@customer.example>\r\n\r\nExport fails.\r\n"
 	testMessage := "From: Admin <admin@waiting.example.com>\r\nTo: support@waiting.example.com\r\n" +
 		"Subject: Test message from Colliedesk\r\nMessage-ID: <test-1@waiting.example.com>\r\n\r\nA test.\r\n"
+	// Gmail's forwarding confirmation reaches the hosted address before the mailbox forwards anything.
+	gmailConfirmation := "From: Gmail Team <forwarding-noreply@google.com>\r\nTo: support@waiting.example.com\r\n" +
+		"Subject: (#563947195) Gmail Forwarding Confirmation - Receive Mail from support@waiting.example.com\r\n" +
+		"Message-ID: <confirmation-1@google.com>\r\n\r\nConfirmation code: 563947195\r\n"
+	bulk := "From: News <news@vendor.example>\r\nTo: support@waiting.example.com\r\nPrecedence: bulk\r\n" +
+		"Subject: Our newsletter\r\nMessage-ID: <bulk-1@vendor.example>\r\n\r\nNews.\r\n"
 	platformAnswer := "From: Rae Customer <rae@customer.example>\r\nTo: reply+0123456789abcdef0123456789abcdef@mail.colliedesk.test\r\n" +
 		"Subject: Re: Hello\r\nMessage-ID: <platform-answer-1@customer.example>\r\n\r\nThanks.\r\n"
 	// receives is a server that takes mail for its platform mail domain (MAIL_FROM_INBOUND_SECRET).
@@ -102,6 +116,19 @@ func TestReplyToIsThePlatformAddressUntilMailArrivesThroughTheSupportMailbox(t *
 			`"Waiting Desk" <support+r-TOKEN@waiting.example.com>`},
 		{"customer mail arrived through the platform forwarder", platform, func(t *testing.T, f fixture) { f.arrive(t, forwarded, true, false) },
 			`"Waiting Desk" <support+r-TOKEN@waiting.example.com>`},
+		{"only Gmail's forwarding confirmation arrived", platform, func(t *testing.T, f fixture) { f.arrive(t, gmailConfirmation, true, false) },
+			`"Waiting Desk" <reply+TOKEN@mail.colliedesk.test>`},
+		{"only dropped bulk mail arrived", platform, func(t *testing.T, f fixture) { f.arrive(t, bulk, true, false) },
+			`"Waiting Desk" <reply+TOKEN@mail.colliedesk.test>`},
+		{"customer mail arrived under the previous support address", platform, func(t *testing.T, f fixture) {
+			f.supportAddress(t, "old@waiting.example.com")
+			f.arrive(t, forwarded, false, false)
+			f.supportAddress(t, "support@waiting.example.com")
+		}, `"Waiting Desk" <reply+TOKEN@mail.colliedesk.test>`},
+		{"customer mail arrived and the same support address was saved again", platform, func(t *testing.T, f fixture) {
+			f.arrive(t, forwarded, false, false)
+			f.supportAddress(t, "support@waiting.example.com")
+		}, `"Waiting Desk" <support+r-TOKEN@waiting.example.com>`},
 		{"no platform mail domain", selfHosted, nil, `"Waiting Desk" <support+r-TOKEN@waiting.example.com>`},
 		{"a platform mail domain nothing receives mail for", unreceived, nil, `"Waiting Desk" <support+r-TOKEN@waiting.example.com>`},
 	}

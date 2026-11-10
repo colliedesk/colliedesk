@@ -102,3 +102,55 @@ func TestATestMessageDoesNotCountAsMailThroughForwarding(t *testing.T) {
 		t.Fatalf("Reply-To after only a test message = %q, want [%s]", replies, want)
 	}
 }
+
+// On the hosted cloud the support mailbox forwards to the workspace's hosted address, which arrives with
+// the server-wide secret. That is mail through forwarding: the next reply uses the support address.
+func TestMailForwardedToTheHostedAddressCountsAsForwarding(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, cloudReplyConfig)
+	admin := createSession(t, api, service, "Cloud Theta", "admin@cloud-theta.example.com")
+	connectEmail(t, api, admin, "support@theta.example.com")
+	result := inboundOK(t, api, platformSecret, hostedMail("support@cloud-theta."+cloudHostedDomain, "forwarded-theta@customer.example",
+		"To: support@theta.example.com"))
+	if result.Status != "created" || result.ConversationID == nil {
+		t.Fatalf("mail to the hosted address = %+v, want created", result)
+	}
+	answer(t, api, admin, *result.ConversationID, "Thanks for writing.")
+	token := queryString(t, pool, `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, *result.ConversationID)
+	if got, want := sendQueuedReplies(t, pool), `"Cloud Theta" <support+r-`+token+`@theta.example.com>`; len(got) != 1 || got[0] != want {
+		t.Fatalf("Reply-To after mail to the hosted address = %q, want [%s]", got, want)
+	}
+}
+
+// An answer to the platform Reply-To that arrives while the channel is off is held; opened later, it is
+// still mail that did not pass the support mailbox.
+func TestAHeldAnswerToThePlatformReplyToOpenedLaterStillDoesNotCountAsForwarding(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, platformConfig)
+	admin := createSession(t, api, service, "Held Desk", "admin@held.example.com")
+	connectEmail(t, api, admin, "support@held.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Quinn", "email": "quinn@customer.example"})
+	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "We moved"})
+	answer(t, api, admin, conversation, "We answer from Colliedesk now.")
+	sendQueuedReplies(t, pool)
+	token := queryString(t, pool, `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, conversation)
+
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": false}, admin, nil)
+	held := inboundOK(t, api, platformSecret, mail([]string{"X-Original-To: reply+" + token + "@mail.colliedesk.test",
+		"From: Quinn <quinn@customer.example>", "To: reply+" + token + "@mail.colliedesk.test",
+		"Subject: Re: We moved", "Message-ID: <quinn-held@customer.example>"}, "Answer while off."))
+	if held.Status != "held" {
+		t.Fatalf("answer while the channel is off = %+v, want held", held)
+	}
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": true}, admin, nil)
+	if opened := request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/replay", map[string]any{}, admin, nil); opened.Code != http.StatusOK {
+		t.Fatalf("replay: %d %s", opened.Code, opened.Body.String())
+	}
+	if items := timeline(t, api, admin, conversation); len(items) != 2 || items[1].Body != "Answer while off." {
+		t.Fatalf("the opened answer is not in the conversation: %+v", items)
+	}
+	answer(t, api, admin, conversation, "Got your answer.")
+	if got, want := sendQueuedReplies(t, pool), `"Held Desk" <reply+`+token+`@mail.colliedesk.test>`; len(got) != 1 || got[0] != want {
+		t.Fatalf("Reply-To after the opened answer = %q, want [%s]", got, want)
+	}
+}

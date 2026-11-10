@@ -103,8 +103,8 @@ You can answer customers before your mailbox forwards here, for example while it
 your old help desk: the customer's answer to a reply sent from Colliedesk still comes back to Colliedesk
 and joins the conversation. Until mail has arrived through your support mailbox, a reply's `Reply-To` is
 the conversation's `reply+…@` address on the server's sending domain, not your support address. A test
-message does not count as that mail. Once forwarded mail arrives, new replies use your support address
-again, and answers to earlier replies still arrive. On your own server this needs the sending domain to
+message, Gmail's forwarding confirmation, mail that is dropped and mail that arrived under an earlier
+support address do not count. Once forwarded mail arrives, new replies use your support address again, and answers to earlier replies still arrive. On your own server this needs the sending domain to
 receive mail ([self-host email](../self-host/email.md)); otherwise replies always use your support
 address.
 
