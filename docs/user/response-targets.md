@@ -9,8 +9,11 @@ Response targets measure how fast conversations are answered and resolved, in bu
    closes at 00:00 on the page closes at midnight (`24:00` in the API). **Copy Monday to weekdays** fills
    Tuesday to Friday with Monday's hours.
 2. **Targets by priority**: business time to the first reply and to resolving, for urgent, high, normal
-   and low, in hours on the page (in half hours; minutes in the API); leave one empty for no target.
-3. **Due soon**: how long before a target a conversation is due soon, when its reminder goes.
+   and low. Each box is a number and a unit, `min` or `h`: any whole number of minutes, 1 or more
+   (15 min, 1.5 h is 90 minutes); leave one empty for no target. The page shows whole hours in hours
+   and anything else in minutes (60 is `1 h`, 480 is `8 h`, 90 is `90 min`). The API takes minutes.
+3. **Due soon**: how long before a target a conversation is due soon, when its reminder goes: minutes
+   or hours the same way, and 0 for no reminder before the target.
 4. **Applies to**: the channels whose conversations have targets (every channel unless you pick some).
 5. **Alerts**: whether reminder and overdue emails go out (an admin), and whether they reach you (each
    person, while the workspace sends them).

@@ -72,20 +72,80 @@ test('business hours refuse a day that ends before it starts, copy Monday to the
   expect(sent()).not.toHaveProperty('enabled_at');
 });
 
-test('targets are hours on the page and minutes on the wire, in half hours; an empty box is no target', async () => {
+// A target is a number and a unit: whole hours show in hours, anything else in minutes (90 is 90 min).
+const box = (region: HTMLElement, label: string, unit: string) => ({ value: within(region).getByLabelText(label), unit: within(region).getByRole('combobox', { name: unit }) });
+
+test('targets show as people say them, take minutes or hours, and are minutes on the wire; an empty box is no target', async () => {
+  responseTargetsApi.get.mockResolvedValue(doc({ targets: { urgent: { first_response_minutes: 15, resolution_minutes: 480 }, high: { first_response_minutes: 60, resolution_minutes: null },
+    normal: { first_response_minutes: 90, resolution_minutes: null }, low: { first_response_minutes: null, resolution_minutes: null } } }));
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
-  expect(within(targets).getByLabelText('Resolve target for Urgent, in business hours')).toHaveValue(9);
-  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business hours'), { target: { value: '0.3' } });
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
-  expect(within(targets).getByLabelText('First reply target for Low, in business hours')).toHaveAccessibleDescription('In half hours, more than 0.');
-  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business hours'), { target: { value: '8.5' } });
-  fireEvent.change(within(targets).getByLabelText('Resolve target for Urgent, in business hours'), { target: { value: '' } });
+  const urgentFirst = box(targets, 'First reply target for Urgent, in business hours', 'Unit of the first reply target for Urgent');
+  expect(urgentFirst.value).toHaveValue(15);
+  expect(urgentFirst.unit).toHaveValue('min');
+  const urgentResolve = box(targets, 'Resolve target for Urgent, in business hours', 'Unit of the resolve target for Urgent');
+  expect(urgentResolve.value).toHaveValue(8);
+  expect(urgentResolve.unit).toHaveValue('h');
+  expect(box(targets, 'First reply target for High, in business hours', 'Unit of the first reply target for High').value).toHaveValue(1);
+  expect(box(targets, 'First reply target for High, in business hours', 'Unit of the first reply target for High').unit).toHaveValue('h');
+  expect(box(targets, 'First reply target for Normal, in business hours', 'Unit of the first reply target for Normal').value).toHaveValue(90);
+  expect(box(targets, 'First reply target for Normal, in business hours', 'Unit of the first reply target for Normal').unit).toHaveValue('min');
+  // 15 min sends 15.
+  const lowFirst = box(targets, 'First reply target for Low, in business hours', 'Unit of the first reply target for Low');
+  fireEvent.change(lowFirst.value, { target: { value: '15' } });
+  fireEvent.change(lowFirst.unit, { target: { value: 'min' } });
+  // 1.5 h sends 90.
+  const highResolve = box(targets, 'Resolve target for High, in business hours', 'Unit of the resolve target for High');
+  fireEvent.change(highResolve.value, { target: { value: '1.5' } });
+  fireEvent.change(highResolve.unit, { target: { value: 'h' } });
+  // Empty is no target.
+  fireEvent.change(urgentResolve.value, { target: { value: '' } });
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
-  expect(sent().targets.low).toEqual({ first_response_minutes: 510, resolution_minutes: null });
-  expect(sent().targets.urgent).toEqual({ first_response_minutes: 240, resolution_minutes: null });
+  expect(sent().targets).toEqual({ urgent: { first_response_minutes: 15, resolution_minutes: null }, high: { first_response_minutes: 60, resolution_minutes: 90 },
+    normal: { first_response_minutes: 90, resolution_minutes: null }, low: { first_response_minutes: 15, resolution_minutes: null } });
   expect(sent().warn_before_minutes).toBe(60);
+});
+
+test('a target of 0 or a part of a minute is refused with a clear message and nothing is sent; due soon takes minutes, 0 too', async () => {
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  const lowFirst = box(targets, 'First reply target for Low, in business hours', 'Unit of the first reply target for Low');
+  fireEvent.change(lowFirst.value, { target: { value: '0' } });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  expect(lowFirst.value).toHaveAccessibleDescription('Use 1 minute or more, in whole minutes, or leave it empty for no target.');
+  fireEvent.change(lowFirst.value, { target: { value: '1.5' } });
+  fireEvent.change(lowFirst.unit, { target: { value: 'min' } });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  expect(lowFirst.value).toHaveAccessibleDescription('Use 1 minute or more, in whole minutes, or leave it empty for no target.');
+  expect(responseTargetsApi.set).not.toHaveBeenCalled();
+  fireEvent.change(lowFirst.value, { target: { value: '45' } });
+  const warn = box(targets, 'Due soon, in business hours before the target', 'Unit of due soon');
+  expect(warn.value).toHaveValue(1);
+  expect(warn.unit).toHaveValue('h');
+  fireEvent.change(warn.value, { target: { value: '5' } });
+  fireEvent.change(warn.unit, { target: { value: 'min' } });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().targets.low).toEqual({ first_response_minutes: 45, resolution_minutes: null });
+  expect(sent().warn_before_minutes).toBe(5);
+  await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
+  fireEvent.change(box(targets, 'Due soon, in business hours before the target', 'Unit of due soon').value, { target: { value: '0' } });
+  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
+  expect(sent().warn_before_minutes).toBe(0);
+});
+
+test('an agent reads each target the way people say it', async () => {
+  api.me.mockResolvedValue(me('agent'));
+  responseTargetsApi.get.mockResolvedValue(doc({ targets: { urgent: { first_response_minutes: 15, resolution_minutes: 480 }, high: { first_response_minutes: 90, resolution_minutes: null },
+    normal: { first_response_minutes: 60, resolution_minutes: null }, low: { first_response_minutes: null, resolution_minutes: null } }, warn_before_minutes: 10 }));
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  expect(targets).toHaveTextContent('First reply: 15 min · Resolve: 8 h');
+  expect(targets).toHaveTextContent('First reply: 90 min · Resolve: No target');
+  expect(targets).toHaveTextContent('First reply: 1 h · Resolve: No target');
+  expect(targets).toHaveTextContent('10 min before the target');
 });
 
 test('a holiday is added and removed; the same day twice is refused', async () => {
@@ -232,7 +292,7 @@ test('after a refusal, the fields nobody here touched show and save the other ad
   fireEvent.change(within(targets).getByLabelText('First reply target for Normal, in business hours'), { target: { value: '2' } });
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
   await within(targets).findByRole('alert');
-  expect(within(targets).getByLabelText('Due soon, in business hours before the target')).toHaveValue(1.5);
+  expect(within(targets).getByLabelText('Due soon, in business hours before the target')).toHaveValue(90);
   expect(within(targets).getByLabelText('First reply target for Normal, in business hours')).toHaveValue(2);
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
