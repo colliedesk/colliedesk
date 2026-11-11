@@ -2,7 +2,7 @@
 
 export const numbersMessages = {
   heading: 'Conversation numbers',
-  description: 'The code each conversation gets, which its customer sees and can type back to find it again.',
+  description: 'The code customers see on each conversation.',
   lead: 'Every conversation is numbered in a series. Email and web forms use the default one (#12); a channel can use a series of its own, set on its page. Numbers count on and never restart, not even with the year.',
   listLabel: 'Number series',
   defaultName: 'Default',

@@ -8,6 +8,7 @@
 /* HelpTip (help-tip.tsx): a 16 px ⓘ or lock in the line of its row. Padding with an equal negative margin gives the
    button a 32 px target with a mouse and 44 px by touch (--control) without making the row taller. */
 .help-tip { display: inline-flex; vertical-align: middle; }
+.heading-with-tip { display: flex; align-items: center; gap: var(--space-1); }
 .help-tip-button {
   --hit: var(--control, 32px);
   width: auto; min-height: 0; border: 0; border-radius: var(--radius-full); background: none; box-shadow: none;

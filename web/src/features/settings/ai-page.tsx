@@ -20,6 +20,7 @@ import { aiModelMatches as modelMatches, aiServices as services, aiServiceURL as
 import type { AIService as Service } from '../../lib/ai-services';
 import { slotInput } from './ai-slot-input';
 import './ai-settings.css';
+import { HelpTip } from '../../ui/help-tip';
 
 // Icons only this page uses stay in its chunk.
 function Glyph({ children }: { children: ReactNode }) {
@@ -130,7 +131,7 @@ export function AIPage(props: AIPageProps) {
       <div className="settings-layout">
         <SettingsNav page="/settings/ai" shown={props.shown} />
         <div className="settings-sections ai-page">
-          {props.builtIn !== false && <div className="section-heading ai-intro"><h2>{m.heading}</h2><p>{m.description}</p></div>}
+          {props.builtIn !== false && <div className="section-heading ai-intro"><div className="heading-with-tip"><h2>{m.heading}</h2><HelpTip label={m.heading} text={m.description} /></div><p>{m.lead}</p></div>}
           {props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
           {props.builtIn === false ? null : !settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">

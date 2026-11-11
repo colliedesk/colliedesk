@@ -551,3 +551,10 @@ test('an admin agrees that chat intake may send pictures or the customer\'s prof
   page({ isAdmin: false, chatChannels: true, onSourceConsent, settings: settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake] }) });
   expect(within(screen.getByRole('group', { name: 'What chat intake may send besides the messages' })).getByRole('switch', { name: 'Images customers sent' })).toBeDisabled();
 });
+
+test('Built-in AI keeps one short line, and the rest of what it does sits in its help tip', () => {
+  page();
+  expect(screen.getByText('Drafts, triage and the AI chat. A person sends every reply.')).toBeVisible();
+  expect(screen.getByText(/a draft never reaches a customer until someone presses Send/)).not.toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Built-in AI' })).toHaveAccessibleDescription(/a draft never reaches a customer until someone presses Send/);
+});

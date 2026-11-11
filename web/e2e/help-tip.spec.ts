@@ -13,7 +13,7 @@ async function openOwnRoles(page: Page, touch: boolean) {
   const suffix = `${Date.now()}-${process.pid}`;
   const email = `owner-${suffix}@example.com`;
   await redeemLink(page, createWorkspaceWithSlug(`Help Tip ${suffix}`, email).url);
-  await page.goto(`${servers.main}/settings`);
+  await page.goto(`${servers.main}/settings/members`);
   const team = page.getByRole('region', { name: 'Team' });
   const change = team.getByRole('button', { name: `Change roles: ${email}` });
   await (touch ? change.tap() : change.click());
