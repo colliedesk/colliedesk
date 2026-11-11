@@ -79,7 +79,12 @@ export const kbMessages = {
   articleSettings: 'Publishing and placement',
   movedCollection: 'Moved',
   restoreNeedsSave: 'Save or undo your changes first: restoring a version replaces the text on screen.',
-  articleCollection: 'Collection',
+  articleCollections: 'Collections',
+  homeCollection: 'Home',
+  alsoListIn: 'Also list in',
+  alsoListInPlaceholder: 'Also list in…',
+  removeCollection: (name: string) => `Remove ${name}`,
+  collectionsHelp: 'The first one is the home: it gives the breadcrumb. Adding or removing others never changes the address.',
   chooseCollection: 'Choose a collection',
   articleSlug: 'Address name',
   articleSlugHelp: (number: number | undefined, slug: string) =>

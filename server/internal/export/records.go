@@ -452,8 +452,11 @@ type KBCollectionTranslation struct {
 // KBArticle is a knowledge base article in Markdown, also in the trash. SourceHTML is the original HTML
 // an import read; ImageIDs are the images its versions link (files under kb-images/).
 type KBArticle struct {
-	ID               string          `json:"id"`
-	CollectionID     string          `json:"collection_id"`
+	ID           string `json:"id"`
+	CollectionID string `json:"collection_id"`
+	// CollectionIDs are every collection the article is listed in, CollectionID (its home) first, also
+	// collections in the trash.
+	CollectionIDs    []string        `json:"collection_ids"`
 	Position         int             `json:"position"`
 	Number           int64           `json:"number"`
 	Title            string          `json:"title"`
