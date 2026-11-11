@@ -107,7 +107,7 @@ In the web app:
 1. A conversation numbered in a series of its own shows its code first on its row and in its header,
    with a button that copies it. The default series' `#12` is not shown, so an inbox of email and web
    forms reads as before.
-2. **Settings → Conversation numbers** lists the series with the code the next conversation gets.
+2. **Settings → General → Conversation numbers** lists the series with the code the next conversation gets.
    Admins add a series and change one: its format (codes already given keep theirs and still find their
    conversations), its next number (it only goes up: a lower one is refused before anything is sent),
    and where it was taken over (**Taken over at**, **In the year**). Agents read the page.
@@ -200,7 +200,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   Your own replies, notes and changes never raise a notification or a count; they only refresh the screen.
 - When the tab is in the background, its title shows the number of new items, for example
   `(2) Colliedesk`. The count clears when you return to the tab.
-- To also get a desktop notification, tick **Desktop notifications** in **Settings → Preferences**.
+- To also get a desktop notification, tick **Desktop notifications** in **Settings → Account → Preferences**.
   Your browser asks for permission only when you tick it; untick it to stop. The choice is stored in
   this browser only.
 - A notification shows the subject and contact name, never message text. More than three new items at
@@ -210,7 +210,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - Colliedesk does not email agents about new or assigned conversations.
 
 **Light or dark**
-- **Theme** in **Settings → Preferences** switches between **Light** (the default) and **Dark**. It is
+- **Theme** in **Settings → Account → Preferences** switches between **Light** (the default) and **Dark**. It is
   stored in this browser only; other tabs you have open follow at once.
 
 **See who else is on a conversation**

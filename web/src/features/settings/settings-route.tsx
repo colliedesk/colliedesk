@@ -1,134 +1,26 @@
-import { useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
-import { AnsweredWithoutSecret, useCreateMutation } from '../../api/use-create';
-import { AgentTokensSection, followableRoles } from './agent-tokens-section';
-import { ExportAllData } from './export-all-data';
-import { SavedRepliesSection } from './saved-replies-section';
-import { TeamSection } from './team-section';
-import { SettingsPage } from './settings-page';
-import { messages } from '../../messages';
-import { settingsMessages } from './settings-messages';
-import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
-import { Part, PartUnavailable } from '../../ui/lazy-part';
-import { helpCenterPart } from '../kb/kb-part';
-import type { AgentToken } from '../../api/schemas';
-import type { TokenChoice } from './agent-tokens-section';
-import { saveState } from './save-feedback';
-import { useBillingShown } from '../billing/billing-shown';
-import { useInvites } from './use-invites';
+import { useQuery } from '@tanstack/react-query';
+import { Navigate } from '@tanstack/react-router';
+import { api } from '../../api/client';
 import { can } from '../../lib/can';
+import { usePhone } from '../../lib/use-phone';
+import { messages } from '../../messages';
+import { useBillingShown } from '../billing/billing-shown';
+import { everyPage, SettingsFrame } from './settings-frame';
+import { settingsMessages } from './settings-messages';
 
-// The email channel and the web form were sections of this page; a link to their old anchors (a bookmark,
-// an old guide) opens their channel instead. Rare, so it is done here, in this page's own chunk.
-const movedSections: Record<string, string> = { '#email-channel-heading': '/settings/channels/type/email', '#web-form-heading': '/settings/channels/type/web_form' };
+// The Settings chunk: one page per item of the settings menu (#528), each asking only for what it shows.
+// AI & agents, Data, a role's page, Channels, Response targets and Plan and billing are chunks of their own.
+export { AccountRoute } from './account-route';
+export { GeneralRoute } from './general-route';
+export { MembersRoute } from './members-route';
+export { SavedRepliesRoute } from './saved-replies-route';
 
-export function SettingsRoute() {
-  useEffect(() => {
-    const follow = () => {
-      const moved = movedSections[window.location.hash];
-      if (moved) window.location.replace(moved);
-    };
-    follow();
-    // An old anchor opened while Settings is already on screen changes only the hash.
-    window.addEventListener('hashchange', follow);
-    return () => window.removeEventListener('hashchange', follow);
-  }, []);
-  const client = useQueryClient();
+// SettingsIndexRoute is the menu itself as a page: /settings on a phone, where the menu and a page take
+// turns on the screen as the inbox list and a conversation do. A wider screen opens Account instead (app.tsx),
+// also when the phone is turned on its side while the menu is open.
+export function SettingsIndexRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  // Where an AI app signs in with OAuth: APP_ORIGIN's /mcp (on Cloud, one address for every workspace).
-  const mcpAddress = `${config.data?.app_origin || window.location.origin}/mcp`;
-  const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
-  // A section the person's roles may not read is neither asked for nor shown.
-  const readsTeam = can(me.data, 'team:read');
-  const invites = useInvites(readsTeam);
-  const team = useQuery({ queryKey: ['agents'], queryFn: api.agents, enabled: readsTeam });
-  const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
-  const roles = invites.roles;
-  // A team change also moves seats, sessions and assignments, so every view that shows them reloads.
-  const afterTeamChange = () => { for (const key of ['agents', 'sessions', 'invites', 'billing', 'conversations', 'me', 'roles']) void refresh(key); };
-  const updateAgent = useMutation({
-    mutationFn: ({ id, ...change }: { id: string; display_name?: string; active?: boolean; reassign_to?: string | null }) => api.updateAgent(id, change),
-    // A rename also shows in the account menu when it is your own row.
-    onSuccess: afterTeamChange,
-  });
-  const setRoles = useMutation({ mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) => api.setAgentRoles(id, roleIds), onSuccess: afterTeamChange });
-  // A mutation, so that a 401 or 402 signs out or locks the app as any action does. The new token is in no
-  // cache: keep hands it to the card, and the mutation's own result is empty. Sessions reloads to list it,
-  // also after a failure whose outcome is unknown, so a token the server did create shows up to be revoked.
-  // A repeat of a press the server already answered comes back without the token (shown once): the card
-  // then points to Sessions, where the token is listed to revoke.
-  const createToken = useCreateMutation({
-    create: async ({ label, choice, keep }: { label: string; choice: TokenChoice; keep: (created: AgentToken & { token: string }) => void }, key: string) => {
-      const created = await api.createAgentToken(label, choice, key);
-      if (!created.token) throw new AnsweredWithoutSecret();
-      keep({ ...created, token: created.token });
-    },
-    // Roles name the tokens that follow them (Team warns with those names before a role is taken).
-    onSettled: () => { void refresh('sessions'); void refresh('roles'); },
-  });
-  // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
-  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); void refresh('roles'); } });
-  const workspaceTimezone = useMutation({ mutationFn: api.updateWorkspaceTimezone, onSuccess: () => refresh('me') });
-  // The name shows in the workspace switcher and the header, which read it from me.
-  const workspaceName = useMutation({ mutationFn: (name: string) => api.updateWorkspaceName(name), onSuccess: () => refresh('me') });
-  const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
-  // Your name also shows in the team list and the assignee lists.
-  const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
-  const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: () => { void refresh('me'); void refresh('setup'); } });
-  // The help center card is its own chunk (the knowledge base's); it loads alongside the settings requests.
-  useEffect(helpCenterPart.preload, []);
-  const readsSavedReplies = can(me.data, 'saved_replies:read');
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies, enabled: readsSavedReplies });
-  const refreshSavedReplies = () => refresh('saved-replies');
-  // A saved reply added again after a failed request goes under the same key, so it is stored once.
-  const createSavedReply = useCreateMutation({ create: ({ title, body }: { title: string; body: string }, key: string) => api.createSavedReply(title, body, key),
-    onSuccess: refreshSavedReplies });
-  const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
-  const deleteSavedReply = useMutation({ mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) => api.deleteSavedReply(id, updatedAt), onSuccess: refreshSavedReplies });
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
-  // Plan and billing exists only on the hosted cloud and only admins manage it.
-  const showBilling = billingShown;
-  const loading = me.isPending || sessions.isPending || (readsTeam && invites.invites.isPending);
-  // A link to a section (the nav from another settings page, a pasted address) arrives before the sections do.
-  useScrollToHashWhenReady(!loading);
-  return <SettingsPage loading={loading} sessions={sessions.data?.items ?? []} invites={invites.section.invites} timezone={me.data?.timezone ?? 'UTC'}
-    canCreateInvites={can(me.data, 'team:invite')} canRevokeInvites={can(me.data, 'team:revoke')} canManageWorkspace={can(me.data, 'workspace:update')} showBilling={showBilling}
-    exportSection={can(me.data, 'workspace:export') ? <ExportAllData /> : undefined} inviteRoles={roles.data?.items}
-    workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
-    workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)} onSetWorkspaceName={(name) => workspaceName.mutate(name)}
-    email={me.data?.agent.email} displayName={me.data?.agent.display_name} displayNameSave={saveState(agentDisplayName)}
-    onSetDisplayName={(name) => agentDisplayName.mutate(name)}
-    setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
-    workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
-    error={invites.revokeFailed || revokeSession.isError ? messages.settingsActionFailed : undefined}
-    mcpAddress={mcpAddress}
-    agentsSection={can(me.data, 'team:create_tokens') && !me.data?.token ? <AgentTokensSection roles={followableRoles(me.data?.agent.roles ?? [], roles.data?.items, me.data?.permissions ?? [])} held={me.data?.permissions ?? []} mcpAddress={mcpAddress}
-      rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
-      onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} /> : undefined}
-    teamSection={can(me.data, 'team:read') ? <TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={can(me.data, 'team:manage_roles')}
-      roles={roles.data?.items} myPermissions={me.data?.permissions} timezone={me.data?.timezone ?? 'UTC'}
-      error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
-      onSetRoles={(id, roleIds) => setRoles.mutateAsync({ id, roleIds })}
-      onRename={(id, name) => updateAgent.mutate({ id, display_name: name })}
-      onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
-      onReactivate={(id) => updateAgent.mutate({ id, active: true })} /> : undefined}
-    showInvites={readsTeam}
-    savedRepliesSection={readsSavedReplies && <SavedRepliesSection replies={savedReplies.data?.items ?? []}
-      onCreate={(title, body) => createSavedReply.mutateAsync({ title, body })}
-      onUpdate={(id, change) => updateSavedReply.mutateAsync({ id, ...change })}
-      onDelete={(id, updatedAt) => deleteSavedReply.mutateAsync({ id, updatedAt })} onReload={() => void refreshSavedReplies()} timezone={me.data?.timezone ?? 'UTC'}
-      loadHistory={(id, before) => api.savedReplyVersions(id, before)}
-      onRestoreVersion={async (id, version, updatedAt) => { await api.restoreSavedReplyVersion(id, version, updatedAt); await refreshSavedReplies(); }}
-      loadTrash={(cursor) => api.trashedSavedReplies(cursor)}
-      onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
-    helpCenterSection={can(me.data, 'help_center:read') && <section className="settings-card" aria-labelledby="help-center-heading">
-      <div className="section-heading"><h2 id="help-center-heading">{messages.helpCenter}</h2><p>{settingsMessages.helpCenterDescription}</p></div>
-      <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
-        render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={can(me.data, 'help_center:update')} workspaceName={me.data?.workspace.name} timezone={me.data?.timezone ?? 'UTC'} />} /></div>
-    </section>}
-    inviteError={invites.section.inviteError} createdInvite={invites.section.createdInvite} creatingInvite={invites.section.creatingInvite}
-    onCreateInvite={invites.section.onCreateInvite} onRevokeInvite={invites.section.onRevokeInvite} onRevokeSession={(id) => revokeSession.mutate(id)}
-    onSetWorkspaceTimezone={(value) => workspaceTimezone.mutate(value)} onSetAgentTimezone={(value) => agentTimezone.mutate(value)} />;
+  if (!usePhone()) return <Navigate to="/settings/account" replace />;
+  return <SettingsFrame page="/settings" title={messages.settings} lead={settingsMessages.pageLeads.index} loading={me.isPending} shown={{ ...everyPage, billing: billingShown }} />;
 }

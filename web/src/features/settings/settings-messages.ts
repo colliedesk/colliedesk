@@ -2,7 +2,6 @@
 export const settingsMessages = {
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
-  helpCenterDescription: 'The public pages of your published knowledge base articles.',
   workspaceTimezone: 'Workspace timezone',
   sessionStates: { active: 'Active', stopped: 'Stopped', revoked: 'Revoked', expired: 'Expired' },
   followsRole: (role: string) => `Follows role ${role}`,
@@ -22,6 +21,17 @@ export const settingsMessages = {
   showWholeText: 'Show all',
   showLessText: 'Show less',
   confirmDelete: 'Delete',
+  // One line under each page's title: what the page holds.
+  pageLeads: {
+    account: 'Your name, how Colliedesk works for you, and where you are signed in.',
+    general: 'Your workspace name, its timezone and how conversations are numbered.',
+    members: 'Who works in this workspace, the roles they hold and the invites that add people.',
+    'saved-replies': 'Text your whole team inserts into a reply.',
+    data: 'Bring your Freshdesk history in, or take all of your data out. Freshdesk keeps working while you move.',
+    index: 'Your own account first, then what everyone in the workspace shares.',
+  },
+  helpCenterMoved: 'Help center settings now live in the Help center area.',
+  openHelpCenterSettings: 'Open Help center settings',
   profileDescription: 'Dates and times show in your timezone.',
   yourTimezone: 'Your timezone',
   displayName: 'Display name',
@@ -36,6 +46,7 @@ export const settingsMessages = {
   copyInboundURL: 'Copy inbound URL',
   urlCopied: 'URL copied',
   sessionsDescription: 'Browsers and clients signed in. Revoke one you no longer use; on this device that signs you out.',
+  tokenSessionsDescription: 'AI agents working with a token. Revoke one to stop that agent at once; no browser is signed out.',
   teamDescription: 'Everyone who can sign in to this workspace. A deactivated person cannot sign in and does not use a seat.',
   teamActive: 'Active',
   teamDeactivated: 'Deactivated',

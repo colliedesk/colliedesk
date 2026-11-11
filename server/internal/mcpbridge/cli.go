@@ -65,9 +65,9 @@ func Parse(args []string, getenv func(string) string) (Config, error) {
 	}
 	switch {
 	case token == "":
-		return Config{}, errors.New("no agent token: set COLLIEDESK_TOKEN or use --token-file. Create one in Colliedesk under Settings → Sessions")
+		return Config{}, errors.New("no agent token: set COLLIEDESK_TOKEN or use --token-file. Create one in Colliedesk under Settings → AI & agents")
 	case !strings.HasPrefix(token, TokenPrefix):
-		return Config{}, fmt.Errorf("the token does not start with %s, so it is not an agent token. Create one in Colliedesk under Settings → Sessions", TokenPrefix)
+		return Config{}, fmt.Errorf("the token does not start with %s, so it is not an agent token. Create one in Colliedesk under Settings → AI & agents", TokenPrefix)
 	}
 	return Config{Endpoint: endpoint, Token: token, Timeout: *timeout}, nil
 }

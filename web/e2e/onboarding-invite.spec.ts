@@ -14,7 +14,9 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const admin = await adminContext.newPage();
   await redeemLink(admin, createWorkspace(`Invite Desk ${suffix}`, adminEmail));
 
+  // Settings opens Account; invites are on Members, one page per item of the settings menu.
   await admin.getByRole('link', { name: 'Settings' }).click();
+  await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Members' }).click();
   await admin.getByLabel('Invite email').fill(teammateEmail);
   // An invite gives the Agent role unless the admin picks other roles.
   await expect(admin.getByRole('button', { name: 'Roles: Agent' })).toBeVisible();
@@ -39,7 +41,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
 
   // Agents work conversations but cannot invite, manage the email channel or change the workspace timezone.
   await teammate.getByRole('link', { name: 'Settings' }).click();
-  await expect(teammate.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(teammate.getByRole('heading', { name: 'Account', level: 1 })).toBeVisible();
   await expect(teammate.getByRole('button', { name: 'Create invite' })).toHaveCount(0);
   await expect(teammate.getByLabel('Workspace timezone')).toHaveCount(0);
   // The email channel lives under Channels; an agent reads it there and cannot change it.
@@ -62,6 +64,8 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   // The admin sees the accepted invite and the teammate's device, then revokes the device.
   await admin.reload();
   await expect(invites.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() })).toContainText('Accepted');
+  // The devices signed in are listed on Account.
+  await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Account' }).click();
   const sessions = admin.getByRole('region', { name: 'Sessions' });
   const teammateSession = sessions.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
   await expect(teammateSession).toHaveCount(1);
@@ -82,6 +86,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   expect((await admin.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(200);
 
   // The team list shows the teammate; deactivating asks first, ends their access and can be undone.
+  await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Members' }).click();
   const team = admin.getByRole('region', { name: 'Team' });
   const teammateRow = team.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
   await expect(teammateRow).toContainText('Active');

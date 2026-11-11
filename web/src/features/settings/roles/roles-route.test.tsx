@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { RolesRoute } from './roles-route';
+import { RolesSection } from './role-list';
 import { adminRoleRef, builtInRoles, permissionsOf, roleOf } from '../../../test-roles';
 
 const mocks = vi.hoisted(() => ({
@@ -20,7 +21,7 @@ function setUp() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-// The list and the form are two routes, so the list that opens after a save is a new page: it still says
+// The form is a page of its own and the list a section of Members, so the list that opens after a save is a new page: it still says
 // what was saved and where to go next.
 test('after a role is created, the list that opens says so and links to Team', async () => {
   const client = setUp();
@@ -29,18 +30,18 @@ test('after a role is created, the list that opens says so and links to Team', a
   const form = render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'new' }} /></QueryClientProvider>);
   fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Tagger' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
-  await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: '/settings/roles' }));
+  await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: '/settings/members', hash: 'roles-heading' }));
   form.unmount();
 
-  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><RolesSection /></QueryClientProvider>);
   const status = await screen.findByRole('status');
   expect(status).toHaveTextContent('Tagger created. Give it to people in Team.');
-  expect(within(status).getByRole('link', { name: 'Go to Team' })).toHaveAttribute('href', '/settings#team-heading');
+  expect(within(status).getByRole('link', { name: 'Go to Team' })).toHaveAttribute('href', '/settings/members#team-heading');
 });
 
 test('a list opened without a save says nothing', async () => {
   const client = setUp();
-  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><RolesSection /></QueryClientProvider>);
   expect(await screen.findByText('Agent')).toBeInTheDocument();
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
@@ -79,7 +80,7 @@ test('a save says who it changed on the list it opens, and the list takes focus 
   fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
   await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
   form.unmount();
-  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><RolesSection /></QueryClientProvider>);
   const status = await screen.findByRole('status');
   expect(status).toHaveTextContent('Agent saved. 1 person and 0 tokens updated.');
   await vi.waitFor(() => expect(status).toHaveFocus());
@@ -94,8 +95,8 @@ test('a role you may only read names who can change it, and names who holds it a
   mocks.api.role.mockResolvedValue(viewed);
   render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'edit', id: viewed.id }} /></QueryClientProvider>);
   expect(await screen.findByText('Ask someone who can change roles (Ada, Linh) to change it.')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Mai' })).toHaveAttribute('href', '/settings#team-heading');
-  expect(screen.getByRole('link', { name: 'KB bot (Mai)' })).toHaveAttribute('href', '/settings#sessions-heading');
+  expect(screen.getByRole('link', { name: 'Mai' })).toHaveAttribute('href', '/settings/members#team-heading');
+  expect(screen.getByRole('link', { name: 'KB bot (Mai)' })).toHaveAttribute('href', '/settings/ai#agent-sessions-heading');
 });
 
 test('a taken name puts focus back on the name, with the reason', async () => {
@@ -129,7 +130,7 @@ test('Undo after a delete brings the role back and says so, without offering Und
   expect(mocks.api.role.mock.calls.length).toBe(asked);
   expect(screen.queryByText('This role was deleted.')).not.toBeInTheDocument();
   form.unmount();
-  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><RolesSection /></QueryClientProvider>);
   const status = await screen.findByRole('status');
   expect(status).toHaveTextContent('Zero deleted.');
   fireEvent.click(within(status).getByRole('button', { name: 'Undo' }));
@@ -150,7 +151,7 @@ test('an Undo that fails on the way can be tried again', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
   await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
   form.unmount();
-  render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'list' }} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><RolesSection /></QueryClientProvider>);
   fireEvent.click(within(await screen.findByRole('status')).getByRole('button', { name: 'Undo' }));
   await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Undo did not get through; try again.'));
   fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Undo' }));

@@ -5,7 +5,7 @@ articles**, and lets them hand the chat to your team. It needs two things turned
 
 1. A **Help chat** channel in **Settings → Channels** (admins): what the chat says first, the questions
    it offers, what you add to the AI's instructions, and the sites that may embed it.
-2. The **AI chat** feature in **Settings → Built-in AI** (admins): which provider and model answer. See
+2. The **AI chat** feature in **Settings → AI & agents** (admins): which provider and model answer. See
    [AI chat](ai-chat.md) for what the AI does, its limits and the transcripts.
 
 While either is off, the chat answers `404`, the same as a help center that is off, and no page shows
