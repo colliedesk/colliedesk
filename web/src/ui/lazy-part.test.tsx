@@ -66,3 +66,27 @@ test('using the part without a preload starts the import', async () => {
   expect(await screen.findByText('Loaded part')).toBeInTheDocument();
   expect(load).toHaveBeenCalledTimes(1);
 });
+
+test('ready settles once the part can render, loaded or failed, never rejects, and imports once', async () => {
+  const loaded = deferred<{ Text: ComponentType }>();
+  const load = vi.fn(() => loaded.promise);
+  const part = lazyPart(load);
+  let settled = false;
+  void part.ready().then(() => { settled = true; });
+  await act(async () => {});
+  expect(settled).toBe(false);
+  await act(async () => loaded.resolve({ Text: () => <p>Loaded part</p> }));
+  expect(settled).toBe(true);
+  await part.ready();
+  expect(load).toHaveBeenCalledTimes(1);
+
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const failed = deferred<{ Text: ComponentType }>();
+  const broken = lazyPart(() => failed.promise);
+  const waiting = broken.ready();
+  failed.reject(new TypeError('Failed to fetch dynamically imported module'));
+  await expect(waiting).resolves.toBeUndefined();
+  render(<Host part={broken} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('This part of the page could not be loaded.');
+  warn.mockRestore();
+});

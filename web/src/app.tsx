@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRouteWithContext, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
@@ -40,6 +41,8 @@ import { useInAppLinks } from './lib/in-app-links';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
+// Each Settings route's loader waits for its chunk, so the router keeps the page on screen, Settings nav included,
+// until the next one can show: moving between Settings pages never blanks the screen as a reload would.
 const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
@@ -146,11 +149,11 @@ function AppLayout() {
 
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
+// preload="intent": hover or focus runs the page's loader, which loads its chunk, so the click shows it at once.
 function settingsRouterLink(item: NavItem) {
-  const preload = item.to.startsWith('/settings/channels') ? channelsRoutePart.preload : undefined;
   // /settings/channels, the type homes under it and /settings/ai are routes with a splat, paths the route types do not list.
   return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}` | '/settings/ai'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
+    aria-current={item.current ? 'page' : undefined} preload="intent">{item.label}</Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -161,7 +164,10 @@ function NotFoundPage() {
   </main>;
 }
 
-const rootRoute = createRootRoute({ component: AppLayout, notFoundComponent: NotFoundPage });
+// A route's loader can start the requests its page reads together with its chunk: main.tsx hands the router the
+// app's query client. Without one (a test's own router) the page asks once it renders.
+type RouterContext = { queryClient?: QueryClient };
+const rootRoute = createRootRouteWithContext<RouterContext>()({ component: AppLayout, notFoundComponent: NotFoundPage });
 // The inbox filters are in the address, so a link opens the same list (src/lib/inbox-query.ts).
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
@@ -261,7 +267,7 @@ function SettingsPage() {
     {part.status === 'error' ? <PartUnavailable /> : <p role="status" className="muted-copy">{messages.loadingList}</p>}
   </main>;
 }
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', loader: () => settingsRoutePart.ready(), component: SettingsPage });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
 // The tab and the channel filter of Review are in the address, so a link opens the same list.
@@ -286,9 +292,19 @@ const reviewRoute = createRoute({
       }} />} />;
   },
 });
+// billingReadable says whether the billing page asks for the plan: the session may read it and billing is on or switched off.
+type Me = Awaited<ReturnType<typeof api.me>>;
+type PublicConfig = Awaited<ReturnType<typeof api.config>>;
+function billingReadable(me: Me | undefined, config: PublicConfig | undefined) {
+  return can(me, 'billing:read') && (config?.billing.enabled === true || config?.billing.switched_off === true);
+}
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/billing',
+  loader: ({ context: { queryClient } }) => {
+    if (queryClient && billingReadable(queryClient.getQueryData<Me>(['me']), queryClient.getQueryData<PublicConfig>(['public-config']))) void queryClient.prefetchQuery({ queryKey: ['billing'], queryFn: api.billing });
+    return billingRoutePart.ready();
+  },
   // `buy=<plan>` is the link the website uses to send a visitor straight into that plan's checkout.
   validateSearch: (search: Record<string, unknown>): { checkout: 'success' | ''; buy?: string } => ({
     checkout: search.checkout === 'success' ? 'success' : '',
@@ -308,28 +324,29 @@ const billingRoute = createRoute({
     // Billing is asked for while the page's chunk loads, not after it (billing-route.tsx asks the same).
     const me = useQuery({ queryKey: ['me'], queryFn: api.me });
     const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: can(me.data, 'billing:read') && (config.data?.billing.enabled === true || config.data?.billing.switched_off === true) });
+    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: billingReadable(me.data, config.data) });
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
 const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/import-freshdesk',
+  loader: () => importRoutePart.ready(),
   component: function Import() {
     return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
 // Settings → Roles: the list, a new role (optionally from another) and one role.
 const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
-const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
+const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles', loader: () => rolesRoutePart.ready(),
   component: () => <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'list' }} />} /> });
-const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new',
+const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new', loader: () => rolesRoutePart.ready(),
   validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
   component: function NewRole() {
     const { from } = newRoleRoute.useSearch();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'new', from }} />} />;
   } });
-const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/$roleId',
+const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/$roleId', loader: () => rolesRoutePart.ready(),
   component: function OneRole() {
     const { roleId } = roleRoute.useParams();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
@@ -338,6 +355,7 @@ const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setting
 const numbersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/numbers',
+  loader: () => numbersRoutePart.ready(),
   component: function Numbers() {
     return <Part part={numbersRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ NumbersRoute }) => <NumbersRoute />} />;
   },
@@ -346,13 +364,14 @@ const numbersRoute = createRoute({
 const targetsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/targets',
+  loader: () => targetsRoutePart.ready(),
   component: function Targets() {
     return <Part part={targetsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ TargetsRoute }) => <TargetsRoute />} />;
   },
 });
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
 const aiRoute = createRoute({
-  getParentRoute: () => rootRoute, path: '/settings/ai/$',
+  getParentRoute: () => rootRoute, path: '/settings/ai/$', loader: () => aiRoutePart.ready(),
   component: function AISettings() {
     // The path is read here, not in render: the part calls render only once its chunk has loaded.
     const path = aiRoute.useParams()._splat ?? '';
@@ -367,14 +386,13 @@ const channelsSearch = (search: Record<string, unknown>) => search as ChannelsSe
 function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
   const navigate = useNavigate();
   const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
-  // A page opened without a hover first (a typed address, a redirect) still asks for everything at once.
-  const client = useQueryClient();
-  useEffect(() => { preloadChannelsPage(client, `/settings/channels/${path}`); }, [client, path]);
   return <Part part={channelsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ChannelsRoute }) => <ChannelsRoute path={path} search={search} navigate={go} />} />;
 }
 // /settings/channels itself is this route with an empty splat.
 const channelRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
+  // The loader also asks for what the page reads, so a hover, a click or a typed address asks for everything at once.
+  loader: ({ context: { queryClient }, location }) => { if (queryClient) preloadChannelsPage(queryClient, location.pathname); return channelsRoutePart.ready(); },
   component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
 });
 // The setup flow is its own chunk (setup-flow-part.ts); one component reads the step in the address.
@@ -417,6 +435,7 @@ const fixesRoute = createRoute({
 const autofixSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/autofix',
+  loader: () => (autofixPreviewOn() ? autofixPart.ready() : undefined),
   component: () => <AutofixScreen render={({ AutofixSettingsRoute }) => <AutofixSettingsRoute />} />,
 });
 const resultsShareRoute = createRoute({
@@ -477,7 +496,7 @@ const trialOfferRoute = createRoute({
 });
 
 export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
-export const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree, context: {} });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
