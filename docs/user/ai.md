@@ -17,6 +17,10 @@ consent that its ticket data goes to the provider it uses; Colliedesk records wh
 and asks again whenever the feature moves to another provider. Turn a feature off at any time in
 **Settings → Built-in AI → Features**.
 
+The [setup flow](setup-guide.md#setup-flow) offers one of them to a new team: its **Turn on AI drafts** step
+turns Reply drafts on with **Default for channels** set to **Suggest**, through the same call as Settings, so
+the consent is recorded the same way. It leaves triage suggestions off.
+
 ## Where a feature runs
 
 Each feature (**Triage suggestions**, **Reply drafts**, and **Chat intake** for chat channels) picks one of:

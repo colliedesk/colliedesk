@@ -77,6 +77,35 @@ type AIRetrievedDoc struct {
 func FoldForAIRetrieval(text string) string {
 	var b strings.Builder
 	b.Grow(len(text))
+	// ASCII has nothing to decompose and no mark, and no mark is ever reordered across it, so only the
+	// runs of other characters go through NFD. A chat turn folds every long article it excerpts (up to
+	// 100,000 characters each) before the provider is called: NFD of the whole texts took 6 ms.
+	for len(text) > 0 {
+		ascii := 0
+		for ascii < len(text) && text[ascii] < utf8.RuneSelf {
+			c := text[ascii]
+			if 'A' <= c && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			b.WriteByte(c)
+			ascii++
+		}
+		text = text[ascii:]
+		other := 0
+		for other < len(text) && text[other] >= utf8.RuneSelf {
+			other++
+		}
+		foldNonASCII(&b, text[:other])
+		text = text[other:]
+	}
+	return b.String()
+}
+
+// foldNonASCII is FoldForAIRetrieval of a run of characters outside ASCII.
+func foldNonASCII(b *strings.Builder, text string) {
+	if text == "" {
+		return
+	}
 	for _, r := range norm.NFD.String(text) {
 		if unicode.Is(unicode.Mn, r) {
 			continue
@@ -91,7 +120,6 @@ func FoldForAIRetrieval(text string) string {
 		}
 		b.WriteRune(unicode.ToLower(r))
 	}
-	return b.String()
 }
 
 // aiTerms returns the words of the query as kb_search_vector splits them, the longest first.

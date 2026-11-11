@@ -3,7 +3,13 @@ import { fireEvent, render as renderPlain, screen, within } from '@testing-libra
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { SetupChecklist } from './setup-checklist';
+import { guideHasWork } from './setup-steps';
 import type { SetupProgress } from '../../api/schemas';
+import { permissionsOf } from '../../test-roles';
+
+// Who looks at the guide: the built-in roles' permissions decide which steps they take.
+const adminMe = { permissions: permissionsOf('admin') };
+const agentMe = { permissions: permissionsOf('agent') };
 
 const client = new QueryClient();
 const render = (ui: ReactElement) => renderPlain(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
@@ -23,7 +29,7 @@ function progress(states: { email?: string; import?: string; invite?: string; fi
 const rows = () => within(screen.getByRole('region', { name: 'Finish setting up' })).getAllByRole('listitem');
 
 test('an admin sees the four steps in the order the server gives, each with its state', () => {
-  render(<SetupChecklist progress={progress({ email: 'waiting' })} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({ email: 'waiting' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(screen.getByRole('heading', { name: 'Finish setting up' })).toBeInTheDocument();
   expect(screen.getByText('0 of 4')).toBeInTheDocument();
   expect(rows().map((row) => row.textContent)).toEqual([
@@ -39,7 +45,7 @@ test('an admin sees the four steps in the order the server gives, each with its 
 });
 
 test('finished steps read Done, and the bar counts them', () => {
-  render(<SetupChecklist progress={progress({ email: 'working', import: 'done' })} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({ email: 'working', import: 'done' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(screen.getByText('2 of 4')).toBeInTheDocument();
   expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuenow', '2');
   expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuemax', '4');
@@ -50,34 +56,34 @@ test('finished steps read Done, and the bar counts them', () => {
 });
 
 test('a finished step is marked with a check, an open one with an empty circle', () => {
-  render(<SetupChecklist progress={progress({ email: 'working' })} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(rows()[0].querySelector('.setup-mark svg.icon')).not.toBeNull();
   expect(rows()[1].querySelector('.setup-mark svg')).toBeNull();
 });
 
-test('every step links to the screen that finishes it, with plain links', () => {
-  render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
-  expect(screen.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
-  expect(screen.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/settings/import-freshdesk');
-  expect(screen.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/settings');
-  expect(screen.getByRole('link', { name: /Answer your first email/ })).toHaveAttribute('href', '/');
+test('every step links to its screen of the setup flow, with plain links', () => {
+  render(<SetupChecklist progress={progress({})} me={adminMe} defaultOpen onHide={vi.fn()} />);
+  expect(screen.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/setup/email');
+  expect(screen.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/setup/import');
+  expect(screen.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/setup/invite');
+  expect(screen.getByRole('link', { name: /Answer your first email/ })).toHaveAttribute('href', '/setup/first_reply');
 });
 
 test('only the first step still to do is the primary action', () => {
-  render(<SetupChecklist progress={progress({ email: 'working' })} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   const links = screen.getAllByRole('link');
   expect(links.filter((link) => link.classList.contains('primary-action')).map((link) => link.textContent)).toEqual([expect.stringContaining('Import from Freshdesk')]);
 });
 
 test('the recommended step from the sign-up goal is marked and listed first', () => {
-  render(<SetupChecklist progress={progress({}, ['import', 'email', 'invite', 'first_reply'], 'import')} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({}, ['import', 'email', 'invite', 'first_reply'], 'import')} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(rows()[0]).toHaveTextContent('Import from Freshdesk');
   expect(rows()[0]).toHaveTextContent('Recommended');
   expect(rows()[1]).not.toHaveTextContent('Recommended');
 });
 
 test('an agent who is not an admin sees only the steps they can take', () => {
-  render(<SetupChecklist progress={progress({})} admin={false} defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({})} me={agentMe} defaultOpen onHide={vi.fn()} />);
   expect(rows()).toHaveLength(1);
   expect(rows()[0]).toHaveTextContent('Answer your first email');
   expect(screen.getByText('0 of 1')).toBeInTheDocument();
@@ -86,7 +92,7 @@ test('an agent who is not an admin sees only the steps they can take', () => {
 });
 
 test('the goal ai_agents puts the AI agent guide first, and it is not counted', () => {
-  render(<SetupChecklist progress={progress({ email: 'working' })} admin goal="ai_agents" defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} goal="ai_agents" defaultOpen onHide={vi.fn()} />);
   expect(rows()[0]).toHaveTextContent('Connect an AI agent');
   expect(screen.getByRole('link', { name: /Connect an AI agent/ })).toHaveAttribute('href', 'https://colliedesk.com/docs/mcp');
   expect(screen.getByText('1 of 4')).toBeInTheDocument();
@@ -95,29 +101,29 @@ test('the goal ai_agents puts the AI agent guide first, and it is not counted', 
 
 test('Hide asks to hide the guide', () => {
   const onHide = vi.fn();
-  render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={onHide} />);
+  render(<SetupChecklist progress={progress({})} me={adminMe} defaultOpen onHide={onHide} />);
   fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
   expect(onHide).toHaveBeenCalledTimes(1);
 });
 
 test('selecting a step reports it started, with the step key only', () => {
-  render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({})} me={adminMe} defaultOpen onHide={vi.fn()} />);
   fireEvent.click(screen.getByRole('link', { name: /Invite your team/ }));
   expect(tracked).toHaveBeenCalledWith('onboarding_step_started', { step: 'invite' });
 });
 
 test('a step that turns done while the guide is on screen is reported once, and the first render reports nothing', () => {
-  const { rerender } = render(<SetupChecklist progress={progress({ email: 'waiting' })} admin defaultOpen onHide={vi.fn()} />);
+  const { rerender } = render(<SetupChecklist progress={progress({ email: 'waiting' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(tracked).not.toHaveBeenCalled();
-  rerender(<SetupChecklist progress={progress({ email: 'working' })} admin defaultOpen onHide={vi.fn()} />);
+  rerender(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(tracked).toHaveBeenCalledTimes(1);
   expect(tracked).toHaveBeenCalledWith('onboarding_step_completed', { step: 'email' });
-  rerender(<SetupChecklist progress={progress({ email: 'working' })} admin defaultOpen onHide={vi.fn()} />);
+  rerender(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(tracked).toHaveBeenCalledTimes(1);
 });
 
 test('closed, the guide is one button in the corner that carries the count; pressing it opens the steps', () => {
-  render(<SetupChecklist progress={progress({ email: 'working' })} admin onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} onHide={vi.fn()} />);
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   const launcher = screen.getByRole('button', { name: /Finish setting up/ });
   expect(launcher).toHaveTextContent('1 of 4');
@@ -127,27 +133,92 @@ test('closed, the guide is one button in the corner that carries the count; pres
 });
 
 test('Minimize folds the steps back into the button, focus goes back to it, and the next visit starts folded', () => {
-  const { unmount } = render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
+  const { unmount } = render(<SetupChecklist progress={progress({})} me={adminMe} defaultOpen onHide={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'Minimize' }));
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Finish setting up/ })).toHaveFocus();
   unmount();
-  render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({})} me={adminMe} defaultOpen onHide={vi.fn()} />);
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
 });
 
 test('a guide the agent opened is open again on the next visit, and focus moves into it', () => {
-  const { unmount } = render(<SetupChecklist progress={progress({})} admin onHide={vi.fn()} />);
+  const { unmount } = render(<SetupChecklist progress={progress({})} me={adminMe} onHide={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: /Finish setting up/ }));
   expect(screen.getByRole('button', { name: 'Minimize' })).toHaveFocus();
   unmount();
-  render(<SetupChecklist progress={progress({})} admin onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({})} me={adminMe} onHide={vi.fn()} />);
   expect(screen.getByRole('region', { name: 'Finish setting up' })).toBeInTheDocument();
 });
 
 test('Escape inside the open guide folds it', () => {
-  render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
+  render(<SetupChecklist progress={progress({})} me={adminMe} defaultOpen onHide={vi.fn()} />);
   fireEvent.keyDown(screen.getByRole('link', { name: /Invite your team/ }), { key: 'Escape' });
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Finish setting up/ })).toHaveFocus();
+});
+
+// The setup as the server gives it now: AI drafts and reply targets between the import and the invites.
+const sixSteps = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'];
+const withNewSteps = (states: Record<string, string>) => {
+  const all = { email: 'working', import: 'done', ai_drafts: 'none', reply_targets: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
+  return { steps: sixSteps.map((key) => ({ key, state: all[key], detail: null })), complete: false, recommended: null } as unknown as SetupProgress;
+};
+
+test('an admin sees AI drafts and reply targets after the import, each linking to its screen of the setup flow', () => {
+  render(<SetupChecklist progress={withNewSteps({ ai_drafts: 'nothing_to_read' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.querySelector('.setup-title')?.textContent)).toEqual(
+    ['Receive customer email', 'Import from Freshdesk', 'Turn on AI drafts', 'Set reply targets', 'Invite your team', 'Answer your first email']);
+  expect(screen.getByText('2 of 6')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Turn on AI drafts/ })).toHaveAttribute('href', '/setup/ai_drafts');
+  expect(screen.getByRole('link', { name: /Set reply targets/ })).toHaveAttribute('href', '/setup/reply_targets');
+  expect(rows()[2]).toHaveTextContent('Better after an import or an article');
+  expect(rows()[3]).toHaveTextContent('Today puts the closest deadline first');
+  fireEvent.click(screen.getByRole('link', { name: /Set reply targets/ }));
+  expect(tracked).toHaveBeenCalledWith('onboarding_step_started', { step: 'reply_targets' });
+});
+
+test('AI drafts and reply targets read Done once they are on; without built-in AI the drafts row has nothing to do and is not counted', () => {
+  render(<SetupChecklist progress={withNewSteps({ ai_drafts: 'unavailable', reply_targets: 'on' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
+  expect(rows()[2]).toHaveTextContent('Nothing to do: no built-in AI on this server');
+  expect(rows()[2]).toHaveAttribute('data-state', 'none');
+  expect(rows()[2].querySelector('.setup-time')).toBeNull();
+  expect(rows()[3]).toHaveTextContent('Done');
+  expect(rows()[3]).toHaveAttribute('data-state', 'done');
+  expect(screen.getByText('3 of 5')).toBeInTheDocument();
+});
+
+// AI drafts and reply targets are offers: the four core steps decide whether the guide has work left.
+test('a workspace that finished the four core steps has nothing left in the guide, whatever the offers say', () => {
+  const core = { email: 'working', import: 'done', invite: 'joined', first_reply: 'sent' };
+  expect(guideHasWork(withNewSteps({ ...core, ai_drafts: 'none', reply_targets: 'none' }), adminMe)).toBe(false);
+  expect(guideHasWork(withNewSteps({ ...core, ai_drafts: 'unavailable', reply_targets: 'none' }), adminMe)).toBe(false);
+  expect(guideHasWork(withNewSteps({ ...core, first_reply: 'none', ai_drafts: 'on', reply_targets: 'on' }), adminMe)).toBe(true);
+});
+
+// Each offer follows the permission its own call needs: turning drafts on is ai_settings:update, saving
+// targets workspace:update; managing channels gives neither.
+test('a person sees AI drafts only with ai_settings:update and reply targets only with workspace:update', () => {
+  const without = (name: string) => ({ permissions: permissionsOf('admin').filter((item) => item !== name) });
+  const { unmount } = render(<SetupChecklist progress={withNewSteps({})} me={without('ai_settings:update')} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'reply_targets', 'invite', 'first_reply']);
+  unmount();
+  render(<SetupChecklist progress={withNewSteps({})} me={without('workspace:update')} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'ai_drafts', 'invite', 'first_reply']);
+});
+
+// The drafts step reads the AI settings first (GET /api/v1/ai needs ai_settings:read).
+test('a person who may change but not read the AI settings does not see AI drafts', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={{ permissions: permissionsOf('admin').filter((item) => item !== 'ai_settings:read') }} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'reply_targets', 'invite', 'first_reply']);
+});
+
+test('an agent whose role may change AI settings and targets, but not channels, gets both offers', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={{ permissions: [...permissionsOf('agent'), 'ai_settings:update', 'workspace:update'] }} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['ai_drafts', 'reply_targets', 'first_reply']);
+});
+
+test('an agent who is not an admin never sees the AI drafts and reply targets steps', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={agentMe} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.querySelector('.setup-title')?.textContent)).toEqual(['Answer your first email']);
 });

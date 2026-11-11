@@ -40,6 +40,12 @@ type Config struct {
 	ResendAPIBase string
 }
 
+// ReceivesPlatformReplies is whether this server takes mail for MailFromDomain (its forwarder has
+// MAIL_FROM_INBOUND_SECRET): only then may a reply ask for the customer's answer at reply+<token>@MailFromDomain.
+func (c Config) ReceivesPlatformReplies() bool {
+	return c.MailFromDomain != "" && c.PlatformInboundSecret != ""
+}
+
 // ConfigFromEnv reads SMTP_*, EMAIL_FROM_POLICY (verified), MAIL_FROM_DOMAIN, MAIL_FROM_INBOUND_SECRET and
 // EMAIL_TRUSTED_AUTHSERV_ID, HOSTED_MAIL_DOMAIN, RESEND_WEBHOOK_SECRET and RESEND_API_KEY.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {

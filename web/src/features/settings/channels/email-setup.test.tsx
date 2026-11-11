@@ -203,6 +203,38 @@ test('step 2 gives the forwarding address to copy first, then provider tabs with
   expect(within(forward).getByRole('button', { name: 'Skip for now' })).toBeEnabled();
 });
 
+test('the inbox\'s Move your mail opens step 2 even after a test message marked it received', async () => {
+  // A test message makes the channel working, yet customer mail still goes to the old help desk.
+  waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  expect(within(forward).getByRole('textbox', { name: 'Forward to this address' })).toHaveValue('support@acme.colliedesk.test');
+  expect(screen.queryByRole('textbox', { name: 'Support address' })).not.toBeInTheDocument();
+});
+
+test('after mail that is not customer mail, step 2 says no customer mail came through the mailbox yet, and turns to First email received when it does, without a reload', async () => {
+  // A test message, Gmail's forwarding confirmation, dropped spam or an answer to a reply+ address made the
+  // channel working; the server says no customer mail came through the mailbox. The words fit each of them.
+  const detail = waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: false }));
+  const { client } = show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('Mail arrived, but no customer mail through your mailbox yet.'));
+  expect(forward).not.toHaveTextContent('First email received');
+  channelsApi.get.mockResolvedValue({ ...detail, last_inbound_at: '2026-10-29T00:40:00Z' });
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: true }));
+  act(() => { client.setQueryData(['inbox-activity'], { now: '2026-10-29T00:40:05Z', new_conversations: [{ id: CONVERSATION, created_at: '2026-10-29T00:40:00Z' }], assigned_to_me: [], updated: [], viewing: [] }); });
+  await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('First email received 12:40 AM'));
+});
+
+test('folded, step 2 after mail that is not customer mail says no customer mail came through the mailbox yet', async () => {
+  waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: false }));
+  show(`${MAIN}/setup`);
+  expect(await screen.findByRole('group', { name: /Send replies from/ })).toHaveTextContent('Step 3 of 4');
+  expect(step(/Forward its mail to Colliedesk/)).toHaveTextContent('Mail arrived, but no customer mail through your mailbox yet.');
+});
+
 test('step 2 flips to First email received when inbox activity brings a conversation, without a reload, and Continue opens step 3', async () => {
   const detail = waitingChannel();
   const { client } = show(`${MAIN}/setup`);
@@ -318,6 +350,13 @@ test('back from Google during the setup, the channel page sends the browser back
   sessionStorage.setItem('colliedesk.email-setup.return', MAIN);
   const { navigate } = show(MAIN, { tab: 'replies', gmail: 'connected' });
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${MAIN}/setup?gmail=connected`, true));
+});
+
+test('back from Google during the setup flow, the channel page sends the browser back to the flow\'s email step with the outcome', async () => {
+  waitingChannel();
+  sessionStorage.setItem('colliedesk.email-setup.return', JSON.stringify({ channel: MAIN, to: '/setup/email' }));
+  const { navigate } = show(MAIN, { tab: 'replies', gmail: 'connected' });
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/setup/email?gmail=connected', true));
 });
 
 test('step 2 waits for Gmail\'s confirmation email, then shows its code, the confirm link in a new tab and its conversation', async () => {

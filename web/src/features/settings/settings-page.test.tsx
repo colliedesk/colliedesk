@@ -32,7 +32,7 @@ test('shows the state of every invite and offers revoke only while it is pending
   const base = { roles: rolesOf('agent'), created_by_email: 'admin@example.com', created_at: '2026-10-14T00:00:00Z', used_at: null, revoked_at: null };
   const future = new Date(Date.now() + 600_000).toISOString();
   const past = new Date(Date.now() - 600_000).toISOString();
-  render(<SettingsPage sessions={[]} timezone="UTC" canCreateInvites invites={[
+  render(<SettingsPage sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites invites={[
     { ...base, id: '11111111-1111-4111-8111-111111111111', email: 'pending@example.com', expires_at: future },
     { ...base, id: '22222222-2222-4222-8222-222222222222', email: 'accepted@example.com', expires_at: future, used_at: '2026-10-14T00:01:00Z' },
     { ...base, id: '33333333-3333-4333-8333-333333333333', email: 'revoked@example.com', expires_at: future, revoked_at: '2026-10-14T00:01:00Z' },
@@ -46,6 +46,16 @@ test('shows the state of every invite and offers revoke only while it is pending
   expect(row('expired@example.com')).toHaveTextContent('Expired');
   expect(within(invites).getAllByRole('button', { name: 'Revoke' })).toHaveLength(1);
   expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
+});
+
+test('an invite stays listed without Revoke for a person who may invite but not revoke', () => {
+  render(<SettingsPage sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites={false} invites={[
+    { id: '11111111-1111-4111-8111-111111111111', email: 'pending@example.com', roles: rolesOf('agent'), created_by_email: 'admin@example.com',
+      created_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), used_at: null, revoked_at: null },
+  ]} />);
+  const invites = screen.getByRole('region', { name: 'Invites' });
+  expect(within(invites).getByText('pending@example.com')).toBeInTheDocument();
+  expect(within(invites).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
 });
 
 test('a fixed token shows how many permissions it holds and lists them by name', () => {

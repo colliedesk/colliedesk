@@ -3046,7 +3046,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. States only, computed on every call. */
+        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, turn on AI drafts, set reply targets, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. It also lists the reply targets presets, with the one the imported history suggests. Computed on every call. */
         get: operations["getSetupProgress"];
         put?: never;
         post?: never;
@@ -6937,24 +6937,57 @@ export interface components {
         };
         SetupProgress: {
             steps: components["schemas"]["SetupStep"][];
-            /** @description True when every step is done. */
+            /** @description True when the four core steps are done: email working, import done, invite joined and first_reply sent. ai_drafts and reply_targets are offers: they never hold setup back. */
             complete: boolean;
             /**
              * @description The step the sign-up goal puts first while it is not done; null for a goal without one.
              * @enum {string|null}
              */
             recommended: "email" | "import" | "invite" | null;
+            /** @description The reply targets the reply_targets step offers, fastest first. Targets are business minutes; a day is reply_target_hours.day_minutes, the open hours of one business day of the hours a preset applies with. Apply one with PUT /api/v1/response-targets and those hours. */
+            reply_target_presets: components["schemas"]["ReplyTargetPreset"][];
+            reply_target_hours: components["schemas"]["ReplyTargetHours"];
+            /** @description The preset that fits the team; null when reply targets are on already or the caller may not change them (workspace:update), since nothing would use it. */
+            reply_target_suggestion: null | components["schemas"]["ReplyTargetSuggestion"];
         };
         SetupStep: {
             /** @enum {string} */
-            key: "email" | "import" | "invite" | "first_reply";
+            key: "email" | "import" | "ai_drafts" | "reply_targets" | "invite" | "first_reply";
+            /** @description The step as the setup guide names it, for example "Turn on AI drafts". */
+            name: string;
             /**
-             * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent.
+             * @description email none, waiting, working or needs_attention; import none, running or done; ai_drafts none, on (reply drafts on, writing a draft for each new customer message), nothing_to_read (off, with no import done and no published help center article to draft from) or unavailable (off, with no built-in AI on this server and no provider of the workspace's own); reply_targets none or on; invite alone, invited or joined; first_reply none or sent.
              * @enum {string}
              */
-            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "alone" | "invited" | "joined" | "sent";
+            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "on" | "nothing_to_read" | "unavailable" | "alone" | "invited" | "joined" | "sent";
             /** @description A reason code for needs_attention; null otherwise. */
             detail: string | null;
+        };
+        ReplyTargetPreset: {
+            key: components["schemas"]["ReplyTargetPresetKey"];
+            name: string;
+            targets: {
+                urgent: components["schemas"]["TargetMinutes"];
+                high: components["schemas"]["TargetMinutes"];
+                normal: components["schemas"]["TargetMinutes"];
+                low: components["schemas"]["TargetMinutes"];
+            };
+        };
+        /** @enum {string} */
+        ReplyTargetPresetKey: "within_the_hour" | "same_day" | "next_business_day";
+        /** @description The business hours a preset applies with. kept: the hours already set in Settings → Response targets (some day is open), which a preset never replaces; otherwise Monday to Friday, 09:00 to 18:00. day_minutes is one business day of them: the length most open days have, the longest on a tie (540 for 09:00 to 18:00, 720 for 08:00 to 20:00). */
+        ReplyTargetHours: {
+            kept: boolean;
+            day_minutes: number;
+            hours: components["schemas"]["BusinessDay"][];
+        };
+        /** @description The preset that fits the team. history: from the median first reply of the imported conversations opened in the last 30 days (up to 60 minutes within_the_hour, up to 480 same_day, longer next_business_day). no_history (nothing imported, or nothing answered in those 30 days) and import_running (checked again when the import ends) suggest same_day. */
+        ReplyTargetSuggestion: {
+            preset: components["schemas"]["ReplyTargetPresetKey"];
+            /** @enum {string} */
+            basis: "history" | "no_history" | "import_running";
+            /** @description Wall-clock minutes from the customer's first message to the first reply; null without history. */
+            median_first_reply_minutes: number | null;
         };
         Agent: {
             /** Format: uuid */
@@ -8708,6 +8741,14 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            mail_switch: components["schemas"]["EmailMailSwitch"];
+            /** @description Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the current support address). Until it has, new customer mail may still arrive in the team's old help desk, and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@` address, dropped mail and mail under an earlier support address do not count. False without a channel. */
+            mail_through_mailbox: boolean;
+            /**
+             * @description Where a customer's answer to a reply goes while `mail_through_mailbox` is false. `colliedesk`: replies carry `Reply-To: reply+<token>@<server's sending domain>`, which this server receives, so the answer joins the conversation. `support_mailbox`: this server does not receive mail on its sending domain, so the answer goes to the support address and reaches Colliedesk only once that mailbox forwards here.
+             * @enum {string}
+             */
+            answers_before_forwarding: "colliedesk" | "support_mailbox";
             gmail: components["schemas"]["GmailSettings"];
             microsoft: components["schemas"]["MicrosoftSettings"];
             /** @description Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and more than 0.3% of the replies sent). Replies can still be written; they stay queued with a note until an operator resumes sending with `collie email resume`. Admins cannot clear it. */
@@ -8730,6 +8771,23 @@ export interface components {
             /** Format: uri */
             inbound_url: string;
             smtp: components["schemas"]["SMTPStatus"];
+        };
+        /** @description The workspace's support mailboxes whose customer mail does not arrive here yet, the same on every email channel's settings. The inbox shows one line while `mailboxes` is not empty. */
+        EmailMailSwitch: {
+            /** @description Whether the workspace finished an import from another help desk (and did not undo it). Each mailbox says in `old_help_desk` whether its new customer mail still arrives in that old help desk. */
+            imported: boolean;
+            /** @description The switched-on email channels with a support address of the team's own whose customer mail has not arrived through the mailbox yet (`mail_through_mailbox` false), the default channel first. A channel whose support address is under the server's hosted mail domain has no mailbox to move and is never listed, also after the workspace address name changed. Empty when nothing is left to move. */
+            mailboxes: components["schemas"]["EmailMailboxToMove"][];
+        };
+        EmailMailboxToMove: {
+            /** Format: uuid */
+            channel_id: string;
+            /** @description The channel's name. */
+            name: string;
+            /** Format: email */
+            support_address: string;
+            /** @description Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added before an import that finished (and was not undone). False for a mailbox added after the import, which the old help desk never received; its mail simply does not arrive here yet. */
+            old_help_desk: boolean;
         };
         GmailSettings: {
             /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off). */

@@ -68,6 +68,17 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   a channel keeps the support address until it is changed again. The self-host **Test request** (posted
   with the channel's own secret from a terminal) counts as forwarded mail: nothing tells it from a
   forwarder.
+  The inbox line "New customer mail still arrives in your old help desk" reads the same rule through the
+  email channel's settings (`mail_through_mailbox`, `store.EmailChannelForwarded`), and
+  `answers_before_forwarding` reads `email.Config.ReceivesPlatformReplies`, the worker's condition. Both
+  share one query and one condition, so the line and the Reply-To cannot disagree. `mail_switch` applies the
+  rule to every email channel of the workspace in the same query as the sending pause
+  (`store.EmailSettingsState`), so the settings cost no extra round trip per channel. The server, not the
+  web app, leaves out a support address under the hosted mail domain (`email.HostedSlug`): after a new
+  workspace address name the channel keeps its old hosted address, which no longer equals `hosted_address`,
+  so a comparison with it would call that address the team's own. A mailbox's `old_help_desk` is set when
+  its channel was created before an import finished (and was not undone): the import does not record which
+  addresses the old help desk received, and a mailbox added later was never there.
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
   verified by Resend. Both steps are needed, in this order:

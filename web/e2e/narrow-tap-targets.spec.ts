@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { servers } from './support/cli';
-import { redeemLink } from './support/browser';
+import { expectIdentityVisible, redeemLink } from './support/browser';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 // A narrow window (a phone browser that does not report a touch pointer, or a small desktop window)
@@ -10,15 +10,15 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 const controls = 'a, button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea';
 
-// expectTapSized lists every visible control in scope shorter than 44 px.
-async function expectTapSized(scope: Locator, what: string): Promise<void> {
+// expectTapSized lists every visible control in scope (or every element the selector names) shorter than 44 px.
+async function expectTapSized(scope: Locator, what: string, selector = controls): Promise<void> {
   await expect(scope.first()).toBeVisible();
   const small = await scope.first().evaluate((root, selector) => Array.from(root.querySelectorAll<HTMLElement>(selector)).flatMap((element) => {
     const box = element.getBoundingClientRect();
     if (box.width === 0 || box.height === 0 || getComputedStyle(element).visibility === 'hidden') return [];
     const name = element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40) ?? element.tagName;
     return box.height < 44 ? [`${name}: ${Math.round(box.height)}px`] : [];
-  }), controls);
+  }), selector);
   expect(small, `${what}: every control is at least 44 px tall`).toEqual([]);
 }
 
@@ -94,4 +94,32 @@ test('on a 375 px screen the test message conversation, its email links and the 
   await expectTapSized(page.locator('.message-envelope'), 'incoming email links');
   await page.getByRole('button', { name: 'Show details' }).click();
   await expectTapSized(page.locator('.conversation-source'), 'contact history link');
+});
+
+test('on a 375 px screen every control of the setup flow\'s email step is tap-sized, and the workspace stays on screen', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const name = `Narrow Flow ${suffix}`;
+  const email = `owner-${suffix}@example.com`;
+  await redeemLink(page, createWorkspaceWithSlug(name, email).url);
+  await page.goto(`${servers.main}/setup/email`);
+  await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, email step');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY), 'the step scrolls').toBeGreaterThan(0);
+  await expectIdentityVisible(page, name, email);
+});
+
+test('on a 375 px screen the setup flow\'s AI drafts and reply targets steps are tap-sized, each preset row included', async ({ page }) => {
+  await newDesk(page, 'Narrow Offers');
+  // This server has no built-in AI: the drafts step offers to add a provider.
+  await page.goto(`${servers.main}/setup/ai_drafts`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Let AI draft your replies' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Add a provider/ })).toBeVisible();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, AI drafts step');
+  await page.goto(`${servers.main}/setup/reply_targets`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Choose when a reply is due' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use Same day' })).toBeEnabled();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, reply targets step');
+  // A preset is chosen by its row, the radio's label.
+  await expectTapSized(page.getByRole('group', { name: 'Reply targets' }), 'reply targets presets', 'label');
 });

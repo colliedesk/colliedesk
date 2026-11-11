@@ -108,6 +108,18 @@ support address do not count. Once forwarded mail arrives, new replies use your 
 receive mail ([self-host email](../self-host/email.md)); otherwise replies always use your support
 address.
 
+Until then the inbox shows one line under its title that names this mailbox and every other one that
+does not forward yet ([Work the inbox](inbox.md)). Its action opens this step, also after a test message
+or other mail that is not customer mail marked it done; the step then says "Mail arrived, but no customer
+mail through your mailbox yet." and changes to **First email received** by itself when customer mail
+arrives. On a server whose sending domain
+does not receive mail, the reply box of an email conversation also says that the customer's answer goes
+to your mailbox until it forwards here. `GET /api/v1/channels/email` (and `GET /api/v1/channels/{id}/email`)
+answer the same: `mail_through_mailbox` is `false` until customer mail arrives through the mailbox,
+`answers_before_forwarding` is `colliedesk` or `support_mailbox`, and `mail_switch` lists every mailbox of
+the workspace still to move, each with `old_help_desk` (added before a finished import, so its mail still
+arrives in the old help desk). The MCP tool `colliedesk_email_channel_get` shows all three.
+
 **Change the forwarding address** (folded under the step, Colliedesk Cloud only) holds the
 **Workspace address name**: the part before `.colliedesk.com`. The old address stops receiving mail
 at once, so change the forwarding in your mailbox at the same time. A name is 1 to 63 lowercase

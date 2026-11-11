@@ -26,8 +26,9 @@ test('test message: a new cloud workspace sends itself a test message from the e
   await page.getByRole('button', { name: 'Save support address' }).click();
   await expect(page.getByRole('group', { name: 'Forward its mail to Colliedesk' })).toContainText('Step 2 of 4');
 
-  // Back on the empty inbox, one click brings a conversation from the agent's own address.
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  // Back on the empty inbox (the setup flow has no rail; leaving it opens the inbox), one click brings a
+  // conversation from the agent's own address.
+  await page.getByRole('link', { name: 'Exit setup' }).click();
   await page.getByRole('region', { name: 'Get started' }).getByRole('button', { name: 'Send yourself a test message' }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();

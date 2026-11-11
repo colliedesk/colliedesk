@@ -17,6 +17,7 @@ import type { Shown } from './settings-nav';
 import { selfHostGuide } from '../../lib/self-host-guide';
 import { aiModelMatches as modelMatches, aiServices as services, aiServiceURL as serviceURL } from '../../lib/ai-services';
 import type { AIService as Service } from '../../lib/ai-services';
+import { slotInput } from './ai-slot-input';
 import './ai-settings.css';
 
 // Icons only this page uses stay in its chunk.
@@ -208,16 +209,6 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
 
 // A choice of provider is "server" or a provider id.
 const sourceOf = (slot: AISlot) => (slot.source === 'server' ? 'server' : slot.provider_id ?? '');
-
-// slotInput is the slot as it is, to change one thing of it.
-function slotInput(slot: AISlot): AISlotInput {
-  const input: AISlotInput = slot.source === 'server' ? { source: 'server', enabled: slot.enabled }
-    : slot.provider_id ? { source: 'provider', provider_id: slot.provider_id, enabled: slot.enabled } : { source: 'none', enabled: false };
-  // The server's provider runs the model its operator picks; only a workspace provider takes one.
-  if (slot.model && input.source === 'provider') input.model = slot.model;
-  input.effort = slot.effort;
-  return input;
-}
 
 
 function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto, onSourceConsent }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {

@@ -5,6 +5,7 @@ export const oauthConsentMessages = {
   acts: (workspace: string, person: string) => `It works in ${workspace} as ${person}, with everything you can do there now.`,
   changes: 'If your roles change, it follows them at once. You can disconnect it at any time in Settings → Connected AI apps.',
   returnsTo: (host: string) => `After your answer you go back to ${host}.`,
+  returnsToThisComputer: 'The answer goes to a program on this computer. Allow only if you just started connecting from an app on this computer.',
   unverifiedName: 'The app named itself; check it is the app you just connected.',
   publishedBy: (host: string) => `Published by ${host}.`,
   allow: 'Allow',
