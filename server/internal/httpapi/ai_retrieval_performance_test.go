@@ -52,11 +52,32 @@ func seedAIRetrievalBudget(t *testing.T, pool *pgxpool.Pool, workspaceName strin
 	}
 }
 
+// clearKBBudgetRetrieval removes the AI retrieval rows of the shared knowledge base fixture's workspaces,
+// what is queued for them, and the resolved conversations seedAIRetrievalBudget adds. Each gate that
+// reads those rows clears them before it seeds its own and when it ends, so it measures the same rows
+// in any order and with any -count.
+func clearKBBudgetRetrieval(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `WITH w AS (SELECT id FROM workspaces WHERE name LIKE 'KB Budget %'),
+		docs AS (DELETE FROM ai_retrieval_docs WHERE workspace_id IN (SELECT id FROM w)),
+		conversations AS (DELETE FROM conversations WHERE workspace_id IN (SELECT id FROM w) AND subject LIKE 'Budget conversation %'),
+		pending AS (DELETE FROM ai_retrieval_pending WHERE workspace_id IN (SELECT id FROM w))
+		SELECT 1`); err != nil {
+		t.Fatalf("clear the AI retrieval rows of the knowledge base fixture: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `DELETE FROM contacts WHERE workspace_id IN (SELECT id FROM workspaces WHERE name LIKE 'KB Budget %')
+		AND email='budget@ai.example'`); err != nil {
+		t.Fatalf("clear the AI retrieval budget's contacts: %v", err)
+	}
+}
+
 // TestAIRetrievalLatencyBudget holds a full search (knowledge base and conversations) to the budget,
 // with more resolved conversations than the search window and the knowledge base at its cap, in two
 // workspaces, with 16 words of which two match every text or half of them.
 func TestAIRetrievalLatencyBudget(t *testing.T) {
 	_, pool, _, _ := sharedKBBudget(t)
+	clearKBBudgetRetrieval(t, pool)
+	t.Cleanup(func() { clearKBBudgetRetrieval(t, pool) })
 	started := time.Now()
 	seedAIRetrievalBudget(t, pool, "KB Budget A", 5200)
 	seedAIRetrievalBudget(t, pool, "KB Budget B", 300)

@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +105,16 @@ func TestMadeUpContactDetailsAreHidden(t *testing.T) {
 				t.Errorf("hidden details leaked: %q", out)
 			}
 		}
+	}
+}
+
+// The phone numbers of the articles are found wherever they stand: after a colon, before a comma or an
+// accented letter, in groups, brackets and dots; runs too short to be a number are not.
+func TestPhoneNumbersAreFoundBetweenWordsAndAccents(t *testing.T) {
+	got := phoneDigits("Hotline:+84 (28) 3822-1234,café 0912 345 678é and 12-34 or Zip 70000.\nFax\t028.3822.9999")
+	want := []string{"842838221234", "0912345678", "02838229999"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("phone digits = %q, want %q", got, want)
 	}
 }
 
