@@ -22,7 +22,7 @@ test('setup flow: a new admin connects email in place, skips the import, invites
   await page.goto(`${baseURL}/setup`);
   await expect(page).toHaveURL(`${baseURL}/setup/email`);
   await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email' })).toBeVisible();
-  await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveText('Step 1 of 4');
+  await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveText('Step 1 of 6 · Email');
   await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   await expectIdentityVisible(page, workspace, admin);
   await expect(continueButton).toBeDisabled();
@@ -48,9 +48,18 @@ test('setup flow: a new admin connects email in place, skips the import, invites
   // The import can wait.
   await expect(page).toHaveURL(`${baseURL}/setup/import`);
   await expect(page.getByRole('heading', { level: 1, name: 'Import from Freshdesk' })).toBeVisible();
-  await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveText('Step 2 of 4');
+  await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveText('Step 2 of 6 · Import');
   await expect(page.getByLabel('Freshdesk address')).toBeVisible();
   await expect(continueButton).toBeDisabled();
+  await later.click();
+
+  // AI drafts and reply targets can wait too. This server has no built-in AI: the drafts step offers to add a provider.
+  await expect(page).toHaveURL(`${baseURL}/setup/ai_drafts`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Let AI draft your replies' })).toBeVisible();
+  await expect(flow.getByRole('link', { name: /Add a provider/ })).toHaveAttribute('target', '_blank');
+  await later.click();
+  await expect(page).toHaveURL(`${baseURL}/setup/reply_targets`);
+  await expect(flow.getByRole('button', { name: 'Use Same day' })).toBeVisible();
   await later.click();
 
   // An invite is created here and its one-time link stays on screen.
@@ -79,7 +88,8 @@ test('setup flow: a new admin connects email in place, skips the import, invites
   await expect(page).toHaveURL(`${baseURL}/setup/done`);
   await expect(page.getByRole('heading', { level: 1, name: 'You\'re ready to answer customers' })).toBeVisible();
   const rows = page.getByRole('list', { name: 'Setup steps' }).getByRole('listitem');
-  await expect(rows).toHaveText([/Receive customer email.*Waiting for the first email/, /Import from Freshdesk.*To do/, /Invite your team.*Invite sent/, /Answer your first email.*To do/]);
+  await expect(rows).toHaveText([/Receive customer email.*Waiting for the first email/, /Import from Freshdesk.*To do/, /Turn on AI drafts.*To do/, /Set reply targets.*To do/,
+    /Invite your team.*Invite sent/, /Answer your first email.*To do/]);
   await expect(rows.nth(1).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/setup/import');
   await expectIdentityVisible(page, workspace, admin);
   await page.getByRole('link', { name: 'Open the inbox' }).click();
