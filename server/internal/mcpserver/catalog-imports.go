@@ -30,7 +30,6 @@ func importsListSpec() Spec {
 		Name:        "colliedesk_imports_list",
 		Title:       "List imports",
 		Description: `List the workspace's imports from Freshdesk and their undos, newest first, with state, progress and error code.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/imports"},
 		Input:       noArguments,
 		Output:      `{"type":"object","required":["imports"],"properties":{"imports":{"type":"array","items":` + importJobSchema + `}}}`,
@@ -44,11 +43,10 @@ func importGetSpec() Spec {
 		Title: "Show an import",
 		Description: `Show one import: its state (previewing, previewed, queued, running, retry_wait, waiting_key, finished, failed, cancelled, discarded), ` +
 			`the preview counts, the progress and why it failed or waits (error_code). Poll it while it runs; it changes every few seconds at most.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/imports/{id}"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
-		Output:   importJobOutput,
-		run:      importGet,
+		REST:   []string{"GET /api/v1/imports/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output: importJobOutput,
+		run:    importGet,
 	}
 }
 
@@ -124,8 +122,7 @@ func importReportSpec() Spec {
 		Description: `Read the reconcile report of an import: status OK, FAILED (every missing item listed) or UNVERIFIED (nothing failed, but Freshdesk's totals could not confirm it), ` +
 			`with counts per entity, failures and warnings. While only the recent tickets are in, it is the interim report (status INTERIM, never OK). ` +
 			`For an undo, what it removed. format markdown gives the report a person reads.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/imports/{id}/report"},
+		REST: []string{"GET /api/v1/imports/{id}/report"},
 		Input: `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `,` +
 			`"format":{"type":"string","enum":["json","markdown"],"default":"json"}}}`,
 		Output: `{"type":"object","properties":{"report":{"type":"object"},"markdown":{"type":"string"}}}`,
@@ -139,11 +136,10 @@ func importUndoSpec() Spec {
 		Title: "Undo an import",
 		Description: `Remove what an ended import (finished, failed or cancelled) brought in from its Freshdesk account; what the team changed since stays. It runs in the background: ` +
 			`follow it with colliedesk_import_get. It cannot be undone: import the account again to bring the data back.`,
-		Destructive: true,
-		REST:        []string{"POST /api/v1/imports/{id}/undo"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
-		Output:      importJobOutput,
-		run:         importUndo,
+		REST:   []string{"POST /api/v1/imports/{id}/undo"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output: importJobOutput,
+		run:    importUndo,
 	}
 }
 
@@ -161,11 +157,10 @@ func importPeopleListSpec() Spec {
 		Title: "List the Freshdesk agents of an import",
 		Description: `List the agents of an import's Freshdesk account and the Colliedesk agent each is linked to. A link makes that agent the author of their imported replies and the assignee of the tickets they held. ` +
 			`The preview links matching emails, and accepting an invite links the invited email; invite the others with colliedesk_invite_create.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/imports/{id}/people"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
-		Output:   `{"type":"object","required":["people"],"properties":{"people":{"type":"array","items":` + importPersonSchema + `}}}`,
-		run:      importPeopleList,
+		REST:   []string{"GET /api/v1/imports/{id}/people"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["import_id"],"properties":{` + importIDProperty + `}}`,
+		Output: `{"type":"object","required":["people"],"properties":{"people":{"type":"array","items":` + importPersonSchema + `}}}`,
+		run:    importPeopleList,
 	}
 }
 

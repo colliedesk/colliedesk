@@ -49,7 +49,7 @@
     "token": {
       "type": "string",
       "title": "Agent token",
-      "description": "Create one in Colliedesk under Settings → Sessions. It starts with cdk_agent_; Claude Desktop stores it securely.",
+      "description": "Create one in Colliedesk under Settings → AI & agents. It starts with cdk_agent_; Claude Desktop stores it securely.",
       "sensitive": true,
       "required": true
     }

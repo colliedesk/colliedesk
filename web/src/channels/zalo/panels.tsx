@@ -239,7 +239,7 @@ function References({ channel, canManage }: ChannelPanelProps) {
           <span className="button-row"><button type="submit" disabled={feedback.pending || chosen === current}>{feedback.saveLabel(m.saveSeries)}</button>{feedback.status}</span>
         </form>
       : <dl className="zl-dl"><dt>{m.series}</dt><dd>{label(current)}{next ? <> · <span className="mono">{m.nextReference(next)}</span></> : null}</dd></dl>}
-    <p className="muted-copy"><a href="/settings/numbers">{m.manageSeries}</a></p>
+    <p className="muted-copy"><a href="/settings/general#numbers-heading">{m.manageSeries}</a></p>
   </section>;
 }
 

@@ -43,11 +43,10 @@ func savedViewsListSpec() Spec {
 		Title: "List saved inbox views",
 		Description: `List the saved inbox views this token's person can use: the views shared with the team, then their own personal views, by name. ` +
 			`trash true lists instead the views deleted in the last 30 days, which colliedesk_saved_view_restore brings back. ` + savedViewNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/saved-views", "GET /api/v1/saved-views/trash", "GET /api/v1/auth/me"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{"trash":{"type":"boolean","default":false}}}`,
-		Output:   `{"type":"object","required":["saved_views"],"properties":{"saved_views":{"type":"array","items":` + savedViewSchema + `}}}`,
-		run:      savedViewsList,
+		REST:   []string{"GET /api/v1/saved-views", "GET /api/v1/saved-views/trash", "GET /api/v1/auth/me"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{"trash":{"type":"boolean","default":false}}}`,
+		Output: `{"type":"object","required":["saved_views"],"properties":{"saved_views":{"type":"array","items":` + savedViewSchema + `}}}`,
+		run:    savedViewsList,
 	}
 }
 

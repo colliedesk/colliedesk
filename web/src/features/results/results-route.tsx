@@ -54,7 +54,7 @@ export function ResultsRoute({ window = '30d', onWindow }: { window?: WindowKey;
   return <ResultsPage results={results.data} loading={results.isPending || me.isPending} failed={results.isError || me.isError}
     onRetry={() => void results.refetch()} window={window} onWindow={onWindow}
     timezone={timezone} isAdmin={isAdmin} now={now} link={numberLink}
-    importLink={<Link to="/settings/import-freshdesk" className="button">{m.openImport}</Link>}
+    importLink={<Link to="/settings/data" className="button">{m.openImport}</Link>}
     admin={isAdmin ? <ResultsAdmin timezone={timezone} link={shareLink.data?.link} linkFailed={shareLink.isError} created={created} replacedOld={replacedOld}
       busy={share.isPending} shareFailed={share.isError} onCreate={() => share.mutate('create')} onTurnOff={() => share.mutate('off')}
       weekly={weeklyState} weeklyBusy={weekly.isPending} weeklyFailed={weekly.isError} onWeekly={(value) => weekly.mutate(value)} /> : undefined} />;

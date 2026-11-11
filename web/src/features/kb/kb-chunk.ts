@@ -9,3 +9,5 @@ export { TranslationRoute } from './translation-editor';
 export { MediaRoute } from './media-page';
 // The library picker, for the help center's logo and icon in Settings.
 export { MediaPicker } from './media-picker';
+// Knowledge base → Settings: the help center's own settings.
+export { HelpCenterSettingsRoute } from './help-center-settings-page';

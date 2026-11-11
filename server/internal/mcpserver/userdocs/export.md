@@ -15,7 +15,7 @@ self-hosted installs.
 
 ## How to export
 
-In the app, open **Settings → Export all data** and select **Export all data**. On a locked cloud
+In the app, open **Settings → Data → Export all data** and select **Export all data**. On a locked cloud
 workspace the same button is on the locked page. Your browser then downloads the file itself, with its
 own progress bar, straight to disk: a large workspace is never held in memory. Keep the page open until
 the download finishes. If the server is busy with other exports you are told how long to wait. If

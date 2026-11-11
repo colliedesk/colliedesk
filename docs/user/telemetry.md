@@ -143,13 +143,31 @@ Each is sent only after the action succeeded.
 | `conversation_assigned` | `to_self` |
 | `bulk_action_applied` | `action`: `status`, `assign`, `add_tag` or `remove_tag`; `count` |
 | `reply_draft_decided` | `decision`: `sent` or `discarded`; sent when someone sends or discards a reply draft an AI made or an AI agent left |
-| `settings_section_opened` | `section`: the settings section |
+| `settings_section_opened` | `section`: the settings page opened from the settings menu: `account`, `general`, `members`, `channels`, `targets`, `ai`, `saved_replies`, `data` or `billing` (see [below](#settings-pages-before-and-after)) |
 | `workspace_export_requested` | none |
 | `onboarding_step_started` | `step`: `email`, `import`, `ai_drafts`, `reply_targets`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
 | `onboarding_step_completed` | `step`: as above; sent when the step turns done while the guide is shown |
 | `problem_reported` | none; sent after a [problem report](problem-reports.md) reached the support desk (the report itself goes to the server's support desk, not to PostHog) |
 
 When you sign out, the web app forgets the agent id, so later events no longer carry it.
+
+### Settings pages before and after
+
+Settings was one long page until each menu item became a page of its own
+([#528](https://github.com/colliedesk/colliedesk/issues/528)). Before, `settings_section_opened` named
+the section the menu scrolled to; now it names the page the menu opens. To keep an existing insight
+counting the same visits, match the old values to the new ones:
+
+| Old `section` | New `section` |
+|---|---|
+| `profile`, `preferences`, `sessions`, `connected_apps` | `account` |
+| `general` | `general` |
+| `team`, `invites` | `members` |
+| `agents`, `ai` | `ai` |
+| `export` | `data` |
+| `channels`, `saved_replies`, `billing` | unchanged |
+| `help_center` | no longer sent: the help center's settings are in Knowledge base → Settings |
+| none | `targets` (Response targets), and Data opened for the Freshdesk import, were not counted before |
 
 ### Trial question (Colliedesk Cloud only)
 

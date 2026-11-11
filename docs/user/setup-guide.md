@@ -59,18 +59,18 @@ Each screen shows:
   - **Import from Freshdesk**: the [import](import-freshdesk.md), without leaving the flow.
   - **Turn on AI drafts** ("Let AI draft your replies"): an example of a conversation in Today with
     its draft ready (only a picture: its buttons do nothing), how drafts work, what is sent to the AI
-    provider and what it costs. The numbers are the server's estimate, as in Settings → Built-in AI:
+    provider and what it costs. The numbers are the server's estimate, as in Settings → AI & agents:
     about how many automatic drafts half of your plan's included AI covers this month, and at most how many
     a day. What is sent and what it costs name the provider the drafts will actually use. **Turn on AI
-    drafts** makes the same call as Settings → Built-in AI: Reply drafts with **Default for channels** set
+    drafts** makes the same call as Settings → AI & agents: Reply drafts with **Default for channels** set
     to **Suggest**, keeping the provider, model and effort the feature already has; when it has none, the
     server's built-in AI if it offers drafts, else your own provider. A feature left on built-in AI that the
     server no longer offers for drafts turns on with your own provider, and the step names that provider. It records your consent, as Settings →
-    Built-in AI does (History). Triage suggestions are not turned on here. **Turn off** sets **Default for
+    AI & agents does (History). Triage suggestions are not turned on here. **Turn off** sets **Default for
     channels** back to **Off**, as Settings does; drafts on request stay as they were. When the AI settings
     cannot be read, the step says why, with **Try again**. With no import and no published help center article, a note says drafts have little to read
     yet; turning on still works. On a server without built-in AI, **Add a provider** opens Settings →
-    Built-in AI in a new tab, and you can skip the step.
+    AI & agents in a new tab, and you can skip the step.
   - **Set reply targets** ("Choose when a reply is due"): three presets side by side, each with the
     reply and resolve target of every priority. A day is one business day of the hours the preset applies
     with: 9 hours for 09:00 to 18:00, 12 hours for 08:00 to 20:00. When days differ, it is the length most

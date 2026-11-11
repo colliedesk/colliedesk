@@ -294,6 +294,19 @@ The contact lookup by id is the call that depends on table size. It must compare
 
 It runs in the normal Go suite and in CI (about 11 seconds, most of it seeding). Do not raise the threshold or shrink the fixture to pass.
 
+## MCP tool list budget
+
+A client that loads every tool pays the whole tool list in its context on each session, before any
+work. `TestToolsListStaysWithinItsBudget` (package `mcpserver`) lists the tools through the real `/mcp`
+endpoint and holds the JSON at or below 600,000 bytes. On 2026-11-12 it was 574,966 bytes for 246
+tools (about 144,000 tokens), and 305,002 bytes without the output schemas: the output schemas are the
+first place to cut. Clients with tool search (Claude Code) load a tool only when it is needed; others
+load all of it.
+
+When a new tool does not fit, shorten output schemas and descriptions or merge tools. When that is not
+enough, split the list into toolsets a client chooses, with the daily inbox tools as the default. Do
+not raise the budget to pass.
+
 ## Ticket open (timeline read and request order)
 
 A ticket opens on three independent reads: the list, the conversation detail and its messages (plus time entries). `inbox-route.test.tsx` pins that a ticket opened by its address requests messages, time entries, list and detail at once, before the list or the detail answers, and that these go out before the side lists (agents, tags, saved replies, email channel). A browser allows six HTTP/1.1 connections per host, so a request queued behind the side lists is a request the person waits for. `TestTimelineReadWithHeavyHTMLMailStaysInBudget` holds `GET .../messages` for 60 HTML messages with 30 remote images each (HTML rewritten to proxy addresses, no image host called) to 100 ms p95 (measured 38 ms).

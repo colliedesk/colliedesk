@@ -41,7 +41,7 @@ func table(specs []mcpserver.Spec) string {
 	b.WriteString("| Tool | What it does | Needs |\n|---|---|---|\n")
 	for _, spec := range specs {
 		doc := spec.Doc
-		if spec.Destructive {
+		if spec.Destructive() {
 			doc += ". Cannot be undone"
 		}
 		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", spec.Name, doc, needsCell(spec))

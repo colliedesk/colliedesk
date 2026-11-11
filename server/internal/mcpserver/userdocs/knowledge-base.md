@@ -395,14 +395,17 @@ it. Deleted translations are listed there too. Articles in the trash count towar
 
 ## Help center settings
 
-Open **Settings → Help center**. Everyone with `help_center:read` (Agent and Admin hold it) sees whether the help center is on. An admin can turn
+Open **Knowledge base → Settings**, or **Settings → General → Open Help center settings**. It needs only
+`help_center:read` (Agent and Admin hold it), not the articles' permission: a role without
+`kb_articles:read` still finds the **Settings** tab beside **Media**, and Knowledge on the rail opens it when the
+role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
 
 ### Brand
 
-An admin sets the help center's brand in **Settings → Help center → Brand**, through the API
+An admin sets the help center's brand in **Knowledge base → Settings → Brand**, through the API
 (`PUT /api/v1/help-center/theme`) or an AI agent (`colliedesk_help_center_theme_update`). Every page
 shows it on the next visit (see [what visitors see](#what-visitors-see)). Agents who are not admins
 see the saved brand and its preview, without the controls. A brand has:
@@ -497,11 +500,11 @@ Images and fonts of your own are not possible this way. Use the logo, the favico
 
 The help center is a public website made from your published articles. Customers read it without
 signing in, on Colliedesk Cloud and on your own server alike. It is off until an admin turns it on
-in **Settings → Help center** (see [Help center settings](#help-center-settings)).
+in **Knowledge base → Settings** (see [Help center settings](#help-center-settings)).
 
 ### Its address
 
-**Settings → Help center** shows the address as a link, even while the help center is off; the API
+**Knowledge base → Settings** shows the address as a link, even while the help center is off; the API
 (`GET /api/v1/help-center`) and `colliedesk_help_center_get` give it in `url`.
 
 - **Colliedesk Cloud:** `/help` on your workspace's own address, `https://<workspace address name>.colliedesk.com/help`.
@@ -550,7 +553,7 @@ the article in the primary language.
 ### Custom domain
 
 The help center can answer on an address of your own domain, such as `help.example.com`. Open
-**Settings → Help center → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
+**Knowledge base → Settings → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
 checks and removes it.
 
 1. Type the host name in **Host name** and press **Set domain**. The card then shows the DNS records
@@ -714,7 +717,7 @@ Both tools offer a verification by HTML tag. Copy only the `content` value of th
 - Google: the tag is `<meta name="google-site-verification" content="…">`.
 - Bing: the tag is `<meta name="msvalidate.01" content="…">`.
 
-Open **Settings → Help center → Search Console**, paste each value into its field and press **Save**.
+Open **Knowledge base → Settings → Search Console**, paste each value into its field and press **Save**.
 The help center then puts the tag in the head of every page of this workspace, on its own address
 (its host or its custom domain). The app and every other workspace's help center never carry it.
 Then press **Verify** in Search Console or Bing.
@@ -758,7 +761,7 @@ edit both before you send. `Ctrl+Z` (`Cmd+Z`) takes the link back out.
 
 The list shows only published articles, and only while the help center is on: while it is off no
 article has a public page, so the list says so instead. An admin gets **Open help center
-settings**, which opens Settings in a new tab, so your draft stays; an agent asks an admin. The list
+settings**, which opens Knowledge base → Settings in a new tab, so your draft stays; an agent asks an admin. The list
 asks again each time it opens, so an article published or a help center turned on a moment ago
 shows up.
 

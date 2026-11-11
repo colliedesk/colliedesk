@@ -50,7 +50,7 @@ interface ConversationListProps {
 }
 
 // Where the inbox sends an admin to finish something in Settings.
-export type SettingsTarget = '/settings' | '/settings/import-freshdesk' | `/settings/channels/${string}`;
+export type SettingsTarget = '/settings' | '/settings/data' | `/settings/channels/${string}`;
 
 const visibleTags = 2;
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,

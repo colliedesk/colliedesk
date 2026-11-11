@@ -475,7 +475,8 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_results_get":                         {readOnly: true},
 	"colliedesk_results_share_link_get":              {readOnly: true},
 	"colliedesk_results_share_link_create":           {},
-	"colliedesk_results_share_link_revoke":           {idempotent: true},
+	"colliedesk_results_share_link_revoke":           {idempotent: true, destructive: true},
+	"colliedesk_cursor_key_remove":                   {destructive: true},
 	"colliedesk_results_email_set":                   {idempotent: true},
 	"colliedesk_setup_progress_get":                  {readOnly: true},
 	"colliedesk_setup_guide_set":                     {idempotent: true},
@@ -513,6 +514,10 @@ var wantAnnotations = map[string]struct {
 func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("List Desk", "admin@list.example.com")
+	openWorld := map[string]bool{}
+	for _, spec := range mcpserver.Catalog() {
+		openWorld[spec.Name] = spec.OpenWorld()
+	}
 	for _, version := range []string{"", "2025-11-25"} {
 		session := e.connect(w.read, version)
 		if info := session.InitializeResult().ServerInfo; info.Name != "colliedesk" || info.Version != testVersion {
@@ -539,8 +544,8 @@ func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 				if a == nil || a.DestructiveHint == nil || *a.DestructiveHint != (want.destructive && !want.readOnly) {
 					t.Errorf("%s: every tool states destructiveHint, %v here", tool.Name, want.destructive && !want.readOnly)
 				}
-				if a == nil || a.OpenWorldHint == nil || *a.OpenWorldHint {
-					t.Errorf("%s: every tool states openWorldHint=false: it reaches only the caller's workspace", tool.Name)
+				if a == nil || a.OpenWorldHint == nil || *a.OpenWorldHint != openWorld[tool.Name] {
+					t.Errorf("%s: every tool states openWorldHint, %v here: true when it may reach people or systems outside the workspace", tool.Name, openWorld[tool.Name])
 				}
 				if want.destructive && !strings.Contains(tool.Description, "cannot be undone") {
 					t.Errorf("%s: a destructive tool must say it cannot be undone\n%s", tool.Name, tool.Description)

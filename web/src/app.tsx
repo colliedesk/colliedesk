@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
-import { closedScreen, firstOpenArea, railAreasFor } from './lib/areas';
+import { closedScreen, firstOpenArea, knowledgeHome, railAreasFor } from './lib/areas';
+import { isPhone } from './lib/use-phone';
+import { keepContentScroll } from './lib/content-scroll';
 import { PermissionsContext } from './lib/permissions-context';
 import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
@@ -18,6 +20,7 @@ import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-inte
 import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
+import { settingsAddress } from './features/settings/settings-anchors';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
@@ -42,8 +45,8 @@ import { useInAppLinks } from './lib/in-app-links';
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
 const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
-const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
-const numbersRoutePart = lazyPart(() => import('./features/settings/numbers/numbers-route'));
+// Settings → Data carries the Freshdesk import's steps, so it is a chunk of its own.
+const dataRoutePart = lazyPart(() => import('./features/settings/data-route'));
 const rolesRoutePart = lazyPart(() => import('./features/settings/roles/roles-route'));
 const targetsRoutePart = lazyPart(() => import('./features/settings/targets/targets-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
@@ -61,6 +64,9 @@ function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   // A bare link to a page of the app opens without reloading, wherever it is written.
   useInAppLinks();
+  // A page opened starts at its top, and Back returns to where it was, in the content pane too (content-scroll.ts).
+  const router = useRouter();
+  useEffect(() => keepContentScroll(router), [router]);
   // The public page of a results share link has no session and no rail.
   // The consent page of an AI app's OAuth sign-in has no rail either: it checks its own session. So does the
   // page of a trial offer link, which a locked workspace must reach past its locked screen.
@@ -119,6 +125,8 @@ function AppLayout() {
   const closed = me.data ? closedScreen(path, me.data) : undefined;
   if (closed && path === '/') return <Navigate to={firstOpenArea(me.data)} replace />;
   const shows = (permission: TokenPermission) => !me.data || can(me.data, permission);
+  // Knowledge opens on what the session reads of it: the articles, the media or the help center's settings.
+  const knowledge = me.data ? knowledgeHome(me.data) : '/knowledge';
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
@@ -132,7 +140,7 @@ function AppLayout() {
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
         {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
-      {(shows('kb_articles:read') || shows('kb_media:read')) && <Link to={me.data && !can(me.data, 'kb_articles:read') ? '/knowledge/media' : '/knowledge'} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+      {knowledge && <Link to={knowledge} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
       {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
         onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
@@ -242,6 +250,12 @@ const languagesRoute = createRoute({
   },
 });
 // One language of an article, beside the original; it also starts a translation.
+// The help center's own settings, beside the articles it publishes; they were a section of Settings.
+const helpCenterSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/settings',
+  component: () => <Part part={kbPart} failed={kbFailed} render={({ HelpCenterSettingsRoute }) => <HelpCenterSettingsRoute />} />,
+});
 const translationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/articles/$articleId/translations/$locale',
@@ -250,18 +264,37 @@ const translationRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ TranslationRoute }) => <TranslationRoute key={`${articleId}-${locale}`} articleId={articleId} locale={locale} />} />;
   },
 });
-// While the chunk loads the page keeps its frame and title, so a slow network shows Settings at once and
-// nothing jumps when the sections arrive. A chunk that cannot load says so, with Reload page: a browser
-// keeps a failed import failed until the page loads again.
-function SettingsPage() {
+// Settings is one page per item of its menu (#528), each at its own address under /settings/. While the
+// chunk loads a page keeps its frame and title, so a slow network shows the page at once and nothing jumps
+// when the sections arrive. A chunk that cannot load says so, with Reload page: a browser keeps a failed
+// import failed until the page loads again.
+type SettingsChunk = typeof import('./features/settings/settings-route');
+function SettingsChunkPage({ title, render }: { title: string; render: (chunk: SettingsChunk) => ReactNode }) {
   const part = settingsRoutePart.use();
-  if (part.status === 'ready') return <part.module.SettingsRoute />;
+  if (part.status === 'ready') return render(part.module);
   return <main className="settings-page" aria-busy={part.status === 'loading'}>
-    <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
+    <header><h1>{title}</h1></header>
     {part.status === 'error' ? <PartUnavailable /> : <p role="status" className="muted-copy">{messages.loadingList}</p>}
   </main>;
 }
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
+// /settings is the menu on a phone and Account elsewhere. A link to a section of the old one-page Settings
+// (/settings#invites-heading, in bookmarks, emails and MCP answers) opens the page that holds it now
+// (settings-anchors.ts), and so does a refused export link (/settings?export_error=…).
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings',
+  beforeLoad: ({ location }) => {
+    const address = settingsAddress(location.hash, location.searchStr);
+    // On a phone the menu and a settings page take turns on the screen, as the inbox list and a conversation do.
+    if (address !== '/settings/account' || !isPhone()) throw redirect({ href: address, replace: true });
+  },
+  component: () => <SettingsChunkPage title={messages.settings} render={({ SettingsIndexRoute }) => <SettingsIndexRoute />} /> });
+const accountRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/account',
+  component: () => <SettingsChunkPage title={messages.account} render={({ AccountRoute }) => <AccountRoute />} /> });
+const generalRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/general',
+  component: () => <SettingsChunkPage title={messages.general} render={({ GeneralRoute }) => <GeneralRoute />} /> });
+const membersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/members',
+  component: () => <SettingsChunkPage title={messages.members} render={({ MembersRoute }) => <MembersRoute />} /> });
+const savedRepliesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/saved-replies',
+  component: () => <SettingsChunkPage title={messages.savedReplies} render={({ SavedRepliesRoute }) => <SavedRepliesRoute />} /> });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
 // The tab and the channel filter of Review are in the address, so a link opens the same list.
@@ -312,17 +345,20 @@ const billingRoute = createRoute({
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
-const importRoute = createRoute({
+// Settings → Data: the Freshdesk import and the whole-workspace export. The import was a page of its own:
+// its address (in import emails and older guides) opens Data.
+const dataRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/settings/import-freshdesk',
-  component: function Import() {
-    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
-  },
+  path: '/settings/data',
+  component: () => <Part part={dataRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ DataRoute }) => <DataRoute />} />,
 });
-// Settings → Roles: the list, a new role (optionally from another) and one role.
+const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/import-freshdesk',
+  beforeLoad: () => { throw redirect({ to: '/settings/data', replace: true }); } });
+// Settings → Members → a role: a new role (optionally from another) and one role. The list of roles is a
+// section of Members; its old address opens it there.
 const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
 const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
-  component: () => <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'list' }} />} /> });
+  beforeLoad: () => { throw redirect({ to: '/settings/members', hash: 'roles-heading', replace: true }); } });
 const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new',
   validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
   component: function NewRole() {
@@ -334,14 +370,9 @@ const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setting
     const { roleId } = roleRoute.useParams();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
   } });
-// Settings → Conversation numbers: the workspace's number series.
-const numbersRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/settings/numbers',
-  component: function Numbers() {
-    return <Part part={numbersRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ NumbersRoute }) => <NumbersRoute />} />;
-  },
-});
+// Conversation numbers were a page of their own; they are a section of General now.
+const numbersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/numbers',
+  beforeLoad: () => { throw redirect({ to: '/settings/general', hash: 'numbers-heading', replace: true }); } });
 // Settings → Response targets: business hours and the targets of each priority.
 const targetsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -476,7 +507,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

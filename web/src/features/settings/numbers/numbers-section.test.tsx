@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { permissionsOf, rolesOf } from '../../../test-roles';
 import { beforeEach, expect, test, vi } from 'vitest';
 
-// Settings → Conversation numbers (docs/user/inbox.md#conversation-numbers).
+// Settings → General → Conversation numbers (docs/user/inbox.md#conversation-numbers).
 const mocks = vi.hoisted(() => {
   class InvalidRequestError extends Error {
     detail?: Record<string, unknown>;
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError }));
 vi.mock('../../../api/number-series', async (actual) => ({ ...(await actual<typeof import('../../../api/number-series')>()), numberSeriesApi: mocks.numberSeriesApi }));
 const { api, numberSeriesApi, InvalidRequestError } = mocks;
-const { NumbersRoute } = await import('./numbers-route');
+const { NumbersSection } = await import('./numbers-section');
 
 const me = (role: 'admin' | 'agent') => ({
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
@@ -27,7 +27,7 @@ const year = Number(new Intl.DateTimeFormat('en', { timeZone: 'Asia/Ho_Chi_Minh'
 
 function show() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><NumbersRoute /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><NumbersSection /></QueryClientProvider>);
 }
 
 beforeEach(() => {

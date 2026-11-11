@@ -5,13 +5,13 @@ import { SettingsPage } from './settings-page';
 afterEach(() => { localStorage.clear(); document.documentElement.removeAttribute('data-theme'); });
 
 test('settings offers light and dark, light chosen by default', () => {
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" />);
+  render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" />);
   expect(screen.getByRole('radio', { name: 'Light' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Dark' })).not.toBeChecked();
 });
 
 test('choosing dark switches the page and remembers it', () => {
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" />);
+  render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" />);
   fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
   expect(document.documentElement.dataset.theme).toBe('dark');
   expect(localStorage.getItem('colliedesk.theme')).toBe('dark');
@@ -21,7 +21,7 @@ test('choosing dark switches the page and remembers it', () => {
 });
 
 test('a theme chosen in another tab moves the choice shown here and the page', () => {
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" />);
+  render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" />);
   act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'colliedesk.theme', newValue: 'dark' })); });
   expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked();
   expect(document.documentElement.dataset.theme).toBe('dark');

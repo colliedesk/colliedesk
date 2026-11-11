@@ -128,7 +128,7 @@ If you move to a smaller plan in the billing portal while you have more agents t
 nobody is removed. Agents are paused before admins, the most recently added first: they can only
 sign out and see why. The first admin of the workspace is never paused, and a paused admin can still
 open the billing portal. An agent you reactivate keeps the place of when they were first added. Admins see a notice on every page. Deactivate agents
-in **Settings → Team**, or upgrade again, and the paused agents can work again at once.
+in **Settings → Members → Team**, or upgrade again, and the paused agents can work again at once.
 
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
 (see "Attachment storage" below). Prices are in US dollars.

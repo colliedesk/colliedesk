@@ -41,6 +41,10 @@ func TestTokenCreatePrintsATokenThatAuthenticatesWithItsScope(t *testing.T) {
 	if !strings.Contains(hint.String(), "once") {
 		t.Fatalf("hint does not say the token is shown once: %q", hint.String())
 	}
+	// Agent tokens and their sessions are on Settings → AI & agents; Settings → Sessions lists devices.
+	if !strings.Contains(hint.String(), "Revoke it under Settings → AI & agents") {
+		t.Fatalf("hint does not say where the token is revoked: %q", hint.String())
+	}
 
 	me := tokenAPICall(t, env, http.MethodGet, "/api/v1/auth/me", token, "")
 	var identity struct {

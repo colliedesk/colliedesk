@@ -34,11 +34,10 @@ func helpCenterDomainGetSpec() Spec {
 			`or taken_over when another workspace proved the host name while this domain's records did not. ` +
 			`awaiting_payment is true while the workspace is on its trial (or locked after it): the domain can be set and verified, ` +
 			`but the help center serves on it only once the workspace is paid. ` + helpCenterAddressRule,
-		ReadOnly: true,
-		REST:     []string{"GET " + helpCenterDomainPath},
-		Input:    noArguments,
-		Output:   helpCenterDomainOutput,
-		run:      helpCenterDomainGet,
+		REST:   []string{"GET " + helpCenterDomainPath},
+		Input:  noArguments,
+		Output: helpCenterDomainOutput,
+		run:    helpCenterDomainGet,
 	}
 }
 

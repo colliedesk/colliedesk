@@ -18,11 +18,10 @@ func helpCenterSearchConsoleGetSpec() Spec {
 		Title: "Read the help center's Search Console tokens",
 		Description: `Return the Google and Bing verification tokens of the public help center (null when not set). ` +
 			`Each is served as a meta tag on this workspace's help center pages only.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/help-center/search-console"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
-		run:      helpCenterSearchConsoleGet,
+		REST:   []string{"GET /api/v1/help-center/search-console"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
+		run:    helpCenterSearchConsoleGet,
 	}
 }
 

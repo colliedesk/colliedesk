@@ -23,7 +23,7 @@ codex plugin add colliedesk@colliedesk
 
 3. Your browser opens Colliedesk. Sign in if it asks, choose the workspace and choose **Allow**.
 
-`codex mcp list` shows `colliedesk` as logged in, and **Settings → External AI agents → Connected
+`codex mcp list` shows `colliedesk` as logged in, and **Settings → Account → Connected
 AI apps** in Colliedesk lists Codex. Codex acts as you, with everything you can do in the workspace you
 allowed; see [Connected AI apps](sessions.md#connected-ai-apps). To use another workspace, run
 `codex mcp logout colliedesk`, then sign in again and choose that workspace. Remove the plugin with
@@ -35,7 +35,7 @@ For a server you run yourself, or to give Codex fewer permissions than you hold,
 
 ## Before you start
 
-1. Sign in to Colliedesk and open **Settings → External AI agents**.
+1. Sign in to Colliedesk and open **Settings → AI & agents → External AI agents**.
 2. Name the token (for example "Codex on my laptop"), choose what it may do (follow a role,
    or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
    See [Agent tokens](sessions.md#agent-tokens).
@@ -84,7 +84,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 codex mcp remove colliedesk
 ```
 
-Delete the `export` line from your shell profile. Then revoke the token in **Settings → Sessions**: it stops working at once, wherever it was
+Delete the `export` line from your shell profile. Then revoke the token in **Settings → AI & agents → Sessions**: it stops working at once, wherever it was
 copied.
 
 ## Other hosts

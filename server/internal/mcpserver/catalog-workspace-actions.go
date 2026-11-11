@@ -110,11 +110,10 @@ func emailChannelDisconnectSpec() Spec {
 		Title: "Disconnect the email channel",
 		Description: `Disconnect the workspace's default email channel (is_default): its mail stops coming in and its replies stop going out until it is connected again; ` +
 			`its conversations and messages stay. Its inbound secret stops working, which cannot be undone: connecting again gives a new one. Mail it held while off must be opened or discarded first. To remove another channel, use colliedesk_channels_delete.`,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/channels/email"},
-		Input:       noArguments,
-		Output:      doneSchema,
-		run:         emailChannelDisconnect,
+		REST:   []string{"DELETE /api/v1/channels/email"},
+		Input:  noArguments,
+		Output: doneSchema,
+		run:    emailChannelDisconnect,
 	}
 }
 
@@ -138,11 +137,10 @@ func gmailDisconnectSpec() Spec {
 		Title: "Disconnect Gmail",
 		Description: `Disconnect the Gmail account of an email channel: Colliedesk's access is revoked at Google (unless another channel uses the same account) and its replies go out the way ` +
 			`they did before Gmail was connected. A reply still waiting to be sent through Gmail fails and can be retried. The revoked access cannot be undone: connect again with colliedesk_gmail_connect. ` + emailChannelChoice,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/channels/email/gmail", "DELETE /api/v1/channels/{id}/email/gmail"},
-		Input:       emailChannelInput,
-		Output:      doneSchema,
-		run:         gmailDisconnect,
+		REST:   []string{"DELETE /api/v1/channels/email/gmail", "DELETE /api/v1/channels/{id}/email/gmail"},
+		Input:  emailChannelInput,
+		Output: doneSchema,
+		run:    gmailDisconnect,
 	}
 }
 
@@ -169,11 +167,10 @@ func microsoftDisconnectSpec() Spec {
 		Description: `Disconnect the Microsoft 365 mailbox of an email channel: Colliedesk deletes its access, and its replies go out the way they did before Microsoft 365 was connected. ` +
 			`Microsoft cannot be asked to revoke it, so Colliedesk stays listed in the account's apps until the person removes it there. A reply still waiting to be sent through ` +
 			`Microsoft 365 fails and can be retried. The deleted access cannot be undone: connect again with colliedesk_microsoft_connect. ` + emailChannelChoice,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/channels/email/microsoft", "DELETE /api/v1/channels/{id}/email/microsoft"},
-		Input:       emailChannelInput,
-		Output:      doneSchema,
-		run:         microsoftDisconnect,
+		REST:   []string{"DELETE /api/v1/channels/email/microsoft", "DELETE /api/v1/channels/{id}/email/microsoft"},
+		Input:  emailChannelInput,
+		Output: doneSchema,
+		run:    microsoftDisconnect,
 	}
 }
 
@@ -183,11 +180,10 @@ func emailSecretRotateSpec() Spec {
 		Title: "Rotate the inbound email secret",
 		Description: `Give an email channel a new inbound secret, for example after the old one leaked; the old one stops working at once, and that cannot be undone. Mail forwarded with the new one arrives on that channel. ` +
 			`The new secret is in the answer, shown once: pass it only to the person who updates the mail forwarder, and never write it in a conversation, note or reply. ` + emailChannelChoice,
-		Destructive: true,
-		REST:        []string{"POST /api/v1/channels/email/secret", "POST /api/v1/channels/{id}/email/secret"},
-		Input:       emailChannelInput,
-		Output:      `{"type":"object","required":["inbound_secret","next"],"properties":{"inbound_secret":{"type":"string"},"next":{"type":"string"}}}`,
-		run:         emailSecretRotate,
+		REST:   []string{"POST /api/v1/channels/email/secret", "POST /api/v1/channels/{id}/email/secret"},
+		Input:  emailChannelInput,
+		Output: `{"type":"object","required":["inbound_secret","next"],"properties":{"inbound_secret":{"type":"string"},"next":{"type":"string"}}}`,
+		run:    emailSecretRotate,
 	}
 }
 
@@ -196,11 +192,10 @@ func numberSeriesListSpec() Spec {
 		Name: "colliedesk_number_series_list", Title: "List the conversation number series",
 		Description: `List the series the workspace's conversations are numbered in, the default one (#{n}) first: each with its code format, the number the next ` +
 			`conversation takes, and where this server took it over (start, start_year). A channel numbers what it opens in the series its settings name (number_series).`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversation-number-series"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
-		Output:   `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["series","format","next","start"],"properties":{"series":{"type":"string"},"format":{"type":"string"},"next":{"type":"integer"},"start":{"type":"integer"},"start_year":{"type":["integer","null"]},"updated_at":{"type":"string"}}}}}}`,
-		run:      numberSeriesList,
+		REST:   []string{"GET /api/v1/conversation-number-series"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["series","format","next","start"],"properties":{"series":{"type":"string"},"format":{"type":"string"},"next":{"type":"integer"},"start":{"type":"integer"},"start_year":{"type":["integer","null"]},"updated_at":{"type":"string"}}}}}}`,
+		run:    numberSeriesList,
 	}
 }
 
@@ -209,11 +204,10 @@ func responseTargetsGetSpec() Spec {
 		Name: "colliedesk_response_targets_get", Title: "Read the response targets",
 		Description: `Read the workspace's response targets: business hours (timezone, weekdays, holidays), first-response and resolution targets by priority in business ` +
 			`minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/response-targets"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
-		Output:   responseTargetsSchema,
-		run:      responseTargetsGet,
+		REST:   []string{"GET /api/v1/response-targets"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: responseTargetsSchema,
+		run:    responseTargetsGet,
 	}
 }
 

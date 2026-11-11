@@ -19,6 +19,9 @@ interface SessionsSectionProps {
   sessions: Session[];
   timezone: string;
   onRevokeSession?: (id: string) => void;
+  // devices lists the browsers and clients a person signed in on (Account); tokens the sessions of agent
+  // tokens (AI & agents). AI apps connected with OAuth are in neither: ConnectedAppsSection lists them.
+  kind?: 'devices' | 'tokens';
 }
 
 // TokenDetail says what an agent token was given: the role it follows (or that it is stopped while its
@@ -44,10 +47,12 @@ function TokenDetail({ session }: { session: Session }) {
 
 // SessionsSection names each device by browser and system; revoking this device is signing out, so it says so.
 // AI apps connected with OAuth are listed by ConnectedAppsSection instead.
-export function SessionsSection({ sessions, timezone, onRevokeSession }: SessionsSectionProps) {
+export function SessionsSection({ sessions, timezone, onRevokeSession, kind = 'devices' }: SessionsSectionProps) {
+  const heading = kind === 'tokens' ? 'agent-sessions-heading' : 'sessions-heading';
+  const shown = sessions.filter((session) => !session.app && (kind === 'tokens') === Boolean(session.token));
   return (
-    <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{settingsMessages.sessionsDescription}</p></div>
-      <div className="settings-body settings-rows"><div className="data-list">{sessions.filter((session) => !session.app).map((session) => {
+    <section className="settings-card" aria-labelledby={heading}><div className="section-heading"><h2 id={heading}>{messages.sessions}</h2><p>{kind === 'tokens' ? settingsMessages.tokenSessionsDescription : settingsMessages.sessionsDescription}</p></div>
+      <div className="settings-body settings-rows"><div className="data-list">{shown.map((session) => {
         const state = sessionState(session);
         return <article key={session.id}>
           <div><span className="session-name"><strong title={session.label}>{describeUserAgent(session.label) ?? session.label}</strong>

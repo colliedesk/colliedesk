@@ -108,6 +108,15 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   availability guarantees and, on Colliedesk Cloud, the status page) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the white collie head on the orange tile (see Logo).
+- Settings (Paper "20 Settings", #528) is one page per item of its menu, each at `/settings/<page>`: Account;
+  Workspace: General, Members, Channels, Response targets, AI & agents, Saved replies (Autofix while in
+  preview); Data and billing: Data, Plan and billing. A page is its serif title, one line saying what it
+  holds, then its sections (`SettingsFrame`, `settings-frame.tsx`). The menu lists pages, never a section of
+  another page, and a page shows only when the person can see one of its sections. `/settings` opens Account;
+  on a phone it is the menu itself, and each page shows **All settings** (back to it) where the menu was, as
+  the inbox list and a conversation take turns. An old `/settings#…-heading` link opens the page that holds
+  that section (`settings-anchors.ts`). The help center's settings are the knowledge base's Settings tab.
+  Not built yet: the design's own settings sidebar with **Back to app** in place of the app rail.
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
   screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow
   centred column", because a single focused task is all the screen holds. A sticky header keeps the mark, the
