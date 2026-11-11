@@ -21,6 +21,9 @@ const disconnected: EmailChannelSettings = {
     admin_consent_redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/admin-consent',
     admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null,
   },
+  mail_through_mailbox: false,
+  answers_before_forwarding: 'colliedesk',
+  mail_switch: { imported: false, mailboxes: [] },
 };
 const connected: EmailChannelSettings = {
   ...disconnected,

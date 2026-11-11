@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { channelListSchema } from './channels';
-import { contactListSchema, conversationPageSchema } from './schemas';
+import { contactListSchema, conversationPageSchema, emailChannelSettingsSchema } from './schemas';
 import { channelLabel } from '../features/inbox/filter-messages';
 import { contactAddress } from '../features/contacts/contact-messages';
 
@@ -34,5 +34,28 @@ describe('a channel type this app does not know', () => {
       created_at: '2026-10-24T10:00:00Z', updated_at: '2026-10-24T10:00:00Z' }],
     types: [{ type: 'line_oa', available: true, count: 1, default_channel_id: null }] });
     expect(list.items[0].type).toBe('line_oa');
+  });
+});
+
+describe('the mail switch of the email settings', () => {
+  const settings = (mailSwitch: unknown) => ({
+    channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', from_policy: 'verified', sending_from: null, hosted_address: null,
+    domain_verification: 'txt', sending_pause: null, smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
+    gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/gmail', connection: null },
+    microsoft: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/ms', admin_consent_redirect_uri: 'https://desk.example.com/ms-admin',
+      admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null },
+    mail_through_mailbox: false, answers_before_forwarding: 'colliedesk', mail_switch: mailSwitch,
+  });
+  const support = { channel_id: '55555555-5555-4555-8555-555555555555', name: 'Support', support_address: 'support@acme.com', old_help_desk: true };
+  const billing = { channel_id: '66666666-6666-4666-8666-666666666666', name: 'Billing', support_address: 'billing@acme.com', old_help_desk: false };
+
+  // One malformed mailbox must not hide the line for the others: only that entry is dropped.
+  it('drops only a malformed mailbox and keeps the others', () => {
+    const parsed = emailChannelSettingsSchema.parse(settings({ imported: true, mailboxes: [support, { channel_id: 'not-a-uuid', name: 'Broken' }, billing] }));
+    expect(parsed.mail_switch).toEqual({ imported: true, mailboxes: [support, billing] });
+  });
+
+  it('reads an older server without a mail switch as nothing to move', () => {
+    expect(emailChannelSettingsSchema.parse(settings(undefined)).mail_switch).toEqual({ imported: false, mailboxes: [] });
   });
 });

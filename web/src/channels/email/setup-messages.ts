@@ -23,6 +23,9 @@ export const setupMessages = {
   openOther: 'set it up under Other / own server',
   waitingFirstEmail: 'Waiting for first email',
   firstEmail: (time: string) => `First email received${time ? ` ${time}` : ''}`,
+  // Mail arrived, but none of it was customer mail through the mailbox (a test message, Gmail's forwarding
+  // confirmation, dropped spam, an answer to a reply+ address): customer mail may still go elsewhere.
+  noCustomerMailYet: 'Mail arrived, but no customer mail through your mailbox yet.',
   continue: 'Continue',
   continueLocked: 'Continue unlocks when the first email arrives.',
   skip: 'Skip for now',

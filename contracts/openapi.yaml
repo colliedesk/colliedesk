@@ -12415,8 +12415,24 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft, mail_through_mailbox, answers_before_forwarding, mail_switch]
       properties:
+        mail_switch: {$ref: '#/components/schemas/EmailMailSwitch'}
+        mail_through_mailbox:
+          type: boolean
+          description: >-
+            Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the
+            current support address). Until it has, new customer mail may still arrive in the team's old help desk,
+            and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@`
+            address, dropped mail and mail under an earlier support address do not count. False without a channel.
+        answers_before_forwarding:
+          type: string
+          enum: [colliedesk, support_mailbox]
+          description: >-
+            Where a customer's answer to a reply goes while `mail_through_mailbox` is false. `colliedesk`: replies
+            carry `Reply-To: reply+<token>@<server's sending domain>`, which this server receives, so the answer joins
+            the conversation. `support_mailbox`: this server does not receive mail on its sending domain, so the
+            answer goes to the support address and reaches Colliedesk only once that mailbox forwards here.
         gmail: {$ref: '#/components/schemas/GmailSettings'}
         microsoft: {$ref: '#/components/schemas/MicrosoftSettings'}
         sending_pause:
@@ -12457,6 +12473,39 @@ components:
             - {$ref: '#/components/schemas/EmailChannel'}
         inbound_url: {type: string, format: uri}
         smtp: {$ref: '#/components/schemas/SMTPStatus'}
+    EmailMailSwitch:
+      type: object
+      description: >-
+        The workspace's support mailboxes whose customer mail does not arrive here yet, the same on every email
+        channel's settings. The inbox shows one line while `mailboxes` is not empty.
+      required: [imported, mailboxes]
+      properties:
+        imported:
+          type: boolean
+          description: >-
+            Whether the workspace finished an import from another help desk (and did not undo it). Each mailbox
+            says in `old_help_desk` whether its new customer mail still arrives in that old help desk.
+        mailboxes:
+          type: array
+          description: >-
+            The switched-on email channels with a support address of the team's own whose customer mail has not
+            arrived through the mailbox yet (`mail_through_mailbox` false), the default channel first. A channel
+            whose support address is under the server's hosted mail domain has no mailbox to move and is never
+            listed, also after the workspace address name changed. Empty when nothing is left to move.
+          items: {$ref: '#/components/schemas/EmailMailboxToMove'}
+    EmailMailboxToMove:
+      type: object
+      required: [channel_id, name, support_address, old_help_desk]
+      properties:
+        channel_id: {type: string, format: uuid}
+        name: {type: string, description: The channel's name.}
+        support_address: {type: string, format: email}
+        old_help_desk:
+          type: boolean
+          description: >-
+            Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added
+            before an import that finished (and was not undone). False for a mailbox added after the import, which
+            the old help desk never received; its mail simply does not arrive here yet.
     GmailSettings:
       type: object
       required: [available, missing_settings, off_reason, redirect_uri, connection]

@@ -109,6 +109,8 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
 .list-title h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 .list-title > span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+/* Until the support mailbox forwards here: one line under the title, its action inline. */
+.mail-switch { margin: calc(-1 * var(--space-1)) 0 0; color: var(--text-2); font-size: var(--fs-small); }
 .conversation-center { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; overflow: hidden; }
 .details-panel { min-width: 0; min-height: 0; overflow-y: auto; }
 /* A wide screen gives the details room, so a name or a tag rarely has to wrap. */
