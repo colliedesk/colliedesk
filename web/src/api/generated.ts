@@ -2544,6 +2544,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trial-offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read a trial offer link an operator sent (`collie trial offer`): the workspace it is for, its state (`open`, `accepted`, `expired`, `revoked`), the workspace's trial end and plan, and whether the caller can accept it now (`can_accept`, else `refusal`). Reading changes nothing: mail scanners open links too. Any signed-in member of the offer's workspace may read it, also while the workspace is locked; `accept_by` names the members who can accept (`billing:manage`). The token is the `token` of the link's address. 404 `trial_offer_not_found` for a token no workspace has; 403 `trial_offer_other_workspace` for an offer of another workspace than the session's, without naming it. */
+        get: operations["getTrialOffer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trial-offer/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Accept an open trial offer: the workspace's trial then ends 14 days from now, and a locked workspace opens at once. A trial end already later than that is kept, never shortened (`extended` false). The offer is spent either way, and the change is recorded with the offer and who accepted it. Allowed while the workspace is locked. 409 `trial_offer_accepted`, `trial_offer_expired` or `trial_offer_revoked` when the offer is no longer open, and 409 `trial_offer_has_plan` when the workspace has a plan; each carries `trial_ends_at` and changes nothing. 403 `permission_missing` without `billing:manage`; 403 `trial_offer_other_workspace` and 404 `trial_offer_not_found` as for `GET /api/v1/trial-offer`. A retry with the same Idempotency-Key answers the first acceptance again. */
+        post: operations["acceptTrialOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/webhooks/polar": {
         parameters: {
             query?: never;
@@ -9545,6 +9579,61 @@ export interface components {
             totp_enabled_at?: string | null;
             link_unused: boolean;
         };
+        TrialOffer: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "open" | "accepted" | "expired" | "revoked";
+            /** @description The workspace the offer is for (the session's own). */
+            workspace_name: string;
+            /**
+             * Format: date-time
+             * @description When the link stops working, at most 30 days after it was made.
+             */
+            expires_at: string;
+            /** Format: date-time */
+            accepted_at: string | null;
+            /** @description Who accepted it: display name, else email. */
+            accepted_by: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the workspace's trial ends or ended now.
+             */
+            trial_ends_at: string;
+            /**
+             * @description The plan in effect now, as in `GET /api/v1/billing`.
+             * @enum {string}
+             */
+            plan: "trial" | "solo" | "small" | "team" | "team25" | "founding" | "none";
+            /**
+             * Format: date-time
+             * @description The trial end accepting now would give: 14 days from now, or trial_ends_at when that is later.
+             */
+            extends_to: string;
+            /** @description True when the caller can accept the offer now. */
+            can_accept: boolean;
+            /**
+             * @description Why the caller cannot accept: the offer is no longer open, the workspace has a plan, or the caller lacks billing:manage. Null when can_accept.
+             * @enum {string|null}
+             */
+            refusal: "accepted" | "expired" | "revoked" | "has_plan" | "not_admin" | null;
+            /** @description Active members who can accept (billing:manage), by display name or email. */
+            accept_by: string[];
+        };
+        TrialOfferAccepted: {
+            offer: components["schemas"]["TrialOffer"];
+            /** Format: date-time */
+            previous_trial_ends_at: string;
+            /**
+             * Format: date-time
+             * @description The trial end now.
+             */
+            trial_ends_at: string;
+            /** @description False when the trial already ended later than 14 days from now and was kept. */
+            extended: boolean;
+        };
         Error: {
             error: {
                 code: string;
@@ -9574,6 +9663,11 @@ export interface components {
                 missing_from?: "token" | "person";
                 /** @description Only on permission_missing from the person: names of active members who can change roles (team:manage_roles). */
                 ask?: string[];
+                /**
+                 * Format: date-time
+                 * @description Only on trial_offer_accepted, trial_offer_expired, trial_offer_revoked and trial_offer_has_plan: when the workspace's trial ends or ended.
+                 */
+                trial_ends_at?: string;
                 /** @description Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading. */
                 where?: string;
                 /** @description Only on role_in_use: what still uses the role. */
@@ -15730,6 +15824,127 @@ export interface operations {
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadGateway"];
+        };
+    };
+    getTrialOffer: {
+        parameters: {
+            query: {
+                /** @description The token of the offer link. */
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer and what the caller can do with it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialOffer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `trial_offer_other_workspace`: the offer is for another workspace. Sign in to the workspace that received the link. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `trial_offer_not_found`: no offer has this token; check that the whole link was copied. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `validation_failed` with `fields.token` when the token is missing. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    acceptTrialOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The token of the offer link. */
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The offer was accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialOfferAccepted"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description `permission_missing` (needs `billing:manage`) or `trial_offer_other_workspace`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `trial_offer_not_found`: no offer has this token. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `trial_offer_accepted`, `trial_offer_expired`, `trial_offer_revoked` or `trial_offer_has_plan`, with `trial_ends_at`; nothing changed. `request_in_progress` while the first request with this Idempotency-Key still runs. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `validation_failed` with `fields.token` when the token is missing; or `idempotency_key_reused`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
         };
     };
     receivePolarWebhook: {

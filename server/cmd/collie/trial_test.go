@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -342,5 +343,100 @@ func TestConcurrentGrantsFailWithAClearErrorNeverARawConstraintViolation(t *test
 	var inForce int
 	if err := env.pool.QueryRow(context.Background(), `SELECT count(*) FROM workspace_comp_plans WHERE workspace_id=$1 AND revoked_at IS NULL`, env.workspaceID).Scan(&inForce); err != nil || inForce != 1 || succeeded == 0 {
 		t.Fatalf("in force=%d succeeded=%d err=%v, want exactly one grant in force", inForce, succeeded, err)
+	}
+}
+
+var offerLinkPattern = regexp.MustCompile(`https://desk\.example\.com/trial-offer\?token=([A-Za-z0-9_-]+)`)
+var offerIDPattern = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+
+func TestTrialOfferPrintsALinkValidForThirtyDaysByDefault(t *testing.T) {
+	env := newTrialEnv(t, "Offer Desk")
+	setClock(t, "2026-10-20T09:00:00Z")
+	output := env.mustRun("trial", "offer", "--workspace", "offer-desk")
+	link := offerLinkPattern.FindStringSubmatch(output)
+	if link == nil || !strings.Contains(output, "2026-11-19T09:00:00Z") || offerIDPattern.FindString(output) == "" {
+		t.Fatalf("offer output lacks the link, its id or its expiry 2026-11-19T09:00:00Z:\n%s", output)
+	}
+	var stored []byte
+	if err := env.pool.QueryRow(context.Background(), `SELECT token_hash FROM trial_offers WHERE workspace_id=$1`, env.workspaceID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), link[1]) {
+		t.Fatal("the raw token is stored; only its hash may be")
+	}
+	output = env.mustRun("trial", "offer", "--workspace", "offer-desk", "--valid", "7d")
+	if !strings.Contains(output, "2026-10-27T09:00:00Z") {
+		t.Fatalf("--valid 7d should expire at 2026-10-27T09:00:00Z:\n%s", output)
+	}
+	output = env.mustRun("trial", "offer", "--workspace", "offer-desk", "--valid", "36h")
+	if !strings.Contains(output, "2026-10-21T21:00:00Z") {
+		t.Fatalf("--valid 36h should expire at 2026-10-21T21:00:00Z:\n%s", output)
+	}
+}
+
+func TestTrialOfferRefusesMoreThanThirtyDaysAndBadInput(t *testing.T) {
+	env := newTrialEnv(t, "Offer Bad")
+	for name, args := range map[string][]string{
+		"31 days":           {"trial", "offer", "--workspace", "offer-bad", "--valid", "31d"},
+		"721 hours":         {"trial", "offer", "--workspace", "offer-bad", "--valid", "721h"},
+		"zero":              {"trial", "offer", "--workspace", "offer-bad", "--valid", "0"},
+		"negative":          {"trial", "offer", "--workspace", "offer-bad", "--valid", "-1h"},
+		"not a duration":    {"trial", "offer", "--workspace", "offer-bad", "--valid", "a month"},
+		"missing workspace": {"trial", "offer"},
+		"unknown workspace": {"trial", "offer", "--workspace", "nobody"},
+		"revoke without id": {"trial", "offer", "revoke"},
+		"revoke unknown":    {"trial", "offer", "revoke", "00000000-0000-0000-0000-000000000001"},
+		"revoke not an id":  {"trial", "offer", "revoke", "abc"},
+		"offers no ws":      {"trial", "offers"},
+	} {
+		if _, err := env.run(args...); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	_, err := env.run("trial", "offer", "--workspace", "offer-bad", "--valid", "31d")
+	if err == nil || !strings.Contains(err.Error(), "30 days") {
+		t.Fatalf("over 30 days: %v, want an error that names the 30-day limit", err)
+	}
+	var offers int
+	if err := env.pool.QueryRow(context.Background(), `SELECT count(*) FROM trial_offers`).Scan(&offers); err != nil || offers != 0 {
+		t.Fatalf("offers stored after refusals: %d %v", offers, err)
+	}
+}
+
+func TestTrialOffersListsEachStateAndRevokeClosesAnOpenOne(t *testing.T) {
+	env := newTrialEnv(t, "Offer List")
+	other := env.withWorkspace("Offer Other")
+	setClock(t, "2026-10-20T09:00:00Z")
+	openID := offerIDPattern.FindString(env.mustRun("trial", "offer", "--workspace", "offer-list", "--by", "chinh"))
+	revokedID := offerIDPattern.FindString(env.mustRun("trial", "offer", "--workspace", "offer-list"))
+	acceptedOutput := env.mustRun("trial", "offer", "--workspace", "offer-list")
+	env.mustRun("trial", "offer", "--workspace", "offer-list", "--valid", "1d")
+	var agentID string
+	if err := env.pool.QueryRow(context.Background(), `SELECT id::text FROM agents WHERE workspace_id=$1`, env.workspaceID).Scan(&agentID); err != nil {
+		t.Fatal(err)
+	}
+	token := offerLinkPattern.FindStringSubmatch(acceptedOutput)[1]
+	if _, err := store.New(env.pool).AcceptTrialOffer(context.Background(), env.workspaceID, token, agentID, "admin@offerlist.example.com", mustTime(t, "2026-10-20T10:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	setClock(t, "2026-10-22T09:00:00Z")
+	output := env.mustRun("trial", "offer", "revoke", revokedID, "--by", "long")
+	if !strings.Contains(output, revokedID) || !strings.Contains(output, "long") {
+		t.Fatalf("revoke output lacks the id or who:\n%s", output)
+	}
+	if _, err := env.run("trial", "offer", "revoke", revokedID); err == nil || !strings.Contains(err.Error(), "revoked") {
+		t.Fatalf("revoking a revoked offer: %v, want an error that says it is revoked", err)
+	}
+
+	output = env.mustRun("trial", "offers", "--workspace", "offer-list")
+	for _, want := range []string{
+		openID + "  open", "chinh", revokedID + "  revoked", "by long", "accepted by admin@offerlist.example.com at 2026-10-20T10:00:00Z", "expired",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("offers list lacks %q:\n%s", want, output)
+		}
+	}
+	if output := other.mustRun("trial", "offers", "--workspace", "offer-other"); strings.Contains(output, openID) || !strings.Contains(output, "No trial offers") {
+		t.Fatalf("another workspace's list:\n%s", output)
 	}
 }
