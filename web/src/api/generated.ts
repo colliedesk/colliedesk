@@ -6991,7 +6991,7 @@ export interface components {
          * @enum {string}
          */
         OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
-        /** @description The post or ad a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys and the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links. A value is kept only when it matches `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. Stored with the onboarding answers and counted with the trial and the first payment. */
+        /** @description The post or ad a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys and the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links. A value is kept only when it matches `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. `referrer` is the host name of the site whose link first brought the browser to the sign-in page (an AI assistant's link often has no `utm_*` keys). Stored with the onboarding answers and counted with the trial and the first payment. */
         SignupAttribution: {
             utm_source?: string;
             utm_medium?: string;
@@ -7000,6 +7000,8 @@ export interface components {
             utm_term?: string;
             ttclid?: string;
             fbclid?: string;
+            /** @description Lowercase host name only, such as `claude.ai`; a URL, a path or a name without a dot is dropped. */
+            referrer?: string;
             /**
              * Format: date-time
              * @description When the browser first saw `ttclid` or `fbclid`. Missing, in the future or older than 7 days, the sign-up time stands in.

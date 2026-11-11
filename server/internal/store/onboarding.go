@@ -34,8 +34,8 @@ func (s *Store) SignupAttribution(ctx context.Context, workspaceID string) (doma
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var seen *time.Time
 		err := tx.QueryRow(ctx, `SELECT COALESCE(utm_source,''), COALESCE(utm_medium,''), COALESCE(utm_campaign,''), COALESCE(utm_content,''),
-			COALESCE(utm_term,''), COALESCE(ttclid,''), COALESCE(fbclid,''), click_id_seen_at FROM workspace_onboarding WHERE workspace_id=$1`, workspaceID).
-			Scan(&found.UTMSource, &found.UTMMedium, &found.UTMCampaign, &found.UTMContent, &found.UTMTerm, &found.TTCLID, &found.FBCLID, &seen)
+			COALESCE(utm_term,''), COALESCE(ttclid,''), COALESCE(fbclid,''), click_id_seen_at, COALESCE(referrer_host,'') FROM workspace_onboarding WHERE workspace_id=$1`, workspaceID).
+			Scan(&found.UTMSource, &found.UTMMedium, &found.UTMCampaign, &found.UTMContent, &found.UTMTerm, &found.TTCLID, &found.FBCLID, &seen, &found.ReferrerHost)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
