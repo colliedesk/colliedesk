@@ -118,18 +118,18 @@ test('Report a problem in the account menu opens the dialog, and closing it retu
   expect(avatar).toHaveFocus();
 });
 
-test('the sidebar starts as its rail, opens and folds again, and the browser keeps the choice', () => {
+test('the sidebar starts open with page names, folds into its rail and opens again, and the browser keeps the choice', () => {
   localStorage.removeItem('colliedesk.sidebar');
   const { container, unmount } = render(<AppShell me={me}><p>inbox</p></AppShell>);
-  const shell = container.querySelector('.app-shell')!;
-  expect(shell).toHaveAttribute('data-sidebar', 'collapsed');
-  fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
-  expect(shell).toHaveAttribute('data-sidebar', 'expanded');
-  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
-  unmount();
-  render(<AppShell me={me}><p>inbox</p></AppShell>);
+  expect(container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'expanded');
   fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+  expect(container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'collapsed');
   expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: true });
+  unmount();
+  const again = render(<AppShell me={me}><p>inbox</p></AppShell>);
+  expect(again.container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'collapsed');
+  fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
 });
 
 test('the sidebar edge resizes with the keyboard within its limits and remembers the width', () => {
