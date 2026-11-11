@@ -118,10 +118,15 @@ func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1 WHERE message_id=$1`, reply); err != nil {
 		t.Fatal(err)
 	}
+	// AI drafts and reply targets are offers: the four core steps alone complete the setup, so a workspace
+	// that finished them before these steps existed never sees the guide again.
 	answered := readSetup(t, api, admin)
 	wantSetup(t, answered, "working", "done", "joined", "sent")
-	if answered.Complete {
-		t.Fatalf("AI drafts and reply targets are still off, setup = %+v", answered)
+	if got := []string{answered.state(t, "ai_drafts"), answered.state(t, "reply_targets")}; got[0] != "none" || got[1] != "none" {
+		t.Fatalf("ai_drafts, reply_targets = %v, want none, none", got)
+	}
+	if !answered.Complete {
+		t.Fatalf("the four core steps are done, setup = %+v", answered)
 	}
 	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "server", "enabled": true, "default_level": "suggest"}, admin, nil); response.Code != http.StatusOK {
 		t.Fatalf("PUT draft status=%d body=%s", response.Code, response.Body.String())

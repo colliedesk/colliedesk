@@ -36,8 +36,20 @@ type setupTargetsView struct {
 		Key  string `json:"key"`
 		Name string `json:"name"`
 	} `json:"steps"`
-	Presets    []replyTargetPresetView    `json:"reply_target_presets"`
-	Suggestion replyTargetsSuggestionView `json:"reply_target_suggestion"`
+	Presets    []replyTargetPresetView     `json:"reply_target_presets"`
+	Hours      replyTargetHoursView        `json:"reply_target_hours"`
+	Suggestion *replyTargetsSuggestionView `json:"reply_target_suggestion"`
+}
+
+type replyTargetHoursView struct {
+	Kept       bool `json:"kept"`
+	DayMinutes int  `json:"day_minutes"`
+	Hours      []struct {
+		Day  string `json:"day"`
+		Open bool   `json:"open"`
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"hours"`
 }
 
 func readSetupTargets(t *testing.T, api http.Handler, token string) setupTargetsView {
@@ -182,7 +194,11 @@ func TestSetupSuggestsTheReplyTargetsPresetFromTheImportedHistory(t *testing.T) 
 	minutes := func(n int) *time.Duration { d := time.Duration(n) * time.Minute; return &d }
 	presetOf := func(token string) replyTargetsSuggestionView {
 		t.Helper()
-		return readSetupTargets(t, api, token).Suggestion
+		suggestion := readSetupTargets(t, api, token).Suggestion
+		if suggestion == nil {
+			t.Fatal("an admin with reply targets off gets a suggestion")
+		}
+		return *suggestion
 	}
 	want := func(got replyTargetsSuggestionView, preset, basis string, median *int) {
 		t.Helper()

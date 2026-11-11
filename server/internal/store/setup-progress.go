@@ -33,23 +33,35 @@ type SetupStep struct {
 	Detail *string `json:"detail"`
 }
 
-// SetupProgress is where a workspace stands on getting started, the goal's step first.
+// SetupProgress is where a workspace stands on getting started, the goal's step first. Complete counts the
+// four core steps only: AI drafts and reply targets are offers that never hold the setup back.
 type SetupProgress struct {
 	Steps       []SetupStep `json:"steps"`
 	Complete    bool        `json:"complete"`
 	Recommended *string     `json:"recommended"`
-	// The reply targets the reply_targets step offers, and the one that fits the team.
-	ReplyTargetPresets    []ReplyTargetPreset   `json:"reply_target_presets"`
-	ReplyTargetSuggestion ReplyTargetSuggestion `json:"reply_target_suggestion"`
+	// The reply targets the reply_targets step offers, the hours they apply with, and the one that fits the
+	// team (nil when nobody would use it).
+	ReplyTargetPresets    []ReplyTargetPreset    `json:"reply_target_presets"`
+	ReplyTargetHours      ReplyTargetHours       `json:"reply_target_hours"`
+	ReplyTargetSuggestion *ReplyTargetSuggestion `json:"reply_target_suggestion"`
 }
+
+// SetupOptions are what the server and the caller add to the workspace's own state: ServerDrafts, whether this
+// server offers built-in AI for reply drafts; CanSetTargets, whether the caller may change the reply targets.
+type SetupOptions struct {
+	ServerDrafts  bool
+	CanSetTargets bool
+}
+
+// setupOffers are the steps offered on the way, which complete does not wait for.
+var setupOffers = map[string]bool{SetupAIDrafts: true, SetupReplyTargets: true}
 
 // setupFirstStep is the step each sign-up goal starts with; any other goal keeps the usual order.
 var setupFirstStep = map[string]string{"leave_helpdesk": SetupImport, "shared_inbox": SetupEmail, "lower_cost": SetupInvite}
 
 // SetupProgress reads the workspace's setup steps. A reply counts once an outgoing message was
-// delivered; a note, a queued reply and a failed one do not. serverDrafts says whether this server offers
-// built-in AI for reply drafts.
-func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.Time, serverDrafts bool) (SetupProgress, error) {
+// delivered; a note, a queued reply and a failed one do not.
+func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.Time, options SetupOptions) (SetupProgress, error) {
 	goal, err := s.OnboardingGoal(ctx, workspaceID)
 	if err != nil {
 		return SetupProgress{}, err
@@ -59,7 +71,8 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 		return SetupProgress{}, err
 	}
 	var importState, invite, firstReply, aiDrafts, replyTargets string
-	var suggestion ReplyTargetSuggestion
+	var hours ReplyTargetHours
+	var suggestion *ReplyTargetSuggestion
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT
 			CASE
@@ -77,7 +90,7 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 		if err != nil {
 			return err
 		}
-		aiDrafts, replyTargets, suggestion, err = setupAIAndTargets(ctx, tx, workspaceID, now, serverDrafts, importState)
+		aiDrafts, replyTargets, hours, suggestion, err = setupAIAndTargets(ctx, tx, workspaceID, now, options, importState)
 		return err
 	})
 	if err != nil {
@@ -95,7 +108,8 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	// times from their first day.
 	base := []string{SetupEmail, SetupImport, SetupAIDrafts, SetupReplyTargets, SetupInvite}
 	order := base
-	progress := SetupProgress{Steps: make([]SetupStep, 0, len(base)+1), ReplyTargetPresets: ReplyTargetPresets(), ReplyTargetSuggestion: suggestion}
+	progress := SetupProgress{Steps: make([]SetupStep, 0, len(base)+1), ReplyTargetPresets: ReplyTargetPresets(hours.DayMinutes),
+		ReplyTargetHours: hours, ReplyTargetSuggestion: suggestion}
 	if goal != nil {
 		if lead, ok := setupFirstStep[*goal]; ok {
 			order = []string{lead}
@@ -114,7 +128,7 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 		step := steps[key]
 		step.Name = setupNames[key]
 		progress.Steps = append(progress.Steps, step)
-		progress.Complete = progress.Complete && setupDone(steps[key])
+		progress.Complete = progress.Complete && (setupOffers[key] || setupDone(steps[key]))
 	}
 	return progress, nil
 }

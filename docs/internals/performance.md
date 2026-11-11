@@ -89,6 +89,19 @@ from the workspace's conversations. Five warm-up calls, then 40
 timed. A card and its items are found by uuid: comparing `id::text` to a parameter skips the index and
 took 17 ms on the dev host; the uuid compare takes 2 ms. Do not widen either budget.
 
+## Setup progress budget
+
+`TestSetupProgressLatencyBudget` holds the store call behind `GET /api/v1/workspace/setup` to 50 ms p95. The
+inbox reads it on every load while the setup guide shows, and the setup flow polls it every 5 seconds. The
+timed path is the slowest one: an admin of a workspace whose reply targets are off, so the median first
+reply of the imported history is read for the reply targets suggestion. The fixture is 10,000 imported
+conversations in the last 30 days and 2,000 older ones (a customer message, a received notice and a reply
+each), beside a second workspace with 4,000. Ten warm-up reads, then 50 timed: 25–32 ms locally on
+2026-11-11. The median is skipped when nobody would use it: reply targets on, an import running, or a
+caller without `workspace:update` (`TestSetupSuggestionIsLeftOutWhenTargetsAreOnOrTheCallerCannotChangeThem`).
+Seeding 30,000 conversations of five messages took 70 s, so the fixture was cut instead. Do not widen the
+50 ms.
+
 ## AI draft read budget
 
 `TestAIDraftReadLatencyBudget` holds the reads the reply box polls, `ai.Service.GetDraft` and
