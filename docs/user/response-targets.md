@@ -7,7 +7,10 @@ Response targets measure how fast conversations are answered and resolved, in bu
    (a day not open is closed; 00:00 to 24:00 is the whole day), and holidays. Time outside them does not
    count. Turned on, they need an open day that is no holiday within the next two years. A day that
    closes at 00:00 on the page closes at midnight (`24:00` in the API). **Copy Monday to weekdays** fills
-   Tuesday to Friday with Monday's hours.
+   Tuesday to Friday with Monday's hours. A new workspace's timezone is the browser zone of the person
+   who created it, from their first sign-in ([timezones](timezones.md)), so business hours count in the
+   team's clock, not in `UTC`. Hours that use the workspace's timezone follow it when an admin changes it
+   in Settings → General.
 2. **Targets by priority**: business time to the first reply and to resolving, for urgent, high, normal
    and low. Each box is a number and a unit, `min` or `h`: any whole number of minutes from 1 up to a
    year (525600 minutes, 8760 hours), such as 15 min or 1.5 h (90 minutes); leave one empty for no

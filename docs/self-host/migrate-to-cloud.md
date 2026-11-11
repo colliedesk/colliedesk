@@ -21,7 +21,15 @@ There is no self-service import of a workspace export yet, so HC Labs does the i
 ## After the move
 
 The export does not hold sessions, API tokens, pairing or invite links, or the email channel's
-inbound secret. On the Cloud workspace:
+inbound secret.
+
+The Cloud workspace keeps the timezone of the self-hosted one. The import copies `timezone` and
+`timezone_chosen_at` from `manifest.json`. If `timezone_chosen_at` is missing (an export from an older
+release), the import marks the timezone as chosen. Otherwise the first sign-in of the person who
+created the workspace could replace a `UTC` your admin chose with their browser's zone
+([timezones](../user/timezones.md)).
+
+On the Cloud workspace:
 
 1. Each agent signs in again with their email address.
 2. Create new [agent tokens](../user/sessions.md#agent-tokens) and update the tools that use them.

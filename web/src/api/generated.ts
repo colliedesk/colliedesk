@@ -4892,7 +4892,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description The browser's IANA timezone. At the agent's first sign-in, while they never chose a timezone and the workspace is still on its `UTC` default, it becomes the agent's own (`timezone_override`). A later sign-in never changes it, and an unknown zone is ignored; it never fails the sign-in. */
+        /** @description The browser's IANA timezone. At the first sign-in of the person who created the workspace, while the workspace is still on the `UTC` default nobody chose, it becomes the workspace's timezone (the zone business hours count in) and they follow it. At anyone else's first sign-in, while they never chose a timezone and the workspace is on `UTC`, it becomes the agent's own (`timezone_override`); a teammate never changes the workspace's. A later sign-in never changes either, a timezone an admin chose (`UTC` included) is kept, and a name of UTC (`GMT`, `Etc/UTC`, `Zulu`...) or an unknown zone is ignored; it never fails the sign-in. */
         SignInTimezone: string;
         ImportPerson: {
             /** @description The Freshdesk agent id */
