@@ -204,9 +204,15 @@ the workspace, and the app acts as that person with everything they hold. Code: 
   fetched through `netguard` (public addresses after resolution, every dial), no redirect, 64 KiB, 5 s,
   cached 10 minutes; the document must name itself as `client_id`. Anyone can publish one, so the consent
   page always names its host and calls the name verified only on a known vendor's host (`trustedClientHosts`:
-  exact or a subdomain at a dot, default port). Redirects: https anywhere, http only
+  exact or a subdomain at a dot, default port). Redirects: https (a metadata document's anywhere; a
+  dynamic registration's only on a `trustedClientHosts` host, checked when signing and again when a
+  signed id is read, so ids signed before the rule stop working), http only
   to `localhost`/`127.0.0.1`/`::1` (any port, RFC 8252), a private scheme with a dot or a known desktop
-  app's (`cursor`, `vscode`…). `GET /api/v1/oauth/client` is the only unauthenticated way to make the
+  app's (`cursor`, `vscode`…). Why: registration proves no host, and an open one let anyone mint an
+  app that sends a person's code to their own site (consent phishing, reported 10/11/2026); Claude and
+  ChatGPT use their metadata documents first and register only as a fallback, with callbacks on their
+  own hosts (`TestRegistrationTakesHttpsRedirectsOnlyOnKnownAIAppHosts`). The consent page warns when the
+  redirect is on this computer: any local program can listen there (MCP spec, localhost redirect risks). `GET /api/v1/oauth/client` is the only unauthenticated way to make the
   server fetch one, 60 a minute per address.
 - **Issuer.** The authorization server is `APP_ORIGIN` for every workspace (Cloud's one `/mcp`).
   `/.well-known/oauth-authorization-server` answers only there (its `issuer` must equal where it was

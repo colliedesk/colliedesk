@@ -145,7 +145,7 @@ func (a *API) registerOAuthClient(response http.ResponseWriter, request *http.Re
 			return
 		}
 	}
-	redirects, problem := checkRedirectURIs(input.RedirectURIs)
+	redirects, problem := checkRegisteredRedirectURIs(input.RedirectURIs)
 	if problem != "" {
 		writeOAuthError(response, http.StatusBadRequest, "invalid_redirect_uri", "The registration "+problem)
 		return

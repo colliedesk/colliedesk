@@ -23,7 +23,9 @@ import (
 // An AI app is an OAuth client, known one of two ways and never stored:
 //   - Dynamic client registration (RFC 7591): POST /oauth/register returns a client id that is the app's
 //     name and redirect addresses, signed with a server secret. Registering stores nothing, so a flood of
-//     registrations costs no rows; it is still limited per client address.
+//     registrations costs no rows; it is still limited per client address. Anyone can register, so an
+//     https redirect must be a known AI app's (checkRegisteredRedirectURIs); another web app proves its
+//     host with a client ID metadata document.
 //   - A client ID metadata document: the client id is an https address the app publishes its name and
 //     redirect addresses at (Claude Code). The server fetches it, guarded against reaching its own
 //     network, and keeps it in memory for a while.
@@ -134,6 +136,10 @@ func (a *API) registeredOAuthClient(ctx context.Context, clientID string) (oauth
 	var client registeredClient
 	if err := json.Unmarshal(body, &client); err != nil {
 		return oauthClient{}, refused
+	}
+	// A client id signed before https redirects were limited to known AI apps is refused the same way.
+	if _, problem := checkRegisteredRedirectURIs(client.RedirectURIs); problem != "" {
+		return oauthClient{}, &oauthClientError{"invalid_client", "This app's registration sends you back to a site that is not a known AI app's. Do not allow it; connect the app again from the app itself."}
 	}
 	return oauthClient{ID: clientID, Name: client.Name, RedirectURIs: client.RedirectURIs}, nil
 }
@@ -254,6 +260,23 @@ func checkRedirectURIs(uris []string) ([]string, string) {
 	return kept, ""
 }
 
+// checkRegisteredRedirectURIs is checkRedirectURIs for dynamic registration, which proves no host: an
+// https redirect must be on a known AI vendor's host (trustedClientHosts), so a stranger cannot register
+// an app that sends a person's code to a site of their own.
+func checkRegisteredRedirectURIs(uris []string) ([]string, string) {
+	kept, problem := checkRedirectURIs(uris)
+	if problem != "" {
+		return nil, problem
+	}
+	for _, raw := range kept {
+		address, _ := url.Parse(raw)
+		if strings.EqualFold(address.Scheme, "https") && !trustedVendorAddress(address) {
+			return nil, "lists an https redirect address that is not a known AI app's (" + raw + "). Publish a client ID metadata document and use its https address as client_id instead."
+		}
+	}
+	return kept, ""
+}
+
 func redirectProblem(raw string) string {
 	address, err := url.Parse(raw)
 	if err != nil || len(raw) > 2048 || address.Fragment != "" || address.User != nil {
@@ -312,7 +335,12 @@ var trustedClientHosts = []string{"claude.ai", "anthropic.com", "chatgpt.com", "
 // host: exactly, or a subdomain at a dot boundary, on the default https port, written as browsers do.
 func trustedClientHost(clientID string) bool {
 	address, err := url.Parse(clientID)
-	if err != nil || address.Scheme != "https" || address.User != nil || address.Port() != "" {
+	return err == nil && trustedVendorAddress(address)
+}
+
+// trustedVendorAddress reports whether an https address is on a trusted vendor's host, default port.
+func trustedVendorAddress(address *url.URL) bool {
+	if !strings.EqualFold(address.Scheme, "https") || address.User != nil || address.Port() != "" {
 		return false
 	}
 	host := address.Hostname()
