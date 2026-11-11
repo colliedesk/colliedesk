@@ -18,7 +18,7 @@ import './email-setup.css';
 // EmailSetup connects a support address in four steps on one page: the address, forwarding its mail here,
 // how replies leave, and a test message. Each step's state is read from the server; a step opens again
 // after it is done, and leaving the page loses nothing.
-export function EmailSetup({ channel, named = false, canManage, timezone, navigate, create }: SetupProps) {
+export function EmailSetup({ channel, named = false, step, canManage, timezone, navigate, create }: SetupProps) {
   const client = useQueryClient();
   const id = channel?.id;
   const settings = useQuery({ queryKey: ['email-channel', id], queryFn: () => channelsApi.email(id!), enabled: Boolean(id) });
@@ -35,14 +35,17 @@ export function EmailSetup({ channel, named = false, canManage, timezone, naviga
   const ready = !id || Boolean(data);
   // The step a person is on stays open until they move on, even when its state changes under them.
   const [chosen, setChosen] = useState<StepID | null>();
-  useEffect(() => { if (ready && chosen === undefined) setChosen(id ? nextStep(states) ?? null : 'address'); }, [ready, chosen, id, states]);
+  // A link may name the step to open (the inbox's Move your mail opens forwarding), done or not.
+  const linked = steps.find((item) => item === step);
+  useEffect(() => { if (ready && chosen === undefined) setChosen(id ? linked ?? nextStep(states) ?? null : 'address'); }, [ready, chosen, id, linked, states]);
   const open = chosen === undefined ? (id ? undefined : 'address') : chosen;
   const advance = (from: StepID) => setChosen(nextStep(states, from) ?? steps.slice(steps.indexOf(from) + 1).find((step) => states[step] !== 'done') ?? null);
   const skip = (step: StepID) => {
     remember({ skipped: [...new Set([...(memory.skipped ?? []), step])] });
     advance(step);
   };
-  useRefetchOnActivity(id ?? '', Boolean(id) && open === 'forward' && states.forward !== 'done');
+  // Also after a test message marked step 2 done: it updates once customer mail comes through the mailbox.
+  useRefetchOnActivity(id ?? '', Boolean(id) && open === 'forward' && (states.forward !== 'done' || data?.mail_through_mailbox === false));
   const refresh = () => Promise.all(['email-channel', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: key === 'channel' ? [key, id] : [key] })));
   const address = data?.channel?.support_address;
   const finished = steps.every((step) => states[step] === 'done');
@@ -64,7 +67,8 @@ export function EmailSetup({ channel, named = false, canManage, timezone, naviga
   };
   const summary: Record<StepID, () => ReactNode> = {
     address: () => <span className="setup-value">{address}</span>,
-    forward: () => <span className="setup-pill">{channel?.last_inbound_at ? m.firstEmail(clockTime(channel.last_inbound_at, timezone)) : m.firstEmail('')}</span>,
+    forward: () => <span className="setup-pill">{data?.mail_through_mailbox === false ? m.noCustomerMailYet
+      : channel?.last_inbound_at ? m.firstEmail(clockTime(channel.last_inbound_at, timezone)) : m.firstEmail('')}</span>,
     replies: () => <span className="muted-copy">{repliesSummary(data)}</span>,
     test: () => <span className="setup-pill">{m.testDelivered}</span>,
   };

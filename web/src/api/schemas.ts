@@ -226,12 +226,24 @@ export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z
 // How many live channels each type has: the inbox says which mailbox a reply leaves from once there are two.
 // The whole list and its schemas load with Settings, not with the inbox.
 export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })) });
+const mailboxToMoveSchema = z.object({ channel_id: z.string().uuid(), name: z.string(), support_address: z.string(), old_help_desk: z.boolean() });
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
   domain_verification: z.enum(['txt', 'provider']),
   sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
+  // An older server says nothing of forwarding: the inbox then says nothing of the old help desk.
+  mail_through_mailbox: z.boolean().catch(true),
+  answers_before_forwarding: z.enum(['colliedesk', 'support_mailbox']).catch('colliedesk'),
+  // A malformed mailbox is dropped alone, so the line still names the others.
+  mail_switch: z.object({
+    imported: z.boolean(),
+    mailboxes: z.array(z.unknown()).transform((items) => items.flatMap((item) => {
+      const parsed = mailboxToMoveSchema.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    })),
+  }).catch({ imported: false, mailboxes: [] }),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
 export const webFormSettingsSchema = z.object({
   channel_id: z.string().uuid().optional(), enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(), legacy_slug: z.boolean().optional(),
