@@ -76,7 +76,9 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   (`store.EmailSettingsState`), so the settings cost no extra round trip per channel. The server, not the
   web app, leaves out a support address under the hosted mail domain (`email.HostedSlug`): after a new
   workspace address name the channel keeps its old hosted address, which no longer equals `hosted_address`,
-  so a comparison with it would call that address the team's own.
+  so a comparison with it would call that address the team's own. A mailbox's `old_help_desk` is set when
+  its channel was created before an import finished (and was not undone): the import does not record which
+  addresses the old help desk received, and a mailbox added later was never there.
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
   verified by Resend. Both steps are needed, in this order:

@@ -67,7 +67,7 @@ export function EmailSetup({ channel, named = false, step, canManage, timezone, 
   };
   const summary: Record<StepID, () => ReactNode> = {
     address: () => <span className="setup-value">{address}</span>,
-    forward: () => <span className="setup-pill">{data?.mail_through_mailbox === false ? m.onlyTestMessage
+    forward: () => <span className="setup-pill">{data?.mail_through_mailbox === false ? m.noCustomerMailYet
       : channel?.last_inbound_at ? m.firstEmail(clockTime(channel.last_inbound_at, timezone)) : m.firstEmail('')}</span>,
     replies: () => <span className="muted-copy">{repliesSummary(data)}</span>,
     test: () => <span className="setup-pill">{m.testDelivered}</span>,

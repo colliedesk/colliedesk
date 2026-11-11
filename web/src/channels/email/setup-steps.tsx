@@ -74,8 +74,9 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
   const prefix = useId();
   const secret = useInboundSecret(channel.id, settings.channel?.secret_set === true, refresh);
   const received = channel.status.state === 'working' || Boolean(channel.last_inbound_at);
-  // A test message makes the channel working, yet no customer mail came through the mailbox (the inbox says so too).
-  const testOnly = received && settings.mail_through_mailbox === false;
+  // A test message, Gmail's forwarding confirmation, dropped spam or an answer to a reply+ address makes the
+  // channel working, yet no customer mail came through the mailbox (the inbox says so too).
+  const noCustomerMail = received && settings.mail_through_mailbox === false;
   return <div className="setup-body">
     {hosted && <div className="copy-field setup-copy">
       <label className="invite-link"><span className="field-label">{m.forwardTo}</span><input readOnly value={hosted} /></label>
@@ -96,8 +97,8 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
       </>}
     </div>
     {(tab === 'gmail' || tab === 'workspace') && <GmailConfirmation channelID={channel.id} timezone={timezone} waiting={!received} />}
-    <p role="status" className={`setup-live ${received && !testOnly ? 'setup-live-ok' : ''}`}>
-      {testOnly ? m.onlyTestMessage : received ? m.firstEmail(channel.last_inbound_at ? clockTime(channel.last_inbound_at, timezone) : '') : m.waitingFirstEmail}</p>
+    <p role="status" className={`setup-live ${received && !noCustomerMail ? 'setup-live-ok' : ''}`}>
+      {noCustomerMail ? m.noCustomerMailYet : received ? m.firstEmail(channel.last_inbound_at ? clockTime(channel.last_inbound_at, timezone) : '') : m.waitingFirstEmail}</p>
     <div className="setup-actions">
       <button type="button" className="primary-action" disabled={!received} onClick={onContinue}>{m.continue}</button>
       {!received && <><small className="muted-copy">{m.continueLocked}</small>

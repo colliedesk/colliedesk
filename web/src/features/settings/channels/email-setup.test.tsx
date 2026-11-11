@@ -212,13 +212,14 @@ test('the inbox\'s Move your mail opens step 2 even after a test message marked 
   expect(screen.queryByRole('textbox', { name: 'Support address' })).not.toBeInTheDocument();
 });
 
-test('after only a test message, step 2 says no customer mail came through the mailbox yet, and turns to First email received when it does, without a reload', async () => {
-  // The test message made the channel working; the server says no customer mail came through the mailbox.
+test('after mail that is not customer mail, step 2 says no customer mail came through the mailbox yet, and turns to First email received when it does, without a reload', async () => {
+  // A test message, Gmail's forwarding confirmation, dropped spam or an answer to a reply+ address made the
+  // channel working; the server says no customer mail came through the mailbox. The words fit each of them.
   const detail = waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
   channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: false }));
   const { client } = show(`${MAIN}/setup`, { step: 'forward' });
   const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
-  await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('Test message received. No customer mail through your mailbox yet.'));
+  await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('Mail arrived, but no customer mail through your mailbox yet.'));
   expect(forward).not.toHaveTextContent('First email received');
   channelsApi.get.mockResolvedValue({ ...detail, last_inbound_at: '2026-10-29T00:40:00Z' });
   channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: true }));
@@ -226,12 +227,12 @@ test('after only a test message, step 2 says no customer mail came through the m
   await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('First email received 12:40 AM'));
 });
 
-test('folded, step 2 after only a test message says no customer mail came through the mailbox yet', async () => {
+test('folded, step 2 after mail that is not customer mail says no customer mail came through the mailbox yet', async () => {
   waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
   channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: false }));
   show(`${MAIN}/setup`);
   expect(await screen.findByRole('group', { name: /Send replies from/ })).toHaveTextContent('Step 3 of 4');
-  expect(step(/Forward its mail to Colliedesk/)).toHaveTextContent('Test message received. No customer mail through your mailbox yet.');
+  expect(step(/Forward its mail to Colliedesk/)).toHaveTextContent('Mail arrived, but no customer mail through your mailbox yet.');
 });
 
 test('step 2 flips to First email received when inbox activity brings a conversation, without a reload, and Continue opens step 3', async () => {

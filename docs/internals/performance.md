@@ -41,7 +41,8 @@ If the gate fails:
 customer mail came through each mailbox (`mail_switch`). The inbox reads it on every load for its line
 about moving the mail. The fixture is the worst case for the forwarding rule: three mailboxes, the default
 one with 20,000 forwarded customer mail, the other two with none, and 30,000 dropped mail in every journal;
-a second workspace is of the same size. Same method as the inbox activity budget: 10 warm-up calls, then
+a fourth mailbox without any journal entry; a second workspace of the same size plus 500,000 dropped mail.
+Same method as the inbox activity budget: 10 warm-up calls, then
 200 timed calls of the store call.
 
 The partial index `channel_inbound_events_channel_messages` (`workspace_id, channel_id`, holding only the
@@ -50,8 +51,11 @@ to its own entries. Without it the planner walked every entry of the workspace t
 (`channel_inbound_events_message`), growing with the mail of the other mailboxes: 30–45 ms p95 on this
 fixture, 0.2–0.5 ms with it. Its condition is the query's own, so a lookup of one message still uses
 `channel_inbound_events_message` (`TestTheJournalRowOfAMessageIsFoundByIndex`). The check for a channel
-without any journal entry reads one entry in `received_at` order: without that order the planner scanned the
-table. Do not widen the 20 ms.
+without any journal entry is a scalar subquery, `(SELECT 1 … ORDER BY received_at DESC LIMIT 1) IS NULL`,
+read through `channel_inbound_events_channel_idx`. Do not write it as `NOT EXISTS (… LIMIT 1)`: PostgreSQL
+drops ORDER BY and LIMIT inside EXISTS, and for a channel without entries the planner then scanned the whole
+journal, every workspace's entries (28–33 ms p95 on this fixture, 0.5 ms as a scalar subquery). Do not widen
+the 20 ms.
 
 ## Import status budget
 

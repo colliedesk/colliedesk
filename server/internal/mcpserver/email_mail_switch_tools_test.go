@@ -23,7 +23,7 @@ func TestTheEmailChannelToolSaysWhetherMailArrivedThroughTheSupportMailbox(t *te
 	}
 	// The same list the inbox line names: every mailbox of the team's own whose customer mail does not arrive yet.
 	if at(t, got, "email_channel", "mail_switch", "imported") != false || at(t, got, "email_channel", "mail_switch", "mailboxes", 0, "support_address") != "help@switch-tools.example.com" ||
-		at(t, got, "email_channel", "mail_switch", "mailboxes", 0, "name") == nil {
+		at(t, got, "email_channel", "mail_switch", "mailboxes", 0, "name") == nil || at(t, got, "email_channel", "mail_switch", "mailboxes", 0, "old_help_desk") != false {
 		t.Fatalf("mail switch before forwarding = %v", at(t, got, "email_channel"))
 	}
 

@@ -86,8 +86,31 @@ type mailSwitchList struct {
 			ChannelID      string `json:"channel_id"`
 			Name           string `json:"name"`
 			SupportAddress string `json:"support_address"`
+			OldHelpDesk    *bool  `json:"old_help_desk"`
 		} `json:"mailboxes"`
 	} `json:"mail_switch"`
+}
+
+// oldHelpDeskOf reads each listed mailbox of the workspace's mail switch as "address=old_help_desk", in order.
+func oldHelpDeskOf(t *testing.T, api http.Handler, token string) string {
+	t.Helper()
+	response := request(t, api, http.MethodGet, "/api/v1/channels/email", nil, token, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET email settings status=%d body=%s", response.Code, response.Body)
+	}
+	var body mailSwitchList
+	decode(t, response, &body)
+	if body.MailSwitch == nil {
+		t.Fatalf("GET email settings has no mail_switch: %s", response.Body)
+	}
+	parts := []string{}
+	for _, mailbox := range body.MailSwitch.Mailboxes {
+		if mailbox.OldHelpDesk == nil {
+			t.Fatalf("mailbox %s has no old_help_desk: %s", mailbox.SupportAddress, response.Body)
+		}
+		parts = append(parts, fmt.Sprintf("%s=%t", mailbox.SupportAddress, *mailbox.OldHelpDesk))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // mailToMove reads the workspace's mail switch from an email channel's settings as "imported: address, …".
@@ -193,5 +216,29 @@ func TestAHostedSupportAddressHasNoMailToMoveAfterTheWorkspaceAddressNameChanges
 	}
 	if got := mailToMove(t, api, admin, "/api/v1/channels/email"); got != want {
 		t.Fatalf("after the rename = %q, want %q", got, want)
+	}
+}
+
+// Only a mailbox the team had before its import finished still gets its new mail in the old help desk; one
+// added after the import never was there, and after the import is undone none is.
+func TestOnlyAMailboxAddedBeforeTheImportFinishedIsSaidToReachTheOldHelpDesk(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, platformConfig)
+	admin := createSession(t, api, service, "Old Desk", "admin@old-desk.example.com")
+	connectEmail(t, api, admin, "support@old-desk.example.com")
+	if got, want := oldHelpDeskOf(t, api, admin), "support@old-desk.example.com=false"; got != want {
+		t.Fatalf("without an import = %q, want %q", got, want)
+	}
+	insertImport(t, pool, workspaceSlug(t, api, admin), "finished")
+	addEmailChannel(t, api, admin, "billing@old-desk.example.com")
+	if got, want := oldHelpDeskOf(t, api, admin), "support@old-desk.example.com=true, billing@old-desk.example.com=false"; got != want {
+		t.Fatalf("after the import, billing@ added later = %q, want %q", got, want)
+	}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO import_jobs(workspace_id,kind,source,domain,undo_of,state,phase,options,started_at,finished_at)
+		SELECT workspace_id,'undo','freshdesk',domain,id,'finished','undo','{}'::jsonb,now(),now() FROM import_jobs WHERE workspace_id=(SELECT id FROM workspaces WHERE slug=$1)`,
+		workspaceSlug(t, api, admin)); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := oldHelpDeskOf(t, api, admin), "support@old-desk.example.com=false, billing@old-desk.example.com=false"; got != want {
+		t.Fatalf("after the import was undone = %q, want %q", got, want)
 	}
 }

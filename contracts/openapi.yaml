@@ -12418,8 +12418,8 @@ components:
         imported:
           type: boolean
           description: >-
-            Whether the workspace finished an import from another help desk (and did not undo it). Then new
-            customer mail to the mailboxes below still arrives in that old help desk.
+            Whether the workspace finished an import from another help desk (and did not undo it). Each mailbox
+            says in `old_help_desk` whether its new customer mail still arrives in that old help desk.
         mailboxes:
           type: array
           description: >-
@@ -12430,11 +12430,17 @@ components:
           items: {$ref: '#/components/schemas/EmailMailboxToMove'}
     EmailMailboxToMove:
       type: object
-      required: [channel_id, name, support_address]
+      required: [channel_id, name, support_address, old_help_desk]
       properties:
         channel_id: {type: string, format: uuid}
         name: {type: string, description: The channel's name.}
         support_address: {type: string, format: email}
+        old_help_desk:
+          type: boolean
+          description: >-
+            Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added
+            before an import that finished (and was not undone). False for a mailbox added after the import, which
+            the old help desk never received; its mail simply does not arrive here yet.
     GmailSettings:
       type: object
       required: [available, missing_settings, off_reason, redirect_uri, connection]

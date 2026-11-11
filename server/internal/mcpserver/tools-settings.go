@@ -88,6 +88,7 @@ type restEmailSettings struct {
 			ChannelID      string `json:"channel_id"`
 			Name           string `json:"name"`
 			SupportAddress string `json:"support_address"`
+			OldHelpDesk    bool   `json:"old_help_desk"`
 		} `json:"mailboxes"`
 	} `json:"mail_switch"`
 }
@@ -365,7 +366,7 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 		"mail_through_mailbox": settings.MailThroughMailbox, "answers_before_forwarding": settings.AnswersBeforeForwarding}
 	mailboxes := make([]map[string]any, 0, len(settings.MailSwitch.Mailboxes))
 	for _, mailbox := range settings.MailSwitch.Mailboxes {
-		mailboxes = append(mailboxes, map[string]any{"channel_id": mailbox.ChannelID, "name": mailbox.Name, "support_address": mailbox.SupportAddress})
+		mailboxes = append(mailboxes, map[string]any{"channel_id": mailbox.ChannelID, "name": mailbox.Name, "support_address": mailbox.SupportAddress, "old_help_desk": mailbox.OldHelpDesk})
 	}
 	view["mail_switch"] = map[string]any{"imported": settings.MailSwitch.Imported, "mailboxes": mailboxes}
 	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false}

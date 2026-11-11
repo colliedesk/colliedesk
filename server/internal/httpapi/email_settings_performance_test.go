@@ -16,14 +16,17 @@ const (
 	emailSettingsSamples       = 200
 	// droppedPerChannel is a year of spam to a public support address that the hosted address drops.
 	droppedPerChannel = 30_000
+	// otherTenantDropped is the extra dropped mail of the second workspace: a large tenant beside a small one.
+	otherTenantDropped = 500_000
 )
 
 // TestEmailChannelSettingsLatencyBudget times the store call behind GET /api/v1/channels/email besides
 // the channel itself: the sending pause, the finished import and whether customer mail came through each
 // mailbox. The inbox reads it on every load for its line about moving the mail. The fixture is the worst
 // case for the forwarding rule: the default mailbox forwarded 20,000 customer mail, two newer mailboxes never
-// forwarded, and every mailbox has 30,000 dropped mail in its journal (which never counts); a second
-// workspace is of the same size.
+// forwarded, and every mailbox has 30,000 dropped mail in its journal (which never counts); a fourth mailbox,
+// added last, has no journal entry at all. A second workspace is of the same size plus 500,000 dropped mail:
+// the check of the mailbox without a journal must not read the other workspaces' entries.
 func TestEmailChannelSettingsLatencyBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	adminA := createSession(t, api, service, "Settings Budget A", "admin-a@settings-budget.example.com")
@@ -36,6 +39,8 @@ func TestEmailChannelSettingsLatencyBudget(t *testing.T) {
 		seedDroppedMail(t, pool, workspaceID(t, api, admin))
 		seedForwardedMail(t, pool, workspaceID(t, api, admin))
 	}
+	addEmailChannel(t, api, adminA, "help@"+workspaceSlug(t, api, adminA)+".example.com")
+	seedOtherTenantMail(t, pool, workspaceID(t, api, adminB))
 	ctx := context.Background()
 	for _, table := range []string{"channel_inbound_events", "conversations", "messages"} {
 		if _, err := pool.Exec(ctx, `ANALYZE `+table); err != nil {
@@ -61,7 +66,7 @@ func TestEmailChannelSettingsLatencyBudget(t *testing.T) {
 	for index := range durations {
 		sample, durations[index] = read()
 	}
-	if len(sample.Channels) != 3 || !sample.Channels[0].Forwarded || sample.Channels[1].Forwarded || sample.Channels[2].Forwarded {
+	if len(sample.Channels) != 4 || !sample.Channels[0].Forwarded || sample.Channels[1].Forwarded || sample.Channels[2].Forwarded || sample.Channels[3].Forwarded {
 		t.Fatalf("fixture is not realistic: %+v", sample.Channels)
 	}
 	sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
@@ -78,6 +83,16 @@ func seedDroppedMail(t *testing.T, pool *pgxpool.Pool, workspace string) {
 	if _, err := pool.Exec(context.Background(), `INSERT INTO channel_inbound_events(workspace_id,channel_id,state,raw,drop_reason,received_at)
 		SELECT c.workspace_id,c.id,'dropped','{"from":"bulk@spam.example"}'::jsonb,'bulk',now()-(n||' minutes')::interval
 		FROM channels c, generate_series(1,$2::int) AS n WHERE c.workspace_id=$1 AND c.type='email'`, workspace, droppedPerChannel); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedOtherTenantMail writes otherTenantDropped dropped mail into the default email channel's journal of the workspace.
+func seedOtherTenantMail(t *testing.T, pool *pgxpool.Pool, workspace string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `INSERT INTO channel_inbound_events(workspace_id,channel_id,state,raw,drop_reason,received_at)
+		SELECT c.workspace_id,c.id,'dropped','{"from":"bulk@spam.example"}'::jsonb,'bulk',now()-(n||' seconds')::interval
+		FROM channels c, generate_series(1,$2::int) AS n WHERE c.workspace_id=$1 AND c.type='email' AND c.is_default`, workspace, otherTenantDropped); err != nil {
 		t.Fatal(err)
 	}
 }

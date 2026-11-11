@@ -1311,7 +1311,7 @@ const switchSettings = (id: string, address: string, waiting: string[], answers:
   smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: address,
   mail_through_mailbox: !waiting.includes(id), answers_before_forwarding: answers,
   mail_switch: { imported: true, mailboxes: waiting.map((channel) => ({ channel_id: channel, name: channel === SALES ? 'Sales' : 'Support',
-    support_address: channel === SALES ? 'sales@desk.example' : 'support@desk.example' })) },
+    support_address: channel === SALES ? 'sales@desk.example' : 'support@desk.example', old_help_desk: true })) },
 });
 const salesRef = { id: SALES, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { id: SALES, type: 'email', name: 'Sales', enabled: true, instead_of: null } };
 const answerToMailbox = 'The customer\'s answer goes to your mailbox until it forwards here.';

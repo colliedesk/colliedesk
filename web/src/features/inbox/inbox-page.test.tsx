@@ -437,7 +437,7 @@ test('an unsent reply comes back after a reload in which the conversation loads 
 // workspace's mailboxes whose customer mail does not arrive here yet; the server leaves out a hosted address.
 const MAILBOX = '55555555-5555-4555-8555-555555555555';
 const BILLING = '66666666-6666-4666-8666-666666666666';
-type Mailbox = { channel_id: string; name: string; support_address: string };
+type Mailbox = { channel_id: string; name: string; support_address: string; old_help_desk?: boolean };
 const supportBox: Mailbox = { channel_id: MAILBOX, name: 'Acme Support', support_address: 'support@acme.com' };
 const billingBox: Mailbox = { channel_id: BILLING, name: 'Billing', support_address: 'billing@acme.com' };
 const mailbox = (change: { mail_through_mailbox?: boolean; answers_before_forwarding?: 'colliedesk' | 'support_mailbox'; connected?: boolean; support_address?: string;
@@ -453,7 +453,9 @@ const mailbox = (change: { mail_through_mailbox?: boolean; answers_before_forwar
   microsoft: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/ms', admin_consent_redirect_uri: 'https://desk.example.com/ms-admin',
     admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null },
   mail_through_mailbox: change.mail_through_mailbox ?? false, answers_before_forwarding: change.answers_before_forwarding ?? 'colliedesk',
-  mail_switch: { imported: change.imported ?? true, mailboxes: change.mailboxes ?? (change.mail_through_mailbox ? [] : [supportBox]) },
+  // A mailbox says itself whether its mail was the old help desk's; by default, as the workspace's import does.
+  mail_switch: { imported: change.imported ?? true, mailboxes: (change.mailboxes ?? (change.mail_through_mailbox ? [] : [supportBox]))
+    .map((box) => ({ ...box, old_help_desk: box.old_help_desk ?? change.imported ?? true })) },
 });
 const answerToMailbox = 'The customer\'s answer goes to your mailbox until it forwards here.';
 const mailSwitchLine = () => screen.getByText((_, element) => element?.classList.contains('mail-switch') ?? false);
@@ -472,6 +474,17 @@ test('without a finished import the line does not speak of an old help desk: cus
   expect(line).toHaveTextContent('Customer mail to support@acme.com does not arrive here yet. Forward your mailbox to start');
   expect(line).not.toHaveTextContent('old help desk');
   expect(within(line).getByRole('link', { name: 'Forward your mailbox to start' })).toHaveAttribute('href', `/settings/channels/${MAILBOX}/setup?step=forward`);
+});
+
+test('a mailbox added after the import is not told its mail still arrives in the old help desk', () => {
+  const added = { ...billingBox, old_help_desk: false };
+  const { rerender } = render(<InboxPage canManageChannels defaultMailbox={mailbox({ mailboxes: [added] })} />);
+  expect(mailSwitchLine()).toHaveTextContent('Customer mail to billing@acme.com does not arrive here yet. Forward your mailbox to start');
+  expect(mailSwitchLine()).not.toHaveTextContent('old help desk');
+  rerender(<InboxPage canManageChannels defaultMailbox={mailbox({ mailboxes: [supportBox, added] })} />);
+  expect(mailSwitchLine()).toHaveTextContent('New customer mail to support@acme.com still arrives in your old help desk until you move it. Replies you send here come back here. '
+    + 'Customer mail to billing@acme.com does not arrive here yet. Move your mail');
+  expect(within(mailSwitchLine()).getByRole('link', { name: 'Move your mail' })).toHaveAttribute('href', `/settings/channels/${MAILBOX}/setup?step=forward`);
 });
 
 test('the line names every mailbox whose customer mail does not arrive yet, and its action opens the first one', () => {

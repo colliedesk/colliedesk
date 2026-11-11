@@ -65,6 +65,7 @@ type mailboxToMove struct {
 	ChannelID      string `json:"channel_id"`
 	Name           string `json:"name"`
 	SupportAddress string `json:"support_address"`
+	OldHelpDesk    bool   `json:"old_help_desk"`
 }
 
 // mailSwitchOf lists the switched-on channels with a support address of the team's own that no customer
@@ -74,7 +75,8 @@ func mailSwitchOf(state store.EmailSettingsState, hostedDomain string) mailSwitc
 	result := mailSwitch{Imported: state.Imported, Mailboxes: []mailboxToMove{}}
 	for _, channel := range state.Channels {
 		if channel.Enabled && !channel.Forwarded && email.HostedSlug(channel.SupportAddress, hostedDomain) == "" {
-			result.Mailboxes = append(result.Mailboxes, mailboxToMove{ChannelID: channel.ChannelID, Name: channel.Name, SupportAddress: channel.SupportAddress})
+			result.Mailboxes = append(result.Mailboxes, mailboxToMove{ChannelID: channel.ChannelID, Name: channel.Name, SupportAddress: channel.SupportAddress,
+				OldHelpDesk: channel.OldHelpDesk})
 		}
 	}
 	return result

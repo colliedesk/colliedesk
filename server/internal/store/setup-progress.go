@@ -35,8 +35,18 @@ type SetupProgress struct {
 var setupFirstStep = map[string]string{"leave_helpdesk": SetupImport, "shared_inbox": SetupEmail, "lower_cost": SetupInvite}
 
 // importFinished is true for a workspace ($1) with an import that finished and was not undone.
-const importFinished = `EXISTS (SELECT 1 FROM import_jobs i WHERE i.workspace_id=$1 AND i.kind='import' AND i.state='finished'
+var importFinished = importFinishedAfter("")
+
+// importFinishedAfter is importFinished for an import that finished at or after the SQL timestamp since; empty
+// is any time.
+func importFinishedAfter(since string) string {
+	when := ""
+	if since != "" {
+		when = ` AND i.finished_at>=` + since
+	}
+	return `EXISTS (SELECT 1 FROM import_jobs i WHERE i.workspace_id=$1 AND i.kind='import' AND i.state='finished'` + when + `
 	AND NOT EXISTS (SELECT 1 FROM import_jobs u WHERE u.workspace_id=$1 AND u.kind='undo' AND u.undo_of=i.id AND u.state='finished'))`
+}
 
 // SetupProgress reads the workspace's setup steps. A reply counts once an outgoing message was
 // delivered; a note, a queued reply and a failed one do not.

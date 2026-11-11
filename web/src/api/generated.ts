@@ -8707,7 +8707,7 @@ export interface components {
         };
         /** @description The workspace's support mailboxes whose customer mail does not arrive here yet, the same on every email channel's settings. The inbox shows one line while `mailboxes` is not empty. */
         EmailMailSwitch: {
-            /** @description Whether the workspace finished an import from another help desk (and did not undo it). Then new customer mail to the mailboxes below still arrives in that old help desk. */
+            /** @description Whether the workspace finished an import from another help desk (and did not undo it). Each mailbox says in `old_help_desk` whether its new customer mail still arrives in that old help desk. */
             imported: boolean;
             /** @description The switched-on email channels with a support address of the team's own whose customer mail has not arrived through the mailbox yet (`mail_through_mailbox` false), the default channel first. A channel whose support address is under the server's hosted mail domain has no mailbox to move and is never listed, also after the workspace address name changed. Empty when nothing is left to move. */
             mailboxes: components["schemas"]["EmailMailboxToMove"][];
@@ -8719,6 +8719,8 @@ export interface components {
             name: string;
             /** Format: email */
             support_address: string;
+            /** @description Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added before an import that finished (and was not undone). False for a mailbox added after the import, which the old help desk never received; its mail simply does not arrive here yet. */
+            old_help_desk: boolean;
         };
         GmailSettings: {
             /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off). */
