@@ -214,6 +214,30 @@ test('on a server with workspace hosts, a new team that signs up without a plan 
   expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup' });
 });
 
+test('on a server with workspace hosts, a new team that signs up with a plan opens the setup flow with that plan on its own host', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  open('/sign-in?intent=trial&plan=team25');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup?plan=team25' });
+});
+
+test("a new team that signs up from an AI app's consent page goes back to that page, not to the setup flow", async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  const router = open('/sign-in?intent=trial&next=%2Foauth%2Fauthorize%3Fclient_id%3Dcdk_client_x%26state%3Ds1');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/oauth/authorize'));
+  expect(router.state.location.searchStr).toBe('?client_id=cdk_client_x&state=s1');
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/oauth/authorize?client_id=cdk_client_x&state=s1' });
+});
+
 // An identity no workspace uses yet is offered the sign-up form; a visitor with an intent is asked for the name only.
 const notAnAgent = () => json(403, { error: { code: 'forbidden', message: 'no' } });
 async function submitSignup(button: string) {
