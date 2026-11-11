@@ -293,7 +293,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_results_share_link_create` | Creates a share link of the results page; the old link stops working | `results:share` |
 | `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `results:share` |
 | `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `profile:update` |
-| `colliedesk_setup_progress_get` | Shows the four getting-started steps (email, import, invite, first reply) and where each stands | `conversations:read` |
+| `colliedesk_setup_progress_get` | Shows the six getting-started steps by name (email, import, AI drafts, reply targets, invite, first reply), where each stands, and the reply targets presets | `conversations:read` |
 | `colliedesk_setup_guide_set` | Hides the [setup guide](setup-guide.md) from your inbox, or shows it again | `profile:update` |
 | `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `channels:read` |
 | `colliedesk_channels_get` | Shows one channel and its configuration | `channels:read` |

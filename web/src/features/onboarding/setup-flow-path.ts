@@ -7,6 +7,8 @@ type Step = { key: SetupStepKey; state: string };
 const ownPartDone: Record<SetupStepKey, ReadonlySet<string>> = {
   email: new Set(['waiting', 'working']),
   import: new Set(['running', 'done']),
+  ai_drafts: new Set(['on']),
+  reply_targets: new Set(['on']),
   invite: new Set(['invited', 'joined']),
   first_reply: new Set(['sent']),
 };

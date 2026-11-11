@@ -21,7 +21,7 @@ export function SetupFlowFrame({ me, busy = false, children }: { me?: Me; busy?:
 
 // FlowProgress is one segment per step, filled once the person's own part of it is done, and where they are.
 export function FlowProgress({ steps, current }: { steps: { key: SetupStepKey; state: string }[]; current: number }) {
-  const where = m.stepOf(current + 1, steps.length);
+  const where = `${m.stepOf(current + 1, steps.length)} · ${m.short[steps[current].key]}`;
   return <div className="setup-flow-progress" role="progressbar" aria-label={m.progressLabel} aria-valuemin={1} aria-valuemax={steps.length}
     aria-valuenow={current + 1} aria-valuetext={where}>
     <span className="setup-flow-segments">

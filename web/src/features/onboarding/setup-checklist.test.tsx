@@ -151,3 +151,36 @@ test('Escape inside the open guide folds it', () => {
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Finish setting up/ })).toHaveFocus();
 });
+
+// The setup as the server gives it now: AI drafts and reply targets between the import and the invites.
+const sixSteps = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'];
+const withNewSteps = (states: Record<string, string>) => {
+  const all = { email: 'working', import: 'done', ai_drafts: 'none', reply_targets: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
+  return { steps: sixSteps.map((key) => ({ key, state: all[key], detail: null })), complete: false, recommended: null } as unknown as SetupProgress;
+};
+
+test('an admin sees AI drafts and reply targets after the import, each linking to its screen of the setup flow', () => {
+  render(<SetupChecklist progress={withNewSteps({ ai_drafts: 'nothing_to_read' })} admin defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.querySelector('.setup-title')?.textContent)).toEqual(
+    ['Receive customer email', 'Import from Freshdesk', 'Turn on AI drafts', 'Set reply targets', 'Invite your team', 'Answer your first email']);
+  expect(screen.getByText('2 of 6')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Turn on AI drafts/ })).toHaveAttribute('href', '/setup/ai_drafts');
+  expect(screen.getByRole('link', { name: /Set reply targets/ })).toHaveAttribute('href', '/setup/reply_targets');
+  expect(rows()[2]).toHaveTextContent('Better after an import or an article');
+  expect(rows()[3]).toHaveTextContent('Today puts the closest deadline first');
+  fireEvent.click(screen.getByRole('link', { name: /Set reply targets/ }));
+  expect(tracked).toHaveBeenCalledWith('onboarding_step_started', { step: 'reply_targets' });
+});
+
+test('AI drafts and reply targets read Done once they are on; without built-in AI the drafts row says what it needs', () => {
+  render(<SetupChecklist progress={withNewSteps({ ai_drafts: 'unavailable', reply_targets: 'on' })} admin defaultOpen onHide={vi.fn()} />);
+  expect(rows()[2]).toHaveTextContent('Needs an AI provider');
+  expect(rows()[3]).toHaveTextContent('Done');
+  expect(rows()[3]).toHaveAttribute('data-state', 'done');
+  expect(screen.getByText('3 of 6')).toBeInTheDocument();
+});
+
+test('an agent who is not an admin never sees the AI drafts and reply targets steps', () => {
+  render(<SetupChecklist progress={withNewSteps({})} admin={false} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.querySelector('.setup-title')?.textContent)).toEqual(['Answer your first email']);
+});

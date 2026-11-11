@@ -25,14 +25,23 @@ func setupProgressGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_setup_progress_get",
 		Title: "Show how far the workspace's setup is",
-		Description: `Show the four getting-started steps and where each stands: email (none, waiting, working, needs_attention), import (none, running, done), ` +
+		Description: `Show the six getting-started steps, each with its name and where it stands: email (none, waiting, working, needs_attention), ` +
+			`import (none, running, done), ai_drafts (none, on, nothing_to_read: off with no import and no published article to draft from, ` +
+			`unavailable: off with no built-in AI on this server and no provider of the workspace's own), reply_targets (none, on), ` +
 			`invite (alone, invited, joined) and first_reply (none, sent; a delivered reply, never a note). The steps come in the order the sign-up goal suggests, ` +
-			`and recommended names the one it puts first while it is not done. Computed on every call.`,
+			`and recommended names the one it puts first while it is not done. reply_target_presets lists the reply targets presets in business minutes, and ` +
+			`reply_target_suggestion names the one that fits the team (from the median first reply of the imported history). ` +
+			`To finish ai_drafts call colliedesk_ai_slot_set (slot draft, source server, enabled true, default_level suggest); to finish reply_targets ` +
+			`call colliedesk_response_targets_set with a preset's targets, enabled true, warn_before_minutes 30 and business hours. Computed on every call.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/workspace/setup"},
 		Input:    noArguments,
-		Output: `{"type":"object","required":["steps","complete","recommended"],"properties":{"steps":{"type":"array","items":{"type":"object","required":["key","state","detail"],` +
-			`"properties":{"key":{"type":"string"},"state":{"type":"string"},"detail":{"type":["string","null"]}}}},"complete":{"type":"boolean"},"recommended":{"type":["string","null"]}}}`,
+		Output: `{"type":"object","required":["steps","complete","recommended","reply_target_presets","reply_target_suggestion"],"properties":{` +
+			`"steps":{"type":"array","items":{"type":"object","required":["key","name","state","detail"],` +
+			`"properties":{"key":{"type":"string"},"name":{"type":"string"},"state":{"type":"string"},"detail":{"type":["string","null"]}}}},` +
+			`"complete":{"type":"boolean"},"recommended":{"type":["string","null"]},` +
+			`"reply_target_presets":{"type":"array","items":{"type":"object","required":["key","name","targets"],"properties":{"key":{"type":"string"},"name":{"type":"string"},"targets":{"type":"object"}}}},` +
+			`"reply_target_suggestion":{"type":"object","required":["preset","basis","median_first_reply_minutes"],"properties":{"preset":{"type":"string"},"basis":{"type":"string"},"median_first_reply_minutes":{"type":["integer","null"]}}}}}`,
 		run: setupProgressGet,
 	}
 }

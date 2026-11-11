@@ -4,7 +4,7 @@ The setup guide sits in the bottom-left corner of the inbox and shows what is le
 can receive and answer customer email. It stays in the inbox, also when conversations exist, until
 every step is done or you hide it.
 
-Heading: **Finish setting up**, with how many steps are done (for example "1 of 4") and a progress bar.
+Heading: **Finish setting up**, with how many steps are done (for example "1 of 6") and a progress bar.
 Each step opens its screen of the [setup flow](#setup-flow).
 
 ## Open and folded
@@ -25,6 +25,8 @@ button on the right.
 |---|---|---|---|
 | **Receive customer email** | The email channel works: a customer message arrived. While nothing has arrived yet, the step reads "Waiting for the first email". | `/setup/email` | [Email channel](email-channel.md) |
 | **Import from Freshdesk** | An import finished and was not undone. While one runs, the step reads "Importing". | `/setup/import` | [Import from Freshdesk](import-freshdesk.md) |
+| **Turn on AI drafts** | Reply drafts are on and write a draft for each new customer message (Default for channels: Suggest). Without built-in AI on the server and no provider of your own, the step reads "Needs an AI provider". | `/setup/ai_drafts` | [Built-in AI](ai.md) |
+| **Set reply targets** | Response targets are on. | `/setup/reply_targets` | [Response targets](response-targets.md) |
 | **Invite your team** | A teammate joined. An invite that was sent but not used yet reads "Invite sent". | `/setup/invite` | [Invites](invites.md) |
 | **Answer your first email** | A reply was delivered to a customer. A note does not count, and neither does a reply marked "Delivery failed". The reply to your own test message counts. | `/setup/first_reply` | The inbox |
 
@@ -41,7 +43,7 @@ Each screen shows:
 
 - At the top: your workspace name and the address you are signed in with, and **Exit setup** (the
   cross on the right), which opens the inbox.
-- Where you are ("Step 2 of 4") and the step's title. The step your sign-up goal recommends is marked
+- Where you are ("Step 3 of 6 · AI drafts") and the step's title. The step your sign-up goal recommends is marked
   **Recommended**.
 - The step itself, the same form as in Settings:
   - **Receive customer email**: your support address and how its mail reaches Colliedesk. After you
@@ -51,12 +53,40 @@ Each screen shows:
     whether it worked. When it did not, it says why; a Microsoft 365 account that needs its admin's
     approval gets the approval link to send them.
   - **Import from Freshdesk**: the [import](import-freshdesk.md), without leaving the flow.
+  - **Turn on AI drafts** ("Let AI draft your replies"): an example of a conversation in Today with
+    its draft ready (only a picture: its buttons do nothing), how drafts work, what is sent to the AI
+    provider and what it costs. The numbers are the server's estimate, as in Settings → Built-in AI:
+    about how many automatic drafts half of your plan's included AI covers this month, and at most how many
+    a day. **Turn on AI drafts** turns Reply drafts on with **Default for channels** set to **Suggest**, on
+    the server's built-in AI (or your own provider when the server has none). It records your consent, as
+    Settings → Built-in AI does (History). Triage suggestions are not turned on here. **Turn off** takes it
+    back. With no import and no published help center article, a note says drafts have little to read
+    yet; turning on still works. On a server without built-in AI, **Add a provider** opens Settings →
+    Built-in AI in a new tab, and you can skip the step.
+  - **Set reply targets** ("Choose when a reply is due"): three presets side by side, each with the
+    reply and resolve target of every priority. A day is one business day of 09:00 to 18:00 (9 hours).
+
+    | Preset | Urgent | High | Normal | Low |
+    |---|---|---|---|---|
+    | **Within the hour** | 15 min / 2 h | 30 min / 4 h | 1 h / 1 day | 4 h / 2 days |
+    | **Same day** | 1 h / 4 h | 2 h / 1 day | 8 h / 3 days | 1 day / 5 days |
+    | **Next business day** | 4 h / 1 day | 1 day / 2 days | 1 day / 3 days | 2 days / 5 days |
+
+    The preset that fits is chosen for you. It comes from the median first reply of the conversations you
+    imported that were opened in the last 30 days: up to 1 hour is **Within the hour**, up to 8 hours
+    **Same day**, longer **Next business day**, tagged "Fits your history". With no such history, or while
+    the import still runs, **Same day** is tagged "Suggested". The main button names the preset, for
+    example **Use Same day**. It saves the targets, turns them on with business hours Monday to Friday,
+    09:00 to 18:00 in the workspace's timezone (your own hours, when Settings already has some), sets
+    **Due soon** to 30 minutes, and opens the next step. Targets start with the next new conversation.
+    Change any of it later in Settings → [Response targets](response-targets.md).
   - **Invite your team**: create an invite. Its one-time link stays on screen until you leave the step.
   - **Answer your first email**: **Send yourself a test message** opens a conversation from your own
     address. Answer it, and the reply is emailed to you. **Open the inbox** is there too: conversations
     come in with your email or your import, and you answer one from the inbox.
 - A main button that names the step it opens (for example **Next: Import from Freshdesk**, and
-  **Finish setup** on the last step), **I'll do this later** and **Back**. The email setup has a
+  **Finish setup** on the last step), **I'll do this later** and **Back**. On the AI drafts and reply
+  targets steps the main button does the step (**Turn on AI drafts**, **Use Same day**). The email setup has a
   **Continue** of its own: it moves between the parts of that setup only.
 
 The main button works once your own part of the step is done, as the server reports it: the address saved
@@ -68,11 +98,12 @@ email, a teammate joining) does not hold you back. The screen checks again every
 step with where it stands (Done, its waiting state, or To do). Each step that is not done links back
 to its screen. **Open the inbox** ends the flow.
 
-On a phone the flow is the same single column, and every button is large enough to tap.
+On a phone the flow is the same single column, and every button is large enough to tap. On the AI drafts
+and reply targets steps the buttons stay pinned at the bottom of the screen, and the presets stack.
 
 ## Who sees it
 
-- **Admins** see all four steps.
+- **Admins** see all six steps.
 - **Agents** see only the steps they can take, in the guide and in the setup flow.
 - **Hide** removes the guide from your inbox only. Other team members keep their own choice.
   To bring it back, open **Preferences** and turn on **Show the setup guide**.
@@ -86,10 +117,15 @@ test message** stays: it puts a first conversation in the inbox so you can answe
 
 ## API and AI agents
 
-- `GET /api/v1/workspace/setup` returns the steps with their states (`email`: `none`, `waiting`,
-  `working`, `needs_attention`; `import`: `none`, `running`, `done`; `invite`: `alone`, `invited`,
-  `joined`; `first_reply`: `none`, `sent`), `complete`, and the `recommended` step. The MCP tool is
-  `colliedesk_setup_progress_get`.
+- `GET /api/v1/workspace/setup` returns the steps with their names and states (`email`: `none`,
+  `waiting`, `working`, `needs_attention`; `import`: `none`, `running`, `done`; `ai_drafts`: `none`,
+  `on`, `nothing_to_read`, `unavailable`; `reply_targets`: `none`, `on`; `invite`: `alone`, `invited`,
+  `joined`; `first_reply`: `none`, `sent`), `complete`, the `recommended` step, the reply targets presets
+  (`reply_target_presets`, in business minutes) and the one that fits (`reply_target_suggestion`). The
+  MCP tool is `colliedesk_setup_progress_get`.
+- An AI agent does the two new steps with tools that already exist: `colliedesk_ai_slot_set` (slot
+  `draft`, source `server`, enabled, `default_level` `suggest`) and `colliedesk_response_targets_set`
+  with a preset's targets, enabled, `warn_before_minutes` 30 and business hours.
 - `PUT /api/v1/agents/me/setup-guide` with `{"hidden": true}` or `{"hidden": false}` hides or shows
   the guide for the caller. The MCP tool is `colliedesk_setup_guide_set`. `GET /api/v1/auth/me`
   returns `setup_guide_hidden`.

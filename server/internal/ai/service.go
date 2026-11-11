@@ -105,6 +105,9 @@ func (s *Service) SetClock(now func() time.Time) { s.now = now }
 // ServerConfigured reports whether the server has a provider.
 func (s *Service) ServerConfigured() bool { return s.config.Server != nil }
 
+// ServerOffers says whether the server's provider runs this feature (its operator offers a model for it).
+func (s *Service) ServerOffers(slot string) bool { return len(s.config.Server.ModelsFor(slot)) > 0 }
+
 func (s *Service) build(spec Spec) (aiprovider.Provider, error) {
 	if s.config.Build != nil {
 		return s.config.Build(spec)

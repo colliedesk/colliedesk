@@ -1,11 +1,16 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/colliedesk/colliedesk/server/internal/ai"
+)
 
 // getSetupProgress tells where the workspace stands on getting started.
 func (a *API) getSetupProgress(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
-	progress, err := a.store.SetupProgress(request.Context(), who.Workspace.ID, a.now())
+	// The AI drafts step is unavailable on a server without built-in AI for drafts (and no provider of the workspace).
+	progress, err := a.store.SetupProgress(request.Context(), who.Workspace.ID, a.now(), a.ai.ServerOffers(ai.SlotDraft))
 	if err != nil {
 		writeStoreError(response, err)
 		return

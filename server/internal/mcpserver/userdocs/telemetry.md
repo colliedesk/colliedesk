@@ -144,7 +144,7 @@ Each is sent only after the action succeeded.
 | `reply_draft_decided` | `decision`: `sent` or `discarded`; sent when someone sends or discards a reply draft an AI made or an AI agent left |
 | `settings_section_opened` | `section`: the settings section |
 | `workspace_export_requested` | none |
-| `onboarding_step_started` | `step`: `email`, `import`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
+| `onboarding_step_started` | `step`: `email`, `import`, `ai_drafts`, `reply_targets`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
 | `onboarding_step_completed` | `step`: as above; sent when the step turns done while the guide is shown |
 | `problem_reported` | none; sent after a [problem report](problem-reports.md) reached the support desk (the report itself goes to the server's support desk, not to PostHog) |
 

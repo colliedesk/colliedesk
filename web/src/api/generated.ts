@@ -3012,7 +3012,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. States only, computed on every call. */
+        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, turn on AI drafts, set reply targets, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. It also lists the reply targets presets, with the one the imported history suggests. Computed on every call. */
         get: operations["getSetupProgress"];
         put?: never;
         post?: never;
@@ -6910,17 +6910,42 @@ export interface components {
              * @enum {string|null}
              */
             recommended: "email" | "import" | "invite" | null;
+            /** @description The reply targets the reply_targets step offers, fastest first. Targets are business minutes; a day is the open hours of one business day, 9 hours for 09:00 to 18:00. Apply one with PUT /api/v1/response-targets. */
+            reply_target_presets: components["schemas"]["ReplyTargetPreset"][];
+            reply_target_suggestion: components["schemas"]["ReplyTargetSuggestion"];
         };
         SetupStep: {
             /** @enum {string} */
-            key: "email" | "import" | "invite" | "first_reply";
+            key: "email" | "import" | "ai_drafts" | "reply_targets" | "invite" | "first_reply";
+            /** @description The step as the setup guide names it, for example "Turn on AI drafts". */
+            name: string;
             /**
-             * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent.
+             * @description email none, waiting, working or needs_attention; import none, running or done; ai_drafts none, on (reply drafts on, writing a draft for each new customer message), nothing_to_read (off, with no import done and no published help center article to draft from) or unavailable (off, with no built-in AI on this server and no provider of the workspace's own); reply_targets none or on; invite alone, invited or joined; first_reply none or sent.
              * @enum {string}
              */
-            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "alone" | "invited" | "joined" | "sent";
+            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "on" | "nothing_to_read" | "unavailable" | "alone" | "invited" | "joined" | "sent";
             /** @description A reason code for needs_attention; null otherwise. */
             detail: string | null;
+        };
+        ReplyTargetPreset: {
+            key: components["schemas"]["ReplyTargetPresetKey"];
+            name: string;
+            targets: {
+                urgent: components["schemas"]["TargetMinutes"];
+                high: components["schemas"]["TargetMinutes"];
+                normal: components["schemas"]["TargetMinutes"];
+                low: components["schemas"]["TargetMinutes"];
+            };
+        };
+        /** @enum {string} */
+        ReplyTargetPresetKey: "within_the_hour" | "same_day" | "next_business_day";
+        /** @description The preset that fits the team. history: from the median first reply of the imported conversations opened in the last 30 days (up to 60 minutes within_the_hour, up to 480 same_day, longer next_business_day). no_history (nothing imported, or nothing answered in those 30 days) and import_running (checked again when the import ends) suggest same_day. */
+        ReplyTargetSuggestion: {
+            preset: components["schemas"]["ReplyTargetPresetKey"];
+            /** @enum {string} */
+            basis: "history" | "no_history" | "import_running";
+            /** @description Wall-clock minutes from the customer's first message to the first reply; null without history. */
+            median_first_reply_minutes: number | null;
         };
         Agent: {
             /** Format: uuid */
