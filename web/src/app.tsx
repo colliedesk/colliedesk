@@ -53,14 +53,17 @@ const resultsSharePart = lazyPart(() => import('./features/results/results-share
 const reviewRoutePart = lazyPart(() => import('./features/review/review-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
+// A trial offer link is opened once by a few admins: its page loads from its own chunk.
+const trialOfferPart = lazyPart(() => import('./features/auth/trial-offer-page'));
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   // A bare link to a page of the app opens without reloading, wherever it is written.
   useInAppLinks();
   // The public page of a results share link has no session and no rail.
-  // The consent page of an AI app's OAuth sign-in has no rail either: it checks its own session.
-  const onSignIn = path === '/sign-in' || path === '/r' || path === '/oauth/authorize';
+  // The consent page of an AI app's OAuth sign-in has no rail either: it checks its own session. So does the
+  // page of a trial offer link, which a locked workspace must reach past its locked screen.
+  const onSignIn = path === '/sign-in' || path === '/r' || path === '/oauth/authorize' || path === '/trial-offer';
   // An address that matches no page is no rail destination either.
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
@@ -442,7 +445,18 @@ const oauthAuthorizeRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+// /trial-offer?token=… is the link of a trial offer an operator emailed (collie trial offer).
+const trialOfferRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/trial-offer',
+  component: function TrialOfferLink() {
+    const { search, pathname } = window.location;
+    return <Part part={trialOfferPart} failed={<main className="settings-page"><PartUnavailable /></main>}
+      render={({ TrialOfferPage }) => <TrialOfferPage token={new URLSearchParams(search).get('token') ?? ''} here={pathname + search} />} />;
+  },
+});
+
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

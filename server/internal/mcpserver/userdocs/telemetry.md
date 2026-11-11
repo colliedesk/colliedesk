@@ -52,6 +52,7 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 | `email_channel_saved` | An admin saves the workspace's support address | `distinct_id` = the workspace id, `realm`, `version` (never the address) |
 | `reply_sent` | A reply to a customer is sent from Colliedesk; a note is not a reply | `distinct_id` = the workspace id, `by` (`person`, or `ai_agent` for an agent token), `realm`, `version` (never the text or the recipient) |
 | `teammate_invited` | An admin invites a teammate | `distinct_id` = the workspace id, `realm`, `version` (never the invited address) |
+| `trial_offer_accepted` | An admin accepts a trial offer link an operator sent | `distinct_id` = the workspace id, `extended` (`false` when the trial already ended later and was kept), `realm`, `version` |
 | `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`solo`, `small`, `team`, `team25` or `founding`), the same `utm_*`, `ttclid`, `fbclid` and `referrer_host` values as its `trial_started`, `realm`, `version` |
 
 Once a day, with the instance heartbeat, Colliedesk Cloud also sends one `workspace_snapshot` event

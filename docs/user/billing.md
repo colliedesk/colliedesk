@@ -43,6 +43,26 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
   gets each email once. A workspace that has a plan, or whose trial is over, gets none. If the trial end
   moves (for example after a Freshdesk import extends it), the new end gets its own two emails.
 
+### A trial offer from Colliedesk
+
+If your trial ran out while you were still trying Colliedesk, Colliedesk may email you a one-time
+link to continue it.
+
+1. Open the link. Opening it changes nothing yet.
+2. If you are not signed in, sign in as an admin of the workspace; you come back to the same page.
+3. The page names your workspace and says "Continue your trial: 14 days, starting when you press
+   Continue." Select **Continue trial**.
+4. Your trial now ends 14 days from that moment, and a locked workspace opens at once. If your trial
+   already ended later than that, it stays as it was.
+
+- Only an admin (`billing:manage`) of that workspace can accept. An agent who opens it sees which
+  admins can.
+- The link works once, for at most 30 days. An expired, withdrawn or already used link says so, with
+  your trial's end and support@colliedesk.com. A workspace that already has a plan needs no trial:
+  the page says so and nothing changes.
+- An AI agent with `billing:manage` can accept the link for you with the MCP tool
+  `colliedesk_trial_offer_accept`.
+
 ### Limits during the trial
 
 - **Agents.** Up to 25, so a team of 11 to 25 agents can try Colliedesk with everyone. An agent and a pending invite each take one seat. Creating an invite when all
@@ -146,7 +166,8 @@ The workspace is **locked**. Nothing is deleted. Everyone who signs in sees a pa
 trial (or the subscription) has ended, instead of the inbox.
 
 - **Admins** can choose a plan (or open **Manage billing** when a subscription ended or failed), select **Export all data**,
-  or write to support@colliedesk.com if they need more time. The page says nothing is deleted. Choosing a plan and
+  or write to support@colliedesk.com if they need more time; support may answer with a
+  [trial offer](#a-trial-offer-from-colliedesk). The page says nothing is deleted. Choosing a plan and
   paying opens the workspace again within a few moments of the provider confirming the payment.
 - **Agents** are told to ask an admin to choose a plan, with the admins' names when the workspace is on its trial, and can sign out.
 - Customers who write to a locked workspace get a bounce. Nothing is stored, so nothing is lost

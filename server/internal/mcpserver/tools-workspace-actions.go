@@ -164,6 +164,61 @@ func billingAction(c *call, arguments map[string]any) (any, error) {
 	return out, nil
 }
 
+// offerToken is the token of a trial offer link, or the argument itself when it is only the token.
+func offerToken(link string) string {
+	link = strings.TrimSpace(link)
+	if parsed, err := url.Parse(link); err == nil && parsed.Query().Get("token") != "" {
+		return parsed.Query().Get("token")
+	}
+	return link
+}
+
+func trialOfferAccept(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		Link    string `json:"link"`
+		Preview bool   `json:"preview"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	token := offerToken(args.Link)
+	if token == "" {
+		return nil, &toolError{"Give link: the trial offer link from the email, or only its token."}
+	}
+	if args.Preview {
+		var offer map[string]any
+		if err := c.get("/api/v1/trial-offer", url.Values{"token": {token}}, &offer); err != nil {
+			return nil, err
+		}
+		next := "Nothing changed. To accept, call colliedesk_trial_offer_accept again without preview."
+		if offer["can_accept"] != true {
+			next = "This token cannot accept it now (refusal " + fmt.Sprint(offer["refusal"]) + ")."
+			if names, _ := offer["accept_by"].([]any); len(names) > 0 && offer["refusal"] == "not_admin" {
+				next += " These members can accept it: " + joinNames(names) + "."
+			}
+		}
+		return map[string]any{"offer": offer, "next": next}, nil
+	}
+	out, err := passOn(c, http.MethodPost, "/api/v1/trial-offer/accept", map[string]any{"token": token})
+	if err != nil {
+		return nil, err
+	}
+	if out["extended"] == true {
+		out["next"] = fmt.Sprintf("The trial now ends at %v; the workspace is open until then.", out["trial_ends_at"])
+	} else {
+		out["next"] = fmt.Sprintf("The trial already ended later, at %v, and was kept; the offer is spent.", out["trial_ends_at"])
+	}
+	return out, nil
+}
+
+func joinNames(names []any) string {
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, fmt.Sprint(name))
+	}
+	return strings.Join(parts, ", ")
+}
+
 func emailChannelDisconnect(c *call, _ map[string]any) (any, error) {
 	if _, err := passOn(c, http.MethodDelete, "/api/v1/channels/email", nil); err != nil {
 		return nil, err
