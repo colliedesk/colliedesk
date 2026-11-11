@@ -9,7 +9,8 @@ test('the ⓘ button is named after its label, and the tip text is its accessibl
   render(<HelpTip label="Workspace name" text={text} />);
   const button = screen.getByRole('button', { name: 'About Workspace name' });
   expect(button).toHaveAccessibleDescription(text);
-  expect(button).toHaveAttribute('aria-expanded', 'false');
+  // A tooltip is not a disclosure: its button never says expanded or collapsed.
+  expect(button).not.toHaveAttribute('aria-expanded');
   expect(tip()).not.toBeInTheDocument();
 });
 
@@ -18,7 +19,7 @@ test('a mouse over the button opens the tip, and leaving closes it', async () =>
   const button = screen.getByRole('button', { name: 'About Workspace name' });
   fireEvent.pointerEnter(button, { pointerType: 'mouse' });
   expect(screen.getByRole('tooltip')).toHaveTextContent(text);
-  expect(button).toHaveAttribute('aria-expanded', 'true');
+  expect(button).not.toHaveAttribute('aria-expanded');
   fireEvent.pointerLeave(button, { pointerType: 'mouse' });
   await waitFor(() => expect(tip()).not.toBeInTheDocument());
 });
@@ -71,25 +72,88 @@ test('a click outside closes a tip opened by a click', () => {
   expect(tip()).not.toBeInTheDocument();
 });
 
-test('a tip with a Learn more link stays open while the pointer or focus is inside it', async () => {
-  render(<><HelpTip label="Response targets" text="Targets count business hours." link={{ href: '/docs/targets', label: 'Learn more' }} />
-    <button type="button">Next</button></>);
+const linkTip = <HelpTip label="Response targets" text="Targets count business hours." link={{ href: '/docs/targets', label: 'Learn more' }} />;
+const layerOf = (button: HTMLElement) => document.getElementById(button.getAttribute('aria-controls') ?? '');
+
+test('a tip with a link is a disclosure: its button says expanded and controls the layer, which is not a tooltip', () => {
+  render(linkTip);
   const button = screen.getByRole('button', { name: 'About Response targets' });
   expect(button).toHaveAccessibleDescription('Targets count business hours.');
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+  expect(layerOf(button)).not.toBeVisible();
+  fireEvent.click(button);
+  expect(button).toHaveAttribute('aria-expanded', 'true');
+  expect(layerOf(button)).toBeVisible();
+  expect(layerOf(button)).toContainElement(screen.getByRole('link', { name: 'Learn more' }));
+  expect(tip()).not.toBeInTheDocument();
+});
+
+test('a tip with a Learn more link stays open while the pointer or focus is inside it', async () => {
+  render(<>{linkTip}<button type="button">Next</button></>);
+  const button = screen.getByRole('button', { name: 'About Response targets' });
   fireEvent.pointerEnter(button, { pointerType: 'mouse' });
-  const layer = screen.getByRole('tooltip');
+  const layer = layerOf(button)!;
   fireEvent.pointerLeave(button, { pointerType: 'mouse' });
   fireEvent.pointerEnter(layer, { pointerType: 'mouse' });
   await new Promise((resolve) => setTimeout(resolve, 250));
-  expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  expect(layer).toBeVisible();
   const link = screen.getByRole('link', { name: 'Learn more' });
   expect(link).toHaveAttribute('href', '/docs/targets');
   act(() => link.focus());
   fireEvent.pointerLeave(layer, { pointerType: 'mouse' });
   await new Promise((resolve) => setTimeout(resolve, 250));
-  expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  expect(layer).toBeVisible();
   act(() => screen.getByRole('button', { name: 'Next' }).focus());
-  expect(tip()).not.toBeInTheDocument();
+  expect(layer).not.toBeVisible();
+});
+
+test('Escape on the tip\'s link puts focus back on its button and closes the tip', () => {
+  render(linkTip);
+  const button = screen.getByRole('button', { name: 'About Response targets' });
+  act(() => button.focus());
+  const link = screen.getByRole('link', { name: 'Learn more' });
+  act(() => link.focus());
+  fireEvent.keyDown(link, { key: 'Escape' });
+  expect(button).toHaveFocus();
+  expect(layerOf(button)).not.toBeVisible();
+});
+
+// press does what a browser does on a press: focus goes to the nearest focusable element around the target, or
+// leaves the focused one when there is none.
+const press = (target: HTMLElement) => {
+  fireEvent.pointerDown(target, { pointerType: 'mouse' });
+  const focusable = target.closest<HTMLElement>('a[href], button, input, [tabindex]');
+  act(() => (focusable ? focusable.focus() : (document.activeElement as HTMLElement | null)?.blur()));
+  fireEvent.click(target);
+};
+
+test('pressing the text of an open tip keeps it open', () => {
+  render(<HelpTip label="Workspace name" text={text} />);
+  const button = screen.getByRole('button', { name: 'About Workspace name' });
+  act(() => button.focus());
+  fireEvent.click(button);
+  press(screen.getByText(text));
+  expect(screen.getByRole('tooltip')).toHaveTextContent(text);
+});
+
+test('Escape on an open tip closes only the tip: an editor around it that cancels on Escape stays open', () => {
+  const cancels: string[] = [];
+  const onDocument = (event: KeyboardEvent) => { if (event.key === 'Escape') cancels.push('document'); };
+  document.addEventListener('keydown', onDocument);
+  try {
+    render(<div onKeyDown={(event) => { if (event.key === 'Escape') cancels.push('editor'); }}>
+      <input aria-label="Agent" /><HelpTip label="Admin" text={text} /></div>);
+    const field = screen.getByRole('textbox', { name: 'Agent' });
+    act(() => field.focus());
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'About Admin' }), { pointerType: 'mouse' });
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(tip()).not.toBeInTheDocument();
+    expect(cancels).toEqual([]);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(cancels).toEqual(['editor', 'document']);
+  } finally {
+    document.removeEventListener('keydown', onDocument);
+  }
 });
 
 test('a locked reason is a lock button whose tip says why, and can describe the locked control too', () => {
