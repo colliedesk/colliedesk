@@ -395,7 +395,10 @@ it. Deleted translations are listed there too. Articles in the trash count towar
 
 ## Help center settings
 
-Open **Knowledge base → Settings**. Everyone with `help_center:read` (Agent and Admin hold it) sees whether the help center is on. An admin can turn
+Open **Knowledge base → Settings**, or **Settings → General → Open Help center settings**. It needs only
+`help_center:read` (Agent and Admin hold it), not the articles' permission: a role without
+`kb_articles:read` still finds the **Settings** tab beside **Media**, and Knowledge on the rail opens it when the
+role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
@@ -758,7 +761,7 @@ edit both before you send. `Ctrl+Z` (`Cmd+Z`) takes the link back out.
 
 The list shows only published articles, and only while the help center is on: while it is off no
 article has a public page, so the list says so instead. An admin gets **Open help center
-settings**, which opens Settings in a new tab, so your draft stays; an agent asks an admin. The list
+settings**, which opens Knowledge base → Settings in a new tab, so your draft stays; an agent asks an admin. The list
 asks again each time it opens, so an article published or a help center turned on a moment ago
 shows up.
 

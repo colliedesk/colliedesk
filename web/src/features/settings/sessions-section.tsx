@@ -51,7 +51,7 @@ export function SessionsSection({ sessions, timezone, onRevokeSession, kind = 'd
   const heading = kind === 'tokens' ? 'agent-sessions-heading' : 'sessions-heading';
   const shown = sessions.filter((session) => !session.app && (kind === 'tokens') === Boolean(session.token));
   return (
-    <section className="settings-card" aria-labelledby={heading}><div className="section-heading"><h2 id={heading}>{messages.sessions}</h2><p>{settingsMessages.sessionsDescription}</p></div>
+    <section className="settings-card" aria-labelledby={heading}><div className="section-heading"><h2 id={heading}>{messages.sessions}</h2><p>{kind === 'tokens' ? settingsMessages.tokenSessionsDescription : settingsMessages.sessionsDescription}</p></div>
       <div className="settings-body settings-rows"><div className="data-list">{shown.map((session) => {
         const state = sessionState(session);
         return <article key={session.id}>

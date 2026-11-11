@@ -25,7 +25,7 @@ func tokenCommand(ctx context.Context, service *auth.Service, args []string, out
 	email := flags.String("email", "", "email of the agent the token acts as")
 	role := flags.String("role", "", "a role of the workspace, by name, whose permissions the person all holds (an admin may pick any); the token follows it")
 	scope := flags.String("scope", "", "deprecated: read, draft or send become that tier's old list of permissions, admin the Admin role")
-	label := flags.String("label", "", "name shown in Settings → Sessions")
+	label := flags.String("label", "", "name shown in Settings → AI & agents")
 	var permissions permissionFlags
 	flags.Var(&permissions, "permission", "a permission (resource:action) instead of a tier; repeat for more")
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || *workspace == "" || *email == "" {
@@ -65,7 +65,7 @@ func tokenCommand(ctx context.Context, service *auth.Service, args []string, out
 	if grant := created.Session.Token; grant != nil && grant.Role != nil {
 		held = "follows the role " + grant.Role.Name
 	}
-	_, err = fmt.Fprintf(stderr, "Token %q (%s) created for %s. It is shown once above; Colliedesk keeps only its hash.\nRevoke it under Settings → Sessions (session %s).\n",
+	_, err = fmt.Fprintf(stderr, "Token %q (%s) created for %s. It is shown once above; Colliedesk keeps only its hash.\nRevoke it under Settings → AI & agents (session %s).\n",
 		created.Session.Label, held, created.Session.AgentEmail, created.Session.ID)
 	return err
 }

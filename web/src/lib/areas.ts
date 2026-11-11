@@ -11,6 +11,8 @@ const screens: Array<{ prefix: string; exact?: boolean; permission: TokenPermiss
   { prefix: '/conversations/', permission: 'conversations:read', label: messages.inbox },
   { prefix: '/contacts/', permission: 'contacts:read', label: messages.contactArea },
   { prefix: '/knowledge/media', permission: 'kb_media:read', label: messages.knowledge },
+  // The help center's settings were a section of Settings: they open with help_center:read, as they did there.
+  { prefix: '/knowledge/settings', permission: 'help_center:read', label: messages.helpCenter },
   { prefix: '/knowledge', permission: 'kb_articles:read', label: messages.knowledge },
   { prefix: '/results', permission: 'results:read', label: messages.results },
   { prefix: '/review', permission: 'messages:read', label: messages.review },
@@ -34,15 +36,23 @@ export function closedScreen(path: string, session: Session): { label: string; p
   return screen && !can(session, screen.permission) ? { label: screen.label, permission: screen.permission } : undefined;
 }
 
-// The rail's destinations in order, for a session: each shows when its permission is held. Knowledge opens on
-// its articles, or on the media library for a role that reads only media.
-export type RailArea = { to: '/' | '/knowledge' | '/knowledge/media' | '/results' | '/settings'; label: string };
+// knowledgeHome is where Knowledge opens for a session: its articles, else the media library, else the help
+// center's settings; undefined when the session reads none of them.
+export type KnowledgeHome = '/knowledge' | '/knowledge/media' | '/knowledge/settings';
+export function knowledgeHome(session: Session): KnowledgeHome | undefined {
+  if (can(session, 'kb_articles:read')) return '/knowledge';
+  if (can(session, 'kb_media:read')) return '/knowledge/media';
+  return can(session, 'help_center:read') ? '/knowledge/settings' : undefined;
+}
+
+// The rail's destinations in order, for a session: each shows when its permission is held.
+export type RailArea = { to: '/' | KnowledgeHome | '/results' | '/settings'; label: string };
 export function railAreasFor(session: Session): RailArea[] {
   const reads = (permission: TokenPermission) => can(session, permission);
+  const knowledge = knowledgeHome(session);
   return [
     ...(reads('conversations:read') ? [{ to: '/' as const, label: messages.inbox }] : []),
-    ...(reads('kb_articles:read') ? [{ to: '/knowledge' as const, label: messages.knowledge }]
-      : reads('kb_media:read') ? [{ to: '/knowledge/media' as const, label: messages.knowledge }] : []),
+    ...(knowledge ? [{ to: knowledge, label: messages.knowledge }] : []),
     ...(reads('results:read') ? [{ to: '/results' as const, label: messages.results }] : []),
     { to: '/settings' as const, label: messages.settings },
   ];

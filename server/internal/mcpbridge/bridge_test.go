@@ -200,7 +200,7 @@ func TestFailuresAnswerTheWaitingIDAndTheBridgeGoesOn(t *testing.T) {
 		want   string
 	}{
 		{"revoked token", func(w http.ResponseWriter, _ []byte) { http.Error(w, "unauthorized", http.StatusUnauthorized) },
-			"Create a new agent token in Settings → Sessions"},
+			"Create a new agent token in Settings → AI & agents"},
 		{"wrong URL", func(w http.ResponseWriter, _ []byte) {
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = io.WriteString(w, "<html>a web page</html>")
@@ -310,10 +310,10 @@ func TestTheTokenNeverComesFromTheCommandLine(t *testing.T) {
 	if _, err := mcpbridge.Parse([]string{"--token", token}, env(withURL)); err == nil || strings.Contains(err.Error(), token) {
 		t.Errorf("--token must not exist, and the error must not repeat the token: %v", err)
 	}
-	if _, err := mcpbridge.Parse(nil, env(withURL)); err == nil || !strings.Contains(err.Error(), "COLLIEDESK_TOKEN") {
+	if _, err := mcpbridge.Parse(nil, env(withURL)); err == nil || !strings.Contains(err.Error(), "COLLIEDESK_TOKEN") || !strings.Contains(err.Error(), "Settings → AI & agents") {
 		t.Errorf("no token: %v", err)
 	}
-	if _, err := mcpbridge.Parse(nil, env(map[string]string{"COLLIEDESK_URL": "https://desk.example.com", "COLLIEDESK_TOKEN": "cdk_session_x"})); err == nil || !strings.Contains(err.Error(), "not an agent token") {
+	if _, err := mcpbridge.Parse(nil, env(map[string]string{"COLLIEDESK_URL": "https://desk.example.com", "COLLIEDESK_TOKEN": "cdk_session_x"})); err == nil || !strings.Contains(err.Error(), "not an agent token") || !strings.Contains(err.Error(), "Settings → AI & agents") {
 		t.Errorf("a session token: %v", err)
 	}
 	cfg, err := mcpbridge.Parse([]string{"--timeout", "5s"}, env(map[string]string{"COLLIEDESK_URL": "https://desk.example.com/", "COLLIEDESK_TOKEN": " " + token + "\n"}))

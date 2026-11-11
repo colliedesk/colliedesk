@@ -29,6 +29,18 @@ test('a link to an old settings section opens the page that holds it now and lan
   await expect(page).toHaveURL(`${baseURL}/settings/account#sessions-heading`);
   await expect(page.getByRole('heading', { name: 'Sessions', exact: true })).toBeInViewport();
 
+  // A refused token call (the server's `where`) and an MCP answer link the tokens; the roles editor links their sessions.
+  // AI & agents starts with the built-in AI, which is drawn from a request of its own and pushes them down.
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.goto(`${baseURL}/settings#agents-heading`);
+  await expect(page).toHaveURL(`${baseURL}/settings/ai#agents-heading`);
+  await expect(page.getByRole('heading', { name: 'External AI agents', exact: true })).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
+  await page.goto(`${baseURL}/settings/ai#agent-sessions-heading`);
+  await expect(page.locator('#agent-sessions-heading')).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
+  await page.setViewportSize({ width: 1280, height: 800 });
+
   await page.goto(`${baseURL}/settings#invites-heading`);
   await expect(page).toHaveURL(`${baseURL}/settings/members#invites-heading`);
   await expect(page.getByRole('heading', { name: 'Invites', exact: true })).toBeVisible();

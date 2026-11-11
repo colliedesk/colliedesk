@@ -689,3 +689,115 @@ test('a role that reads only media lands in the media library, and the rail take
   const rail = screen.getByRole('navigation', { name: 'Main' });
   expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/media');
 });
+
+// The help center's settings moved from Settings to Knowledge base → Settings (#528); they still need only
+// help_center:read to open, as the section of Settings did, not the articles' permission.
+test('a role that runs the help center without reading articles opens its settings from Knowledge and from General', async () => {
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['help_center:read', 'help_center:update', 'kb_media:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/media': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/kb/media-uploads': () => json(200, { items: [] }),
+    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
+    '/api/v1/auth/sessions': () => json(200, { items: [] }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/media'));
+  const tabs = await screen.findByRole('navigation', { name: 'Knowledge base sections' });
+  fireEvent.click(within(tabs).getByRole('link', { name: 'Settings' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
+  const card = await screen.findByRole('region', { name: 'Help center' });
+  expect(await within(card).findByRole('checkbox', { name: 'Publish the help center' })).toBeEnabled();
+  expect(screen.queryByText(/Your roles do not let you open/)).not.toBeInTheDocument();
+
+  // Settings → General points there, and is in the menu for this role.
+  await act(async () => { await router.navigate({ to: '/settings/account' }); });
+  fireEvent.click(within(await screen.findByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'General' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
+  fireEvent.click(await screen.findByRole('link', { name: 'Open Help center settings' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
+  expect(await screen.findByRole('region', { name: 'Help center' })).toBeInTheDocument();
+});
+
+// A role that reads only the help center still reaches its settings from the rail.
+test('a role that reads only the help center finds Knowledge on the rail, at its settings', async () => {
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['help_center:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/settings');
+  expect(await screen.findByRole('region', { name: 'Help center' })).toBeInTheDocument();
+});
+
+// Revoking a teammate's agent token needs team:revoke alone; the tokens and their sessions are on AI & agents.
+test('a person who may revoke but not create tokens finds the teammates\' agent tokens in AI & agents', async () => {
+  forgetPermissions();
+  const token = { id: '77777777-7777-4777-8777-777777777777', agent_id: '33333333-3333-4333-8333-333333333333', agent_email: 'ann@example.com', agent_name: 'Ann', label: 'Claude Code',
+    token: { kind: 'custom', role: null, role_held: true, permissions: ['conversations:read'], legacy_tier: null }, role: null, permissions: ['conversations:read'], current: false,
+    created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['team:read', 'team:revoke', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/auth/sessions': () => json(200, { items: [token] }),
+  });
+  const router = open('/settings/account');
+  fireEvent.click(within(await screen.findByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'AI & agents' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/ai'));
+  const sessions = await screen.findByRole('region', { name: 'Sessions' });
+  expect(await within(sessions).findByTitle('Claude Code')).toBeInTheDocument();
+  expect(within(sessions).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+});
+
+// The pages scroll inside the app's content pane on a wide screen, not the window.
+test('a settings page opened from the menu starts at its top, and Back returns to where the last one was scrolled', async () => {
+  settingsServer();
+  const router = open('/settings/account');
+  const menu = await screen.findByRole('navigation', { name: 'Settings sections' });
+  const content = document.querySelector('.app-content') as HTMLElement;
+  content.scrollTop = 300;
+  fireEvent.click(within(menu).getByRole('link', { name: 'General' }));
+  await screen.findByRole('heading', { level: 1, name: 'General' });
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
+  await waitFor(() => expect(content.scrollTop).toBe(0));
+  await act(() => { router.history.back(); });
+  await screen.findByRole('heading', { level: 1, name: 'Account' });
+  await waitFor(() => expect(content.scrollTop).toBe(300));
+});
+
+// Each page draws its own menu: the item pressed keeps keyboard focus on the page it opened.
+test('a page opened from the settings menu keeps keyboard focus on its menu item', async () => {
+  settingsServer();
+  open('/settings/account');
+  const general = within(await screen.findByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'General' });
+  general.focus();
+  fireEvent.click(general);
+  await screen.findByRole('heading', { level: 1, name: 'General' });
+  await waitFor(() => expect(document.activeElement).toHaveAttribute('aria-current', 'page'));
+  expect(document.activeElement).toHaveTextContent('General');
+  expect(document.activeElement?.closest('nav')).toHaveAccessibleName('Settings sections');
+});
+
+// On a phone /settings is the menu alone; turned on its side the screen is wide, where Settings opens Account.
+test('the settings menu of a phone turned on its side opens Account', async () => {
+  const listeners = new Set<() => void>();
+  const query = { matches: true, addEventListener: (_: string, fn: () => void) => listeners.add(fn), removeEventListener: (_: string, fn: () => void) => listeners.delete(fn) };
+  vi.stubGlobal('matchMedia', (text: string) => (text === '(max-width: 44rem)' ? query : { matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
+  try {
+    settingsServer();
+    const router = open('/settings');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/settings');
+    query.matches = false;
+    act(() => { for (const fn of listeners) fn(); });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.stubGlobal('fetch', fetchMock);
+  }
+});

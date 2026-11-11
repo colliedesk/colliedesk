@@ -45,6 +45,28 @@ test('on a wide screen the settings menu opens each page at its own address, and
   await expect(page.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
 });
 
+// The pages scroll inside the content pane on a wide screen: a page opened from the menu starts at its top, Back
+// returns to where the person was, and keyboard focus stays on the menu item pressed.
+test('on a wide screen a page opened from the settings menu starts at its top, keeps focus on its item, and Back returns to the offset', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await newDesk(page, 'E2E settings scroll');
+  await page.goto(`${baseURL}/settings/account`);
+  await expect(page.getByRole('region', { name: 'Connected AI apps' })).toBeVisible();
+  const content = page.locator('.app-content');
+  const offset = () => content.evaluate((element) => element.scrollTop);
+  await content.evaluate((element) => { element.scrollTop = 250; });
+  expect(await offset()).toBe(250);
+  const menu = page.getByRole('navigation', { name: 'Settings sections' });
+  await menu.getByRole('link', { name: 'General', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { level: 1, name: 'General' })).toBeVisible();
+  await expect.poll(offset).toBe(0);
+  await expect(menu.getByRole('link', { name: 'General', exact: true })).toBeFocused();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
+  await expect.poll(offset).toBe(250);
+});
+
 test.describe('on a 390 px phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -62,6 +84,8 @@ test.describe('on a 390 px phone', () => {
     await menu.getByRole('link', { name: 'Members', exact: true }).click();
     await expect(page).toHaveURL(`${baseURL}/settings/members`);
     await expect(page.getByRole('heading', { level: 1, name: 'Members' })).toBeVisible();
+    // The menu is not on this page: focus goes to the page's title instead of the top of the document.
+    await expect(page.getByRole('heading', { level: 1, name: 'Members' })).toBeFocused();
     await expect(page.getByRole('region', { name: 'Invites' })).toBeVisible();
     await expect(menu).toBeHidden();
     expect(await noSidewaysScroll(page), 'Members fits the phone').toBe(true);

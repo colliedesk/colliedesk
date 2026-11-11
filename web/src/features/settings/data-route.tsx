@@ -28,5 +28,8 @@ export function DataRoute() {
       <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
       <div className="settings-body settings-rows"><ExportAllData /></div>
     </section>}
+    {/* The import's email links here: someone who may do neither is told who can, as the import's page told them. */}
+    {!imports && !exports && <div className="settings-card"><p className="muted-copy">{importMessages.adminsOnly}</p>
+      <p className="muted-copy">{settingsMessages.exportForbidden}</p></div>}
   </SettingsFrame>;
 }

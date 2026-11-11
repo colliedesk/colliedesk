@@ -19,6 +19,8 @@ export function AIAgentsSections() {
   const mcpAddress = `${config.data?.app_origin || window.location.origin}/mcp`;
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
   const creates = can(me.data, 'team:create_tokens') && !me.data?.token;
+  // team:revoke stops a teammate's token: the list shows for it, even while no token is in use.
+  const revokes = can(me.data, 'team:revoke');
   // The roles a token may follow; asked for only where a token can be made.
   const roles = useQuery({ queryKey: ['roles'], queryFn: () => api.roles(), enabled: creates && can(me.data, 'team:read') });
   const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
@@ -45,6 +47,6 @@ export function AIAgentsSections() {
     {creates && <AgentTokensSection roles={followableRoles(me.data.agent.roles, roles.data?.items, me.data.permissions)} held={me.data.permissions} mcpAddress={mcpAddress}
       rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
       onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} />}
-    {(creates || tokens.length > 0) && <SessionsSection kind="tokens" sessions={tokens} timezone={me.data.timezone ?? 'UTC'} onRevokeSession={(id) => revokeSession.mutate(id)} />}
+    {(creates || revokes || tokens.length > 0) && <SessionsSection kind="tokens" sessions={tokens} timezone={me.data.timezone ?? 'UTC'} onRevokeSession={(id) => revokeSession.mutate(id)} />}
   </>;
 }

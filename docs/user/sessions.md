@@ -49,7 +49,8 @@ An agent token lets an AI agent, such as Claude Code, Codex or a script, work yo
 with the permissions you choose. It is a session with a label. It appears in **Settings → AI & agents → Sessions**,
 apart from your browser sessions (in Account), with what it was given as a badge and the date it stops working.
 **Revoke** ends it at once, as for any session. Someone with `team:revoke` sees and revokes the
-tokens of every person they do not rank below.
+tokens of every person they do not rank below; AI & agents is in their settings menu even when they may not
+create tokens or read the built-in AI.
 
 Create a token in **Settings → AI & agents → External AI agents** (it needs `team:create_tokens`, which the Agent
 and Admin roles hold). Give it a name you will recognise in Sessions (1 to 80 characters, for

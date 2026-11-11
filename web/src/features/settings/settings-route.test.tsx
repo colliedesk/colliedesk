@@ -332,6 +332,9 @@ test('agent tokens are listed in AI & agents, browser sessions in Account', asyn
   const tokens = await screen.findByRole('region', { name: 'Sessions' });
   expect(await within(tokens).findByTitle('Claude Code')).toBeInTheDocument();
   expect(within(tokens).queryByTitle('Firefox')).not.toBeInTheDocument();
+  // Revoking a token stops an AI agent; it signs no browser out, so the card says so instead of the devices' line.
+  expect(tokens).toHaveTextContent('AI agents working with a token. Revoke one to stop that agent at once; no browser is signed out.');
+  expect(tokens).not.toHaveTextContent('on this device that signs you out');
 });
 
 // Data: the Freshdesk import and the whole-workspace export.
@@ -354,6 +357,14 @@ test('an agent does not see Export all data', async () => {
   await new Promise((resolve) => { setTimeout(resolve, 20); });
   expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
   expect(imports.list).not.toHaveBeenCalled();
+});
+
+// The import's email links here (/settings/import-freshdesk): a person who may neither import nor export is told who can.
+test('Data tells a person who may neither import nor export that admins do it', async () => {
+  show('agent', [], DataRoute);
+  await screen.findByRole('heading', { level: 1, name: 'Data' });
+  expect(await screen.findByText('Only a workspace admin can import. Ask an admin to import your Freshdesk account.')).toBeInTheDocument();
+  expect(screen.getByText('Only workspace admins can export all data.')).toBeInTheDocument();
 });
 
 // A link to a section (#…-heading) opens the page before its data arrives, so the router finds no section to go to.

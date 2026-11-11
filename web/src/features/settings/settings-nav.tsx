@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { can } from '../../lib/can';
 import type { Permissions } from '../../lib/can';
@@ -44,7 +44,9 @@ export interface Shown { general: boolean; team: boolean; channels: boolean; sav
 export function byPermission(shown: Shown, me: Permissions): Shown {
   if (!me) return shown;
   return { ...shown, general: can(me, 'workspace:update'), team: can(me, 'team:read'), roles: can(me, 'team:read'), invites: can(me, 'team:read'),
-    exportData: can(me, 'workspace:export'), importData: can(me, 'imports:run'), agents: shown.agents !== false && can(me, 'team:create_tokens'),
+    exportData: can(me, 'workspace:export'), importData: can(me, 'imports:run'),
+    // Someone who may revoke teammates' sessions finds their agent tokens on AI & agents, without making tokens.
+    agents: shown.agents !== false && (can(me, 'team:create_tokens') || can(me, 'team:revoke')),
     channels: shown.channels && can(me, 'channels:read'), conversations: can(me, 'conversations:read'), ai: shown.ai !== false && can(me, 'ai_settings:read'),
     savedReplies: shown.savedReplies && can(me, 'saved_replies:read'), helpCenter: shown.helpCenter !== false && can(me, 'help_center:read') };
 }
@@ -56,8 +58,9 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
   const groups: NavGroup[] = [
     { items: item(messages.account, '/settings/account') },
     { label: messages.settingsWorkspace, items: [
-      // Conversation numbers read conversations, not the workspace's own settings: General shows for them too.
-      ...item(messages.general, '/settings/general', shown.general || Boolean(shown.conversations)),
+      // Conversation numbers read conversations, not the workspace's own settings, and the way to the help
+      // center's settings reads the help center: General shows for either too.
+      ...item(messages.general, '/settings/general', shown.general || Boolean(shown.conversations) || Boolean(shown.helpCenter)),
       ...item(messages.members, '/settings/members', shown.team || shown.invites === true || shown.roles === true, page === '/settings/members' || page === '/settings/roles'),
       ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels', sub: [
         { label: messages.emailNav, to: '/settings/channels/type/email' as const, current: page === '/settings/channels/type/email' },
@@ -82,6 +85,25 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
   return groups.filter((group) => group.items.length > 0);
 }
 
+// Each settings page draws its own menu, so the link pressed is gone once the page it opens is drawn. The
+// address it opened is kept here until that page's menu is drawn, which then gives keyboard focus back to
+// its current item, or to the page's title where the menu is not shown (a page on a phone).
+let opening: string | undefined;
+function rememberOpening(event: MouseEvent<HTMLElement>, page: SettingsPath) {
+  const to = (event.target as HTMLElement).closest('a')?.getAttribute('href')?.split(/[?#]/)[0];
+  opening = to && to !== page ? to : undefined;
+}
+function focusOpened(nav: HTMLElement | null, page: SettingsPath) {
+  if (!nav || opening !== page) return;
+  opening = undefined;
+  const current = nav.querySelector<HTMLElement>('[aria-current="page"]');
+  if (current && getComputedStyle(nav).display !== 'none') { current.focus(); return; }
+  const title = nav.closest('main')?.querySelector<HTMLElement>('h1');
+  if (!title) return;
+  title.tabIndex = -1;
+  title.focus();
+}
+
 export function SettingsNav({ shown: given, page }: { shown: Shown; page: SettingsPath }) {
   const renderLink = useContext(SettingsNavLinkContext);
   // The session is in the cache on every settings page, which reads it itself and so renders again when it
@@ -95,12 +117,13 @@ export function SettingsNav({ shown: given, page }: { shown: Shown; page: Settin
   useEffect(() => {
     nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [page, links]);
+  useEffect(() => focusOpened(nav.current, page), [page]);
   // On a phone the menu is a page of its own (/settings), as the inbox list is: every other settings page
   // shows the way back to it where the menu would be (layout.css).
   const index = page === '/settings';
   return <>
-    {!index && <a className="settings-back" href="/settings"><ChevronLeftIcon />{messages.allSettings}</a>}
-    <nav ref={nav} className={index ? 'settings-nav settings-nav-index' : 'settings-nav'} aria-label={messages.settingsSections}>
+    {!index && <a className="settings-back" href="/settings" onClick={(event) => rememberOpening(event, page)}><ChevronLeftIcon />{messages.allSettings}</a>}
+    <nav ref={nav} onClick={(event) => rememberOpening(event, page)} className={index ? 'settings-nav settings-nav-index' : 'settings-nav'} aria-label={messages.settingsSections}>
       {settingsNavGroups(shown, page).map((group, at) => <div key={group.label ?? at}>{group.label && <p className="settings-group-label">{group.label}</p>}
         <ul>{group.items.map((item) => <li key={item.label} className={item.sub ? 'settings-nav-parent' : undefined} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}
           {item.sub && <ul className="settings-nav-sub" aria-label={item.label}>{item.sub.map((sub) => <li key={sub.label}>{renderLink(sub, page)}</li>)}</ul>}</li>)}</ul>

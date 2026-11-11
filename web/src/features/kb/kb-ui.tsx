@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { Icon } from './editor/icons';
@@ -13,15 +13,8 @@ import { useHolds } from '../../lib/permissions-context';
 // reach it; only content (rows, cards, the text) scrolls. A phone gets its page actions in a bar at the
 // bottom, its menus and settings as sheets.
 
-// The width under which the pages take their phone layout (layout.css changes the shell there too).
-const phoneQuery = '(max-width: 44rem)';
-const subscribePhone = (change: () => void) => {
-  const query = window.matchMedia?.(phoneQuery);
-  query?.addEventListener('change', change);
-  return () => query?.removeEventListener('change', change);
-};
-const isPhone = () => window.matchMedia?.(phoneQuery).matches ?? false;
-export const usePhone = () => useSyncExternalStore(subscribePhone, isPhone);
+// The pages take their phone layout under the app's phone width.
+export { usePhone } from '../../lib/use-phone';
 
 interface DialogProps {
   title: ReactNode;
