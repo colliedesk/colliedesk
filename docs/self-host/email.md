@@ -166,7 +166,9 @@ The secret is passed in a private header file, never on the command line.
 
 Workspaces without a verified domain send from `reply+<token>@<mail_from.domain>`. Most customers
 reply to the support address (it is in `Reply-To`), but some mail clients reply to the From
-address. A bounce goes to it only when your relay keeps that address as the envelope sender; relays
+address. Once `mail_from.inbound_secret` is set, a mailbox's replies also carry
+`reply+<token>@<mail_from.domain>` in `Reply-To` until mail has arrived through its forwarding,
+verified domain or not, so a team can answer before its mailbox forwards here. A bounce goes to it only when your relay keeps that address as the envelope sender; relays
 that own the envelope sender (Resend, Amazon SES) send bounces to themselves instead. The server
 operator routes the domain once for all workspaces:
 

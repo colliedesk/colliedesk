@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
 import { recordProductEvent } from './diagnostics';
+import type { SetupStepKey } from '../api/schemas';
 
 // Product analytics. The server's public config says whether to report (DISABLE_TELEMETRY or
 // DO_NOT_TRACK turn it off, on the cloud and self-hosted alike), and only then is posthog-js
@@ -111,9 +112,9 @@ export interface EventProperties {
   settings_section_opened: { section: SettingsSection };
   workspace_export_requested: undefined;
   problem_reported: undefined;
-  // step is the setup guide row only: email, import, invite or first_reply.
-  onboarding_step_started: { step: 'email' | 'import' | 'invite' | 'first_reply' };
-  onboarding_step_completed: { step: 'email' | 'import' | 'invite' | 'first_reply' };
+  // step is the setup guide row only: email, import, ai_drafts, reply_targets, invite or first_reply.
+  onboarding_step_started: { step: SetupStepKey };
+  onboarding_step_completed: { step: SetupStepKey };
   survey_answered: { survey: SurveyId; answer: string };
   survey_dismissed: { survey: SurveyId };
 }

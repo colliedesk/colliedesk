@@ -1,4 +1,5 @@
 import type { Guard, Setting } from './api';
+import { m } from './messages';
 
 // What saving a change asks for. The settings it touches say what it may ask (the save bar shows it before the
 // person presses Save); the server says what it does ask, from what the change does (POST /config/check
@@ -87,9 +88,9 @@ export function validCode(code: string): boolean {
 // missing lists what the review still lacks, for the line beside the disabled button.
 export function missing(need: Needs, code: string, typed: Record<string, string>, reentered: Record<string, string>, totp: boolean): string[] {
   const out: string[] = [];
-  for (const secret of need.reenter) if (!reentered[secret]?.trim()) out.push(`enter ${secret} again`);
-  for (const [key, phrase] of Object.entries(need.confirm)) if (!confirmMatches(typed[key] ?? '', phrase)) out.push(`type ${phrase}`);
-  if (need.reauth && totp && !validCode(code)) out.push('your 6-digit code');
+  for (const secret of need.reenter) if (!reentered[secret]?.trim()) out.push(m.needReenter(secret));
+  for (const [key, phrase] of Object.entries(need.confirm)) if (!confirmMatches(typed[key] ?? '', phrase)) out.push(m.needType(phrase));
+  if (need.reauth && totp && !validCode(code)) out.push(m.needCode);
   return out;
 }
 

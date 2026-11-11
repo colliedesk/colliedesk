@@ -142,7 +142,6 @@ export function InboxRoute() {
   useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
   const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
-  const isAdmin = can(me.data, 'channels:update');
   const activeID = selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen.
   const shownID = activeID ?? conversations.data?.items[0]?.id;
@@ -203,13 +202,16 @@ export function InboxRoute() {
   const senderID = repliesVia?.id;
   const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
     queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()), enabled: reads('channels:read') && (!repliesVia || repliesVia.type === 'email') });
+  // The default mailbox says whether customer mail arrives through it yet (the line under the title). With no
+  // conversation open it is the query above; with one open it was read with the list, or goes out beside it.
+  const defaultMailbox = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel, enabled: reads('channels:read') }).data;
   const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
   // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
   // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
   const guideStartsOpen = checkAny && anyConversation.data?.items.length === 0 && channelTypes !== undefined && mailboxes === 0;
-  const guide = !guideHidden && setup.data && guideHasWork(setup.data, isAdmin)
-    ? <SetupGuide progress={setup.data} admin={isAdmin} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
+  const guide = !guideHidden && setup.data && guideHasWork(setup.data, me.data)
+    ? <SetupGuide progress={setup.data} me={me.data} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
   // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
   const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
   const channelLabel = (conversation: Conversation) => {
@@ -344,13 +346,14 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
+    defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     onSpam={(ids, value) => spam.mutateAsync({ ids, spam: value })}
-    canManage={can(me.data, 'ai_settings:update')}
+    canManage={can(me.data, 'ai_settings:update')} canManageChannels={can(me.data, 'channels:update')}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} viewers={viewing}

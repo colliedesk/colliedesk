@@ -1,12 +1,12 @@
 package helpcenter
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 )
@@ -106,7 +106,7 @@ func DomainClaim(name, domain string) (string, bool) {
 func DomainFromEnv(getenv func(string) string) (string, error) {
 	domain := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(getenv("HELP_CENTER_DOMAIN"))), ".")
 	if domain != "" && (!email.ValidHostname(domain) || !strings.Contains(domain, ".")) {
-		return "", fmt.Errorf("HELP_CENTER_DOMAIN must be a domain name such as example.com, got %q", domain)
+		return "", configerr.Say("help_center_domain_invalid", configerr.Params{"domain": domain})
 	}
 	return domain, nil
 }

@@ -132,7 +132,9 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   const secret = `oa-secret-${suffix}`;
   const series = `t${suffix.replace(/[^0-9]/g, '').slice(-8)}`;
   await redeemLink(page, createWorkspace(`Zalo Numbers ${suffix}`, `admin-${suffix}@example.com`, baseURL));
-  const year = Number(new Intl.DateTimeFormat('en', { timeZone: 'UTC', year: 'numeric' }).format(new Date()));
+  // The creator's first sign-in starts the workspace on the browser's timezone, the zone the year counts in.
+  const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const year = Number(new Intl.DateTimeFormat('en', { timeZone: zone, year: 'numeric' }).format(new Date()));
 
   // The series, in Settings → Conversation numbers.
   await page.goto(`${baseURL}/settings/numbers`);

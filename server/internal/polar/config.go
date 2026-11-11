@@ -1,10 +1,10 @@
 package polar
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
@@ -94,12 +94,12 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		return Config{}, nil
 	}
 	if len(missing) > 0 {
-		return Config{}, fmt.Errorf("billing is partly configured; also set %s (or unset every POLAR_* variable to turn billing off)", strings.Join(missing, ", "))
+		return Config{}, configerr.Say("polar_partly_configured", configerr.Params{"missing": strings.Join(missing, ", ")})
 	}
 	if apiURL != "" {
 		parsed, err := url.Parse(apiURL)
 		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
-			return Config{}, fmt.Errorf("POLAR_API_URL must be an http(s) URL such as %s", DefaultAPIURL)
+			return Config{}, configerr.Say("polar_api_url_invalid", configerr.Params{"example": DefaultAPIURL})
 		}
 		config.APIURL = strings.TrimRight(apiURL, "/")
 	}

@@ -151,3 +151,21 @@ func TestOpenRouterListsOnlyModelsThatTakeStructuredOutput(t *testing.T) {
 		t.Fatalf("models = %v, want %v", models, want)
 	}
 }
+
+// OpenRouter lists what each model costs per token; the operator's console fills in prices per million
+// tokens from it, and a model without a price (or a price that is not a number) is left out.
+func TestOpenRouterListsWhatEachModelCosts(t *testing.T) {
+	fake := newFakeAPI(t, http.StatusOK, `{"data":[{"id":"z-ai/glm-5.3","pricing":{"prompt":"0.0000000699","completion":"0.0000014","input_cache_read":"0.0000000689"}},`+
+		`{"id":"own/model"},{"id":"odd/model","pricing":{"prompt":"-1","completion":"x"}}]}`)
+	provider, err := NewOpenAICompatible(OpenAIConfig{BaseURL: fake.server.URL + "/api/v1", APIKey: "sk-or", HTTPClient: fake.server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prices, err := provider.(ModelPricer).ModelPrices(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]ListedPrice{"z-ai/glm-5.3": {Input: 0.0699, Output: 1.4, CacheRead: 0.0689}}; !reflect.DeepEqual(prices, want) {
+		t.Fatalf("prices = %+v, want %+v", prices, want)
+	}
+}

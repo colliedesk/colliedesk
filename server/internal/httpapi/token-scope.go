@@ -354,13 +354,14 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/channel-thread-items":                   need(auth.PermMessagesRead),
 	// The intake queue shows what customers wrote; deciding a card opens a conversation (and may tell
 	// the customer it was received), joins one or sets the card aside.
-	"GET /api/v1/intake/gatherings":               need(auth.PermMessagesRead),
-	"GET /api/v1/intake/gatherings/{id}":          need(auth.PermMessagesRead),
-	"POST " + intakeDecideRoute:                   byHandler(auth.PermConversationsUpdate),
-	"POST /api/v1/intake/gatherings/{id}/requeue": need(auth.PermConversationsUpdate),
-	"GET /api/v1/intake/summary":                  need(auth.PermConversationsRead),
-	"GET /api/v1/intake/stats":                    need(auth.PermConversationsRead),
-	"GET /api/v1/conversations/{id}/intake":       need(auth.PermMessagesRead),
+	"GET /api/v1/intake/gatherings":                                   need(auth.PermMessagesRead),
+	"GET /api/v1/intake/gatherings/{id}":                              need(auth.PermMessagesRead),
+	"GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}": need(auth.PermMessagesRead),
+	"POST " + intakeDecideRoute:                                       byHandler(auth.PermConversationsUpdate),
+	"POST /api/v1/intake/gatherings/{id}/requeue":                     need(auth.PermConversationsUpdate),
+	"GET /api/v1/intake/summary":                                      need(auth.PermConversationsRead),
+	"GET /api/v1/intake/stats":                                        need(auth.PermConversationsRead),
+	"GET /api/v1/conversations/{id}/intake":                           need(auth.PermMessagesRead),
 	// Moving customer messages between conversations sends nothing; reading the moves names no words.
 	"POST /api/v1/conversations/{id}/messages/move": need(auth.PermConversationsUpdate),
 	"GET /api/v1/conversations/{id}/message-moves":  need(auth.PermConversationsRead),

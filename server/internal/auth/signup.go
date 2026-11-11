@@ -111,10 +111,10 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 		}
 		a := in.Attribution
 		if _, err := tx.Exec(ctx, `INSERT INTO workspace_onboarding(workspace_id,goal,role,source,created_at,
-			utm_source,utm_medium,utm_campaign,utm_content,utm_term,ttclid,fbclid,click_id_seen_at)
-			VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),NULLIF($11,''),NULLIF($12,''),$13)`,
+			utm_source,utm_medium,utm_campaign,utm_content,utm_term,ttclid,fbclid,click_id_seen_at,referrer_host)
+			VALUES($1,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),NULLIF($11,''),NULLIF($12,''),$13,NULLIF($14,''))`,
 			workspace.ID, in.Onboarding.Goal, in.Onboarding.Role, in.Onboarding.Source, now,
-			a.UTMSource, a.UTMMedium, a.UTMCampaign, a.UTMContent, a.UTMTerm, a.TTCLID, a.FBCLID, nullTime(a.ClickIDSeenAt)); err != nil {
+			a.UTMSource, a.UTMMedium, a.UTMCampaign, a.UTMContent, a.UTMTerm, a.TTCLID, a.FBCLID, nullTime(a.ClickIDSeenAt), a.ReferrerHost); err != nil {
 			return fmt.Errorf("record onboarding answers: %w", err)
 		}
 		return nil

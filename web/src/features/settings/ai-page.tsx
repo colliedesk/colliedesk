@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { AIEvent, AILevel, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import { Tooltip } from '../../ui/tooltip';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { Choice } from '../../ui/choice';
 import { Dialog as SharedDialog, Field } from '../../ui/dialog';
@@ -14,6 +15,9 @@ import type { Part } from './ai-level-dialogs';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
 import { selfHostGuide } from '../../lib/self-host-guide';
+import { aiModelMatches as modelMatches, aiServices as services, aiServiceURL as serviceURL } from '../../lib/ai-services';
+import type { AIService as Service } from '../../lib/ai-services';
+import { slotInput } from './ai-slot-input';
 import './ai-settings.css';
 
 // Icons only this page uses stay in its chunk.
@@ -206,24 +210,18 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
 // A choice of provider is "server" or a provider id.
 const sourceOf = (slot: AISlot) => (slot.source === 'server' ? 'server' : slot.provider_id ?? '');
 
-// slotInput is the slot as it is, to change one thing of it.
-function slotInput(slot: AISlot): AISlotInput {
-  const input: AISlotInput = slot.source === 'server' ? { source: 'server', enabled: slot.enabled }
-    : slot.provider_id ? { source: 'provider', provider_id: slot.provider_id, enabled: slot.enabled } : { source: 'none', enabled: false };
-  if (slot.model && input.source !== 'none') input.model = slot.model;
-  input.effort = slot.effort;
-  return input;
-}
-
 
 function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto, onSourceConsent }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
   const serverModels = settings.server?.models[slot.slot] ?? [];
+  const chosen = sourceOf(slot);
+  // While the operator switched the server's provider off, nobody can pick it; a feature already set to
+  // it still shows it, greyed, with why.
+  const serverOff = chosen === 'server' && !settings.server && settings.server_off ? settings.server_off : null;
   const choices = [
     ...(serverModels.length > 0 && settings.server ? [{ value: 'server', label: settings.server.label, models: serverModels }] : []),
     ...settings.providers.map((provider) => ({ value: provider.id, label: provider.label, models: provider.models })),
   ];
-  const chosen = sourceOf(slot);
   const choice = choices.find((item) => item.value === chosen);
   const models = choice?.models ?? (slot.model ? [slot.model] : []);
   const saving = busySlot === slot.slot;
@@ -233,7 +231,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
     const input: AISlotInput = source === 'server' ? { source: 'server', enabled: next.enabled ?? slot.enabled }
       : source ? { source: 'provider', provider_id: source, enabled: next.enabled ?? slot.enabled } : { source: 'none', enabled: false };
     const model = next.model ?? (next.source ? undefined : slot.model ?? undefined);
-    if (model && input.source !== 'none') input.model = model;
+    if (model && input.source === 'provider') input.model = model;
     input.effort = slot.effort;
     onSetSlot(slot.slot, input);
   };
@@ -250,16 +248,29 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
         <span>{m.slotHelp[slot.slot]}</span>
       </div>
       <label className="ai-slot-provider"><span className="ai-cell-label">{m.columnProvider}</span>
-        <select aria-label={m.providerFor(name)} value={chosen} disabled={locked || choices.length === 0} onChange={(event) => save({ source: event.target.value })}>
-          {choices.length === 0 && <option value="">{m.noProvider}</option>}
-          {choices.length > 0 && !choice && <option value="">{m.pickProvider}</option>}
-          {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select></label>
-      <label className="ai-slot-model"><span className="ai-cell-label">{m.columnModel}</span>
-        <select aria-label={m.modelFor(name)} value={slot.model ?? ''} disabled={locked || !choice} onChange={(event) => save({ model: event.target.value })}>
-          {models.length === 0 && <option value="">—</option>}
-          {models.map((model) => <option key={model} value={model}>{model}</option>)}
-        </select></label>
+        {serverOff
+          // A disabled select gets no pointer events: the tooltip hangs on its wrapper, which takes focus then.
+          ? <Tooltip text={m.serverOffTip(serverOff.label)}>
+            <span className="ai-tip-anchor" tabIndex={locked ? 0 : undefined}>
+              <select aria-label={m.providerFor(name)} className="ai-select-off" value="server" disabled={locked} onChange={(event) => save({ source: event.target.value })}>
+                <option value="server" disabled>{serverOff.label}</option>
+                {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select></span></Tooltip>
+          : <select aria-label={m.providerFor(name)} value={chosen} disabled={locked || choices.length === 0} onChange={(event) => save({ source: event.target.value })}>
+            {choices.length === 0 && <option value="">{m.noProvider}</option>}
+            {choices.length > 0 && !choice && <option value="">{m.pickProvider}</option>}
+            {choices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>}</label>
+      {chosen === 'server' && serverOff
+        ? <div className="ai-slot-model ai-slot-model-fixed ai-off-text"><span className="ai-cell-label">{m.columnModel}</span><span>—</span></div>
+        : chosen === 'server'
+        ? <div className="ai-slot-model ai-slot-model-fixed"><span className="ai-cell-label">{m.columnModel}</span>
+          <span className="ai-model-name">{serverModels[0]}</span><span className="muted-copy">{m.modelByServer}</span></div>
+        : <label className="ai-slot-model"><span className="ai-cell-label">{m.columnModel}</span>
+          <select aria-label={m.modelFor(name)} value={slot.model ?? ''} disabled={locked || !choice} onChange={(event) => save({ model: event.target.value })}>
+            {models.length === 0 && <option value="">—</option>}
+            {models.map((model) => <option key={model} value={model}>{model}</option>)}
+          </select></label>}
       <div className="ai-slot-limit"><span className="ai-cell-label">{m.columnAutomatic}</span>
         {slot.slot === 'triage' || slot.slot === 'intake' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
           : slot.slot === 'intake' ? m.intakeLimits(settings.automatic.intake_per_day) : m.draftLimits(settings.automatic.draft_per_day)}</span>
@@ -658,11 +669,8 @@ const maxProviderModels = 20;
 // Above this many listed models, the list gets a search box.
 const modelSearchFrom = 8;
 
-// What Add provider offers: Anthropic, two OpenAI-compatible services whose address is filled in, and
-// any other OpenAI-compatible server, whose address the person types.
-type Service = 'anthropic' | 'openai' | 'openrouter' | 'self_hosted';
-const services: Service[] = ['anthropic', 'openai', 'openrouter', 'self_hosted'];
-const serviceURL: Partial<Record<Service, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' };
+// What Add provider offers (lib/ai-services): Anthropic, two OpenAI-compatible services whose address is
+// filled in, and any other OpenAI-compatible server, whose address the person types.
 const serviceText: Record<Service, [string, string]> = {
   anthropic: [m.kindAnthropic, m.kindAnthropicHelp], openai: [m.serviceOpenAI, m.serviceOpenAIHelp],
   openrouter: [m.serviceOpenRouter, m.serviceOpenRouterHelp], self_hosted: [m.serviceSelfHosted, m.serviceSelfHostedHelp],
@@ -770,15 +778,6 @@ function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISet
         : <button type="button" className="link-button ai-models-switch" onClick={() => { setError(undefined); setTyped(picked.join(', ')); setList({ state: 'typing' }); }}>{m.modelsTypeInstead}</button>}
     </Dialog>
   );
-}
-
-// modelMatches finds a model whatever the punctuation, spacing, case or word order typed:
-// "gpt5 mini", "GPT-5-mini" and "mini gpt5" all find gpt-5-mini; "sonnet 4.6" finds claude-sonnet-4-6.
-function modelMatches(model: string, query: string): boolean {
-  const compact = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
-  const name = compact(model);
-  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return name.includes(compact(query)) || words.every((word) => name.includes(word));
 }
 
 // ModelPicker lists the models the provider offers this key, to tick instead of typing ids. The picked

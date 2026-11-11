@@ -24,13 +24,13 @@ test('setup guide: a workspace with one conversation and no email channel still 
   // With a conversation in the inbox the guide waits folded in the bottom-left corner; one press opens it,
   // and it stays open across reloads until it is folded again.
   const launcher = page.getByRole('button', { name: /Finish setting up/ });
-  await expect(launcher).toContainText('0 of 4');
+  await expect(launcher).toContainText('0 of 5');
   await launcher.click();
   const guide = page.getByRole('region', { name: 'Finish setting up' });
   const email = guide.getByRole('listitem').filter({ hasText: 'Receive customer email' });
   await expect(email).toBeVisible();
   await expect(email).toHaveAttribute('data-state', 'todo');
-  await expect(guide).toContainText('0 of 4');
+  await expect(guide).toContainText('0 of 5');
 
   // The email channel is set up and a customer email is forwarded to it.
   const saved = await page.request.put(`${baseURL}/api/v1/channels/email`, { headers, data: { support_address: support } });
@@ -51,7 +51,7 @@ test('setup guide: a workspace with one conversation and no email channel still 
   await page.reload();
   await expect(email).toHaveAttribute('data-state', 'done');
   await expect(email).toContainText('Done');
-  await expect(guide).toContainText('1 of 4');
+  await expect(guide).toContainText('1 of 5');
 
   // Hide is remembered; Preferences brings the guide back.
   await guide.getByRole('button', { name: 'Hide' }).click();

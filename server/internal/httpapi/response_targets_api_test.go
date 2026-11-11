@@ -44,6 +44,9 @@ func TestResponseTargetsAreOneDocumentAnAdminSets(t *testing.T) {
 		{func(d map[string]any) {
 			d["targets"].(map[string]any)["urgent"] = map[string]any{"first_response_minutes": 0}
 		}, "targets.urgent.first_response_minutes"},
+		{func(d map[string]any) {
+			d["targets"].(map[string]any)["low"] = map[string]any{"resolution_minutes": -15}
+		}, "targets.low.resolution_minutes"},
 		{func(d map[string]any) { d["warn_before_minutes"] = -5 }, "warn_before_minutes"},
 		{func(d map[string]any) { d["channel_ids"] = []string{"00000000-0000-4000-8000-000000000000"} }, "channel_ids.0"},
 		// On, they need an open day, and one that is no holiday within reach.
@@ -69,6 +72,25 @@ func TestResponseTargetsAreOneDocumentAnAdminSets(t *testing.T) {
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"`+c.field+`"`) {
 			t.Fatalf("%s: %d %s", c.field, response.Code, response.Body.String())
 		}
+	}
+	// Any whole number of minutes is a target, not only half hours: 15 and 7 are kept as sent.
+	minutes := contractTargets()
+	minutes["targets"].(map[string]any)["urgent"] = map[string]any{"first_response_minutes": 15, "resolution_minutes": 7}
+	minutes["warn_before_minutes"] = 5
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", minutes, admin, nil); response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"urgent":{"first_response_minutes":15,"resolution_minutes":7}`) || !strings.Contains(response.Body.String(), `"warn_before_minutes":5`) {
+		t.Fatalf("minutes: %d %s", response.Code, response.Body.String())
+	}
+	// A refused target names both limits.
+	minutes["targets"].(map[string]any)["urgent"] = map[string]any{"first_response_minutes": 525601}
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", minutes, admin, nil); response.Code != http.StatusBadRequest ||
+		!strings.Contains(response.Body.String(), "Use 1 to 525600 business minutes (a year), or no target.") {
+		t.Fatalf("over a year: %d %s", response.Code, response.Body.String())
+	}
+	// A part of a minute is no target.
+	minutes["targets"].(map[string]any)["urgent"] = map[string]any{"first_response_minutes": 1.5}
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", minutes, admin, nil); response.Code != http.StatusBadRequest {
+		t.Fatalf("part of a minute: %d %s", response.Code, response.Body.String())
 	}
 	if response := request(t, api, http.MethodGet, "/api/v1/response-targets", nil, other, nil); strings.Contains(response.Body.String(), "Asia/Bangkok") {
 		t.Fatalf("another workspace sees them: %s", response.Body.String())

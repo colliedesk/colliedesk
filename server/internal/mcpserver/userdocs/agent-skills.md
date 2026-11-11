@@ -24,9 +24,6 @@ A step your token has no permission for is refused with the permission it needs;
 you which one, and you give it a token that holds it
 ([Roles and permissions](roles-and-permissions.md#when-a-permission-is-missing)).
 
-The Colliedesk plugin for Claude Code also adds `/colliedesk-token`, a command you run yourself to
-replace the plugin's token; see [Connect Claude Code](connect-claude-code.md).
-
 ## Install
 
 The skills are in the Colliedesk repository, in
@@ -35,7 +32,9 @@ The skills are in the Colliedesk repository, in
 - **Claude Code:** the Colliedesk plugin installs them with the MCP server; see
   [Connect Claude Code](connect-claude-code.md). Ask for them by name, for example "use
   colliedesk-triage on the queue", or let Claude pick one.
-- **Codex, Cursor and VS Code:** copy the skill folders into `~/.agents/skills/` (every project) or
+- **Codex:** the Colliedesk plugin installs them with the MCP server;
+  see [Connect Codex](connect-codex.md).
+- **Cursor and VS Code:** copy the skill folders into `~/.agents/skills/` (every project) or
   `.agents/skills/` in a project. On macOS or Linux:
 
   ```sh
@@ -47,5 +46,6 @@ The skills are in the Colliedesk repository, in
 - **Claude (claude.ai and Claude Desktop):** make a ZIP of one skill folder and upload it under
   **Customize → Skills**. Skills need code execution turned on.
 
-Remove a skill by deleting its folder (Claude Code: `claude plugin uninstall colliedesk@colliedesk`).
+Remove a skill by deleting its folder (Claude Code: `claude plugin uninstall colliedesk@colliedesk`;
+Codex: `codex plugin remove colliedesk@colliedesk`).
 The skills change with Colliedesk: copy them again after you upgrade.

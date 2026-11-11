@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -250,6 +251,23 @@ func TestValidationErrorsNeverCarryASecret(t *testing.T) {
 		if strings.Contains(err.Error(), canary) || !strings.Contains(err.Error(), key.Name) {
 			t.Errorf("%s: %v", key.Name, err)
 		}
+	}
+}
+
+// A secret in the params of a coded error is caught as in its text: the error only names the secret, and keeps
+// a code the console translates (configerr).
+func TestACodedErrorNeverCarriesASecretInItsParams(t *testing.T) {
+	const canary = "relay-password-canary"
+	snap := serverconfig.NewSnapshot(1, map[string]string{"smtp.password": canary, "smtp.starttls": canary}, nil, "", nil, true)
+	_, err := checkSnapshot(snap)
+	coded, ok := configerr.As(err)
+	if !ok || coded.Code != "secret_not_valid" || coded.Params["keys"] != "smtp.password" || strings.Contains(fmt.Sprint(coded.Params), canary) || strings.Contains(err.Error(), canary) {
+		t.Fatalf("check: %v %+v", err, coded)
+	}
+	// A param the text does not show is checked too.
+	paramsOnly := redactSecrets(configerr.Say("smtp_port_implicit_tls", configerr.Params{"value": canary}), snap)
+	if coded, ok := configerr.As(paramsOnly); !ok || coded.Code != "secret_not_valid" || strings.Contains(fmt.Sprint(coded.Params), canary) {
+		t.Fatalf("params only: %v", paramsOnly)
 	}
 }
 

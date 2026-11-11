@@ -52,7 +52,7 @@ func aiSettingsGetSpec() Spec {
 		REST:     []string{"GET /api/v1/ai"},
 		Input:    noArguments,
 		Output: `{"type":"object","required":["settings"],"properties":{"settings":{"type":"object","required":["server","providers","slots","events"],"properties":{` +
-			`"server":{"type":["object","null"]},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
+			`"server":{"type":["object","null"]},"server_off":{"type":["object","null"],"description":"Set (with the provider's label) while the operator switched the server's provider off: no feature can pick source server then."},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
 			`"events":{"type":"array","items":{"type":"object"}},"provider_limit":{"type":"integer"},"can_store_keys":{"type":"boolean"},"allow_private_base_urls":{"type":"boolean"}}}}}`,
 		run: aiSettingsGet,
 	}
@@ -157,15 +157,15 @@ func aiSlotSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_slot_set",
 		Title: "Set an AI feature",
-		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. ` +
+		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model (a workspace provider's; the server's provider runs the model its operator picks), effort, and on or off. ` +
 			`default_level is what it does by itself where no channel says otherwise: off (only when someone asks), suggest (triage suggests for every new conversation; drafts are written when a customer writes, never sent; intake suggests in Review) ` +
 			`or auto (triage only: suggestions apply the auto_parts, filling only what nobody set). Left out, it stays as it is; turned on, or moved to another provider, the feature starts at suggest (triage) or off. ` +
 			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets: say so to the person you work for before you turn one on.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/ai/slots/{slot}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":` + aiSlotName + `,` +
-			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200},` +
-			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept."},` +
+			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200,"description":"One of the provider's models; left out, its first. On the server's provider (source server) it is ignored: its operator picks the model."},` +
+			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept. On the server's provider it is ignored: its operator picks it."},` +
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},` +
 			`"default_level":` + aiLevelName + `,` +
 			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},` +
@@ -443,7 +443,7 @@ func channelAIIntakeReadinessSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_ai_intake_readiness_get", Title: "Show whether intake's AI may act on its own",
 		Description: `Show, for a chat channel's scope, whether intake's AI may take each action (create, attach, ignore) on its own at auto: its gate (open, closed, overridden by an admin), ` +
-			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the model and prompt it runs), what keeps it closed (labels, accuracy, severe, junk), ` +
+			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the prompt it runs, on any model), what keeps it closed (labels, accuracy, severe, junk), ` +
 			`how much of what AI did on its own people corrected, and what a month costs. A closed action stays a suggestion.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/readiness"},
@@ -457,7 +457,7 @@ func channelAIIntakeEvaluationsListSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_ai_intake_evaluations_list", Title: "List intake's offline evaluations",
 		Description: `List the offline evaluations recorded for a chat channel's intake, newest first: the model and prompt version each ran, the dataset's SHA-256 and the counts per action. ` +
-			`Only a run of the model and prompt intake runs now counts towards readiness.`,
+			`Only a run of the prompt version intake runs now counts towards readiness, whichever model it ran.`,
 		ReadOnly: true,
 		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/evaluations"},
 		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
@@ -471,7 +471,7 @@ func channelAIIntakeEvaluationRecordSpec() Spec {
 		Name:  "colliedesk_channel_ai_intake_evaluation_record",
 		Title: "Record an intake evaluation",
 		Description: `Record the counts of an offline evaluation of a chat channel's scope (run with collie intake-eval): model, prompt_version, dataset_sha256 and, per action, ` +
-			`labels, correct, severe and light. It counts towards readiness only for that model and prompt version, and can open a gate, so record only counts you ran yourself.`,
+			`labels, correct, severe and light. It counts towards readiness while intake runs that prompt version, on any model, and can open a gate, so record only counts you ran yourself.`,
 		REST: []string{"POST /api/v1/channels/{id}/ai/intake/evaluations"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","scope","model","prompt_version","dataset_sha256","counts"],"properties":{` + channelIDInput + `,` +
 			`"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"model":{"type":"string","minLength":1,"maxLength":200},"prompt_version":{"type":"string","minLength":1,"maxLength":80},` +

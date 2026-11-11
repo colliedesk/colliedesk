@@ -36,21 +36,25 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   // straight back here.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   // On APP_ORIGIN of a server with workspace hosts the server answers where the browser continues
-  // (continue_url): the workspace's own host, signed in there.
-  const goAfterSignIn = useCallback(async (result?: { continue_url?: string }) => {
+  // (continue_url): the workspace's own host, signed in there. landing is where a sign-in without a plan
+  // opens: the inbox, or the setup flow for a team that just signed up.
+  const goAfterSignIn = useCallback(async (result?: { continue_url?: string }, landing: '/' | '/setup' = '/') => {
     if (result?.continue_url) {
       leaveTo(result.continue_url);
       return undefined;
     }
     await client.resetQueries({ queryKey: ['me'] });
     if (consent) return navigate({ href: consent });
-    return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' });
+    return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: landing });
   }, [client, consent, navigate]);
   // The page a sign-in here opens on the workspace host. A plan to buy rides in it: that host's storage
   // is not this page's. So does the plan a trial visitor came for, which opens the inbox, not a checkout.
   const plan = readCheckoutIntent();
   const planIntent = readPlanIntent();
-  const next = consent ?? (plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : planIntent ? `/?plan=${planIntent}` : undefined);
+  const nextFor = (landing: '/' | '/setup') => consent ?? (plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : planIntent ? `${landing}?plan=${planIntent}` : undefined);
+  const next = nextFor('/');
+  // A new team opens the setup flow; the plan it came for rides along to that page.
+  const signUpNext = nextFor('/setup') ?? '/setup';
   // The website's trial and buy links only lead to cloud sign-in: its chunk downloads beside the config
   // instead of after it. A page without a sign-in form lets what waited for one go.
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);
@@ -58,7 +62,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
-  const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent, next), onSuccess: goAfterSignIn });
+  const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent, next), onSuccess: (result) => goAfterSignIn(result) });
   const exchange = useCallback(async (sessionToken: string) => {
     setCloudPending(true);
     setCloudFailed(false);
@@ -72,9 +76,10 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
       setCloudPending(false);
     }
   }, [goAfterSignIn, next, workspaceSlug]);
+  // A new team opens the setup flow, also when the sign-up continues on the workspace's own host.
   const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: Partial<SignupAnswers>) => {
-    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next));
-  }, [goAfterSignIn, next]);
+    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, signUpNext), '/setup');
+  }, [goAfterSignIn, signUpNext]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
   useEffect(() => { if (config.data && !cloudEnabled) markSignInFormReady(); }, [config.data, cloudEnabled]);

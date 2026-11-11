@@ -5,12 +5,12 @@
 package ai
 
 import (
-	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // Slots are the features a provider can be plugged into. Values are stored; they never change.
@@ -53,6 +53,20 @@ func (s *ServerProvider) PriceOf(model string) (Price, bool) {
 	return price, ok
 }
 
+// ServerTurnedOff says whether the operator set the server's provider to Off while keeping its other values
+// (AI_SERVER_MODELS above all), and the name workspaces knew it by. Workspaces that picked it then see it
+// greyed, as with features.ai_server off.
+func ServerTurnedOff(getenv func(string) string) (label string, off bool) {
+	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
+	if value("AI_SERVER_PROVIDER") != "" || value("AI_SERVER_MODELS") == "" {
+		return "", false
+	}
+	if label = value("AI_SERVER_LABEL"); label == "" {
+		label = DefaultServerLabel
+	}
+	return label, true
+}
+
 // ModelsFor returns the models the server offers for a slot.
 func (s *ServerProvider) ModelsFor(slot string) []string {
 	if s == nil {
@@ -63,14 +77,15 @@ func (s *ServerProvider) ModelsFor(slot string) []string {
 
 // ServerProviderFromEnv reads AI_SERVER_PROVIDER (anthropic or openai_compatible), AI_SERVER_API_KEY,
 // AI_SERVER_BASE_URL, AI_SERVER_MODELS (triage=model|other,draft=model), AI_SERVER_LABEL,
-// AI_SERVER_PRICES and AI_SERVER_MONTHLY_ALLOWANCE. None set means the server has no provider; an
+// AI_SERVER_PRICES and AI_SERVER_MONTHLY_ALLOWANCE. No AI_SERVER_PROVIDER means the server has no provider: the
+// operator turned it off (the console's "Off") and the other values wait, unused, until it is on again. An
 // allowance needs a price for every model it offers. A partial setting is an error that names what is missing or
 // wrong (never a value), so a half-configured server never starts.
 func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) {
 	value := func(key string) string { return strings.TrimSpace(getenv(key)) }
 	kind, key, base, models, label := value("AI_SERVER_PROVIDER"), value("AI_SERVER_API_KEY"), value("AI_SERVER_BASE_URL"), value("AI_SERVER_MODELS"), value("AI_SERVER_LABEL")
 	prices, allowance := value("AI_SERVER_PRICES"), value("AI_SERVER_MONTHLY_ALLOWANCE")
-	if kind == "" && key == "" && base == "" && models == "" && label == "" && prices == "" && allowance == "" {
+	if kind == "" {
 		return nil, nil
 	}
 	server := &ServerProvider{Kind: aiprovider.Kind(kind), Label: label, APIKey: key, BaseURL: base}
@@ -87,25 +102,23 @@ func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) 
 		if base == "" {
 			missing = append(missing, "AI_SERVER_BASE_URL")
 		}
-	case "":
-		missing = append(missing, "AI_SERVER_PROVIDER")
 	default:
-		return nil, fmt.Errorf("AI_SERVER_PROVIDER must be anthropic or openai_compatible")
+		return nil, configerr.Say("ai_server_provider_invalid", nil)
 	}
 	if models == "" {
 		missing = append(missing, "AI_SERVER_MODELS")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("the server AI provider is half configured: set %s, or unset every AI_SERVER_ variable", strings.Join(missing, ", "))
+		return nil, configerr.Say("ai_server_half_configured", configerr.Params{"missing": strings.Join(missing, ", ")})
 	}
 	if base != "" {
 		parsed, err := url.Parse(base)
 		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil {
-			return nil, fmt.Errorf("AI_SERVER_BASE_URL must be an http or https URL without credentials")
+			return nil, configerr.Say("ai_server_base_url_invalid", nil)
 		}
 	}
 	if len(label) > 80 {
-		return nil, fmt.Errorf("AI_SERVER_LABEL must be at most 80 characters")
+		return nil, configerr.Say("ai_server_label_too_long", configerr.Params{"max": 80})
 	}
 	parsed, err := parseServerModels(models)
 	if err != nil {
@@ -128,7 +141,7 @@ func ServerProviderFromEnv(getenv func(string) string) (*ServerProvider, error) 
 			}
 		}
 		if len(unpriced) > 0 {
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE needs a price in AI_SERVER_PRICES for %s", strings.Join(unpriced, ", "))
+			return nil, configerr.Say("ai_server_allowance_unpriced", configerr.Params{"models": strings.Join(unpriced, ", ")})
 		}
 	}
 	return server, nil
@@ -140,15 +153,15 @@ func parseServerModels(value string) (map[string][]string, error) {
 		slot, list, ok := strings.Cut(strings.TrimSpace(entry), "=")
 		slot = strings.TrimSpace(slot)
 		if !ok || !slices.Contains(Slots, slot) {
-			return nil, fmt.Errorf("AI_SERVER_MODELS must be written triage=model,draft=model (a slot may list more models separated by |)")
+			return nil, configerr.Say("ai_server_models_format", nil)
 		}
 		if _, seen := models[slot]; seen {
-			return nil, fmt.Errorf("AI_SERVER_MODELS lists %s twice", slot)
+			return nil, configerr.Say("ai_server_models_twice", configerr.Params{"slot": slot})
 		}
 		for _, model := range strings.Split(list, "|") {
 			model = strings.TrimSpace(model)
 			if model == "" || len(model) > 200 {
-				return nil, fmt.Errorf("AI_SERVER_MODELS has an empty or too long model for %s", slot)
+				return nil, configerr.Say("ai_server_models_bad_model", configerr.Params{"slot": slot})
 			}
 			if !slices.Contains(models[slot], model) {
 				models[slot] = append(models[slot], model)

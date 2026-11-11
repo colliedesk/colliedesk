@@ -39,13 +39,31 @@ type Decision struct {
 	FollowsDecisionID string
 	// Detail is what an AI decision keeps of how it was made.
 	Detail store.AIDecisionDetail
+	// ItemCount is how many messages of the card the person read: when the customer added to it since,
+	// nothing is decided (store.ErrGatheringChanged). Nil decides what the card holds.
+	ItemCount *int
 }
 
-// ConflictError is a decision that came after another: the gathering stands as Outcome.
-type ConflictError struct{ Outcome store.GatheringOutcome }
+// ConflictError is a decision that came after another, or (Changed) about a card the customer added to
+// since its decider read it: the gathering stands as Outcome.
+type ConflictError struct {
+	Outcome store.GatheringOutcome
+	Changed bool
+}
 
 func (e *ConflictError) Error() string {
+	if e.Changed {
+		return store.ErrGatheringChanged.Error()
+	}
 	return fmt.Sprintf("this gathering was already decided (%s by %s)", e.Outcome.State, e.Outcome.DecidedBy)
+}
+
+// Unwrap makes a Changed conflict a store.ErrGatheringChanged.
+func (e *ConflictError) Unwrap() error {
+	if e.Changed {
+		return store.ErrGatheringChanged
+	}
+	return nil
 }
 
 // ErrInvalid is a decision that cannot be made (an unknown action, an attach without a conversation).
@@ -90,7 +108,8 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 	}
 	apply := store.IntakeApply{Decider: decider, Actor: actor, Decision: &store.IntakeDecisionInput{Action: d.Action, TargetConversationID: d.ConversationID,
 		Command: d.Command, Subject: d.Subject, ReplyKind: d.ReplyKind, Reason: d.Reason, IgnoreReason: d.IgnoreReason, Confidence: d.Confidence,
-		CorrectsDecisionID: d.CorrectsDecisionID, FollowsDecisionID: d.FollowsDecisionID, AIDecisionDetail: d.Detail}}
+		CorrectsDecisionID: d.CorrectsDecisionID, FollowsDecisionID: d.FollowsDecisionID, AIDecisionDetail: d.Detail},
+		Seen: d.Detail.ItemsSeen, ItemCount: d.ItemCount}
 	// A card of messages a person took back to the queue holds no held events: its messages move.
 	var detached *store.DetachedCard
 	if d.Action == Create || d.Action == Attach {
@@ -137,7 +156,7 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 		if same(outcome, d, decider) {
 			return outcome, nil
 		}
-		return outcome, &ConflictError{Outcome: outcome}
+		return outcome, &ConflictError{Outcome: outcome, Changed: errors.Is(err, store.ErrGatheringChanged)}
 	}
 	if err != nil {
 		return store.GatheringOutcome{}, err
@@ -184,6 +203,9 @@ func same(o store.GatheringOutcome, d Decision, decider string) bool {
 // Requeue takes a gathering that was set aside back to the queue; its decision stays in its history.
 func (s *Service) Requeue(ctx context.Context, workspaceID, gatheringID string, actor store.ChannelActor) (store.GatheringOutcome, error) {
 	err := s.store.SetGatheringState(ctx, workspaceID, gatheringID, Review, store.ReviewRequeued, store.IntakeApply{Decider: store.DecidedByAgent, Actor: actor}, s.now().UTC())
+	if errors.Is(err, store.ErrGatheringChanged) {
+		return store.GatheringOutcome{}, err
+	}
 	if errors.Is(err, store.ErrGatheringDecided) {
 		outcome, readErr := s.store.GatheringOutcomeOf(ctx, workspaceID, gatheringID)
 		if readErr != nil {

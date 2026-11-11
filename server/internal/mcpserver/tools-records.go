@@ -146,15 +146,35 @@ func attachmentGet(c *call, arguments map[string]any) (any, error) {
 		AttachmentID   string `json:"attachment_id"`
 		ConversationID string `json:"conversation_id"`
 		DraftID        string `json:"draft_id"`
+		GatheringID    string `json:"gathering_id"`
+		ItemID         string `json:"item_id"`
+		FileIndex      *int   `json:"file_index"`
 		Image          *bool  `json:"image"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
+	card := args.GatheringID != "" || args.ItemID != "" || args.FileIndex != nil
+	switch {
+	case card && (args.GatheringID == "" || args.ItemID == "" || args.FileIndex == nil):
+		return nil, &toolError{"A file on an intake card needs gathering_id, item_id and file_index (from colliedesk_intake_get)."}
+	case card && (args.AttachmentID != "" || args.DraftID != "" || args.ConversationID != ""):
+		return nil, &toolError{"Give either attachment_id (a message's or a draft's file) or gathering_id, item_id and file_index (a file on an intake card), not both."}
+	case !card && args.AttachmentID == "":
+		return nil, &toolError{"Give attachment_id (from colliedesk_conversation_get), or gathering_id, item_id and file_index for a file on an intake card (from colliedesk_intake_get)."}
+	}
+	if card {
+		args.AttachmentID = args.ItemID + "/" + strconv.Itoa(*args.FileIndex)
+	}
 	path := "/api/v1/attachments/" + url.PathEscape(args.AttachmentID)
 	c.notFound = "No attachment " + args.AttachmentID + " in this workspace. Use an attachment id from colliedesk_conversation_get."
 	if (args.ConversationID == "") != (args.DraftID == "") {
 		return nil, &toolError{"A draft's file needs both conversation_id and draft_id; an attachment of a message needs neither."}
+	}
+	if card {
+		path = intakePath(args.GatheringID, "/items/"+url.PathEscape(args.ItemID)+"/files/"+strconv.Itoa(*args.FileIndex))
+		c.notFound = "No stored file " + strconv.Itoa(*args.FileIndex) + " of item " + args.ItemID + " on intake card " + args.GatheringID + " in this workspace. " +
+			"The item's files are in colliedesk_intake_get; a file the channel could not fetch (status failed) cannot be read."
 	}
 	if args.DraftID != "" {
 		path = aiDraftsPath(args.ConversationID, "/"+url.PathEscape(args.DraftID)+"/files/"+url.PathEscape(args.AttachmentID))
@@ -179,6 +199,10 @@ func attachmentGet(c *call, arguments map[string]any) (any, error) {
 		case len(body) > attachmentImageLimit || int64(len(body)) < out.Size:
 			// The web app's thumbnail of the picture stands in for it: a preview the model can still look at.
 			out.Hint = "This image is larger than " + attachmentImageLimitWords + ", the most a call shows. Open it in the web app to see it."
+			// A file on an intake card has no thumbnail yet: the hint sends the reader to the web app.
+			if card {
+				break
+			}
 			if _, preview, err := c.rest.download(c.ctx, c.token, "/api/v1/attachments/"+url.PathEscape(args.AttachmentID)+"/thumbnail", attachmentImageLimit); err == nil {
 				out.IsImage = true
 				out.Hint = "This image is larger than " + attachmentImageLimitWords + ", the most a call shows: this is a preview of at most 320 pixels. Open it in the web app to see it whole."

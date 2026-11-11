@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -47,6 +48,30 @@ type IntakeGathering struct {
 	AIDecision *IntakeAIDecision `json:"ai_decision"`
 	// ConversationRef is the code people know ConversationID by.
 	ConversationRef *string `json:"conversation_ref"`
+	// Files are the card's first files (at most IntakeCardFiles), in the order its items came, so a person sees a
+	// picture or a video without opening the card.
+	Files []IntakeCardFile `json:"files"`
+}
+
+// IntakeCardFiles is the most files a card of a list carries; the card's detail has every file.
+const IntakeCardFiles = 8
+
+// IntakeCardFile is one file of a card's item: index is its place among the item's files, as
+// GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index} reads it.
+type IntakeCardFile struct {
+	ItemID      string  `json:"item_id"`
+	Index       int     `json:"index"`
+	Name        string  `json:"name"`
+	ContentType string  `json:"content_type"`
+	Status      string  `json:"status"`
+	Size        *int64  `json:"size"`
+	Error       *string `json:"error"`
+}
+
+// IntakeFile is the stored file a card's item names: what the download route serves.
+type IntakeFile struct {
+	Name, ContentType, Status, SHA256, Key string
+	Size                                   int64
 }
 
 // IntakeAIDecision is what AI decided by itself of a card: how sure it was, why, the model the channel asked
@@ -197,7 +222,13 @@ const gatheringColumns = `g.id::text,g.channel_id::text,g.scope,g.thread_id::tex
 	s.id::text,s.action,s.target_conversation_id::text,s.target_subject,s.target_status,s.runner_up_conversation_id::text,s.runner_up_subject,
 	s.runner_up_confidence::float8,s.confidence::float8,s.command,s.subject,s.reply_kind,s.ignore_reason,s.reason,s.not_applied_reason,s.created_at,
 	(SELECT NULLIF(c.display_ref,'') FROM conversations c WHERE c.workspace_id=g.workspace_id AND c.id=g.conversation_id),
-	a.id::text,a.action,a.target_conversation_id::text,a.confidence::float8,a.runner_up_confidence::float8,a.reason,a.model,a.fallback_model,a.created_at`
+	a.id::text,a.action,a.target_conversation_id::text,a.confidence::float8,a.runner_up_confidence::float8,a.reason,a.model,a.fallback_model,a.created_at,
+	(SELECT COALESCE(json_agg(json_build_object('item_id',y.item_id,'index',y.n,'name',y.name,'content_type',y.content_type,'status',y.status,'size',y.size,'error',y.error)
+		ORDER BY y.at,y.item_id,y.n),'[]') FROM (SELECT i.id::text AS item_id,i.occurred_at AS at,x.n,x.name,x.content_type,x.status,x.size,x.error
+		FROM ` + gatheringItemRows + ` CROSS JOIN LATERAL ` + chatItemFileRows + ` x ORDER BY i.occurred_at,i.id,x.n LIMIT ` + intakeCardFilesSQL + `) y)`
+
+// intakeCardFilesSQL is IntakeCardFiles in the list query (TestIntakeCardFilesLimitMatches keeps them equal).
+const intakeCardFilesSQL = "8"
 
 const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM ` + gatheringItemRows + `
 	ORDER BY i.occurred_at,i.id LIMIT 1) f ON true
@@ -223,6 +254,7 @@ func scanGathering(row pgx.Row) (IntakeGathering, error) {
 	var decisionID, decisionAction *string
 	var decision IntakeAIDecision
 	var decidedAt *time.Time
+	var files []byte
 	err := row.Scan(&g.ID, &g.ChannelID, &g.Scope, &g.ThreadID, &g.LaneKey, &g.ContactID, &g.State, &g.ReviewReason, &g.Rules.Action, &g.Rules.Rule,
 		&g.Rules.Basis, &g.Rules.TargetConversationID, &g.ConversationID, &g.DecidedBy, &g.DecidedAt, &g.DecidedByAgentID, &g.IgnoreReason, &g.Fallback,
 		&g.OpenedAt, &g.ClosedAt, &g.DecideBy, &g.RequeuedAt, &g.RequeuedByAgentID, &g.ItemCount, &g.Sender.Kind, &g.Sender.Value, &g.Sender.Name,
@@ -231,7 +263,10 @@ func scanGathering(row pgx.Row) (IntakeGathering, error) {
 		&suggestion.RunnerUpSubject, &suggestion.RunnerUpConfidence, &suggestion.Confidence, &suggestion.Command, &suggestion.Subject, &suggestion.ReplyKind,
 		&suggestion.IgnoreReason, &suggestion.Reason, &notApplied, &suggestedAt, &g.ConversationRef,
 		&decisionID, &decisionAction, &decision.TargetConversationID, &decision.Confidence, &decision.RunnerUpConfidence, &decision.Reason, &decision.Model,
-		&decision.FallbackModel, &decidedAt)
+		&decision.FallbackModel, &decidedAt, &files)
+	if err == nil {
+		err = json.Unmarshal(files, &g.Files)
+	}
 	if placeKind != nil {
 		g.Place = &IntakePlace{Kind: *placeKind, Name: placeName}
 	}
@@ -319,6 +354,25 @@ func (s *Store) IntakeGatherings(ctx context.Context, workspaceID, list, channel
 
 // IntakeGatheringByID reads a card with its items, oldest first, its decisions, newest first, and,
 // while it is to be decided, the conversations it may join as of now and the channel's commands.
+// IntakeGatheringFile finds the file index (from 0) of the item itemID on the card id, as the card lists it;
+// ErrGatheringNotFound when the card, the item on it, or the file is not there.
+func (s *Store) IntakeGatheringFile(ctx context.Context, workspaceID, id, itemID string, index int) (IntakeFile, error) {
+	if !isID(id) || !isID(itemID) || index < 0 {
+		return IntakeFile{}, ErrGatheringNotFound
+	}
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (IntakeFile, error) {
+		var file IntakeFile
+		err := tx.QueryRow(ctx, `SELECT x.name,x.content_type,x.status,COALESCE(x.sha256,''),COALESCE(x.storage_key,''),COALESCE(x.size,0)
+			FROM intake_gatherings g CROSS JOIN LATERAL `+gatheringItemRows+` CROSS JOIN LATERAL `+chatItemFileRows+` x
+			WHERE g.workspace_id=$1 AND g.id=$2::uuid AND i.id=$3::uuid AND x.n=$4`, workspaceID, id, itemID, index).
+			Scan(&file.Name, &file.ContentType, &file.Status, &file.SHA256, &file.Key, &file.Size)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return file, ErrGatheringNotFound
+		}
+		return file, err
+	})
+}
+
 func (s *Store) IntakeGatheringByID(ctx context.Context, workspaceID, id string, now time.Time) (IntakeGatheringDetail, error) {
 	if !isID(id) {
 		return IntakeGatheringDetail{}, ErrGatheringNotFound
@@ -339,12 +393,36 @@ func (s *Store) IntakeGatheringByID(ctx context.Context, workspaceID, id string,
 		if detail.Decisions, err = gatheringDecisions(ctx, tx, workspaceID, []string{id}); err != nil {
 			return detail, err
 		}
-		if detail.Candidates, err = gatheringCandidates(ctx, tx, workspaceID, g, now); err != nil {
+		if detail.Candidates, err = s.gatheringCandidates(ctx, tx, workspaceID, g, now); err != nil {
 			return detail, err
 		}
 		detail.Commands, err = s.openCommands(ctx, tx, workspaceID, g.ChannelID)
 		return detail, err
 	})
+}
+
+// joinsOnlyOpen says whether the channel's join policy, for the scope, adds messages only to open or pending
+// conversations (channels.JoinOpenOnly), over its type's defaults.
+func (s *Store) joinsOnlyOpen(ctx context.Context, tx pgx.Tx, workspaceID, channelID, scope string) (bool, error) {
+	var kind channels.Type
+	var settings json.RawMessage
+	err := tx.QueryRow(ctx, `SELECT type,settings FROM channels WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, channelID).Scan(&kind, &settings)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the channel's join policy: %w", err)
+	}
+	adapter, err := s.adapterOf(kind)
+	if err != nil {
+		return false, nil
+	}
+	merged, err := adapter.Definition().Defaults.Merge(settings)
+	if err != nil {
+		return false, nil
+	}
+	merged, _ = merged.ForScope(scope)
+	return merged.JoinPolicy.JoinsOnlyOpen(), nil
 }
 
 // candidateLimit is the most conversations a card offers to join.
@@ -355,10 +433,15 @@ const candidateLimit = 30
 // conversations of the same place active in the last 72 hours; in a one-to-one chat, the same
 // customer's on the same channel; then the ones resolved within the scope's reopen window. A closed
 // conversation is never one. The rules' target comes first, then the newest.
-func gatheringCandidates(ctx context.Context, tx pgx.Tx, workspaceID string, g IntakeGathering, now time.Time) ([]IntakeCandidate, error) {
+func (s *Store) gatheringCandidates(ctx context.Context, tx pgx.Tx, workspaceID string, g IntakeGathering, now time.Time) ([]IntakeCandidate, error) {
 	candidates := []IntakeCandidate{}
 	if g.State != GatheringDeciding && g.State != GatheringReview {
 		return candidates, nil
+	}
+	// A channel that joins only open conversations offers no resolved one, not even the rules' target.
+	openOnly, err := s.joinsOnlyOpen(ctx, tx, workspaceID, g.ChannelID, g.Scope)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := tx.Query(ctx, `WITH card AS (
 			SELECT g.workspace_id,g.channel_id,g.thread_id,g.rules_target,t.kind,COALESCE(g.contact_id,t.contact_id) AS contact_id,
@@ -371,17 +454,18 @@ func gatheringCandidates(ctx context.Context, tx pgx.Tx, workspaceID string, g I
 				JOIN conversation_thread_items l ON l.workspace_id=i.workspace_id AND l.item_id=i.id AND l.unlinked_at IS NULL
 				JOIN conversations c ON c.workspace_id=l.workspace_id AND c.id=l.conversation_id
 				WHERE card.kind='group' AND ((c.status IN ('open','pending') AND GREATEST(c.updated_at,c.last_public_at)>=$3::timestamptz-interval '72 hours')
-					OR (c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
+					OR (NOT $5 AND c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
 			UNION
 			SELECT c.id FROM conversations c, card WHERE c.workspace_id=card.workspace_id AND card.kind IS DISTINCT FROM 'group'
 				AND c.contact_id=card.contact_id AND c.channel_id=card.channel_id
-				AND (c.status IN ('open','pending') OR (c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
+				AND (c.status IN ('open','pending') OR (NOT $5 AND c.status='resolved' AND c.updated_at>=$3::timestamptz-make_interval(days=>card.reopen_days)))
 			UNION
-			SELECT c.id FROM conversations c, card WHERE c.workspace_id=card.workspace_id AND c.id=card.rules_target AND c.status<>'closed')
+			SELECT c.id FROM conversations c, card WHERE c.workspace_id=card.workspace_id AND c.id=card.rules_target AND c.status<>'closed'
+				AND (NOT $5 OR c.status IN ('open','pending')))
 		SELECT c.id::text,c.subject,c.status,c.contact_id::text,COALESCE(NULLIF(p.name,''),p.email,''),c.channel_id::text,c.updated_at,c.status='resolved'
 		FROM found JOIN conversations c ON c.workspace_id=$1 AND c.id=found.id JOIN contacts p ON p.workspace_id=c.workspace_id AND p.id=c.contact_id, card
 		ORDER BY c.id IS DISTINCT FROM card.rules_target, c.status='resolved', GREATEST(c.updated_at,c.last_public_at) DESC, c.id DESC
-		LIMIT $4`, workspaceID, g.ID, now, candidateLimit)
+		LIMIT $4`, workspaceID, g.ID, now, candidateLimit, openOnly)
 	if err != nil {
 		return nil, fmt.Errorf("read intake candidates: %w", err)
 	}

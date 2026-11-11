@@ -146,10 +146,12 @@ func TestOAuthDiscoveryNamesThisServerAsTheAuthorizationServerOfMCP(t *testing.T
 		var resource struct {
 			Resource             string   `json:"resource"`
 			AuthorizationServers []string `json:"authorization_servers"`
+			Documentation        string   `json:"resource_documentation"`
 		}
 		response := request(t, f.api, http.MethodGet, path, nil, "", nil)
 		decode(t, response, &resource)
-		if response.Code != http.StatusOK || resource.Resource != testOrigin+"/mcp" || len(resource.AuthorizationServers) != 1 || resource.AuthorizationServers[0] != testOrigin {
+		if response.Code != http.StatusOK || resource.Resource != testOrigin+"/mcp" || len(resource.AuthorizationServers) != 1 || resource.AuthorizationServers[0] != testOrigin ||
+			resource.Documentation != "https://colliedesk.com/docs/mcp" {
 			t.Fatalf("%s status=%d body=%s", path, response.Code, response.Body.String())
 		}
 	}
@@ -159,6 +161,7 @@ func TestOAuthDiscoveryNamesThisServerAsTheAuthorizationServerOfMCP(t *testing.T
 	want := map[string]any{
 		"issuer": testOrigin, "authorization_endpoint": testOrigin + "/oauth/authorize", "token_endpoint": testOrigin + "/oauth/token",
 		"registration_endpoint": testOrigin + "/oauth/register", "client_id_metadata_document_supported": true,
+		"service_documentation": "https://colliedesk.com/docs/mcp",
 	}
 	for key, value := range want {
 		if server[key] != value {

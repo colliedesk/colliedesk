@@ -10,6 +10,8 @@ const origin = `http://localhost:${port}`;
 const database = `colliedesk_onboard_fresh_${process.pid}`;
 const freshURL = withDatabase(databaseURL, database);
 let server: ChildProcess | undefined;
+// The owner's browser is in London: their first sign-in starts the new workspace there (docs/user/timezones.md).
+test.use({ timezoneId: 'Europe/London' });
 
 test.beforeAll(async () => {
   psql(`DROP DATABASE IF EXISTS ${database}`, withDatabase(databaseURL, 'postgres'));
@@ -36,13 +38,16 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
   await redeemLink(page, pairingURL);
   await expect(appNavigationWith(page, 'Acme Support')).toHaveCount(1);
   await expect(appNavigationWith(page, `owner-${suffix}@example.com`)).toHaveCount(1);
+  const me = await page.request.get(`${origin}/api/v1/auth/me`);
+  expect(me.status()).toBe(200);
+  expect((await me.json()).workspace.timezone, "the workspace starts on the creator's browser timezone").toBe('Europe/London');
 
   const empty = page.getByRole('region', { name: 'Get started' });
   await expect(empty).toContainText('No conversations yet');
   const guide = page.getByRole('region', { name: 'Finish setting up' });
-  await expect(guide.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
-  await expect(guide.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', /import-freshdesk/);
-  await expect(guide.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/settings');
+  await expect(guide.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/setup/email');
+  await expect(guide.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/setup/import');
+  await expect(guide.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/setup/invite');
   await expectReadablePage(page);
 
   // A failed list (server error) is reported with a retry, not as "No conversations yet".
@@ -57,8 +62,8 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
   // Next steps open inside the app (no full page load).
   await page.evaluate(() => { (window as unknown as { stillHere: boolean }).stillHere = true; });
   await guide.getByRole('link', { name: /Receive customer email/ }).click();
-  // The email channel's own page (Settings → Channels → Email).
-  await expect(page.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
+  // The email step of the setup flow.
+  await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email', exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true);
 
   // The docs: "The link works once". A second open of the same link must not sign anyone in.

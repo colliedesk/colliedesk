@@ -78,6 +78,28 @@ func (p *Preview) MailboxConnections(ctx context.Context, provider string) (chan
 	return channels, workspaces, nil
 }
 
+// ServerAIOutOfCredit counts the calls of the server's AI provider its account refused for want of credit
+// (quota_exhausted) since the last one that answered, in the last day, and when the first of them was:
+// the console warns while there are any, until a call answers again.
+func (p *Preview) ServerAIOutOfCredit(ctx context.Context) (failures int, since time.Time, err error) {
+	var first *time.Time
+	err = p.db.Privileged(ctx, database.PrivilegeOperatorPreview, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `WITH recent AS (
+				SELECT finished_at, status, error_code FROM ai_usage
+				WHERE billed_to = 'server' AND status IN ('ok', 'error') AND finished_at > now() - interval '1 day'),
+			answered AS (SELECT max(finished_at) AS at FROM recent WHERE status = 'ok')
+			SELECT count(*), min(finished_at) FROM recent, answered
+			WHERE status = 'error' AND error_code = 'quota_exhausted' AND finished_at > COALESCE(answered.at, '-infinity')`).Scan(&failures, &first)
+	})
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("count the server AI provider's refusals for credit: %w", err)
+	}
+	if first != nil {
+		since = first.UTC()
+	}
+	return failures, since, nil
+}
+
 // ServerAIWorkspaces counts the workspaces with an AI feature on that runs on the server's provider.
 func (p *Preview) ServerAIWorkspaces(ctx context.Context) (int, error) {
 	var count int

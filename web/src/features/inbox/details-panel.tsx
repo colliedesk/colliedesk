@@ -4,7 +4,7 @@ import type { TeamMember, Conversation, ConversationOrigin, SettableStatus, Tag 
 import { formatDate } from '../../lib/format-date';
 import { clockLine, slaOf } from '../../lib/sla';
 import { messages } from '../../messages';
-import { CheckIcon } from '../../ui/icons';
+import { CheckIcon, ChevronRightIcon, UserIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
 import { AITriageSlot } from './ai-triage-slot';
 import { StatusLabel } from './conversation-labels';
@@ -125,13 +125,14 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
       </fieldset>
       {conversation && (
         <section className="details-section conversation-source">
+          <h2>{messages.contact}</h2>
           {conversation.contact_organization && <div className="property-row conversation-organization"><span>{messages.organization}</span>
             {onShowOrganizationConversations
               ? <button type="button" className="link-button" title={messages.showOrganizationConversations(conversation.contact_organization)}
                 onClick={() => onShowOrganizationConversations(conversation.contact_organization ?? '')}>{conversation.contact_organization}</button>
               : <span>{conversation.contact_organization}</span>}</div>}
-          {onShowContactConversations && <button type="button" className="link-button" onClick={() => onShowContactConversations(conversation.contact_id)}>
-            {messages.showContactConversations(conversation.contact_name)}</button>}
+          {onShowContactConversations && <button type="button" className="details-link" onClick={() => onShowContactConversations(conversation.contact_id)}>
+            <UserIcon /><span>{messages.showContactConversations(conversation.contact_name)}</span><ChevronRightIcon /></button>}
         </section>
       )}
       {conversation?.origin && <ConversationOriginBlock origin={conversation.origin} timezone={timezone} />}

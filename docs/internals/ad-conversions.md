@@ -92,3 +92,9 @@ The sign-in page reads `fbclid` from its own address. colliedesk.com carries an 
 colliedesk.com#131; kept in the tab's `sessionStorage` at most a day, no cookie). The Founding link's
 redirect to sign-in keeps them too. A visitor who closes the tab and comes back later without the ad
 link signs up without a click ID, so no event is sent for them.
+
+The sign-in page also keeps the host of the page that first opened it in the tab (`referrer`, stored as
+`workspace_onboarding.referrer_host`): an AI assistant such as claude.ai links straight to the app with
+no `utm_*` keys, and the browser's referrer is the only trace of it. Trap: the identity provider's return
+is a new page load whose `document.referrer` is the provider, so only the tab's first landing counts, and a
+first landing with no outside referrer is remembered as none (`signup-attribution.ts`).

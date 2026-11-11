@@ -68,7 +68,7 @@ func TestLooseningOpenRouterRoutingFromATokenWaitsForAPerson(t *testing.T) {
 }
 
 // Intake's fallback model is one more of its provider's models: triage has none, the provider cannot
-// drop it, a new one takes intake's channels back to suggest (its gate was passed without it), and the
+// drop it, a new one keeps intake's channel levels (its gate counts labels of any model), and the
 // export keeps it.
 func TestIntakesFallbackModelOverTheAPI(t *testing.T) {
 	d := newLevelDesk(t)
@@ -81,7 +81,7 @@ func TestIntakesFallbackModelOverTheAPI(t *testing.T) {
 	if slot.FallbackModel == nil || *slot.FallbackModel != "claude-haiku-5-5" {
 		t.Fatalf("slot = %+v", slot)
 	}
-	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Level == nil || *item.Level != "suggest" {
+	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Level == nil || *item.Level != "auto" || item.Lowered != nil {
 		t.Fatalf("intake after a new fallback model = %+v", item)
 	}
 	response := request(t, d.api, http.MethodPatch, "/api/v1/ai/providers/"+two, map[string]any{"models": []string{"claude-sonnet-5-5"}}, d.adminA, nil)

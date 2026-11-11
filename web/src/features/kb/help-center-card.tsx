@@ -9,6 +9,7 @@ import { HelpCenterDomainSection } from './help-center-domain';
 import { HelpCenterFreshdeskRedirectSection } from './help-center-freshdesk-redirect';
 import { HelpCenterSearchConsoleSection } from './help-center-search-console';
 import { kbMessages } from './kb-messages';
+import './help-center-card.css';
 
 // The brand settings are a chunk of their own (with their styles and the preview), asked for as soon as this
 // card's chunk runs, so the card's switch and title never wait for them. A plain import rather than

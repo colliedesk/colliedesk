@@ -545,7 +545,7 @@ func (s *Service) ChannelAI(ctx context.Context, workspaceID string, channel Cha
 
 func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, channel ChannelRef) (ChannelAI, error) {
 	result := ChannelAI{ChannelID: channel.ID, Scopes: []ChannelAIScope{}}
-	slots, err := readSlots(ctx, tx, workspaceID, false)
+	slots, err := s.readSlots(ctx, tx, workspaceID, false)
 	if err != nil {
 		return result, err
 	}
@@ -635,7 +635,7 @@ func (s *Service) SetChannelLevel(ctx context.Context, workspaceID string, actor
 	now := s.now().UTC()
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		// The order SetSlot takes them: a recipient change lowering the channels meanwhile is seen.
-		slots, err := readSlots(ctx, tx, workspaceID, true)
+		slots, err := s.readSlots(ctx, tx, workspaceID, true)
 		if err != nil {
 			return err
 		}
@@ -760,8 +760,7 @@ func recordChannelLevel(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 
 // lowerChannelLevels takes back what channels let a feature do by itself when the admin's consent is
 // recorded anew (the feature moved to another provider, or was turned on again; reason
-// recipient_changed), or when intake moves to another model, whose gate it has not passed
-// (model_changed): auto becomes suggest, and a draft written by itself becomes a draft asked for by
+// recipient_changed): auto becomes suggest, and a draft written by itself becomes a draft asked for by
 // hand, as the workspace's level does.
 func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, slot, reason string, now time.Time) error {
 	lowered := LevelSuggest

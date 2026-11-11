@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
@@ -39,12 +40,12 @@ func retentionSettingsFromEnv(getenv func(string) string) (retentionSettings, er
 	case "on":
 		settings.DeleteEnabled = true
 	default:
-		return retentionSettings{}, errors.New("RETENTION_DELETE must be on or off")
+		return retentionSettings{}, configerr.Say("retention_delete_invalid", nil)
 	}
 	if value := getenv("RETENTION_MAX_DELETIONS_PER_DAY"); value != "" {
 		max, err := strconv.Atoi(value)
 		if err != nil || max < 0 || max > maxDeletionsPerDayCeiling {
-			return retentionSettings{}, fmt.Errorf("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number from 0 to %d", maxDeletionsPerDayCeiling)
+			return retentionSettings{}, configerr.Say("retention_max_invalid", configerr.Params{"max": maxDeletionsPerDayCeiling})
 		}
 		settings.MaxDeletionsPerDay = max
 	}

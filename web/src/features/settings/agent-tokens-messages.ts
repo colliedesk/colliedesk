@@ -39,10 +39,11 @@ export const agentTokenMessages = {
   copy: 'Copy',
   copySnippet: (label: string) => `Copy: ${label}`,
   runInTerminal: 'Run in your terminal',
-  insideClaudeCode: 'Then, inside Claude Code',
+  thenSignIn: 'Then sign in',
+  claudeCodeOAuth: 'Claude Code needs no token: it signs in with your Colliedesk account and acts as you.',
   pluginInstalls: 'Installs the Colliedesk tools and the Colliedesk agent skills (see Agent skills in the docs).',
-  pluginToken: 'Paste the token when it asks, then restart Claude Code. It keeps the token in your system’s credential store.',
-  withoutPlugin: 'Without the plugin',
+  claudeCodeAllow: 'Your browser opens Colliedesk: choose the workspace and Allow. Or, in Claude Code, run /mcp, choose the server and Authenticate.',
+  claudeCodeSkills: 'For the agent skills, also install the Colliedesk plugin and turn its Cloud server off in /mcp; the full guide shows how.',
   shellProfile: 'Add to your shell profile, with your token',
   thenRun: 'Then run',
   codexReadsEnv: 'Codex reads the token from this variable; it is never written into Codex’s config.',
@@ -68,6 +69,8 @@ export const agentTokenMessages = {
   fullGuide: 'Full guide',
   disconnect: 'To disconnect: ',
   revokeAfter: ', then revoke the token in Sessions below.',
+  disconnectAfter: ', then Disconnect it in Connected AI apps above.',
+  claudeCodeRemove: ['run ', 'claude mcp remove colliedesk'] as [string, string?],
   // Each is the words before a command or path, then the command or path if there is one, as in the host guide's "Remove it".
   disconnects: {
     'claude-code': ['run ', 'claude plugin uninstall colliedesk@colliedesk'],

@@ -8,6 +8,10 @@ export interface GalleryItem {
   kind: MediaKind;
   sender: string;
   at: string;
+  // src and thumb are where a file that is not an attachment is read, such as a file on an intake card; an
+  // attachment is read by its id. A file without a small picture shows its original in the strip.
+  src?: string;
+  thumb?: string;
 }
 
 // Raster pictures every browser draws. SVG is left out: it is a document, and the download route serves no
@@ -30,3 +34,8 @@ export const attachmentURL = (id: string) => `/api/v1/attachments/${id}`;
 // The server's small picture of an image (at most 320 px): what the timeline and the gallery's strip show. A
 // file the server cannot read answers 404, and the original is shown instead.
 export const thumbnailURL = (id: string) => `/api/v1/attachments/${id}/thumbnail`;
+
+// A file a customer sent on an intake card, before the card is a conversation: the same kind of download route,
+// named by the card, the item that carried it and its place among the item's files.
+export const intakeFileURL = (gatheringId: string, itemId: string, index: number) =>
+  `/api/v1/intake/gatherings/${gatheringId}/items/${itemId}/files/${index}`;

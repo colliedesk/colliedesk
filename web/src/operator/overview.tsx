@@ -15,6 +15,7 @@ function warningText(warning: ConsoleData['status']['warnings'][number]): string
     case 'path_mode': return m.warning.path_mode(env);
     case 'requests_waiting': return m.warning.requests_waiting(warning.detail ?? '');
     case 'feature_incomplete': return m.warning.feature_incomplete(warning.key ?? '', warning.detail ?? '');
+    case 'ai_server_out_of_credit': return m.warning.ai_server_out_of_credit(warning.detail ?? '', when(warning.since ?? ''));
     default: return warning.code;
   }
 }
@@ -42,7 +43,7 @@ export function Overview({ data }: { data: ConsoleData }) {
           <tbody>{status.processes.map((process) => <tr key={process.instance_id}>
             <td data-label={m.host}><code>{process.hostname}</code></td><td data-label={m.binary}><code>{process.binary_version}</code></td>
             <td data-label={m.running}><span className="dot" data-tone={process.running_version === status.desired_version ? 'ok' : undefined} /> v{process.running_version}</td>
-            <td data-label={m.heartbeat}>{when(process.heartbeat_at)}</td><td data-label={m.waitingFor}>{process.waiting_for || process.last_error || '—'}</td></tr>)}</tbody></table>
+            <td data-label={m.heartbeat} className="ops-when">{when(process.heartbeat_at)}</td><td data-label={m.waitingFor}>{process.waiting_for || process.last_error || '—'}</td></tr>)}</tbody></table>
       </div>
     </section>
     <section className="settings-card"><div className="section-heading"><h2>{m.environment}</h2><p>{m.environmentLead}</p></div>

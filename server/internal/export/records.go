@@ -283,10 +283,13 @@ type ImportItem struct {
 }
 
 // Workspace is the workspace in manifest.json. StatusHistorySince is when its status history became
-// complete: a resolution or reopen before it was never recorded.
+// complete: a resolution or reopen before it was never recorded. TimezoneChosenAt is when an admin last
+// chose its timezone, nil while it is the UTC default nobody chose (which the creator's first sign-in
+// replaces with their browser's zone); a workspace recreated from the export keeps it.
 type Workspace struct {
 	domain.Workspace
-	StatusHistorySince time.Time `json:"status_history_since"`
+	StatusHistorySince time.Time  `json:"status_history_since"`
+	TimezoneChosenAt   *time.Time `json:"timezone_chosen_at"`
 }
 
 // ConversationThreadItem says an item is, or was, part of a conversation, and how it came to it.

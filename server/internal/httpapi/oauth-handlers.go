@@ -34,7 +34,7 @@ const (
 // OAuthReconnectSteps says how each app connects again; the token endpoint and /mcp answer it when a
 // connection no longer works.
 const OAuthReconnectSteps = "Connect again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; " +
-	"in Claude Code, run /mcp, choose colliedesk and Authenticate (or claude mcp login colliedesk); " +
+	"in Claude Code, run /mcp, choose colliedesk (plugin:colliedesk:colliedesk with the Colliedesk plugin) and Authenticate; " +
 	"in Codex, run codex mcp login colliedesk; in Cursor, open Settings → MCP and log in to colliedesk again."
 
 func (a *API) mountOAuth(mux *http.ServeMux) {
@@ -84,7 +84,7 @@ func (a *API) protectedResourceMetadata(response http.ResponseWriter, request *h
 		"authorization_servers":    []string{a.oauthIssuer()},
 		"bearer_methods_supported": []string{"header"},
 		"resource_name":            "Colliedesk",
-		"resource_documentation":   "https://colliedesk.com/docs/user/mcp",
+		"resource_documentation":   "https://colliedesk.com/docs/mcp",
 	})
 }
 
@@ -109,7 +109,7 @@ func (a *API) authorizationServerMetadata(response http.ResponseWriter, request 
 		"token_endpoint_auth_methods_supported":          []string{"none"},
 		"client_id_metadata_document_supported":          true,
 		"authorization_response_iss_parameter_supported": true,
-		"service_documentation":                          "https://colliedesk.com/docs/user/mcp",
+		"service_documentation":                          "https://colliedesk.com/docs/mcp",
 	})
 }
 
@@ -145,7 +145,7 @@ func (a *API) registerOAuthClient(response http.ResponseWriter, request *http.Re
 			return
 		}
 	}
-	redirects, problem := checkRedirectURIs(input.RedirectURIs)
+	redirects, problem := checkRegisteredRedirectURIs(input.RedirectURIs)
 	if problem != "" {
 		writeOAuthError(response, http.StatusBadRequest, "invalid_redirect_uri", "The registration "+problem)
 		return

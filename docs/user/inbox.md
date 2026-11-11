@@ -4,6 +4,11 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+On a computer the sidebar on the left starts folded into a row of icons. It can be made wider or narrower: drag its right edge, or focus the
+edge and use the arrow keys. Double-click the edge to restore the default width. **Expand sidebar** (the
+panel icon at the top) opens it with each page's name, as does dragging the edge to the right;
+**Collapse sidebar** folds it again, and each icon is named when you point at it. The browser remembers the width and the choice.
+
 On a phone the list and the conversation take turns. A conversation you open fills the screen, and its
 messages take most of it. The top row has **Back to Inbox** (the arrow), the subject (two lines at most)
 and **Show details** (the panel icon), which opens the properties, tags and the customer's other
@@ -28,6 +33,32 @@ with an email channel also offers **Send yourself a test message**: it opens a c
 own address that you can answer, and the reply comes to your mailbox (see
 [Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list
 cannot be loaded, it says so with **Try again** instead.
+
+**Before your mailbox forwards here.** Until customer mail has arrived through a support mailbox, one
+line under the **Inbox** title names it. It covers every switched-on email channel with an address of
+your own, not only the default one: "support@acme.com and billing@acme.com" when two still wait.
+
+- For a mailbox you had before an import from another help desk finished, the line says: "New customer
+  mail to support@acme.com still arrives in your old help desk until you move it. Replies you send here
+  come back here." Its action is **Move your mail**.
+- Without a finished import, and for a mailbox added after the import, it says: "Customer mail to
+  billing@acme.com does not arrive here yet." Its action is then **Forward your mailbox to start** (the
+  action follows the first mailbox named). With both kinds, the line says both sentences.
+- The action opens step 2 of the [email setup](email-channel.md#2-forward-its-mail-to-colliedesk) of the
+  first mailbox named, where you forward that mailbox here. Only people who may change channels see it;
+  a teammate reads "An admin can move it." instead.
+- A [test message](email-channel.md#send-yourself-a-test-message), Gmail's forwarding confirmation,
+  dropped mail and answers to a `reply+…@` address do not count. A mailbox leaves the
+  line once a customer's mail arrives through it; the line goes away when none is left.
+- A channel still on its Colliedesk Cloud forwarding address (`…@<name>.colliedesk.com`) has no mailbox
+  of yours to move: it is never named, also after you change the workspace address name.
+- On a server that cannot receive replies on its sending domain, the line has no "Replies you send here
+  come back here", and the reply box of an email conversation whose mailbox does not forward yet says:
+  "The customer's answer goes to your mailbox until it forwards here."
+
+Agents read the same in one call: `mail_switch` (the mailboxes, each with `old_help_desk`, and whether
+the workspace finished an import), `mail_through_mailbox` and `answers_before_forwarding` of `GET /api/v1/channels/email`, or of the
+MCP tool `colliedesk_email_channel_get`.
 
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every

@@ -1,17 +1,25 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { createElement, lazy, Suspense, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ApiError, api } from './api';
 import type { Feature, Guard, Setting } from './api';
 import type { ConsoleData } from './app';
-import { CommandLine, when } from './copy';
+import { when } from './copy';
 import { fields, sections } from './fields';
 import type { Draft } from './guards';
-import { changedKeys, confirmMatches, emptyDraft, mayAskToType, missing, needs, validCode } from './guards';
-import { ConsoleDialog } from './dialog';
+import { changedKeys, mayAskToType, needs } from './guards';
 import { m } from './messages';
 import { href, navigate } from './router';
 
 type SetDraft = Dispatch<SetStateAction<Draft>>;
+
+// What the server provider's form (ai-provider, loaded on the AI page only) is given: the page's own rows
+// and draft helpers, passed in so the console's first bundle exports nothing for it.
+export interface ServerProviderProps {
+  byKey: Map<string, Setting>; draft: Draft; setDraft: SetDraft; errors: Record<string, string>; groupOf: (key: string) => string | undefined;
+  SettingRow: typeof SettingRow; change: typeof change; currentValue: typeof currentValue;
+  // The server's provider out of credit (status warning ai_server_out_of_credit), shown on its card.
+  credit?: { detail?: string; since?: string };
+}
 
 function sourceText(setting: Setting): string {
   const at = when(setting.set_at);
@@ -64,6 +72,7 @@ function SettingRow({ setting, draft, setDraft, error, feature, groupOf }: { set
   const locked = setting.locked ?? '';
   const disabled = !setting.editable || locked !== '';
   const [replacing, setReplacing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const tags: string[] = [setting.hot ? m.appliesAtOnce : m.appliesInSeconds];
   if (setting.guards.includes('reauth')) tags.push(m.needsYourCode);
   if (setting.guards.includes('type_to_confirm')) tags.push(m.typeToConfirmTag);
@@ -118,8 +127,41 @@ function SettingRow({ setting, draft, setDraft, error, feature, groupOf }: { set
         <span>{value === 'true' ? m.featureIncomplete : m.featureNeeds}</span><FeatureNeeds names={missingNow} groupOf={groupOf} /></div>}
     </div>;
   } else if (info.kind === 'select') {
-    control = <select id={id} value={currentValue(setting, draft)} disabled={disabled} aria-describedby={describedBy} onChange={(event) => change(setDraft, setting, event.target.value)}>
-      {(info.options ?? []).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>;
+    // A select with "Other" takes a value of its own in a box under it.
+    const value = currentValue(setting, draft) || setting.default || '';
+    const own = Boolean(info.other) && !(info.options ?? []).some(([option]) => option === value);
+    control = <>
+      <select id={id} value={own ? '\u0000' : value} disabled={disabled} aria-describedby={describedBy} onChange={(event) => change(setDraft, setting, event.target.value === '\u0000' ? ' ' : event.target.value)}>
+        {(info.options ?? []).map(([option, label]) => <option key={option} value={option}>{label}</option>)}
+        {info.other && <option value={'\u0000'}>{info.other}</option>}</select>
+      {own && <input type="text" aria-label={info.other} value={value.trim()} disabled={disabled} aria-invalid={error ? true : undefined} onChange={(event) => change(setDraft, setting, event.target.value || ' ')} />}
+    </>;
+  } else if (info.kind === 'list') {
+    // One box per value; the setting keeps them comma separated. A box just added stays until typed in.
+    const items = currentValue(setting, draft).split(',').map((item) => item.trim());
+    const saved = items.length === 1 && items[0] === '' ? [] : items;
+    const rows = adding ? [...saved, ''] : saved;
+    const write = (next: string[]) => { setAdding(false); change(setDraft, setting, next.filter((item, at) => item !== '' || at < saved.length).join(',')); };
+    control = <div className="list-edit" id={id}>
+      {rows.map((item, index) => <div className="list-row" key={index}>
+        <input type="text" aria-label={`${info.label} ${index + 1}`} value={item} placeholder={info.placeholder} disabled={disabled} aria-invalid={error ? true : undefined}
+          onChange={(event) => write(rows.map((each, at) => (at === index ? event.target.value.replace(/,/g, '') : each)))} />
+        <button type="button" className="link-button" aria-label={m.removeItem(item || String(index + 1))} disabled={disabled} onClick={() => write(rows.filter((_, at) => at !== index))}>×</button>
+      </div>)}
+      <button type="button" aria-label={m.addTo(info.label)} disabled={disabled || rows.some((item) => item === '')} onClick={() => setAdding(true)}>{m.addItem}</button>
+    </div>;
+  } else if (info.kind === 'bytes') {
+    // A size in MB or GB; the setting keeps bytes.
+    const bytes = Number(currentValue(setting, draft) || setting.default || 0);
+    const gb = bytes >= 1024 ** 3 && bytes % 1024 ** 3 === 0;
+    const unit = gb ? 1024 ** 3 : 1024 ** 2;
+    const write = (amount: string, size: number) => change(setDraft, setting, amount.trim() === '' ? '' : String(Math.round(Number(amount.replace(',', '.')) * size)));
+    control = <div className="size-edit">
+      <input id={id} type="text" inputMode="decimal" value={bytes ? String(Math.round((bytes / unit) * 100) / 100) : ''} disabled={disabled} aria-describedby={describedBy} aria-invalid={error ? true : undefined}
+        onChange={(event) => write(event.target.value, unit)} />
+      <select aria-label={m.unit} value={unit} disabled={disabled} onChange={(event) => write(String(bytes / unit), Number(event.target.value))}>
+        <option value={1024 ** 2}>MB</option><option value={1024 ** 3}>GB</option></select>
+    </div>;
   } else if (info.kind === 'textarea') {
     control = <textarea id={id} rows={3} value={currentValue(setting, draft)} placeholder={setting.default ?? ''} disabled={disabled} aria-describedby={describedBy}
       aria-invalid={error ? true : undefined} onChange={(event) => change(setDraft, setting, event.target.value)} />;
@@ -151,9 +193,22 @@ function asks(draft: Draft, settings: Setting[]): string[] {
 
 // The products table, on the billing page only.
 const ProductsSection = lazy(() => import('./products'));
+// The server provider's form, on the AI page only.
+const ServerProvider = lazy(() => import('./ai-provider'));
+const ServerPricing = lazy(() => import('./ai-provider').then((module) => ({ default: module.ServerPricing })));
+// The dialog that asks what a save needs (a code, a secret again, a phrase), only when it needs one.
+const Review = lazy(() => import('./review'));
 
-export function ConfigPage({ group, data, draft, setDraft }: { group: string; data: ConsoleData; draft: Draft; setDraft: SetDraft }) {
+export function ConfigPage({ group, data, draft: all, setDraft }: { group: string; data: ConsoleData; draft: Draft; setDraft: SetDraft }) {
   const settings = data.config.settings;
+  // A page counts, checks, saves and discards its own changes only; another page's wait there, untouched.
+  const here = new Set((sections[group] ?? []).flatMap((section) => section.keys));
+  const part = (d: Draft, on: boolean): Draft => {
+    const keep = ([key]: [string, unknown]) => here.has(key) === on;
+    return { set: Object.fromEntries(Object.entries(d.set).filter(keep)), unset: d.unset.filter((key) => here.has(key) === on), secrets: Object.fromEntries(Object.entries(d.secrets).filter(keep)) };
+  };
+  const draft = part(all, true);
+  const clear = () => setDraft((current) => part(current, false));
   const byKey = new Map(settings.map((setting) => [setting.key, setting]));
   const [review, setReview] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -161,10 +216,43 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
   const [conflict, setConflict] = useState(false);
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [checked, setChecked] = useState<Guard[] | undefined>();
+  const [saving, setSaving] = useState(false);
   const changed = changedKeys(draft);
-  // A draft spans pages: say how many of its changes are not on this one.
-  const here = new Set((sections[group] ?? []).flatMap((section) => section.keys));
-  const elsewhere = changed.filter((key) => !here.has(key)).length;
+  const done = (version: number, applies: string) => { setReview(false); clear(); setErrors({}); setSaved({ version, applies }); void data.reload(); };
+  const invalid = (fieldErrors: Record<string, string>) => {
+    setReview(false);
+    // An error of a setting on another page, or of none, shows at the top.
+    const away = Object.entries(fieldErrors).filter(([key]) => key !== '' && !here.has(key)).map(([, text]) => text);
+    setErrors({ ...fieldErrors, ...(away.length ? { '': [fieldErrors[''], ...away].filter(Boolean).join(' ') } : {}) });
+    window.setTimeout(() => document.querySelector('.field-bad, .error-copy[role="alert"]')?.scrollIntoView?.({ block: 'center' }), 0);
+  };
+  // Save checks the change first: an invalid one says why beside its fields, and one that asks for nothing
+  // (no code, secret or phrase) is saved at once; only one that does opens the review.
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setErrors({});
+    try {
+      const result = await api.check({ set: draft.set, unset: draft.unset, secrets: draft.secrets });
+      if (!result.ok) { invalid(result.errors); return; }
+      const guards = result.guards ?? [];
+      const need = needs(draft, settings, guards);
+      // A code is asked of an operator with an authenticator; without one, the server takes a recent sign-in.
+      if ((need.reauth && data.me.operator.totp_enabled) || need.trial || need.reenter.length > 0 || Object.keys(need.confirm).length > 0) { setChecked(guards); setReview(true); return; }
+      const savedNow = await api.change({ base_version: data.config.version, set: draft.set, unset: draft.unset, secrets: draft.secrets, confirm: {} });
+      done(savedNow.version, savedNow.applies);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'config_changed') { setConflict(true); void data.reload(); return; }
+      if (error instanceof ApiError && error.status === 401) return;
+      // The server asks for more than the check said (a code): the review asks for it.
+      if (error instanceof ApiError && error.code.startsWith('reauth')) { setChecked(undefined); setReview(true); return; }
+      if (error instanceof ApiError) { invalid(Object.keys(error.fields).length ? error.fields : { '': error.message }); return; }
+      invalid({ '': error instanceof Error ? error.message : m.nothingSaved });
+    } finally {
+      setSaving(false);
+    }
+  };
   const runTest = async (kind: 'smtp' | 'polar' | 'jwks' | 'ai') => {
     setTesting(true);
     try {
@@ -186,12 +274,15 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
     {saved && <p className="apply-line" role="status"><span className="dot" data-tone="ok" /><span>{saved.applies === 'trial' ? m.savedTrial(saved.version) : m.saved(saved.version, saved.applies === 'at_once')}</span>
       <a className="link-button" href={href('/history')} onClick={(event) => { event.preventDefault(); navigate('/history'); }}>{m.undoInHistory}</a></p>}
     {conflict && <section className="ops-strip" data-tone="danger" role="alert"><span><strong>{m.conflictTitle}.</strong> {m.conflictLead}</span>
-      <div className="button-row"><button type="button" className="primary-action" onClick={() => { setConflict(false); setReview(true); }}>{m.applyMine}</button>
-        <button type="button" onClick={() => { setConflict(false); setDraft(emptyDraft()); }}>{m.discardMine}</button></div></section>}
+      <div className="button-row"><button type="button" className="primary-action" onClick={() => { setConflict(false); void save(); }}>{m.applyMine}</button>
+        <button type="button" onClick={() => { setConflict(false); clear(); }}>{m.discardMine}</button></div></section>}
     {(sections[group] ?? []).map((section) => <section className="settings-card" key={section.title}>
       <div className="section-heading"><h2>{section.title}</h2><p>{section.lead}</p></div>
       <div className="settings-body">
-        {section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
+        {group === 'ai' && <Suspense fallback={null}>{createElement(section.keys.includes('ai.server.provider') ? ServerProvider : ServerPricing,
+          { byKey, draft, setDraft, errors, groupOf: (key: string) => byKey.get(key)?.group, SettingRow, change, currentValue,
+            credit: data.status.warnings?.find((warning) => warning.code === 'ai_server_out_of_credit') })}</Suspense>}
+        {group !== 'ai' && section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
           <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]}
             feature={data.config.features?.find((feature) => feature.switch_key === setting.key)} groupOf={(key) => byKey.get(key)?.group} />)}
         {section.test && <div className="ops-check">
@@ -203,105 +294,13 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
     </section>)}
     {group === 'billing' && <Suspense fallback={null}><ProductsSection totp={data.me.operator.totp_enabled} /></Suspense>}
     {changed.length > 0 && <div className="save-bar" role="region" aria-label={m.unsavedChanges(changed.length)}>
-      <span><strong>{m.unsavedChanges(changed.length)}</strong>{elsewhere > 0 && <> {m.onOtherPages(elsewhere)}</>}
+      <span><strong>{m.unsavedChanges(changed.length)}</strong>
         {asks(draft, settings).length > 0 && <span className="save-asks"> · {m.savingAsksFor} {asks(draft, settings).join(' · ')}</span>}</span>
-      <div className="button-row"><button type="button" onClick={() => { setDraft(emptyDraft()); setErrors({}); }}>{m.discard}</button>
-        <button type="button" className="primary-action" onClick={() => setReview(true)}>{m.reviewAndSave}</button></div>
+      <div className="button-row"><button type="button" onClick={() => { clear(); setErrors({}); }}>{m.discard}</button>
+        <button type="button" className="primary-action" disabled={saving} onClick={() => void save()}>{saving ? m.saving : m.save}</button></div>
     </div>}
-    {review && <Review data={data} draft={draft} onClose={() => setReview(false)}
-      onSaved={(version, applies) => { setReview(false); setDraft(emptyDraft()); setErrors({}); setSaved({ version, applies }); void data.reload(); }}
-      onInvalid={(fieldErrors) => { setReview(false); setErrors(fieldErrors); }}
-      onConflict={() => { setReview(false); setConflict(true); void data.reload(); }} />}
+    {review && <Suspense fallback={null}><Review data={data} draft={draft} checked={checked} onClose={() => setReview(false)} onSaved={done} onInvalid={invalid}
+      onConflict={() => { setReview(false); setConflict(true); void data.reload(); }} /></Suspense>}
   </div>;
 }
 
-// Review is the one dialog that gathers every check a change needs, in a fixed order: what changes, the
-// secret entered again, the phrase typed, the code. Its button works only when everything is filled, and Escape
-// only closes it: nothing is applied without the button.
-export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }: {
-  data: ConsoleData; draft: Draft; onClose: () => void; onSaved: (version: number, applies: string) => void;
-  onInvalid: (errors: Record<string, string>) => void; onConflict: () => void;
-}) {
-  const settings = data.config.settings;
-  const byKey = new Map(settings.map((setting) => [setting.key, setting]));
-  // What the change does and asks comes from the server (the same check PATCH runs); until it answers, the
-  // review waits and its button stays off.
-  const [guards, setGuards] = useState<Guard[] | null>(null);
-  // The parent passes a new callback on each render; the check runs once per draft.
-  const invalid = useRef(onInvalid);
-  useEffect(() => { invalid.current = onInvalid; }, [onInvalid]);
-  useEffect(() => {
-    let live = true;
-    api.check({ set: draft.set, unset: draft.unset, secrets: draft.secrets }).then((result) => {
-      if (!live) return;
-      if (!result.ok) invalid.current(result.errors);
-      else setGuards(result.guards ?? []);
-    }, () => { if (live) setGuards([]); });
-    return () => { live = false; };
-  }, [draft]);
-  const need = needs(draft, settings, guards ?? []);
-  const totp = data.me.operator.totp_enabled;
-  const [code, setCode] = useState('');
-  const [typed, setTyped] = useState<Record<string, string>>({});
-  const [again, setAgain] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [codeError, setCodeError] = useState('');
-  const [cli, setCli] = useState(false);
-  const lacking = guards === null ? [m.checkingChange] : missing(need, code, typed, again, totp);
-  const submit = async () => {
-    if (lacking.length || busy) return;
-    setBusy(true);
-    setCodeError('');
-    try {
-      const saved = await api.change({ base_version: data.config.version, set: draft.set, unset: draft.unset, secrets: { ...draft.secrets, ...again },
-        confirm: typed, reauth_code: need.reauth ? code.replace(/\s/g, '') : undefined });
-      onSaved(saved.version, saved.applies);
-    } catch (error) {
-      if (!(error instanceof ApiError)) { setCodeError(m.keptChanges); return; }
-      if (error.code === 'reauth_code_invalid' || error.code === 'reauth_required') { setCodeError(m.keptChanges); setCode(''); return; }
-      if (error.code === 'reauth_needs_new_link') { setCli(true); return; }
-      if (error.code === 'config_changed') { onConflict(); return; }
-      if (error.status === 401) return;
-      onInvalid(Object.keys(error.fields).length ? error.fields : { '': error.message });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return <ConsoleDialog title={m.reviewChanges(need.changed.length)} help={m.willBeSaved(data.config.version + 1)} onClose={onClose} closeLabel={m.cancel} onSubmit={() => void submit()}
-    footer={<>
-      {lacking.length > 0 && <span className="help" aria-live="polite">{m.fillEveryCheck(lacking.join(', '))}</span>}
-      <button type="button" onClick={onClose}>{m.cancel}</button>
-      <button type="submit" className="primary-action" disabled={lacking.length > 0 || busy}>{busy ? m.saving : m.saveAndApply}</button>
-    </>}>
-    <h3>{m.whatChanges}</h3>
-    <ul className="diff">{need.changed.map((key) => {
-      const setting = byKey.get(key);
-      const secret = setting?.secret;
-      const after = key in draft.set ? draft.set[key] : draft.unset.includes(key) ? '' : null;
-      return <li className="diff-row" key={key}><div>{fields[key]?.label ?? key}<code className="key">{key}</code></div>
-        {secret ? <div className="diff-vals">{draft.unset.includes(key) ? m.removed : m.replaced}</div> : <div className="diff-vals"><del>{setting?.value || setting?.default || '—'}</del><ins>{after || '—'}</ins></div>}</li>;
-    })}</ul>
-    {guards === null && <p className="help" aria-busy="true">{m.checkingChange}…</p>}
-    {need.preview.length > 0 && <div className="warning-note"><h3>{m.whatItDoes}</h3><ul>{need.preview.map((text) => <li key={text}>{text}</li>)}</ul></div>}
-    {need.reenter.map((secret) => <div className="field" key={secret}>
-      <label className="field-label" htmlFor={`again-${secret}`}>{m.enterSecretAgain}: <code>{secret}</code></label>
-      <input id={`again-${secret}`} type="password" autoComplete="off" value={again[secret] ?? ''} onChange={(event) => setAgain({ ...again, [secret]: event.target.value })} />
-      <span className="help field-note">{m.enterSecretAgainHelp(secret)}</span>
-    </div>)}
-    {Object.entries(need.confirm).map(([key, phrase]) => <div className="field" key={key}>
-      <label className="field-label" htmlFor={`confirm-${key}`}>{m.typeToConfirm(phrase)}</label>
-      <input id={`confirm-${key}`} autoComplete="off" spellCheck={false} value={typed[key] ?? ''} aria-invalid={typed[key] && !confirmMatches(typed[key], phrase) ? true : undefined}
-        onChange={(event) => setTyped({ ...typed, [key]: event.target.value })} />
-    </div>)}
-    {need.reauth && totp && <div className="field">
-      <label className="field-label" htmlFor="review-code">{m.confirmItsYou}: {m.authenticatorCode}</label>
-      <input id="review-code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} spellCheck={false} value={code}
-        aria-invalid={codeError ? true : undefined} aria-describedby={codeError ? 'review-code-error' : undefined} onChange={(event) => setCode(event.target.value)} />
-      {codeError && <span className="error-copy field-note" id="review-code-error" role="alert">{codeError}</span>}
-      {!validCode(code) && code !== '' && <span className="help field-note">6 digits</span>}
-    </div>}
-    {(cli || (need.reauth && !totp && codeError)) && <div className="warning-note" role="alert"><p>{m.reauthCLI}</p>
-      <CommandLine command={`docker compose exec server /app/collie operator pair --email ${data.me.operator.email}`} /></div>}
-    {!need.reauth && codeError && <p className="error-copy" role="alert">{codeError}</p>}
-  </ConsoleDialog>;
-}

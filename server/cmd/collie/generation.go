@@ -185,7 +185,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if httpapi.Outbound(channelConfig).Worker {
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
+			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain,
+				ReceivesPlatformReplies: emailConfig.ReceivesPlatformReplies(), Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
 				SwitchedOff: map[string]bool{domain.MailboxGoogle: off[serverconfig.FeatureGmail], domain.MailboxMicrosoft: off[serverconfig.FeatureMicrosoft]}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
@@ -285,6 +286,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: config.AllowPrivateBaseURLs, PlanLimits: billingOn}
+	if aiServer == nil && config.AIServerOffLabel != "" {
+		// Provider set to Off with its models kept: workspaces that picked it see it greyed, as when switched off.
+		aiConfig.ServerOff, aiConfig.ServerOffLabel = true, config.AIServerOffLabel
+	}
 	apiConfig := httpapi.Config{Cursor: p.cursor, AI: aiConfig, ImportKeys: p.importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth,
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,

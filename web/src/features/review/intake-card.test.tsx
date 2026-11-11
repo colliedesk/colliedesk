@@ -207,3 +207,29 @@ test('a decided card whose messages were all moved out says so instead of an emp
   expect(screen.getByText('Its messages were moved out of this card.')).toBeInTheDocument();
   expect(screen.queryByText('0 messages')).not.toBeInTheDocument();
 });
+
+const ITEM = '88888888-8888-4888-8888-888888888888';
+
+test('a card shows the picture and video a customer sent, and says why a file did not arrive', () => {
+  render(<IntakeCard {...props({ item: gathering({ preview: '[picture]', files: [
+    { item_id: ITEM, index: 0, name: 'image-1', content_type: 'image/jpeg', status: 'stored', size: 55499, error: null },
+    { item_id: ITEM, index: 1, name: 'video-1', content_type: 'video/mp4', status: 'stored', size: 65093, error: null },
+    { item_id: ITEM, index: 2, name: 'video-2', content_type: 'video/mp4', status: 'failed', size: null, error: 'the file is larger than this channel accepts (27020613 bytes)' },
+  ] }) })} />);
+  const card = screen.getByRole('article', { name: 'Lan Nguyen' });
+  const files = within(card).getByRole('list', { name: 'Files the customer sent' });
+  const picture = within(files).getByRole('button', { name: /image-1/ }).querySelector('img');
+  expect(picture).toHaveAttribute('src', `/api/v1/intake/gatherings/${gathering().id}/items/${ITEM}/files/0`);
+  expect(within(files).getByRole('link', { name: /video-1/ })).toHaveAttribute('href', `/api/v1/intake/gatherings/${gathering().id}/items/${ITEM}/files/1`);
+  expect(within(card).getByText('video-2 was not received: the file is larger than this channel accepts (27020613 bytes)')).toBeInTheDocument();
+  // "[picture]" says nothing the picture does not.
+  expect(within(card).queryByText('[picture]')).not.toBeInTheDocument();
+});
+
+test('an opened card shows each message\'s files where they were sent', () => {
+  const entry = { ...detail().items[0], body: '[picture]', files: [{ name: 'image-1', content_type: 'image/png', status: 'stored', size: 10, error: null }] };
+  render(<IntakeCard {...props({ open: true, detail: detail({ items: [entry] }) })} />);
+  const picture = screen.getByRole('button', { name: /image-1/ }).querySelector('img');
+  expect(picture).toHaveAttribute('src', `/api/v1/intake/gatherings/${gathering().id}/items/${entry.id}/files/0`);
+  expect(screen.queryByText('[picture]', { selector: '.intake-item *' })).not.toBeInTheDocument();
+});

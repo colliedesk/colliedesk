@@ -1,0 +1,62 @@
+// The strings of the server provider's form (AI & pricing). They load with the form, on that page only, so the
+// console's first bundle stays in its budget (docs/internals/performance.md); like messages.ts otherwise. Another
+// language's words wait in lazyWords (lang.ts) and replace these as the form loads.
+import { lazyWords } from './lang';
+
+const en = {
+  serverProviderOn: "The server's provider",
+  serverProviderOnHelp: 'Workspaces can pick it. Off stops it and keeps everything below for when it is on again.',
+  serverProviderOffHelp: 'Off: no workspace can pick it, and features set to it stop and say why. Its settings are kept.',
+  serverProviderService: 'Service',
+  outOfCredit: 'The provider account is out of credit.',
+  outOfCreditBody: (n: string, since: string) => `It refused ${n} AI ${n === '1' ? 'call' : 'calls'} since ${since}: features on it fail, and each says why. Add credit to the account (or raise the key's limit), or pick another service or key below. Saving is not affected.`,
+  aiService: {
+    anthropic: ['Anthropic', 'Claude models, with an Anthropic API key'],
+    openai: ['OpenAI', 'GPT models, with an OpenAI API key'],
+    openrouter: ['OpenRouter', 'Hundreds of models, with one OpenRouter key'],
+    self_hosted: ['Other or self-hosted', 'Any OpenAI-compatible server: vLLM, Ollama, LM Studio…'],
+  } as Record<string, readonly [string, string]>,
+  serverModels: 'Models',
+  serverModelsHelp: 'Every workspace on this provider runs these models; a workspace picks the provider, never its model.',
+  listing: 'Listing the models this key may use…',
+  listed: (n: number) => `${n} ${n === 1 ? 'model' : 'models'} available. Type in a box to search.`,
+  listNeedsKey: 'Enter the API key to list the models it may use.',
+  listNeedsAddress: 'Enter the base URL to list the models it may use.',
+  listFailed: (why: string) => `${why} You can still type a model name.`,
+  searchModels: 'Type to search',
+  noMatch: 'No model matches.',
+  useTyped: (name: string) => `Use “${name}”`,
+  moreMatches: (n: number) => `${n} more: type to narrow the list.`,
+  modelEveryFeature: 'Model for every feature',
+  serverSlot: { triage: 'Triage suggestions', draft: 'Reply drafts', chat: 'AI chat', intake: 'Chat intake' } as Record<string, string>,
+  intakeFallback: 'Chat intake, when its model fails',
+  notOffered: 'Not offered',
+  noFallback: 'No second model',
+  modelPerFeature: 'Choose a model per feature',
+  oneModelForAll: 'One model for every feature',
+  perMillion: (input: number, output: number) => `$${input} in · $${output} out per 1M tokens`,
+  // Pricing and allowance
+  pricesTitle: 'Price of each model',
+  pricesHelp: 'US dollars per million tokens. A model picked from the list gets the price its provider lists.',
+  priceModel: 'Model',
+  priceInput: 'Input',
+  priceOutput: 'Output',
+  priceCache: 'Cached input',
+  notInUse: 'not in use',
+  removePrice: (model: string) => `Remove the price of ${model}`,
+  needsPrice: 'Needs a price',
+  fillPrices: (n: number) => `Use the listed price for ${n} ${n === 1 ? 'model' : 'models'}`,
+  noModelsYet: 'Pick the models above first.',
+  allowanceTitle: 'Monthly allowance',
+  allowanceHelp: 'What the server’s provider may spend for one workspace in a calendar month, in US dollars.',
+  allowanceNone: 'No limit',
+  allowanceWorkspace: 'Same for every workspace',
+  allowanceAgent: 'Per active agent',
+  allowanceAmount: 'Each workspace',
+  allowanceAgentAmount: 'Each active agent',
+  allowanceTrial: 'A workspace on its trial',
+  allowanceTrialHelp: 'Empty: the same as the others.',
+  dollarsPerMonth: '$ / month',
+} as const;
+
+export const am: typeof en = Object.assign(en, lazyWords.am);

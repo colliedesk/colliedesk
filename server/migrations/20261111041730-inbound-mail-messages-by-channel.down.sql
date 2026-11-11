@@ -1,0 +1,1 @@
+DROP INDEX channel_inbound_events_channel_messages;

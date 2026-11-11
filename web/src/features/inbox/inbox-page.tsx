@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Conversation, ConversationViewer, Message, SavedReply, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, EmailChannelSettings, Message, SavedReply, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import { answerGoesToMailbox, MailSwitchLine } from './mail-switch';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { mayTellCustomers, noticesOf } from './status-tell';
@@ -102,6 +103,8 @@ interface InboxPageProps {
   failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   canManage?: boolean;
+  // canManageChannels: the person may change channels (channels:update): the links into a channel's settings.
+  canManageChannels?: boolean;
   currentAgentId?: string;
   // onBulkUpdate resolves when every listed conversation changed, and rejects when none did.
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
@@ -128,6 +131,11 @@ interface InboxPageProps {
   // The setup guide while setup is unfinished; it floats in a corner, outside the conversation list.
   guide?: ReactNode;
   onTestMessage?: () => Promise<unknown>;
+  // The default email channel's settings: until customer mail arrives through its mailbox, a line under the
+  // title says new mail still reaches the old help desk.
+  defaultMailbox?: EmailChannelSettings;
+  // The settings of the email channel the open conversation's replies leave from; undefined for another type.
+  replyMailbox?: EmailChannelSettings;
 }
 
 // ShownCount is how many conversations the list shows. One page shows its count; with more pages a bare
@@ -147,7 +155,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -243,7 +251,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   }, [selected?.id]);
   // Past the three-pane width the drawer button is hidden, so an open drawer would strand focus.
   useEffect(() => {
-    const wide = window.matchMedia?.('(min-width: 75rem)');
+    const wide = window.matchMedia?.('(min-width: 80rem)');
     if (!wide) return;
     const onChange = (event: { matches: boolean }) => { if (event.matches) setDetailsOpen(false); };
     wide.addEventListener('change', onChange);
@@ -255,6 +263,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         <header>
           <div className="list-title"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} />
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
+          <MailSwitchLine settings={defaultMailbox} canManageChannels={canManageChannels} />
           <div className="list-head">
             <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} currentAgentId={currentAgentId} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
               views={viewsMenu} />
@@ -279,7 +288,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           <button type="button" className="icon-button" aria-label={messages.dismiss} onClick={() => setSpamToast(undefined)}><XIcon /></button></div>}
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManage} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
+        <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManageChannels} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
           afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
             currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           before={selected && <Part part={messageMovesPart} render={(part) => <part.MessageMovesLog key={selected.id} conversation={selected} timeline={timeline}
@@ -290,8 +299,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined}
           onSpam={selected && onSpam ? (spam) => applySpam([selected.id], spam) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
         {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
-          {canManage && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
+          {canManageChannels && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
         {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
+        {selected && answerGoesToMailbox(replyMailbox) && <p className="composer-from">{messages.answerGoesToMailbox}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}

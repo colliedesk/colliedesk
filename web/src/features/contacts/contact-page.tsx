@@ -8,6 +8,7 @@ import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-key
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { StatusLabel } from '../inbox/conversation-labels';
 import { ContactPicker } from './contact-picker';
+import './contacts.css';
 
 interface ContactPageProps {
   contact?: ContactDetail;

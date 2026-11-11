@@ -16,8 +16,17 @@ for how cards are collected and what the rules decide by themselves). A card wai
   change it;
 - a person put it back.
 
-A card of a customer who has an earlier card still waiting in the same place sits right under that card
-(**Waiting for the card above**). Decide the upper one first, so their messages stay in order.
+At Auto, what a customer writes while their card waits joins that card, and AI reads the whole card again:
+it may decide it alone then, and otherwise it comes back here with every message in it. At Suggest, a card of
+a customer who has an earlier card still waiting in the same place sits right under that card (**Waiting for
+the card above**). Decide the upper one first, so their messages stay in order.
+
+A picture, a video or a file a customer sent shows on the card itself, as in a conversation: a picture to
+look at, a video or a voice clip to play, any other file to download, and the gallery opens at the one you
+press. A file the channel could not fetch says why, for example when it is larger than the channel accepts
+(25 MB a file on Zalo). The card shows its first 8 files; **Decide** shows every file under the message that
+carried it. An AI agent reads them with `colliedesk_attachment_get` (`gathering_id`, `item_id`, `file_index`)
+or `GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}`, with the `messages:read` permission.
 
 ## Decide a card
 
@@ -43,7 +52,9 @@ it reopens it. The decide form also starts from the suggestion. Whether a person
 AI suggested is kept with the card's decisions, to measure how often AI is right.
 
 Each decision is one press and is saved once: when a teammate (or AI) decided the card first, the card
-leaves Waiting and the page says who decided it, with the conversation it opened or joined.
+leaves Waiting and the page says who decided it, with the conversation it opened or joined. When the
+customer wrote again while you read the card, nothing is decided and the page says so: at Auto AI reads the
+whole card again and it comes back to Waiting, with every message, if AI is not sure.
 
 ## A customer who writes after it was resolved
 

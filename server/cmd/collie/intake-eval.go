@@ -108,7 +108,7 @@ func intakeEval(ctx context.Context, db *database.DB, args []string, output io.W
 			PromptVersion: result.PromptVersion, DatasetSHA256: sha, Counts: result.Counts}, store.ChannelActor{}, clock()); err != nil {
 			return fmt.Errorf("record the evaluation: %w", err)
 		}
-		fmt.Fprintln(stderr, "Recorded: the scope's readiness counts it for this model and prompt version.")
+		fmt.Fprintln(stderr, "Recorded: the scope's readiness counts it for this prompt version, on any model.")
 	}
 	encoder := json.NewEncoder(output)
 	encoder.SetIndent("", "  ")

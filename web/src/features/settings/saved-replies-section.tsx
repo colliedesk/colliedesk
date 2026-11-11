@@ -6,6 +6,7 @@ import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { savedReplyMessages } from './saved-reply-messages';
 import { settingsMessages } from './settings-messages';
+import './saved-replies.css';
 
 // History and the trash are opened rarely, so their code loads only when one is opened.
 const SavedReplyHistory = lazy(() => import('./saved-reply-panels').then((module) => ({ default: module.SavedReplyHistory })));
@@ -73,12 +74,12 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
     }
   };
   return (
-    <section className="settings-card" aria-labelledby="saved-replies-heading">
+    <section className="settings-card saved-replies" aria-labelledby="saved-replies-heading">
       <div className="section-heading"><h2 id="saved-replies-heading">{messages.savedReplies}</h2><p>{savedReplyMessages.savedRepliesDescription}</p></div>
       <div className="settings-body">
         {problem && <p role="alert" className="error-copy">{problem}</p>}
-        {stale && <button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{settingsMessages.reload}</button>}
-        {!editing && !adding && <button type="button" ref={newButton} className="new-saved-reply" onClick={() => { setProblem(undefined); setAdding(true); }}>{savedReplyMessages.newSavedReply}</button>}
+        {stale && <div className="saved-reply-bar"><button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{settingsMessages.reload}</button></div>}
+        {!editing && !adding && <div className="saved-reply-bar"><button type="button" ref={newButton} className="new-saved-reply" onClick={() => { setProblem(undefined); setAdding(true); }}>{savedReplyMessages.newSavedReply}</button></div>}
         {!editing && adding && <form className="saved-reply-form" aria-label={savedReplyMessages.addSavedReply}
           onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onCreate(title, body), () => { setTitle(''); setBody(''); closeAdd(); }); }}>
           <label className="field"><span>{savedReplyMessages.savedReplyTitle}</span><input autoFocus value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
@@ -121,8 +122,8 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
                 </>}
           </li>
         ))}</ul>}
-        <button type="button" className="saved-reply-trash-toggle" aria-expanded={panel === 'trash'}
-          onClick={(event) => (panel === 'trash' ? closePanel() : openPanel('trash', event.currentTarget))}>{savedReplyMessages.savedReplyTrash}</button>
+        <div className="saved-reply-bar"><button type="button" className="saved-reply-trash-toggle" aria-expanded={panel === 'trash'}
+          onClick={(event) => (panel === 'trash' ? closePanel() : openPanel('trash', event.currentTarget))}>{savedReplyMessages.savedReplyTrash}</button></div>
         {panel === 'trash' && <Suspense fallback={<p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>}>
           <SavedReplyTrash timezone={timezone} now={now ?? new Date()} load={loadTrash} onUndelete={onUndelete} onClose={closePanel} /></Suspense>}
       </div>
