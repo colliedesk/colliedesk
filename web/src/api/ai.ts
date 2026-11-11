@@ -67,6 +67,7 @@ const aiEventSchema = z.object({
 }) satisfies z.ZodType<Generated<'AIEvent'>>;
 export const aiSettingsSchema = z.object({
   server: z.object({ kind: kindSchema, label: z.string(), models: z.record(z.string(), z.array(z.string())) }).nullable(),
+  server_off: z.object({ label: z.string() }).nullable(),
   providers: z.array(aiProviderSchema), slots: z.array(aiSlotSchema), events: z.array(aiEventSchema),
   provider_limit: z.number().int(), can_store_keys: z.boolean(), allow_private_base_urls: z.boolean(),
   automatic: aiAutomaticSchema, allowance: aiAllowanceSchema.nullable(), auto_triage: z.object({ applied: z.number().int(), undone: z.number().int() }),

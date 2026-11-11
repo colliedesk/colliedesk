@@ -1,0 +1,936 @@
+{
+  "ai_allow_private_invalid": {
+    "text": "ai.allow_private_base_urls must be true or false",
+    "message": "ai.allow_private_base_urls must be true or false"
+  },
+  "ai_server_allowance_format": {
+    "text": "ai.server.monthly_allowance must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)",
+    "message": "ai.server.monthly_allowance must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)"
+  },
+  "ai_server_allowance_not_number": {
+    "text": "ai.server.monthly_allowance must be a number of dollars",
+    "message": "ai.server.monthly_allowance must be a number of dollars"
+  },
+  "ai_server_allowance_unknown": {
+    "text": "ai.server.monthly_allowance knows workspace, agent and trial, not {\"key\"}",
+    "params": {
+      "key": "seat"
+    },
+    "message": "ai.server.monthly_allowance knows workspace, agent and trial, not \"seat\""
+  },
+  "ai_server_allowance_unpriced": {
+    "text": "ai.server.monthly_allowance needs a price in ai.server.prices for {models}",
+    "params": {
+      "models": "claude-haiku-5-5, gpt-5"
+    },
+    "message": "ai.server.monthly_allowance needs a price in ai.server.prices for claude-haiku-5-5, gpt-5"
+  },
+  "ai_server_base_url_invalid": {
+    "text": "ai.server.base_url must be an http or https URL without credentials",
+    "message": "ai.server.base_url must be an http or https URL without credentials"
+  },
+  "ai_server_half_configured": {
+    "text": "the server AI provider is half configured: set {missing}, or unset every AI_SERVER_ variable",
+    "params": {
+      "missing": "ai.server.api_key, ai.server.models"
+    },
+    "message": "the server AI provider is half configured: set ai.server.api_key, ai.server.models, or unset every AI_SERVER_ variable"
+  },
+  "ai_server_label_too_long": {
+    "text": "ai.server.label must be at most {max} characters",
+    "params": {
+      "max": 80
+    },
+    "message": "ai.server.label must be at most 80 characters"
+  },
+  "ai_server_models_bad_model": {
+    "text": "ai.server.models has an empty or too long model for {slot}",
+    "params": {
+      "slot": "draft"
+    },
+    "message": "ai.server.models has an empty or too long model for draft"
+  },
+  "ai_server_models_format": {
+    "text": "ai.server.models must be written triage=model,draft=model (a slot may list more models separated by |)",
+    "message": "ai.server.models must be written triage=model,draft=model (a slot may list more models separated by |)"
+  },
+  "ai_server_models_twice": {
+    "text": "ai.server.models lists {slot} twice",
+    "params": {
+      "slot": "triage"
+    },
+    "message": "ai.server.models lists triage twice"
+  },
+  "ai_server_prices_format": {
+    "text": "ai.server.prices must be written model=input:output[:cache_read[:cache_write]] in US dollars per million tokens, separated by commas",
+    "message": "ai.server.prices must be written model=input:output[:cache_read[:cache_write]] in US dollars per million tokens, separated by commas"
+  },
+  "ai_server_prices_not_number": {
+    "text": "ai.server.prices has a price for {model} that is not a number of dollars",
+    "params": {
+      "model": "claude-haiku-5-5"
+    },
+    "message": "ai.server.prices has a price for claude-haiku-5-5 that is not a number of dollars"
+  },
+  "ai_server_prices_twice": {
+    "text": "ai.server.prices lists {model} twice",
+    "params": {
+      "model": "claude-haiku-5-5"
+    },
+    "message": "ai.server.prices lists claude-haiku-5-5 twice"
+  },
+  "ai_server_provider_invalid": {
+    "text": "ai.server.provider must be anthropic or openai_compatible",
+    "message": "ai.server.provider must be anthropic or openai_compatible"
+  },
+  "audit_unreadable": {
+    "text": "The audit log could not be read.",
+    "message": "The audit log could not be read."
+  },
+  "authenticator_needs_key_ring": {
+    "text": "An authenticator needs {env} on the server.",
+    "params": {
+      "env": "MAILBOX_TOKEN_KEYS"
+    },
+    "message": "An authenticator needs MAILBOX_TOKEN_KEYS on the server."
+  },
+  "billing_alert_email_invalid": {
+    "text": "billing.alert_email must be an email address",
+    "message": "billing.alert_email must be an email address"
+  },
+  "body_invalid": {
+    "text": "The body is not valid.",
+    "message": "The body is not valid."
+  },
+  "body_not_a_change": {
+    "text": "The body is not a configuration change.",
+    "message": "The body is not a configuration change."
+  },
+  "body_not_a_product": {
+    "text": "The body is not a product.",
+    "message": "The body is not a product."
+  },
+  "body_not_json": {
+    "text": "The body is not valid JSON.",
+    "message": "The body is not valid JSON."
+  },
+  "body_unreadable": {
+    "text": "The body could not be read.",
+    "message": "The body could not be read."
+  },
+  "change_empty": {
+    "text": "The change is empty.",
+    "message": "The change is empty."
+  },
+  "change_unsaved": {
+    "text": "The change could not be saved.",
+    "message": "The change could not be saved."
+  },
+  "cloud_sign_in_not_configured": {
+    "text": "Cloud sign-in is not configured.",
+    "message": "Cloud sign-in is not configured."
+  },
+  "code_unchecked": {
+    "text": "The code could not be checked.",
+    "message": "The code could not be checked."
+  },
+  "config_changed": {
+    "text": "Someone saved another version since you read this one. Nothing was saved.",
+    "message": "Someone saved another version since you read this one. Nothing was saved."
+  },
+  "config_unreadable": {
+    "text": "The configuration could not be read.",
+    "message": "The configuration could not be read."
+  },
+  "config_unsaved": {
+    "text": "The configuration could not be saved.",
+    "message": "The configuration could not be saved."
+  },
+  "confirm_mismatch": {
+    "text": "Type the phrase to confirm. Nothing was saved.",
+    "message": "Type the phrase to confirm. Nothing was saved."
+  },
+  "confirm_mismatch_request": {
+    "text": "Type the phrase to confirm. The request keeps waiting.",
+    "message": "Type the phrase to confirm. The request keeps waiting."
+  },
+  "csrf_rejected": {
+    "text": "Origin does not match the operator console.",
+    "message": "Origin does not match the operator console."
+  },
+  "email_from_policy_invalid": {
+    "text": "email.from_policy must be verified or any, got {\"value\"}",
+    "params": {
+      "value": "everyone"
+    },
+    "message": "email.from_policy must be verified or any, got \"everyone\""
+  },
+  "feature_incomplete_refused": {
+    "text": "A feature cannot be turned on before its settings are complete. Nothing was saved.",
+    "message": "A feature cannot be turned on before its settings are complete. Nothing was saved."
+  },
+  "feature_needs_settings": {
+    "text": "{label} cannot be turned on yet: set {missing} first",
+    "params": {
+      "feature": "gmail",
+      "label": "Gmail",
+      "missing": "google.client_id, google.client_secret"
+    },
+    "message": "Gmail cannot be turned on yet: set google.client_id, google.client_secret first"
+  },
+  "feature_switch_invalid": {
+    "text": "{key} must be true or false",
+    "params": {
+      "key": "features.gmail"
+    },
+    "message": "features.gmail must be true or false"
+  },
+  "field_choose_period": {
+    "text": "Choose a period.",
+    "message": "Choose a period."
+  },
+  "field_choose_plan": {
+    "text": "Choose a plan.",
+    "message": "Choose a plan."
+  },
+  "field_enter_it": {
+    "text": "Enter it.",
+    "message": "Enter it."
+  },
+  "field_no_key_ring": {
+    "text": "No key ring.",
+    "message": "No key ring."
+  },
+  "field_not_a_secret": {
+    "text": "Not a secret.",
+    "message": "Not a secret."
+  },
+  "field_product_id": {
+    "text": "Enter the product's id in Polar.",
+    "message": "Enter the product's id in Polar."
+  },
+  "field_reenter": {
+    "text": "Enter it again: it goes to the new {key}.",
+    "params": {
+      "key": "smtp.host"
+    },
+    "message": "Enter it again: it goes to the new smtp.host."
+  },
+  "field_secret_goes_in_secrets": {
+    "text": "A secret goes in secrets.",
+    "message": "A secret goes in secrets."
+  },
+  "field_totp_cli_only": {
+    "text": "an authenticator can be turned off only with collie config, and never on the hosted cloud",
+    "message": "an authenticator can be turned off only with collie config, and never on the hosted cloud"
+  },
+  "field_type_phrase": {
+    "text": "Type {phrase} to confirm.",
+    "params": {
+      "phrase": "billing on"
+    },
+    "message": "Type billing on to confirm."
+  },
+  "field_type_the_phrase": {
+    "text": "Type the phrase to confirm.",
+    "message": "Type the phrase to confirm."
+  },
+  "field_unknown_setting": {
+    "text": "Unknown setting.",
+    "message": "Unknown setting."
+  },
+  "github_private_key_invalid": {
+    "text": "github.private_key: {detail}",
+    "params": {
+      "detail": "no PEM block"
+    },
+    "message": "github.private_key: no PEM block"
+  },
+  "guard_ai_server_off": {
+    "text": "{workspaces} {workspaces?workspace|workspaces} {workspaces?runs|run} an AI feature on the server's provider: those features stop, and say why, until it is on again. Workspaces with their own provider are not affected.",
+    "params": {
+      "workspaces": 4
+    },
+    "message": "4 workspaces run an AI feature on the server's provider: those features stop, and say why, until it is on again. Workspaces with their own provider are not affected."
+  },
+  "guard_ai_server_uncountable": {
+    "text": "The workspaces using the server's AI provider could not be counted; try again.",
+    "message": "The workspaces using the server's AI provider could not be counted; try again."
+  },
+  "guard_autofix_off": {
+    "text": "Autofix disappears from every workspace and no fix is sent; connected repositories and fixes stay, and GitHub's webhook is still received.",
+    "message": "Autofix disappears from every workspace and no fix is sent; connected repositories and fixes stay, and GitHub's webhook is still received."
+  },
+  "guard_billing_off": {
+    "text": "Billing turns off: every workspace gets full access with no trial and no lock, and retention deletes nothing.",
+    "message": "Billing turns off: every workspace gets full access with no trial and no lock, and retention deletes nothing."
+  },
+  "guard_billing_on": {
+    "text": "Billing turns this server into the hosted cloud: {workspaces} {workspaces?workspace|workspaces} whose trial ended without a plan lock at once, and every new workspace starts a trial.",
+    "params": {
+      "workspaces": 3
+    },
+    "message": "Billing turns this server into the hosted cloud: 3 workspaces whose trial ended without a plan lock at once, and every new workspace starts a trial."
+  },
+  "guard_billing_on_again": {
+    "text": "Billing turns on again: {workspaces} {workspaces?workspace|workspaces} whose trial ended without a plan lock at once, and every new workspace starts a trial.",
+    "params": {
+      "workspaces": 1
+    },
+    "message": "Billing turns on again: 1 workspace whose trial ended without a plan lock at once, and every new workspace starts a trial."
+  },
+  "guard_billing_switch_off": {
+    "text": "Billing turns off: no workspace is billed or locked, trials are not enforced, and retention deletes nothing. Subscriptions stay as they are at Polar and their webhooks are still received; switching billing on again locks the workspaces whose trial ended without a plan.",
+    "message": "Billing turns off: no workspace is billed or locked, trials are not enforced, and retention deletes nothing. Subscriptions stay as they are at Polar and their webhooks are still received; switching billing on again locks the workspaces whose trial ended without a plan."
+  },
+  "guard_billing_uncountable": {
+    "text": "The workspaces billing would lock could not be counted; try again.",
+    "message": "The workspaces billing would lock could not be counted; try again."
+  },
+  "guard_cloud_auth": {
+    "text": "Who can sign in to the hosted cloud changes. Operators do not sign in through it, so the console counts the cloud sign-ins that work and fail meanwhile. It is tried for {trial} {seconds?seconds|minutes} and reverts by itself unless you confirm it.",
+    "params": {
+      "seconds": 1,
+      "trial": 30
+    },
+    "message": "Who can sign in to the hosted cloud changes. Operators do not sign in through it, so the console counts the cloud sign-ins that work and fail meanwhile. It is tried for 30 seconds and reverts by itself unless you confirm it."
+  },
+  "guard_cloud_sign_in_off": {
+    "text": "Every person who signs in to the app with cloud sign-in is refused, and nobody can sign up, until it is on again; sessions already open keep working. The operator console still opens with a one-time link (collie operator pair) and with its own cloud sign-in. It is tried for {trial} {seconds?seconds|minutes} and reverts by itself unless you confirm it.",
+    "params": {
+      "seconds": 0,
+      "trial": 10
+    },
+    "message": "Every person who signs in to the app with cloud sign-in is refused, and nobody can sign up, until it is on again; sessions already open keep working. The operator console still opens with a one-time link (collie operator pair) and with its own cloud sign-in. It is tried for 10 minutes and reverts by itself unless you confirm it."
+  },
+  "guard_from_policy_any": {
+    "text": "Every workspace may send as any address through your relay. On a relay you share with others, one customer can then pose as another.",
+    "message": "Every workspace may send as any address through your relay. On a relay you share with others, one customer can then pose as another."
+  },
+  "guard_help_center_back": {
+    "text": "Help centers move back to {origin}/help/\u003cslug\u003e. It is tried for {trial} {seconds?seconds|minutes} and reverts by itself unless you confirm it.",
+    "params": {
+      "origin": "https://app.example.com",
+      "seconds": 0,
+      "trial": 10
+    },
+    "message": "Help centers move back to https://app.example.com/help/\u003cslug\u003e. It is tried for 10 minutes and reverts by itself unless you confirm it."
+  },
+  "guard_help_center_moves": {
+    "text": "Every public help center moves to \u003cslug\u003e.{domain}; old links stop working unless redirected, and your reverse proxy needs certificates for them. It is tried for {trial} {seconds?seconds|minutes} and reverts by itself unless you confirm it.",
+    "params": {
+      "domain": "help.example.com",
+      "seconds": 0,
+      "trial": 10
+    },
+    "message": "Every public help center moves to \u003cslug\u003e.help.example.com; old links stop working unless redirected, and your reverse proxy needs certificates for them. It is tried for 10 minutes and reverts by itself unless you confirm it."
+  },
+  "guard_help_center_no_wildcard": {
+    "text": "No DNS record answers for {probe}: add a wildcard record *.{domain} that points at this server first.",
+    "params": {
+      "domain": "help.example.com",
+      "probe": "dns-check-abc.help.example.com"
+    },
+    "message": "No DNS record answers for dns-check-abc.help.example.com: add a wildcard record *.help.example.com that points at this server first."
+  },
+  "guard_hosted_mail_off": {
+    "text": "New workspaces get no hosted support address and the address is no longer shown; mail to existing hosted addresses still arrives.",
+    "message": "New workspaces get no hosted support address and the address is no longer shown; mail to existing hosted addresses still arrives."
+  },
+  "guard_kb_video": {
+    "text": "Videos up to this size upload in parts of 8 MiB: your reverse proxy must accept bodies that large.",
+    "message": "Videos up to this size upload in parts of 8 MiB: your reverse proxy must accept bodies that large."
+  },
+  "guard_mail_domain_moves": {
+    "text": "Replies to mail sent before go to addresses at {before}: once it changes, they no longer thread into their conversations.",
+    "params": {
+      "before": "mail.example.com"
+    },
+    "message": "Replies to mail sent before go to addresses at mail.example.com: once it changes, they no longer thread into their conversations."
+  },
+  "guard_mailbox_off": {
+    "text": "No workspace can connect {label}. {channels} email {channels?channel|channels} in {workspaces} {workspaces?workspace|workspaces} {channels?sends|send} through it: their replies wait in the outbox, with the reason on the conversation, and are sent once {label} is on again. Nothing is disconnected.",
+    "params": {
+      "channels": 1,
+      "label": "Gmail",
+      "workspaces": 2
+    },
+    "message": "No workspace can connect Gmail. 1 email channel in 2 workspaces sends through it: their replies wait in the outbox, with the reason on the conversation, and are sent once Gmail is on again. Nothing is disconnected."
+  },
+  "guard_mailbox_uncountable": {
+    "text": "The channels sending through {label} could not be counted; try again.",
+    "params": {
+      "label": "Gmail"
+    },
+    "message": "The channels sending through Gmail could not be counted; try again."
+  },
+  "guard_no_workspace": {
+    "text": "No workspace has the address {slug}.",
+    "params": {
+      "slug": "acme"
+    },
+    "message": "No workspace has the address acme."
+  },
+  "guard_private_addresses": {
+    "text": "A workspace admin can then point the AI provider at an address inside your network, and the server will call it (server-side request forgery).",
+    "message": "A workspace admin can then point the AI provider at an address inside your network, and the server will call it (server-side request forgery)."
+  },
+  "guard_problem_reports": {
+    "text": "Problem reports from every workspace become conversations in {slug}.",
+    "params": {
+      "slug": "acme"
+    },
+    "message": "Problem reports from every workspace become conversations in acme."
+  },
+  "guard_proxies_none": {
+    "text": "No proxy is trusted: every visitor's address is the connection's own. It is tried for {trial} {seconds?seconds|minutes}; confirm it from a page that still works, or it reverts by itself.",
+    "params": {
+      "seconds": 0,
+      "trial": 10
+    },
+    "message": "No proxy is trusted: every visitor's address is the connection's own. It is tried for 10 minutes; confirm it from a page that still works, or it reverts by itself."
+  },
+  "guard_proxies_read": {
+    "text": "Under this list your own address reads as {address}. It is tried for {trial} {seconds?seconds|minutes}; confirm it from a page that still works, or it reverts by itself.",
+    "params": {
+      "address": "203.0.113.7",
+      "seconds": 0,
+      "trial": 10
+    },
+    "message": "Under this list your own address reads as 203.0.113.7. It is tried for 10 minutes; confirm it from a page that still works, or it reverts by itself."
+  },
+  "guard_refused_nothing_saved": {
+    "text": "{refused} Nothing was saved.",
+    "params": {
+      "refused": "No workspace has the address acme."
+    },
+    "message": "No workspace has the address acme. Nothing was saved."
+  },
+  "guard_retention_billing_off": {
+    "text": "Billing is off, so no workspace is locked and nothing is deleted while it stays off.",
+    "message": "Billing is off, so no workspace is locked and nothing is deleted while it stays off."
+  },
+  "guard_retention_on": {
+    "text": "Deletion starts: {workspaces} {workspaces?workspace|workspaces} locked for 12 months {workspaces?is|are} due now, deleted at most {per_day} a day after a last check with Polar. A deleted workspace cannot be brought back.",
+    "params": {
+      "per_day": "5",
+      "workspaces": 1
+    },
+    "message": "Deletion starts: 1 workspace locked for 12 months is due now, deleted at most 5 a day after a last check with Polar. A deleted workspace cannot be brought back."
+  },
+  "guard_retention_uncountable": {
+    "text": "The workspaces due for deletion could not be counted; try again.",
+    "message": "The workspaces due for deletion could not be counted; try again."
+  },
+  "guard_signup_off": {
+    "text": "Nobody can start a new trial; existing workspaces are not affected.",
+    "message": "Nobody can start a new trial; existing workspaces are not affected."
+  },
+  "guard_workspace_unlooked": {
+    "text": "The workspace could not be looked up; try again.",
+    "message": "The workspace could not be looked up; try again."
+  },
+  "help_center_domain_invalid": {
+    "text": "help_center.domain must be a domain name such as example.com, got {\"domain\"}",
+    "params": {
+      "domain": "localhost"
+    },
+    "message": "help_center.domain must be a domain name such as example.com, got \"localhost\""
+  },
+  "history_unreadable": {
+    "text": "The history could not be read.",
+    "message": "The history could not be read."
+  },
+  "hosted_mail_domain_invalid": {
+    "text": "hosted_mail.domain must be a domain name, got {\"value\"}",
+    "params": {
+      "value": "not a domain"
+    },
+    "message": "hosted_mail.domain must be a domain name, got \"not a domain\""
+  },
+  "hosted_mail_needs_inbound_secret": {
+    "text": "hosted_mail.domain needs mail_from.inbound_secret for its forwarder",
+    "message": "hosted_mail.domain needs mail_from.inbound_secret for its forwarder"
+  },
+  "idempotency_key_reused": {
+    "text": "This Idempotency-Key was already used for another request. Send a new key for a new one.",
+    "message": "This Idempotency-Key was already used for another request. Send a new key for a new one."
+  },
+  "internal_signup_email_invalid": {
+    "text": "internal_signup.emails entry {\"entry\"} is not @domain or an email address",
+    "params": {
+      "entry": "colliedesk.com"
+    },
+    "message": "internal_signup.emails entry \"colliedesk.com\" is not @domain or an email address"
+  },
+  "invalid_limit": {
+    "text": "limit is 1 to 200.",
+    "message": "limit is 1 to 200."
+  },
+  "invalid_since": {
+    "text": "since is an RFC 3339 time.",
+    "message": "since is an RFC 3339 time."
+  },
+  "kb_video_max_invalid": {
+    "text": "kb_video.max_bytes must be a whole number of bytes above zero",
+    "message": "kb_video.max_bytes must be a whole number of bytes above zero"
+  },
+  "link_expired": {
+    "text": "This link expired. Print a new one with collie operator pair.",
+    "message": "This link expired. Print a new one with collie operator pair."
+  },
+  "link_invalid": {
+    "text": "This link is not valid. Print a new one with collie operator pair.",
+    "message": "This link is not valid. Print a new one with collie operator pair."
+  },
+  "link_used": {
+    "text": "This link was used already. Print a new one with collie operator pair.",
+    "message": "This link was used already. Print a new one with collie operator pair."
+  },
+  "mail_from_domain_invalid": {
+    "text": "mail_from.domain must be a domain name, got {\"value\"}",
+    "params": {
+      "value": "not a domain"
+    },
+    "message": "mail_from.domain must be a domain name, got \"not a domain\""
+  },
+  "mail_from_domain_slug": {
+    "text": "mail_from.domain {\"value\"} is below hosted_mail.domain and not a reserved name, so a workspace could own it as its slug; use a reserved label such as mail",
+    "params": {
+      "value": "acme.mail.example.com"
+    },
+    "message": "mail_from.domain \"acme.mail.example.com\" is below hosted_mail.domain and not a reserved name, so a workspace could own it as its slug; use a reserved label such as mail"
+  },
+  "mail_from_inbound_secret_needs": {
+    "text": "mail_from.inbound_secret needs mail_from.domain or hosted_mail.domain and at least {min} characters",
+    "params": {
+      "min": 32
+    },
+    "message": "mail_from.inbound_secret needs mail_from.domain or hosted_mail.domain and at least 32 characters"
+  },
+  "mail_image_cache_invalid": {
+    "text": "mail_image_cache.max_bytes must be a whole number of bytes above zero",
+    "message": "mail_image_cache.max_bytes must be a whole number of bytes above zero"
+  },
+  "microsoft_tenant_invalid": {
+    "text": "microsoft.tenant: {\"value\"} is not common, organizations, consumers, a tenant id or a domain",
+    "params": {
+      "value": "my tenant"
+    },
+    "message": "microsoft.tenant: \"my tenant\" is not common, organizations, consumers, a tenant id or a domain"
+  },
+  "network_entry_invalid": {
+    "text": "{name} entry {\"entry\"} is not a CIDR or an IP address",
+    "params": {
+      "entry": "10.0.0.0/33",
+      "name": "trusted_proxies"
+    },
+    "message": "trusted_proxies entry \"10.0.0.0/33\" is not a CIDR or an IP address"
+  },
+  "no_such_operator": {
+    "text": "No such operator.",
+    "message": "No such operator."
+  },
+  "no_such_product": {
+    "text": "No such product.",
+    "message": "No such product."
+  },
+  "no_such_request": {
+    "text": "No such request.",
+    "message": "No such request."
+  },
+  "no_such_session": {
+    "text": "No such session.",
+    "message": "No such session."
+  },
+  "no_such_version": {
+    "text": "No such version.",
+    "message": "No such version."
+  },
+  "no_trial": {
+    "text": "That version is not a trial that still runs.",
+    "message": "That version is not a trial that still runs."
+  },
+  "not_a_secret_setting": {
+    "text": "Not a secret setting. Nothing was saved.",
+    "message": "Not a secret setting. Nothing was saved."
+  },
+  "nothing_added": {
+    "text": "Nothing was added.",
+    "message": "Nothing was added."
+  },
+  "nothing_changes": {
+    "text": "Every setting already has that value.",
+    "message": "Every setting already has that value."
+  },
+  "operator_locked": {
+    "text": "Sign-in is locked for 15 minutes after ten wrong codes. Nothing was saved.",
+    "message": "Sign-in is locked for 15 minutes after ten wrong codes. Nothing was saved."
+  },
+  "operator_session_required": {
+    "text": "An operator session is required.",
+    "message": "An operator session is required."
+  },
+  "operator_unrevoked": {
+    "text": "The operator could not be revoked.",
+    "message": "The operator could not be revoked."
+  },
+  "operators_unreadable": {
+    "text": "The operators could not be read.",
+    "message": "The operators could not be read."
+  },
+  "person_only": {
+    "text": "Only a person decides an operator request; an approval by a token would mean nothing.",
+    "message": "Only a person decides an operator request; an approval by a token would mean nothing."
+  },
+  "polar_api_url_invalid": {
+    "text": "polar.api_url must be an http(s) URL such as {example}",
+    "params": {
+      "example": "https://api.polar.sh"
+    },
+    "message": "polar.api_url must be an http(s) URL such as https://api.polar.sh"
+  },
+  "polar_partly_configured": {
+    "text": "billing is partly configured; also set {missing} (or remove the Polar settings to turn billing off)",
+    "params": {
+      "missing": "polar.webhook_secret, the team monthly product (Billing › Products)"
+    },
+    "message": "billing is partly configured; also set polar.webhook_secret, the team monthly product (Billing › Products) (or remove the Polar settings to turn billing off)"
+  },
+  "product_exists": {
+    "text": "That product is listed already; a product is never changed, only taken off sale.",
+    "message": "That product is listed already; a product is never changed, only taken off sale."
+  },
+  "product_unchanged": {
+    "text": "The product could not be changed.",
+    "message": "The product could not be changed."
+  },
+  "products_unreadable": {
+    "text": "The products could not be read.",
+    "message": "The products could not be read."
+  },
+  "reauth_code_invalid": {
+    "text": "That code didn't match. Nothing was saved.",
+    "message": "That code didn't match. Nothing was saved."
+  },
+  "reauth_needs_new_link": {
+    "text": "Confirming needs a fresh sign-in: run collie operator pair and open the link. Nothing was saved.",
+    "message": "Confirming needs a fresh sign-in: run collie operator pair and open the link. Nothing was saved."
+  },
+  "reauth_required": {
+    "text": "Enter your authenticator code to confirm. Nothing was saved.",
+    "message": "Enter your authenticator code to confirm. Nothing was saved."
+  },
+  "reenter_secret": {
+    "text": "Enter the secret again for the new address. Nothing was saved.",
+    "message": "Enter the secret again for the new address. Nothing was saved."
+  },
+  "request_decided": {
+    "text": "The request was decided, cancelled or expired.",
+    "message": "The request was decided, cancelled or expired."
+  },
+  "request_in_progress": {
+    "text": "The first request with this Idempotency-Key is still running.",
+    "message": "The first request with this Idempotency-Key is still running."
+  },
+  "request_uncancelled": {
+    "text": "The request could not be cancelled.",
+    "message": "The request could not be cancelled."
+  },
+  "request_unreadable": {
+    "text": "The request could not be read.",
+    "message": "The request could not be read."
+  },
+  "request_unstored": {
+    "text": "The request could not be stored.",
+    "message": "The request could not be stored."
+  },
+  "requests_unreadable": {
+    "text": "The requests could not be read.",
+    "message": "The requests could not be read."
+  },
+  "resend_webhook_needs_mail_from": {
+    "text": "resend.webhook_secret needs mail_from.domain",
+    "message": "resend.webhook_secret needs mail_from.domain"
+  },
+  "restore_not_changeable": {
+    "text": "This version changes a setting the console does not change yet; restore it with collie config restore. Nothing was saved.",
+    "message": "This version changes a setting the console does not change yet; restore it with collie config restore. Nothing was saved."
+  },
+  "retention_delete_invalid": {
+    "text": "retention.delete must be on or off",
+    "message": "retention.delete must be on or off"
+  },
+  "retention_max_invalid": {
+    "text": "retention.max_deletions_per_day must be a whole number from 0 to {max}",
+    "params": {
+      "max": 20
+    },
+    "message": "retention.max_deletions_per_day must be a whole number from 0 to 20"
+  },
+  "retention_max_range": {
+    "text": "retention.max_deletions_per_day must be between 1 and {max}",
+    "params": {
+      "max": 20
+    },
+    "message": "retention.max_deletions_per_day must be between 1 and 20"
+  },
+  "secret_in_request": {
+    "text": "A token cannot send a secret. Ask for it with null in secrets; the person who approves types it.",
+    "message": "A token cannot send a secret. Ask for it with null in secrets; the person who approves types it."
+  },
+  "secret_in_request_example": {
+    "text": "A token cannot send a secret. Ask for it with null (\"secrets\": {\"smtp.password\": null}); the person who approves types it.",
+    "message": "A token cannot send a secret. Ask for it with null (\"secrets\": {\"smtp.password\": null}); the person who approves types it."
+  },
+  "secret_in_set": {
+    "text": "Secrets go in secrets, never in set. Nothing was saved.",
+    "message": "Secrets go in secrets, never in set. Nothing was saved."
+  },
+  "secret_keys_missing": {
+    "text": "Secrets can be saved only with a key ring ({env}). Nothing was saved.",
+    "params": {
+      "env": "MAILBOX_TOKEN_KEYS"
+    },
+    "message": "Secrets can be saved only with a key ring (MAILBOX_TOKEN_KEYS). Nothing was saved."
+  },
+  "secret_missing": {
+    "text": "Enter the secret. Nothing was saved.",
+    "message": "Enter the secret. Nothing was saved."
+  },
+  "secret_not_asked": {
+    "text": "The request does not ask for that secret.",
+    "message": "The request does not ask for that secret."
+  },
+  "secret_not_valid": {
+    "text": "{keys}: not valid",
+    "params": {
+      "keys": "ai.server.api_key, smtp.password"
+    },
+    "message": "ai.server.api_key, smtp.password: not valid"
+  },
+  "send_base_version": {
+    "text": "Send the version you read (base_version).",
+    "message": "Send the version you read (base_version)."
+  },
+  "send_link_token": {
+    "text": "Send the token of the link.",
+    "message": "Send the token of the link."
+  },
+  "send_on_sale": {
+    "text": "Send on_sale.",
+    "message": "Send on_sale."
+  },
+  "send_operator_email": {
+    "text": "Send the operator's email address.",
+    "message": "Send the operator's email address."
+  },
+  "send_trial_version": {
+    "text": "Send the version of the trial.",
+    "message": "Send the version of the trial."
+  },
+  "session_unended": {
+    "text": "The session could not be ended.",
+    "message": "The session could not be ended."
+  },
+  "sessions_unreadable": {
+    "text": "The sessions could not be read.",
+    "message": "The sessions could not be read."
+  },
+  "setting_not_changeable": {
+    "text": "This setting is not changed in the console yet. Nothing was saved.",
+    "message": "This setting is not changed in the console yet. Nothing was saved."
+  },
+  "sign_in_failed": {
+    "text": "Sign-in failed. Try again.",
+    "message": "Sign-in failed. Try again."
+  },
+  "sign_in_refused": {
+    "text": "This account cannot sign in to the operator console.",
+    "message": "This account cannot sign in to the operator console."
+  },
+  "smtp_port_implicit_tls": {
+    "text": "smtp.port 465 (implicit TLS) is not supported; use port 587 with STARTTLS",
+    "message": "smtp.port 465 (implicit TLS) is not supported; use port 587 with STARTTLS"
+  },
+  "smtp_port_invalid": {
+    "text": "smtp.port must be a TCP port, got {\"value\"}",
+    "params": {
+      "value": "smtp"
+    },
+    "message": "smtp.port must be a TCP port, got \"smtp\""
+  },
+  "smtp_port_range": {
+    "text": "smtp.port must be a port number between 1 and 65535",
+    "message": "smtp.port must be a port number between 1 and 65535"
+  },
+  "smtp_starttls_invalid": {
+    "text": "smtp.starttls must be true or false, got {\"value\"}",
+    "params": {
+      "value": "maybe"
+    },
+    "message": "smtp.starttls must be true or false, got \"maybe\""
+  },
+  "status_unreadable": {
+    "text": "The status could not be read.",
+    "message": "The status could not be read."
+  },
+  "test_ai_models_failed": {
+    "text": "The models could not be listed: {detail}",
+    "params": {
+      "detail": "connection refused"
+    },
+    "message": "The models could not be listed: connection refused"
+  },
+  "test_ai_models_needs_base_url": {
+    "text": "Enter the base URL first.",
+    "message": "Enter the base URL first."
+  },
+  "test_ai_models_needs_key": {
+    "text": "Enter the API key first.",
+    "message": "Enter the API key first."
+  },
+  "test_ai_models_needs_provider": {
+    "text": "Pick a provider first.",
+    "message": "Pick a provider first."
+  },
+  "test_ai_models_ok": {
+    "text": "The provider offers {count} {count?model|models}. Nothing was saved.",
+    "params": {
+      "count": 2
+    },
+    "message": "The provider offers 2 models. Nothing was saved."
+  },
+  "test_ai_models_refused": {
+    "text": "The provider refused to list its models ({check_code}). Check the key and the address, or type the model names.",
+    "params": {
+      "check_code": "auth"
+    },
+    "message": "The provider refused to list its models (auth). Check the key and the address, or type the model names."
+  },
+  "test_ai_needs_settings": {
+    "text": "Set the provider, its key or address and the models first.",
+    "message": "Set the provider, its key or address and the models first."
+  },
+  "test_ai_ok": {
+    "text": "The provider answered with {model}. Nothing was saved.",
+    "params": {
+      "model": "claude-haiku-5-5"
+    },
+    "message": "The provider answered with claude-haiku-5-5. Nothing was saved."
+  },
+  "test_ai_refused": {
+    "text": "The provider refused {model}: {detail}",
+    "params": {
+      "detail": "401 invalid x-api-key [secret]",
+      "model": "claude-haiku-5-5"
+    },
+    "message": "The provider refused claude-haiku-5-5: 401 invalid x-api-key [secret]"
+  },
+  "test_jwks_failed": {
+    "text": "The JWKS address did not answer with keys: {detail}",
+    "params": {
+      "detail": "GET https://auth.example.com/.well-known/jwks.json: 404"
+    },
+    "message": "The JWKS address did not answer with keys: GET https://auth.example.com/.well-known/jwks.json: 404"
+  },
+  "test_jwks_needs_settings": {
+    "text": "Set the issuer and the JWKS address first.",
+    "message": "Set the issuer and the JWKS address first."
+  },
+  "test_jwks_no_rsa": {
+    "text": "The JWKS address answered with no RSA key: no cloud sign-in would verify.",
+    "message": "The JWKS address answered with no RSA key: no cloud sign-in would verify."
+  },
+  "test_jwks_ok": {
+    "text": "The JWKS address answered with {count} keys. Nothing was saved.",
+    "params": {
+      "count": 2
+    },
+    "message": "The JWKS address answered with 2 keys. Nothing was saved."
+  },
+  "test_needs_a_person": {
+    "text": "A live test sends the server's secrets; only a person runs it in the console. Without test, the change is checked.",
+    "message": "A live test sends the server's secrets; only a person runs it in the console. Without test, the change is checked."
+  },
+  "test_polar_archived": {
+    "text": "Product {product} is archived at Polar: nobody can buy it.",
+    "params": {
+      "product": "prod_123"
+    },
+    "message": "Product prod_123 is archived at Polar: nobody can buy it."
+  },
+  "test_polar_needs_settings": {
+    "text": "Set the Polar token, its webhook secret and the Team and Founding products first.",
+    "message": "Set the Polar token, its webhook secret and the Team and Founding products first."
+  },
+  "test_polar_ok": {
+    "text": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved.",
+    "message": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved."
+  },
+  "test_polar_refused": {
+    "text": "Polar refused: {detail}",
+    "params": {
+      "detail": "401 Unauthorized"
+    },
+    "message": "Polar refused: 401 Unauthorized"
+  },
+  "test_reenter_secret": {
+    "text": "Enter {secret} again: the test goes to the new {key}.",
+    "params": {
+      "key": "smtp.host",
+      "secret": "smtp.password"
+    },
+    "message": "Enter smtp.password again: the test goes to the new smtp.host."
+  },
+  "test_smtp_needs_host": {
+    "text": "Set the relay host first.",
+    "message": "Set the relay host first."
+  },
+  "test_smtp_ok": {
+    "text": "Sent a test email to {to}. Nothing was saved.",
+    "params": {
+      "to": "ops@example.com"
+    },
+    "message": "Sent a test email to ops@example.com. Nothing was saved."
+  },
+  "test_smtp_refused": {
+    "text": "The relay refused the test email: {detail}",
+    "params": {
+      "detail": "SMTP AUTH: 535 authentication failed"
+    },
+    "message": "The relay refused the test email: SMTP AUTH: 535 authentication failed"
+  },
+  "test_smtp_unwritable": {
+    "text": "The test email could not be written.",
+    "message": "The test email could not be written."
+  },
+  "token_needs_name": {
+    "text": "A token needs a name.",
+    "message": "A token needs a name."
+  },
+  "too_many_tries": {
+    "text": "Too many tries. Wait a minute.",
+    "message": "Too many tries. Wait a minute."
+  },
+  "trial_pending": {
+    "text": "A trial change runs: confirm or revert it before saving another. Nothing was saved.",
+    "message": "A trial change runs: confirm or revert it before saving another. Nothing was saved."
+  },
+  "trial_pending_first": {
+    "text": "A trial change runs: confirm or revert it first. Nothing was saved.",
+    "message": "A trial change runs: confirm or revert it first. Nothing was saved."
+  },
+  "unknown_setting": {
+    "text": "Unknown setting. Nothing was saved.",
+    "message": "Unknown setting. Nothing was saved."
+  },
+  "version_runs_already": {
+    "text": "That version is what runs already.",
+    "message": "That version is what runs already."
+  },
+  "version_unreadable": {
+    "text": "The version could not be read.",
+    "message": "The version could not be read."
+  }
+}

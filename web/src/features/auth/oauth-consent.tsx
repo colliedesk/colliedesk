@@ -5,6 +5,7 @@ import { leaveTo } from '../../lib/leave-to';
 import { LogoMark } from '../../ui/logo';
 import { messages } from '../../messages';
 import { oauthConsentMessages as text } from './oauth-consent-messages';
+import './auth.css';
 
 // The parameters an AI app sends to /oauth/authorize (RFC 6749 §4.1.1, PKCE, RFC 8707).
 export interface OAuthRequest {
@@ -25,6 +26,10 @@ export function oauthRequestFrom(search: URLSearchParams): OAuthRequest {
     code_challenge_method: get('code_challenge_method'), state: get('state'), resource: get('resource'), scope: get('scope'),
   };
 }
+
+// loopbackHosts are the redirect hosts on this computer (the server's host field drops IPv6 brackets):
+// any program here can listen on such a port and claim to be the app, so the page warns about them.
+const loopbackHosts = ['localhost', '127.0.0.1', '::1'];
 
 // cancelAddress is the app's redirect (one the server confirmed is the app's own) with access_denied.
 export function cancelAddress(app: OAuthClient, state: string, issuer: string): string {
@@ -77,6 +82,7 @@ export function OAuthConsent({ request, here }: OAuthConsentProps) {
       {app.data.client_host && <p className="muted-copy">{text.publishedBy(app.data.client_host)}</p>}
       {!app.data.verified && <p className="muted-copy">{text.unverifiedName}</p>}
       <p className="muted-copy">{text.returnsTo(app.data.host)}</p>
+      {loopbackHosts.includes(app.data.host) && <p className="notice">{text.returnsToThisComputer}</p>}
       {locked && <p role="alert" className="error-copy">{text.locked}</p>}
       {allow.error && <p role="alert" className="error-copy">{allow.error instanceof InvalidRequestError ? allow.error.message : text.allowFailed}</p>}
       <div className="consent-actions">

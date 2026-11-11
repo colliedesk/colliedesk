@@ -105,18 +105,59 @@ var (
 	chatCitation = regexp.MustCompile(`\[#(\d{1,18})\]`)
 )
 
-// chatFilter checks sentences against the text of the articles the AI read.
+// chatFilter checks sentences against the text of the articles the AI read. One stream uses it, one
+// sentence after another, never from two goroutines.
 type chatFilter struct {
-	text   string
-	digits []string
+	text string
+	// articles are read for their phone numbers (digits) at the first sentence that holds one: most
+	// answers hold none, and a chat turn builds its filter before the provider is called.
+	articles string
+	digits   []string
+	scanned  bool
 }
 
 func newChatFilter(articles string) *chatFilter {
-	f := &chatFilter{text: normalizeLinks(strings.ToLower(articles))}
-	for _, match := range chatPhone.FindAllString(articles, -1) {
-		f.digits = append(f.digits, onlyDigits(match))
+	return &chatFilter{text: normalizeLinks(strings.ToLower(articles)), articles: articles}
+}
+
+// knownDigits are the digits of the articles' phone numbers.
+func (f *chatFilter) knownDigits() []string {
+	if !f.scanned {
+		f.digits, f.articles, f.scanned = phoneDigits(f.articles), "", true
 	}
-	return f
+	return f.digits
+}
+
+// phoneDigits are the digits of each phone number (chatPhone) in text. A number is made only of
+// digits, ASCII spaces and +().-, and chatPhone has no anchor or word boundary, so its matches are
+// the same when it reads only the runs of those characters that hold two digits and six characters
+// or more: the pattern over 180 KB of excerpts took 12 ms (docs/internals/performance.md).
+func phoneDigits(text string) []string {
+	var digits []string
+	for start := 0; start < len(text); {
+		if !phoneByte(text[start]) {
+			start++
+			continue
+		}
+		end, count := start, 0
+		for ; end < len(text) && phoneByte(text[end]); end++ {
+			if text[end] >= '0' && text[end] <= '9' {
+				count++
+			}
+		}
+		if count >= 2 && end-start >= 6 {
+			for _, match := range chatPhone.FindAllString(text[start:end], -1) {
+				digits = append(digits, onlyDigits(match))
+			}
+		}
+		start = end
+	}
+	return digits
+}
+
+// phoneByte is a byte chatPhone can match: a digit, \s (ASCII spaces) or +().-.
+func phoneByte(b byte) bool {
+	return b >= '0' && b <= '9' || strings.IndexByte(" \t\n\f\r+().-", b) >= 0
 }
 
 func onlyDigits(text string) string {
@@ -150,7 +191,7 @@ func (f *chatFilter) check(sentence string) (string, bool, []string) {
 		if len(digits) < 6 {
 			continue
 		}
-		if !slices.ContainsFunc(f.digits, func(known string) bool { return strings.Contains(known, digits) }) {
+		if !slices.ContainsFunc(f.knownDigits(), func(known string) bool { return strings.Contains(known, digits) }) {
 			return hiddenSentence(sentence), true, nil
 		}
 	}

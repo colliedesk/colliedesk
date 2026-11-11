@@ -687,7 +687,11 @@ paths:
       description: >
         Creates an invite and returns its one-time URL once, to a person or an agent token alike. Needs
         `team:invite`, and every permission of the roles it gives (403 `role_exceeds_yours`). The invited
-        person gets these roles on joining, added to any they hold. A `role_ceiling` (the old field) is
+        person gets these roles on joining, added to any they hold. Inviting someone already in the
+        workspace signs in as them, so it needs a person session holding `team:manage_roles` and every
+        permission that member holds (403 `role_exceeds_yours`); an agent token gets 409 `already_a_member`.
+        The link signs in only the member it was made for while its creator may still change their roles:
+        a link made before its address joined no longer signs in. A `role_ceiling` (the old field) is
         refused with 400.
       responses:
         '201':
@@ -709,8 +713,9 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409':
           description: >
-            The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent
-            in the team list instead of inviting them again.
+            The address belongs to a deactivated agent (error code `agent_deactivated`): reactivate the agent
+            in the team list instead of inviting them again. Or an agent token invited a member of the
+            workspace (error code `already_a_member`): change their roles with `PUT /api/v1/agents/{id}/roles`.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/auth/invites/{id}:
@@ -964,7 +969,9 @@ paths:
         (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address
         through the relay of the change; `polar` asks Polar about the Team and Founding products with the
         change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI
-        provider of the change (its first model, a few output tokens). A help center domain without a
+        provider of the change (its first model, a few output tokens); `ai_models` lists the models the
+        change's server AI provider offers its key (`test.models`), before any model is picked, so it runs on a
+        change that is not complete yet. A help center domain without a
         wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored
         secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an
         endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored).
@@ -980,7 +987,7 @@ paths:
                 set: {type: object, additionalProperties: {type: string}}
                 unset: {type: array, items: {type: string}}
                 secrets: {type: object, additionalProperties: {type: [string, 'null']}}
-                test: {type: string, enum: [smtp, polar, jwks, ai]}
+                test: {type: string, enum: [smtp, polar, jwks, ai, ai_models]}
       responses:
         '200':
           description: The result of the checks
@@ -2081,6 +2088,50 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: itemId, in: path, required: true, schema: {type: string, format: uuid}, description: 'The item of the card: an id in the card''s items, or item_id in its files.'}
+      - {name: index, in: path, required: true, schema: {type: integer, minimum: 0, maximum: 999}, description: 'The file''s place among the item''s files, from 0 (the order of files in the item, or index in the card''s files).'}
+    get:
+      operationId: getIntakeGatheringFile
+      x-permission: messages:read
+      description: >-
+        Streams the stored bytes of one file a customer sent on a card of the intake queue, so a person sees the
+        picture or video before deciding the card. Like GET /api/v1/attachments/{id} it is always a download
+        (`Content-Disposition: attachment`, `application/octet-stream`); the file's media type is content_type in
+        the card. A single byte `Range` is answered with 206, so a video plays and seeks without the whole file.
+        A file the channel could not fetch (status failed, its error says why) or has not fetched yet answers 404.
+      parameters:
+        - {name: Range, in: header, required: false, schema: {type: string}, description: 'One byte range, for example bytes=0-1023.'}
+      responses:
+        '200':
+          description: File bytes
+          headers:
+            Accept-Ranges: {schema: {type: string}, description: bytes}
+            Content-Disposition: {schema: {type: string}}
+            Content-Security-Policy: {schema: {type: string}, description: "default-src 'none'; sandbox"}
+            ETag: {schema: {type: string}, description: The quoted SHA-256 of the file}
+            X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '206':
+          description: The requested byte range of the file, with the same download headers
+          headers:
+            Accept-Ranges: {schema: {type: string}, description: bytes}
+            Content-Range: {schema: {type: string}, description: 'bytes first-last/size'}
+            Content-Disposition: {schema: {type: string}}
+            X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '304': {description: 'Not modified (If-None-Match matched the ETag, the file''s SHA-256)'}
+        '416':
+          description: The range starts past the end of the file; `Content-Range` names the size
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/intake/gatherings/{id}/decide:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:
@@ -2095,7 +2146,10 @@ paths:
         channel; or the conversation the rules named. A conversation merged into another is joined through the
         one it was merged into, which must be one of these. Any other is 400 and nothing is decided; a
         closed one of the same place opens again. The same decision again changes
-        nothing; another one once the card is decided is 409 gathering_decided, with how it stands. An agent
+        nothing; another one once the card is decided is 409 gathering_decided, with how it stands. At intake
+        level auto a customer who writes again while their card waits joins that card, and AI decides it again:
+        send item_count as read, and a decision of a card the customer added to since is 409 gathering_changed
+        (nothing decided; read it again). An agent
         token needs messages:send to create (the channel may tell the customer it was received) and
         conversations:update otherwise; without it the call is filed for a person (202).
         A repeat with the same Idempotency-Key answers what the first one got and decides nothing; the key
@@ -2342,9 +2396,9 @@ paths:
       x-permission: channels:read
       description: >
         Whether intake's AI may act on its own on a chat channel's scope, per action (create, attach,
-        ignore), for the model intake runs and the prompt version of this server: people's explicit
+        ignore), for the prompt version of this server, whichever model intake runs: people's explicit
         labels of the last 30 days (a person following or correcting AI on a card or by moving its
-        messages) plus the newest recorded evaluation of each dataset of that model and prompt. An action
+        messages) plus the newest recorded evaluation of each dataset of that prompt, on any model. An action
         opens with 30 labels at its accuracy (create 90 %, attach and ignore 95 %), no severe error for
         attach and ignore, and at most one conversation opened for chatter a week for create; someone with `ai_settings:update`
         may open one by hand (gate_override). A closed action stays a suggestion at auto. Also what AI did on
@@ -2387,8 +2441,8 @@ paths:
       description: >
         Records the counts of an offline evaluation (`collie intake-eval`) of a scope: the model and
         prompt version it ran, the dataset's SHA-256, and per action the labelled cases, how many it got
-        right, and its severe and light errors. It counts towards readiness only for that model and prompt
-        version, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it
+        right, and its severe and light errors. It counts towards readiness for that prompt version, on any
+        model, and a newer run of the same dataset replaces it. It needs `ai_settings:update`, since it
         can open a gate.
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
@@ -4916,8 +4970,9 @@ paths:
       x-permission: conversations:read
       description: >-
         Where the workspace stands on getting started: receive customer email, import from Freshdesk,
-        invite the team, answer the first email. The steps come in the order the sign-up goal suggests;
-        first_reply is always last. States only, computed on every call.
+        turn on AI drafts, set reply targets, invite the team, answer the first email. The steps come in
+        the order the sign-up goal suggests; first_reply is always last. It also lists the reply targets
+        presets, with the one the imported history suggests. Computed on every call.
       responses:
         '200':
           description: The setup steps and whether all are done
@@ -8393,7 +8448,7 @@ components:
       description: The resource is not in a state that allows this action
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     IntakeGatheringDecided:
-      description: The card was decided otherwise meanwhile (gathering_decided); nothing changed
+      description: The card was decided otherwise meanwhile (gathering_decided), or the customer added messages to it since it was read (gathering_changed); nothing changed
       content:
         application/json:
           schema:
@@ -8404,7 +8459,7 @@ components:
                 type: object
                 required: [code, message, state, decided_by, decided_by_agent_id, conversation_id]
                 properties:
-                  code: {type: string, enum: [gathering_decided]}
+                  code: {type: string, enum: [gathering_decided, gathering_changed]}
                   message: {type: string}
                   request_id: {type: string}
                   state: {type: string}
@@ -8571,9 +8626,12 @@ components:
       type: string
       maxLength: 64
       description: >-
-        The browser's IANA timezone. At the agent's first sign-in, while they never chose a timezone and the
-        workspace is still on its `UTC` default, it becomes the agent's own (`timezone_override`). A later
-        sign-in never changes it, and an unknown zone is ignored; it never fails the sign-in.
+        The browser's IANA timezone. At the first sign-in of the person who created the workspace, while the
+        workspace is still on the `UTC` default nobody chose, it becomes the workspace's timezone (the zone
+        business hours count in) and they follow it. At anyone else's first sign-in, while they never chose a
+        timezone and the workspace is on `UTC`, it becomes the agent's own (`timezone_override`); a teammate
+        never changes the workspace's. A later sign-in never changes either, a timezone an admin chose
+        (`UTC` included) is kept, and a name of UTC (`GMT`, `Etc/UTC`, `Zulu`...) or an unknown zone is ignored; it never fails the sign-in.
     ImportPerson:
       type: object
       required: [external_id, name, email, active, linked_agent_id, linked_by_email, pending, updated_at]
@@ -8904,7 +8962,7 @@ components:
                     lowered:
                       type: [object, 'null']
                       required: [at, reason]
-                      description: 'The server''s last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider).'
+                      description: 'The server''s last lowering of this level, while no person changed it since: recipient_changed (the feature moved to another provider), or model_changed in a history from before another model stopped lowering levels.'
                       properties:
                         at: {type: string, format: date-time}
                         reason: {type: string, enum: [model_changed, recipient_changed]}
@@ -8988,13 +9046,13 @@ components:
     IntakeGathering:
       type: object
       required: [id, channel_id, scope, thread_id, lane_key, contact_id, state, review_reason, rules, conversation_id, decided_by, decided_at, decided_by_agent_id,
-        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion, ai_decision, conversation_ref]
+        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion, ai_decision, conversation_ref, files]
       properties:
         id: {type: string, format: uuid}
         channel_id: {type: string, format: uuid}
         scope: {type: string}
         thread_id: {type: [string, 'null'], format: uuid}
-        lane_key: {type: string, description: 'The place and sender whose cards are decided one after the other.'}
+        lane_key: {type: string, description: 'The place and sender whose cards are decided one after the other. At auto what the sender adds while their card waits for a person joins that card, decided again.'}
         contact_id: {type: [string, 'null'], format: uuid}
         state: {type: string, enum: [deciding, review, created, attached, ignored, applied, cancelled], description: 'applied: the rules decided and AI only suggested (cards from before intake at suggest held every card).'}
         review_reason: {type: [string, 'null'], enum: [no_command, ai_unsure, ai_unavailable, too_old, credential, target_changed, lane_blocked, requeued, gate_closed, ai_suggests, null]}
@@ -9035,6 +9093,21 @@ components:
         ai_decision:
           anyOf: [{$ref: '#/components/schemas/IntakeAIDecision'}, {type: 'null'}]
           description: 'The decision AI took by itself on the card (decided_by ai): how sure it was, why, and which model; null for a card the rules or a person decided.'
+        files:
+          type: array
+          maxItems: 8
+          description: 'The card''s first files (at most 8), in the order its items came: a picture or a video shows on the card without opening it. Read one with GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}; the card''s detail lists every file with its item.'
+          items:
+            type: object
+            required: [item_id, index, name, content_type, status, size, error]
+            properties:
+              item_id: {type: string, format: uuid}
+              index: {type: integer, minimum: 0}
+              name: {type: string}
+              content_type: {type: string}
+              status: {type: string, description: 'stored: it can be read; pending: not fetched yet; failed: error says why (for example larger than the channel accepts).'}
+              size: {type: [integer, 'null']}
+              error: {type: [string, 'null']}
     IntakeAIDecision:
       type: object
       required: [decision_id, action, target_conversation_id, confidence, runner_up_confidence, reason, model, fallback_model, created_at]
@@ -9125,7 +9198,7 @@ components:
       properties:
         channel_id: {type: string, format: uuid}
         scope: {type: string}
-        model: {type: string, description: 'The model intake runs; empty while intake is off (evaluations then count for nothing).'}
+        model: {type: string, description: 'The model intake runs now; empty while intake is off (evaluations then count for nothing). Labels and evaluations of any model count.'}
         prompt_version: {type: string}
         actions:
           type: array
@@ -9264,6 +9337,7 @@ components:
         subject: {type: string, minLength: 1, maxLength: 200, description: With create.}
         ignore_reason: {$ref: '#/components/schemas/IntakeIgnoreReason'}
         follows_decision_id: {type: string, format: uuid, description: 'The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card''s, or no AI decision, is refused.'}
+        item_count: {type: integer, minimum: 1, description: 'The card''s item_count as the decider read it. When the customer added messages since (at auto they join their waiting card), nothing is decided: 409 gathering_changed. Left out, the decision is of what the card holds.'}
     IntakeStats:
       type: object
       required: [days, gatherings, by_state, decided_by, fallback, ai_decisions, ai_corrected]
@@ -9950,7 +10024,7 @@ components:
         assignee_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
-      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate, channels, source_consents]
+      required: [server, server_off, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate, channels, source_consents]
       properties:
         server:
           description: The server's provider, set by the operator in the operator console → AI (ai.server.*); null when the server has none.
@@ -9963,8 +10037,16 @@ components:
                 label: {type: string}
                 models:
                   type: object
-                  description: Per feature, the models a workspace may pick; the first is the default.
+                  description: Per feature, the models the operator set; a feature on this provider runs the first (intake tries the second when the first fails).
                   additionalProperties: {type: array, items: {type: string}}
+        server_off:
+          description: Set while the operator switched the server's provider off (`server` is then null); no workspace can pick it, and a feature set to it does not run until it is on again. Null otherwise.
+          anyOf:
+            - type: 'null'
+            - type: object
+              required: [label]
+              properties:
+                label: {type: string, description: The name workspaces know the server's provider by.}
         providers: {type: array, items: {$ref: '#/components/schemas/AIProvider'}}
         slots: {type: array, items: {$ref: '#/components/schemas/AISlot'}}
         channels: {type: array, items: {$ref: '#/components/schemas/AIChannelLevel'}, description: 'The levels live channels set apart from the workspace''s default, by channel name.'}
@@ -10027,8 +10109,8 @@ components:
       properties:
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: string, format: uuid, description: With source provider.}
-        model: {type: string, maxLength: 200}
-        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it.'}
+        model: {type: string, maxLength: 200, description: 'One of the provider''s models; left out, its first. On the server''s provider (source server) it is ignored: the operator picks the model.'}
+        fallback_model: {type: string, maxLength: 200, description: 'Intake only: another of the same provider''s models; an empty string removes it. Left out: kept while the provider stays and still offers it. On the server''s provider it is ignored: the operator picks it.'}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
         default_level: {$ref: '#/components/schemas/AILevel'}
@@ -10357,30 +10439,94 @@ components:
         timezone: {type: string, default: UTC}
     SetupProgress:
       type: object
-      required: [steps, complete, recommended]
+      required: [steps, complete, recommended, reply_target_presets, reply_target_hours, reply_target_suggestion]
       properties:
         steps:
           type: array
           items: {$ref: '#/components/schemas/SetupStep'}
-        complete: {type: boolean, description: True when every step is done.}
+        complete:
+          type: boolean
+          description: >-
+            True when the four core steps are done: email working, import done, invite joined and
+            first_reply sent. ai_drafts and reply_targets are offers: they never hold setup back.
         recommended:
           description: The step the sign-up goal puts first while it is not done; null for a goal without one.
           type: [string, 'null']
           enum: [email, import, invite, null]
+        reply_target_presets:
+          type: array
+          description: >-
+            The reply targets the reply_targets step offers, fastest first. Targets are business minutes; a
+            day is reply_target_hours.day_minutes, the open hours of one business day of the hours a preset
+            applies with. Apply one with PUT /api/v1/response-targets and those hours.
+          items: {$ref: '#/components/schemas/ReplyTargetPreset'}
+        reply_target_hours: {$ref: '#/components/schemas/ReplyTargetHours'}
+        reply_target_suggestion:
+          description: >-
+            The preset that fits the team; null when reply targets are on already or the caller may not
+            change them (workspace:update), since nothing would use it.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ReplyTargetSuggestion'}
     SetupStep:
       type: object
-      required: [key, state, detail]
+      required: [key, name, state, detail]
       properties:
-        key: {type: string, enum: [email, import, invite, first_reply]}
+        key: {type: string, enum: [email, import, ai_drafts, reply_targets, invite, first_reply]}
+        name: {type: string, description: 'The step as the setup guide names it, for example "Turn on AI drafts".'}
         state:
           type: string
           description: >-
-            email none, waiting, working or needs_attention; import none, running or done; invite alone,
-            invited or joined; first_reply none or sent.
-          enum: [none, waiting, working, needs_attention, running, done, alone, invited, joined, sent]
+            email none, waiting, working or needs_attention; import none, running or done; ai_drafts none,
+            on (reply drafts on, writing a draft for each new customer message), nothing_to_read (off, with
+            no import done and no published help center article to draft from) or unavailable (off, with no
+            built-in AI on this server and no provider of the workspace's own); reply_targets none or on;
+            invite alone, invited or joined; first_reply none or sent.
+          enum: [none, waiting, working, needs_attention, running, done, 'on', nothing_to_read, unavailable, alone, invited, joined, sent]
         detail:
           description: A reason code for needs_attention; null otherwise.
           type: [string, 'null']
+    ReplyTargetPreset:
+      type: object
+      required: [key, name, targets]
+      properties:
+        key: {$ref: '#/components/schemas/ReplyTargetPresetKey'}
+        name: {type: string}
+        targets:
+          type: object
+          required: [urgent, high, normal, low]
+          properties:
+            urgent: {$ref: '#/components/schemas/TargetMinutes'}
+            high: {$ref: '#/components/schemas/TargetMinutes'}
+            normal: {$ref: '#/components/schemas/TargetMinutes'}
+            low: {$ref: '#/components/schemas/TargetMinutes'}
+    ReplyTargetPresetKey: {type: string, enum: [within_the_hour, same_day, next_business_day]}
+    ReplyTargetHours:
+      type: object
+      required: [kept, day_minutes, hours]
+      description: >-
+        The business hours a preset applies with. kept: the hours already set in Settings → Response targets
+        (some day is open), which a preset never replaces; otherwise Monday to Friday, 09:00 to 18:00.
+        day_minutes is one business day of them: the length most open days have, the longest on a tie
+        (540 for 09:00 to 18:00, 720 for 08:00 to 20:00).
+      properties:
+        kept: {type: boolean}
+        day_minutes: {type: integer, minimum: 1, maximum: 1440}
+        hours:
+          type: array
+          items: {$ref: '#/components/schemas/BusinessDay'}
+    ReplyTargetSuggestion:
+      type: object
+      required: [preset, basis, median_first_reply_minutes]
+      description: >-
+        The preset that fits the team. history: from the median first reply of the imported conversations
+        opened in the last 30 days (up to 60 minutes within_the_hour, up to 480 same_day, longer
+        next_business_day). no_history (nothing imported, or nothing answered in those 30 days) and
+        import_running (checked again when the import ends) suggest same_day.
+      properties:
+        preset: {$ref: '#/components/schemas/ReplyTargetPresetKey'}
+        basis: {type: string, enum: [history, no_history, import_running]}
+        median_first_reply_minutes: {type: [integer, 'null'], description: 'Wall-clock minutes from the customer''s first message to the first reply; null without history.'}
     Agent:
       type: object
       required: [id, email, display_name, roles, timezone_override]
@@ -10470,8 +10616,9 @@ components:
       description: >
         The post or ad a sign-up came from, as the sign-in page read it from its address: the `utm_*` keys and
         the click IDs TikTok (`ttclid`) and Meta (`fbclid`) add to ad links. A value is kept only when it matches
-        `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. Stored with the onboarding
-        answers and counted with the trial and the first payment.
+        `[A-Za-z0-9._-]{1,300}`; any other key or value is dropped, never refused. `referrer` is the host name of
+        the site whose link first brought the browser to the sign-in page (an AI assistant's link often has no
+        `utm_*` keys). Stored with the onboarding answers and counted with the trial and the first payment.
       additionalProperties: {type: string}
       properties:
         utm_source: {type: string, maxLength: 300}
@@ -10481,6 +10628,10 @@ components:
         utm_term: {type: string, maxLength: 300}
         ttclid: {type: string, maxLength: 300}
         fbclid: {type: string, maxLength: 300}
+        referrer:
+          type: string
+          maxLength: 253
+          description: Lowercase host name only, such as `claude.ai`; a URL, a path or a name without a dot is dropped.
         click_id_seen_at:
           type: string
           format: date-time
@@ -12274,8 +12425,24 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft, mail_through_mailbox, answers_before_forwarding, mail_switch]
       properties:
+        mail_switch: {$ref: '#/components/schemas/EmailMailSwitch'}
+        mail_through_mailbox:
+          type: boolean
+          description: >-
+            Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the
+            current support address). Until it has, new customer mail may still arrive in the team's old help desk,
+            and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@`
+            address, dropped mail and mail under an earlier support address do not count. False without a channel.
+        answers_before_forwarding:
+          type: string
+          enum: [colliedesk, support_mailbox]
+          description: >-
+            Where a customer's answer to a reply goes while `mail_through_mailbox` is false. `colliedesk`: replies
+            carry `Reply-To: reply+<token>@<server's sending domain>`, which this server receives, so the answer joins
+            the conversation. `support_mailbox`: this server does not receive mail on its sending domain, so the
+            answer goes to the support address and reaches Colliedesk only once that mailbox forwards here.
         gmail: {$ref: '#/components/schemas/GmailSettings'}
         microsoft: {$ref: '#/components/schemas/MicrosoftSettings'}
         sending_pause:
@@ -12316,6 +12483,39 @@ components:
             - {$ref: '#/components/schemas/EmailChannel'}
         inbound_url: {type: string, format: uri}
         smtp: {$ref: '#/components/schemas/SMTPStatus'}
+    EmailMailSwitch:
+      type: object
+      description: >-
+        The workspace's support mailboxes whose customer mail does not arrive here yet, the same on every email
+        channel's settings. The inbox shows one line while `mailboxes` is not empty.
+      required: [imported, mailboxes]
+      properties:
+        imported:
+          type: boolean
+          description: >-
+            Whether the workspace finished an import from another help desk (and did not undo it). Each mailbox
+            says in `old_help_desk` whether its new customer mail still arrives in that old help desk.
+        mailboxes:
+          type: array
+          description: >-
+            The switched-on email channels with a support address of the team's own whose customer mail has not
+            arrived through the mailbox yet (`mail_through_mailbox` false), the default channel first. A channel
+            whose support address is under the server's hosted mail domain has no mailbox to move and is never
+            listed, also after the workspace address name changed. Empty when nothing is left to move.
+          items: {$ref: '#/components/schemas/EmailMailboxToMove'}
+    EmailMailboxToMove:
+      type: object
+      required: [channel_id, name, support_address, old_help_desk]
+      properties:
+        channel_id: {type: string, format: uuid}
+        name: {type: string, description: The channel's name.}
+        support_address: {type: string, format: email}
+        old_help_desk:
+          type: boolean
+          description: >-
+            Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added
+            before an import that finished (and was not undone). False for a mailbox added after the import, which
+            the old help desk never received; its mail simply does not arrive here yet.
     GmailSettings:
       type: object
       required: [available, missing_settings, off_reason, redirect_uri, connection]
@@ -12613,7 +12813,7 @@ components:
       type: object
       description: >-
         The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days
-        (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits`
+        (days), never, open_only (joins only an open or pending conversation: a resolved or closed one is never added to by a reply, the place's thread or AI intake, and a new one starts; only a reopen command reopens it; Zalo's default)}, `default_tags`, `default_priority`, `default_assignee_id`, `number_series` (the series its conversations are numbered in), `rate_limits`
         {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
         {action: open, cancel, reopen, confirm or help (answers with notices.help, opens nothing); match: fuzzy (the default), words or exact; phrases; tags; priority; ask_description}), `review`, `scopes` (keys the type
         declares; each {mode: all or commands, join_policy, review, gather {quiet_seconds, max_seconds,
@@ -12934,12 +13134,13 @@ components:
       type: object
       required: [code, severity]
       properties:
-        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting, feature_incomplete]}
+        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting, feature_incomplete, ai_server_out_of_credit]}
         severity: {type: string, enum: [error, warning]}
         env_name: {type: string, description: 'The environment variable it is about, as data (never written in the web app)'}
         key: {type: string}
         version: {type: integer}
-        detail: {type: string}
+        detail: {type: string, description: 'For ai_server_out_of_credit: how many of its calls the provider refused since the last that answered'}
+        since: {type: string, format: date-time, description: 'For ai_server_out_of_credit: when the provider first refused for want of credit'}
     OperatorProcess:
       type: object
       required: [instance_id, hostname, binary_version, running_version, started_at, heartbeat_at]
@@ -13054,12 +13255,214 @@ components:
         applies: {type: string, enum: [at_once, in_seconds, trial]}
         changed: {type: array, items: {type: string}}
         trial_expires_at: {type: string, format: date-time, description: 'A trial: when it reverts by itself unless confirmed'}
+    OperatorMessageCode:
+      type: string
+      description: 'The code of a message the operator console shows from the server, beside its English text: the console translates by code and params, and falls back to the text (docs/internals/operator-console.md › Message codes). A code is stable.'
+      enum:
+        - ai_allow_private_invalid
+        - ai_server_allowance_format
+        - ai_server_allowance_not_number
+        - ai_server_allowance_unknown
+        - ai_server_allowance_unpriced
+        - ai_server_base_url_invalid
+        - ai_server_half_configured
+        - ai_server_label_too_long
+        - ai_server_models_bad_model
+        - ai_server_models_format
+        - ai_server_models_twice
+        - ai_server_prices_format
+        - ai_server_prices_not_number
+        - ai_server_prices_twice
+        - ai_server_provider_invalid
+        - audit_unreadable
+        - authenticator_needs_key_ring
+        - billing_alert_email_invalid
+        - body_invalid
+        - body_not_a_change
+        - body_not_a_product
+        - body_not_json
+        - body_unreadable
+        - change_empty
+        - change_unsaved
+        - cloud_sign_in_not_configured
+        - code_unchecked
+        - config_changed
+        - config_unreadable
+        - config_unsaved
+        - confirm_mismatch
+        - confirm_mismatch_request
+        - csrf_rejected
+        - email_from_policy_invalid
+        - feature_incomplete_refused
+        - feature_needs_settings
+        - feature_switch_invalid
+        - field_choose_period
+        - field_choose_plan
+        - field_enter_it
+        - field_no_key_ring
+        - field_not_a_secret
+        - field_product_id
+        - field_reenter
+        - field_secret_goes_in_secrets
+        - field_totp_cli_only
+        - field_type_phrase
+        - field_type_the_phrase
+        - field_unknown_setting
+        - github_private_key_invalid
+        - guard_ai_server_off
+        - guard_ai_server_uncountable
+        - guard_autofix_off
+        - guard_billing_off
+        - guard_billing_on
+        - guard_billing_on_again
+        - guard_billing_switch_off
+        - guard_billing_uncountable
+        - guard_cloud_auth
+        - guard_cloud_sign_in_off
+        - guard_from_policy_any
+        - guard_help_center_back
+        - guard_help_center_moves
+        - guard_help_center_no_wildcard
+        - guard_hosted_mail_off
+        - guard_kb_video
+        - guard_mail_domain_moves
+        - guard_mailbox_off
+        - guard_mailbox_uncountable
+        - guard_no_workspace
+        - guard_private_addresses
+        - guard_problem_reports
+        - guard_proxies_none
+        - guard_proxies_read
+        - guard_refused_nothing_saved
+        - guard_retention_billing_off
+        - guard_retention_on
+        - guard_retention_uncountable
+        - guard_signup_off
+        - guard_workspace_unlooked
+        - help_center_domain_invalid
+        - history_unreadable
+        - hosted_mail_domain_invalid
+        - hosted_mail_needs_inbound_secret
+        - idempotency_key_reused
+        - internal_signup_email_invalid
+        - invalid_limit
+        - invalid_since
+        - kb_video_max_invalid
+        - link_expired
+        - link_invalid
+        - link_used
+        - mail_from_domain_invalid
+        - mail_from_domain_slug
+        - mail_from_inbound_secret_needs
+        - mail_image_cache_invalid
+        - microsoft_tenant_invalid
+        - network_entry_invalid
+        - no_such_operator
+        - no_such_product
+        - no_such_request
+        - no_such_session
+        - no_such_version
+        - no_trial
+        - not_a_secret_setting
+        - nothing_added
+        - nothing_changes
+        - operator_locked
+        - operator_session_required
+        - operator_unrevoked
+        - operators_unreadable
+        - person_only
+        - polar_api_url_invalid
+        - polar_partly_configured
+        - product_exists
+        - product_unchanged
+        - products_unreadable
+        - reauth_code_invalid
+        - reauth_needs_new_link
+        - reauth_required
+        - reenter_secret
+        - request_decided
+        - request_in_progress
+        - request_uncancelled
+        - request_unreadable
+        - request_unstored
+        - requests_unreadable
+        - resend_webhook_needs_mail_from
+        - restore_not_changeable
+        - retention_delete_invalid
+        - retention_max_invalid
+        - retention_max_range
+        - secret_in_request
+        - secret_in_request_example
+        - secret_in_set
+        - secret_keys_missing
+        - secret_missing
+        - secret_not_asked
+        - secret_not_valid
+        - send_base_version
+        - send_link_token
+        - send_on_sale
+        - send_operator_email
+        - send_trial_version
+        - session_unended
+        - sessions_unreadable
+        - setting_not_changeable
+        - sign_in_failed
+        - sign_in_refused
+        - smtp_port_implicit_tls
+        - smtp_port_invalid
+        - smtp_port_range
+        - smtp_starttls_invalid
+        - status_unreadable
+        - test_ai_models_failed
+        - test_ai_models_needs_base_url
+        - test_ai_models_needs_key
+        - test_ai_models_needs_provider
+        - test_ai_models_ok
+        - test_ai_models_refused
+        - test_ai_needs_settings
+        - test_ai_ok
+        - test_ai_refused
+        - test_jwks_failed
+        - test_jwks_needs_settings
+        - test_jwks_no_rsa
+        - test_jwks_ok
+        - test_needs_a_person
+        - test_polar_archived
+        - test_polar_needs_settings
+        - test_polar_ok
+        - test_polar_refused
+        - test_reenter_secret
+        - test_smtp_needs_host
+        - test_smtp_ok
+        - test_smtp_refused
+        - test_smtp_unwritable
+        - token_needs_name
+        - too_many_tries
+        - trial_pending
+        - trial_pending_first
+        - unknown_setting
+        - version_runs_already
+        - version_unreadable
+    OperatorMessageParams:
+      type: object
+      description: 'What the message names (a setting, a model, a count). Never a secret''s value.'
+      additionalProperties: {oneOf: [{type: string}, {type: number}]}
+    OperatorCodedMessage:
+      type: object
+      required: [code]
+      properties:
+        code: {$ref: '#/components/schemas/OperatorMessageCode'}
+        params: {$ref: '#/components/schemas/OperatorMessageParams'}
     OperatorConfigCheck:
       type: object
       required: [ok, errors]
       properties:
         ok: {type: boolean}
         errors: {type: object, additionalProperties: {type: string}}
+        field_errors:
+          type: object
+          description: 'The code of each message of `errors` that has one, by the same key'
+          additionalProperties: {$ref: '#/components/schemas/OperatorCodedMessage'}
         test:
           type: object
           required: [name, ok, message]
@@ -13067,6 +13470,20 @@ components:
             name: {type: string}
             ok: {type: boolean}
             message: {type: string}
+            code: {$ref: '#/components/schemas/OperatorMessageCode'}
+            params: {$ref: '#/components/schemas/OperatorMessageParams'}
+            models: {type: array, items: {type: string}, description: 'The models listed, for `ai_models`'}
+            prices:
+              type: object
+              description: 'For `ai_models`: what the provider lists each model to cost (OpenRouter), in US dollars per million tokens; a model without a listed price is left out'
+              additionalProperties:
+                type: object
+                required: [input, output, cache_read, cache_write]
+                properties:
+                  input: {type: number}
+                  output: {type: number}
+                  cache_read: {type: number}
+                  cache_write: {type: number}
         guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}}
     OperatorConfigGuard:
       type: object
@@ -13078,6 +13495,10 @@ components:
         phrase: {type: string, description: 'What to type in `confirm[key]`'}
         trial: {type: boolean, description: 'The change is tried and reverts by itself unless confirmed (D12)'}
         refused: {type: string, description: Why the change cannot be saved as it is}
+        preview_code: {$ref: '#/components/schemas/OperatorMessageCode'}
+        preview_params: {$ref: '#/components/schemas/OperatorMessageParams'}
+        refused_code: {$ref: '#/components/schemas/OperatorMessageCode'}
+        refused_params: {$ref: '#/components/schemas/OperatorMessageParams'}
     OperatorTrial:
       type: object
       required: [version, parent_version, started_at, expires_at, started_by, keys, evidence]
@@ -13197,6 +13618,12 @@ components:
               type: object
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
+            message_code: {$ref: '#/components/schemas/OperatorMessageCode', description: 'Only on the operator console''s routes: the code of `message`, when it has one'}
+            params: {$ref: '#/components/schemas/OperatorMessageParams', description: 'With message_code: what the message names'}
+            field_errors:
+              type: object
+              description: 'Only on the operator console''s routes: the code of each message of `fields` that has one, by the same key'
+              additionalProperties: {$ref: '#/components/schemas/OperatorCodedMessage'}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
             missing_permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks.'}
             missing_from: {type: string, enum: [token, person], description: 'Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.'}

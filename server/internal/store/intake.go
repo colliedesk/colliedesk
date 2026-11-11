@@ -58,13 +58,91 @@ func unblockLane(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID string
 		return fmt.Errorf("unblock gathering lane: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
-		if _, err = tx.Exec(ctx, `UPDATE channel_thread_items i SET disposition='gathering',disposition_reason='deciding' FROM intake_gatherings g
-			WHERE i.workspace_id=$1 AND g.workspace_id=i.workspace_id AND g.id=i.gathering_id AND g.state='deciding'
-			AND i.disposition='pending_review'`, workspaceID); err != nil {
+		if err := itemsDeciding(ctx, tx, workspaceID); err != nil {
 			return err
 		}
 	}
 	return enqueueLaneTurn(ctx, tx, workspaceID, gatheringID, now)
+}
+
+// itemsDeciding marks the chat items of the cards given back to their decider as being decided.
+func itemsDeciding(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	if _, err := tx.Exec(ctx, `UPDATE channel_thread_items i SET disposition='gathering',disposition_reason='deciding' FROM intake_gatherings g
+		WHERE i.workspace_id=$1 AND g.workspace_id=i.workspace_id AND g.id=i.gathering_id AND g.state='deciding'
+		AND i.disposition='pending_review'`, workspaceID); err != nil {
+		return fmt.Errorf("mark gathering items deciding: %w", err)
+	}
+	return nil
+}
+
+// TaskSuperseded is why an intake task is let go when the customer adds to its card: what it read is
+// no longer the whole card.
+const TaskSuperseded = "messages_added"
+
+// joinWaitingCard adds a batch to the card of its lane that waits for a person, at auto: AI reads what the
+// customer adds with what they said before and decides the whole card again, so a customer who takes a
+// while to say what they need is not left to a person. It reports false when no card of the lane waits for
+// a person.
+func joinWaitingCard(ctx context.Context, tx pgx.Tx, journal *journalWriter, lane string) (bool, error) {
+	workspaceID := journal.channel.WorkspaceID
+	var head string
+	err := tx.QueryRow(ctx, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND lane_key=$2 AND state='review' AND review_reason<>'lane_blocked'
+		AND rules_rule<>$3 ORDER BY closed_at,id LIMIT 1 FOR UPDATE`, workspaceID, lane, RuleDetached).Scan(&head)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("find the waiting card of the lane: %w", err)
+	}
+	return foldIntoCard(ctx, tx, workspaceID, head, journal.batchEvents(), journal.now)
+}
+
+// foldIntoCard gives card head back to AI with events added (a new batch of its lane) and the later cards
+// of its lane that never had a decision or a task (those that waited behind it, or for their turn): their
+// messages join it and they go. A task that read the card before is let go (TaskSuperseded): it decides
+// nothing of what it did not read, and a new one reads the whole card. The card closes when its last
+// message did. It reports false, changing nothing, when there is nothing to add.
+func foldIntoCard(ctx context.Context, tx pgx.Tx, workspaceID, head string, events []string, now time.Time) (bool, error) {
+	var behind []string
+	var lastClosed *time.Time
+	if err := tx.QueryRow(ctx, `WITH h AS (SELECT lane_key,closed_at FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid),
+		b AS (SELECT g.id,g.closed_at FROM intake_gatherings g, h WHERE g.workspace_id=$1 AND g.lane_key=h.lane_key AND g.id<>$2::uuid AND g.closed_at>=h.closed_at
+			AND (g.state='deciding' OR (g.state='review' AND g.review_reason='lane_blocked'))
+			AND NOT EXISTS(SELECT 1 FROM intake_decisions d WHERE d.workspace_id=g.workspace_id AND d.gathering_id=g.id)
+			AND NOT EXISTS(SELECT 1 FROM ai_tasks t WHERE t.workspace_id=g.workspace_id AND t.gathering_id=g.id) FOR UPDATE OF g)
+		SELECT COALESCE(array_agg(id::text),'{}'),max(closed_at) FROM b`, workspaceID, head).Scan(&behind, &lastClosed); err != nil {
+		return false, fmt.Errorf("find the cards behind: %w", err)
+	}
+	if len(behind) == 0 && len(events) == 0 {
+		return false, nil
+	}
+	closedAt := now
+	if len(events) == 0 {
+		closedAt = *lastClosed
+	}
+	for _, statement := range []string{
+		`UPDATE channel_inbound_events SET gathering_id=$2 WHERE workspace_id=$1 AND (gathering_id::text=ANY($3) OR id::text=ANY($4))`,
+		`UPDATE channel_thread_items SET gathering_id=$2 WHERE workspace_id=$1 AND (gathering_id::text=ANY($3) OR inbound_event_id::text=ANY($4))`,
+	} {
+		if _, err := tx.Exec(ctx, statement, workspaceID, head, behind, events); err != nil {
+			return false, fmt.Errorf("join messages to the card: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM intake_gatherings WHERE workspace_id=$1 AND id::text=ANY($2)`, workspaceID, behind); err != nil {
+		return false, fmt.Errorf("remove the cards joined: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE ai_tasks SET state='cancelled',error_code=$3,claim_token=NULL,lease_until=NULL,finished_at=$4
+		WHERE workspace_id=$1 AND gathering_id=$2::uuid AND kind='intake' AND state IN ('queued','running')`, workspaceID, head, TaskSuperseded, now); err != nil {
+		return false, fmt.Errorf("let go of the task of the card: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='deciding',review_reason=NULL,fallback=false,decide_by=$3,closed_at=GREATEST(closed_at,$4),updated_at=$5
+		WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, head, now.Add(DecideWithin), closedAt, now); err != nil {
+		return false, fmt.Errorf("give the card back to AI: %w", err)
+	}
+	if err := itemsDeciding(ctx, tx, workspaceID); err != nil {
+		return false, err
+	}
+	return true, enqueueAgain(ctx, tx, workspaceID, head, now)
 }
 
 // Intake levels a scope's intake is at (ai_level).
@@ -171,8 +249,9 @@ func recordGathering(ctx context.Context, tx pgx.Tx, journal *journalWriter, in 
 
 // holdForIntake keeps a batch the rules decided only by default for intake to decide: held like any
 // held message (its original stored and counted), with what the rules would do, until DecideWithin.
-// Behind a card of the same lane that waits for a person it waits in the queue too.
-func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWriter, in channels.Inbound, decision rules.Decision,
+// Behind a card of the same lane that waits for a person it waits in the queue too; at auto it joins that
+// card instead, decided again as one (joinWaitingCard).
+func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWriter, in channels.Inbound, level string, decision rules.Decision,
 	finish func(channels.IngestResult) (channels.IngestResult, error)) (channels.IngestResult, error) {
 	var result channels.IngestResult
 	held, err := s.holdInbound(ctx, tx, journal, in, channels.HoldIntake, decision, func(r channels.IngestResult) (channels.IngestResult, error) {
@@ -185,6 +264,15 @@ func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWr
 	lane, _, err := laneKey(ctx, tx, journal.channel, in)
 	if err != nil {
 		return result, err
+	}
+	if level == intakeAuto {
+		joined, err := joinWaitingCard(ctx, tx, journal, lane)
+		if err != nil {
+			return result, err
+		}
+		if joined {
+			return finish(result)
+		}
 	}
 	var blocked bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM intake_gatherings WHERE workspace_id=$1 AND lane_key=$2 AND state='review' AND review_reason<>'ai_suggests')`,
@@ -222,6 +310,9 @@ var (
 	ErrGatheringDecided = errors.New("this gathering was decided meanwhile")
 	// ErrGatheringNotFound means no gathering of the workspace has that id.
 	ErrGatheringNotFound = errors.New("no gathering with that id")
+	// ErrGatheringChanged means the customer added to the card since its decider read it: nothing is
+	// applied, and the decider reads it again. It is an ErrGatheringDecided.
+	ErrGatheringChanged = fmt.Errorf("%w: the customer added messages since it was read", ErrGatheringDecided)
 )
 
 // isID says id is a uuid, as the queries of a gathering compare it (so its index serves them).
@@ -252,6 +343,10 @@ type IntakeApply struct {
 	ReplyKind string
 	// Decision is the row intake_decisions keeps of an AI's or a person's decision; nil for the rules.
 	Decision *IntakeDecisionInput
+	// Seen are the journal events the decider read (AI); ItemCount is how many messages of the card it
+	// showed (a person). When set, a card the customer added to since is ErrGatheringChanged.
+	Seen      []string
+	ItemCount *int
 }
 
 // IntakeDecisionInput is what intake_decisions keeps of one decision.
@@ -289,8 +384,9 @@ type pendingGathering struct {
 	events                            []string
 }
 
-// lockGathering locks a gathering that is still to be decided and checks it holds exactly eventIDs.
-func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, eventIDs []string) (pendingGathering, error) {
+// lockGathering locks a gathering that is still to be decided and checks it holds exactly eventIDs, and
+// what its decider read of it (seen).
+func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, eventIDs []string, seen *IntakeApply) (pendingGathering, error) {
 	var g pendingGathering
 	if !isID(id) {
 		return g, ErrGatheringNotFound
@@ -311,7 +407,24 @@ func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, event
 		seen := slices.Clone(eventIDs)
 		slices.Sort(seen)
 		if !slices.Equal(seen, g.events) {
-			return g, ErrGatheringDecided
+			return g, ErrGatheringChanged
+		}
+	}
+	if seen != nil && seen.Seen != nil {
+		read := slices.Clone(seen.Seen)
+		slices.Sort(read)
+		if !slices.Equal(read, g.events) {
+			return g, ErrGatheringChanged
+		}
+	}
+	if seen != nil && seen.ItemCount != nil {
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM `+gatheringItemRows+`) FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.id=$2::uuid`,
+			workspaceID, id).Scan(&count); err != nil {
+			return g, fmt.Errorf("count gathering items: %w", err)
+		}
+		if count != *seen.ItemCount {
+			return g, ErrGatheringChanged
 		}
 	}
 	return g, nil
@@ -430,7 +543,7 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 				WHERE workspace_id=$1 AND gathering_id=$2::uuid`, workspaceID, id)
 			return struct{}{}, err
 		}
-		g, err := lockGathering(ctx, tx, workspaceID, id, nil)
+		g, err := lockGathering(ctx, tx, workspaceID, id, nil, &apply)
 		if err != nil {
 			return struct{}{}, err
 		}
@@ -466,6 +579,18 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 			if reviewReason == ReviewAISuggests {
 				if err := enqueueLaneTurn(ctx, tx, workspaceID, id, now); err != nil {
 					return struct{}{}, err
+				}
+			} else {
+				// At auto what the customer wrote meanwhile, waiting for its turn, joins the card: AI reads all of it.
+				var level string
+				if err := tx.QueryRow(ctx, `SELECT ai_level(workspace_id,channel_id,scope,'intake') FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`,
+					workspaceID, id).Scan(&level); err != nil {
+					return struct{}{}, fmt.Errorf("read intake level: %w", err)
+				}
+				if level == intakeAuto && g.rulesRule != RuleDetached {
+					if _, err := foldIntoCard(ctx, tx, workspaceID, id, nil, now); err != nil {
+						return struct{}{}, err
+					}
 				}
 			}
 		default:

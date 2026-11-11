@@ -36,6 +36,12 @@ const (
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
 		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
+		`"mail_through_mailbox":{"type":"boolean","description":"Whether customer mail has arrived through the support mailbox. Until it has, new customer mail may still arrive in the team's old help desk; a test message does not count. On Colliedesk Cloud a person moves the mail by forwarding the support mailbox to hosted_address. A mailbox cannot forward to inbound_url, an HTTP address: a self-hosted server needs a forwarder that posts each mail to inbound_url with the channel's inbound secret (docs/self-host/email.md)."},` +
+		`"mail_switch":{"type":"object","required":["imported","mailboxes"],"description":"The workspace's support mailboxes whose customer mail does not arrive here yet, the same for every email channel; the inbox shows one line while mailboxes is not empty. A hosted forwarding address has no mailbox to move and is never listed.",` +
+		`"properties":{"imported":{"type":"boolean","description":"Whether the workspace finished an import from another help desk (not undone)."},` +
+		`"mailboxes":{"type":"array","items":{"type":"object","required":["channel_id","name","support_address","old_help_desk"],"properties":{"channel_id":{"type":"string"},"name":{"type":"string"},"support_address":{"type":"string"},` +
+		`"old_help_desk":{"type":"boolean","description":"Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added before the finished import. False for a mailbox added after it."}}}}}},` +
+		`"answers_before_forwarding":{"type":"string","enum":["colliedesk","support_mailbox"],"description":"Where a customer's answer to a reply goes while mail_through_mailbox is false: colliedesk (it joins the conversation) or support_mailbox (this server cannot receive it; it reaches Colliedesk only once the mailbox forwards here)."},` +
 		`"gmail":{"type":"object","description":"Gmail connected for sending: replies go out from address through Gmail. status failed means replies fail until a person reconnects (colliedesk_gmail_connect).",` +
 		`"required":["available","connected"],"properties":{"available":{"type":"boolean","description":"Whether this server can connect Gmail."},"connected":{"type":"boolean"},` +
 		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]}}},` +
@@ -154,7 +160,8 @@ func inviteCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_invite_create",
 		Title: "Invite a team member",
-		Description: `Invite a person by email with one or more roles by name (the Agent role when you give none); they get those roles on joining, added to any they hold. ` +
+		Description: `Invite a person by email with one or more roles by name (the Agent role when you give none); they get those roles on joining. ` +
+			`Someone already in the workspace cannot be invited this way (already_a_member): change their roles with colliedesk_member_roles_set. ` +
 			`You can only give roles whose every permission you hold. On the hosted cloud a pending invite takes a seat. ` +
 			`The answer holds the one-time sign-in link, shown this once: it is a credential, so give it only to the invited person, privately. Revoke it with colliedesk_invite_revoke.`,
 		REST: []string{"POST /api/v1/auth/invites"},

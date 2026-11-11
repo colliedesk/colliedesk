@@ -361,11 +361,13 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/channel-thread-items":                   {path: "/api/v1/channel-thread-items?older_than=900", token: admin, status: 200},
 		"GET /api/v1/intake/gatherings":                      {path: "/api/v1/intake/gatherings?state=decided", token: admin, status: 200},
 		"GET /api/v1/intake/gatherings/{id}":                 {path: "/api/v1/intake/gatherings/" + f.intakeCardID, token: admin, status: 200},
-		"POST /api/v1/intake/gatherings/{id}/decide":         {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/decide", body: map[string]any{"action": "ignore"}, token: admin, status: 200},
-		"POST /api/v1/intake/gatherings/{id}/requeue":        {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/requeue", token: admin, status: 200},
-		"GET /api/v1/intake/summary":                         {path: "/api/v1/intake/summary", token: admin, status: 200},
-		"GET /api/v1/intake/stats":                           {path: "/api/v1/intake/stats?days=7", token: admin, status: 200},
-		"GET /api/v1/conversations/{id}/intake":              {path: "/api/v1/conversations/" + f.conversationID + "/intake", token: admin, status: 200},
+		// The fixture's card is a web form's, with no files: the bytes are read in intake_files_api_test.go.
+		"GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}": {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/items/00000000-0000-4000-8000-000000000000/files/0", token: admin, status: 404},
+		"POST /api/v1/intake/gatherings/{id}/decide":                      {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/decide", body: map[string]any{"action": "ignore"}, token: admin, status: 200},
+		"POST /api/v1/intake/gatherings/{id}/requeue":                     {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/requeue", token: admin, status: 200},
+		"GET /api/v1/intake/summary":                                      {path: "/api/v1/intake/summary", token: admin, status: 200},
+		"GET /api/v1/intake/stats":                                        {path: "/api/v1/intake/stats?days=7", token: admin, status: 200},
+		"GET /api/v1/conversations/{id}/intake":                           {path: "/api/v1/conversations/" + f.conversationID + "/intake", token: admin, status: 200},
 		// Moving is shown failing the same way for every tier: a message that is not the conversation's.
 		"POST /api/v1/conversations/{id}/messages/move": {path: "/api/v1/conversations/" + f.conversationID + "/messages/move",
 			body: map[string]any{"message_ids": []string{"00000000-0000-4000-8000-000000000000"}, "to": map[string]any{"new": map[string]any{"subject": "Split"}}}, token: admin, status: 400},

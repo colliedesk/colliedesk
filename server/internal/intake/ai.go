@@ -42,8 +42,8 @@ func (openGate) Open(context.Context, GateQuery) bool { return true }
 // OpenGate opens every gate: for tests and evaluation, never a default.
 var OpenGate Gate = openGate{}
 
-// readinessGate opens an action's gate when the scope's readiness for the model and the prompt's
-// Version does (people's explicit labels and offline evaluations), or an admin opened it by hand.
+// readinessGate opens an action's gate when the scope's readiness for the prompt's Version (labels and
+// evaluations of any model) does (people's explicit labels and offline evaluations), or an admin opened it by hand.
 type readinessGate struct {
 	store *store.Store
 	now   func() time.Time
@@ -166,6 +166,9 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	if reason == "" {
 		applied, err := s.applyAI(ctx, workspaceID, gatheringID, decision, detail)
 		switch {
+		case errors.Is(err, store.ErrGatheringChanged):
+			// The customer added to the card while AI read it: the task was let go, a new one reads all of it.
+			return run.Record(ctx, func(pgx.Tx) error { return nil })
 		case errors.Is(err, store.ErrNotACandidate):
 			// The conversation it named stopped being one the card may join (closed, merged, gone).
 			reason = "target_changed"
@@ -196,7 +199,7 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	}
 	// At auto the card waited for AI; what it did not do on its own, a person decides.
 	err = s.store.SetGatheringState(ctx, workspaceID, gatheringID, Review, reviewReasonFor(reason),
-		store.IntakeApply{Decider: store.DecidedByRules, Fallback: code != ""}, s.now().UTC())
+		store.IntakeApply{Decider: store.DecidedByRules, Fallback: code != "", Seen: snap.EventIDs}, s.now().UTC())
 	if errors.Is(err, store.ErrGatheringDecided) {
 		return nil
 	}
@@ -242,6 +245,9 @@ func (s *Service) notApplied(ctx context.Context, workspaceID, model string, sna
 func (s *Service) applyAI(ctx context.Context, workspaceID, gatheringID string, d Decision, detail store.AIDecisionDetail) (bool, error) {
 	d.Detail = detail
 	_, err := s.Decide(ctx, workspaceID, gatheringID, d, store.DecidedByAI, store.ChannelActor{})
+	if errors.Is(err, store.ErrGatheringChanged) {
+		return false, err
+	}
 	var conflict *ConflictError
 	if errors.As(err, &conflict) {
 		return false, nil

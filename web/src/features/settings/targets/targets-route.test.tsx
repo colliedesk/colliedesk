@@ -72,20 +72,119 @@ test('business hours refuse a day that ends before it starts, copy Monday to the
   expect(sent()).not.toHaveProperty('enabled_at');
 });
 
-test('targets are hours on the page and minutes on the wire, in half hours; an empty box is no target', async () => {
+// A target is a number and a unit: whole and half hours show in hours, anything else in minutes.
+const box = (region: HTMLElement, label: string, unit: string) => ({ value: within(region).getByLabelText(label), unit: within(region).getByRole('combobox', { name: unit }) });
+const lowFirstBox = (region: HTMLElement) => box(region, 'First reply target for Low, in business time', 'Unit of the first reply target for Low');
+const lowResolveBox = (region: HTMLElement) => box(region, 'Resolve target for Low, in business time', 'Unit of the resolve target for Low');
+const warnBox = (region: HTMLElement) => box(region, 'Due soon, in business time before the target', 'Unit of due soon');
+const typeIn = (field: { value: HTMLElement; unit: HTMLElement }, amount: string, unit: 'min' | 'h') => {
+  fireEvent.change(field.value, { target: { value: amount } });
+  fireEvent.change(field.unit, { target: { value: unit } });
+};
+const saveTargets = (region: HTMLElement) => fireEvent.click(within(region).getByRole('button', { name: 'Save targets' }));
+
+test('targets show as people say them, take minutes or hours, and are minutes on the wire; an empty box is no target', async () => {
+  responseTargetsApi.get.mockResolvedValue(doc({ targets: { urgent: { first_response_minutes: 15, resolution_minutes: 480 }, high: { first_response_minutes: 60, resolution_minutes: 510 },
+    normal: { first_response_minutes: 90, resolution_minutes: 45 }, low: { first_response_minutes: null, resolution_minutes: null } } }));
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
-  expect(within(targets).getByLabelText('Resolve target for Urgent, in business hours')).toHaveValue(9);
-  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business hours'), { target: { value: '0.3' } });
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
-  expect(within(targets).getByLabelText('First reply target for Low, in business hours')).toHaveAccessibleDescription('In half hours, more than 0.');
-  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business hours'), { target: { value: '8.5' } });
-  fireEvent.change(within(targets).getByLabelText('Resolve target for Urgent, in business hours'), { target: { value: '' } });
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  const shown = (label: string, unitLabel: string) => { const field = box(targets, label, unitLabel); return [(field.value as HTMLInputElement).value, (field.unit as HTMLSelectElement).value].join(' '); };
+  expect(shown('First reply target for Urgent, in business time', 'Unit of the first reply target for Urgent')).toBe('15 min');
+  expect(shown('Resolve target for Urgent, in business time', 'Unit of the resolve target for Urgent')).toBe('8 h');
+  expect(shown('First reply target for High, in business time', 'Unit of the first reply target for High')).toBe('1 h');
+  expect(shown('Resolve target for High, in business time', 'Unit of the resolve target for High')).toBe('8.5 h');
+  expect(shown('First reply target for Normal, in business time', 'Unit of the first reply target for Normal')).toBe('1.5 h');
+  expect(shown('Resolve target for Normal, in business time', 'Unit of the resolve target for Normal')).toBe('45 min');
+  typeIn(lowFirstBox(targets), '15', 'min');
+  typeIn(lowResolveBox(targets), '1.5', 'h');
+  fireEvent.change(box(targets, 'Resolve target for Urgent, in business time', 'Unit of the resolve target for Urgent').value, { target: { value: '' } });
+  saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
-  expect(sent().targets.low).toEqual({ first_response_minutes: 510, resolution_minutes: null });
-  expect(sent().targets.urgent).toEqual({ first_response_minutes: 240, resolution_minutes: null });
+  expect(sent().targets).toEqual({ urgent: { first_response_minutes: 15, resolution_minutes: null }, high: { first_response_minutes: 60, resolution_minutes: 510 },
+    normal: { first_response_minutes: 90, resolution_minutes: 45 }, low: { first_response_minutes: 15, resolution_minutes: 90 } });
   expect(sent().warn_before_minutes).toBe(60);
+});
+
+test('a target of 0 or a part of a minute is refused with a clear message and nothing is sent; parts of an hour that are whole minutes are kept', async () => {
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  const rule = 'Use 1 minute or more, in whole minutes, or leave it empty for no target.';
+  for (const [amount, unit] of [['0', 'h'], ['1.5', 'min'], ['0.01', 'h'], ['-15', 'min']] as const) {
+    typeIn(lowFirstBox(targets), amount, unit);
+    saveTargets(targets);
+    expect(lowFirstBox(targets).value).toHaveAccessibleDescription(rule);
+  }
+  expect(responseTargetsApi.set).not.toHaveBeenCalled();
+  typeIn(lowFirstBox(targets), '1.1', 'h');
+  typeIn(lowResolveBox(targets), '0.1', 'h');
+  saveTargets(targets);
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().targets.low).toEqual({ first_response_minutes: 66, resolution_minutes: 6 });
+});
+
+test('due soon takes minutes or hours, and 0', async () => {
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  expect((warnBox(targets).value as HTMLInputElement).value).toBe('1');
+  expect(warnBox(targets).unit).toHaveValue('h');
+  typeIn(warnBox(targets), '5', 'min');
+  saveTargets(targets);
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().warn_before_minutes).toBe(5);
+  await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
+  typeIn(warnBox(targets), '0', 'min');
+  saveTargets(targets);
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
+  expect(sent().warn_before_minutes).toBe(0);
+});
+
+test('switching the unit keeps the number: a loaded 8 h switched to min sends 8', async () => {
+  responseTargetsApi.get.mockResolvedValue(doc({ targets: { ...doc().targets, urgent: { first_response_minutes: 240, resolution_minutes: 480 } } }));
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  const urgentResolve = box(targets, 'Resolve target for Urgent, in business time', 'Unit of the resolve target for Urgent');
+  fireEvent.change(urgentResolve.unit, { target: { value: 'min' } });
+  expect(urgentResolve.value).toHaveValue(8);
+  saveTargets(targets);
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().targets.urgent).toEqual({ first_response_minutes: 240, resolution_minutes: 8 });
+});
+
+test('a target above a year or a due soon above a week is refused, the limit named in the unit shown', async () => {
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  for (const [amount, unit, message] of [['525601', 'min', 'At most 525600 min (a year of business time).'], ['8761', 'h', 'At most 8760 h (a year of business time).'],
+    ['1e20', 'h', 'At most 8760 h (a year of business time).']] as const) {
+    typeIn(lowFirstBox(targets), amount, unit);
+    saveTargets(targets);
+    expect(lowFirstBox(targets).value).toHaveAccessibleDescription(message);
+  }
+  for (const [amount, unit, message] of [['10081', 'min', 'At most 10080 min (a week of business time).'], ['169', 'h', 'At most 168 h (a week of business time).']] as const) {
+    typeIn(warnBox(targets), amount, unit);
+    saveTargets(targets);
+    expect(warnBox(targets).value).toHaveAccessibleDescription(message);
+  }
+  expect(responseTargetsApi.set).not.toHaveBeenCalled();
+  typeIn(lowFirstBox(targets), '8760', 'h');
+  typeIn(warnBox(targets), '168', 'h');
+  saveTargets(targets);
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().targets.low.first_response_minutes).toBe(525600);
+  expect(sent().warn_before_minutes).toBe(10080);
+});
+
+test('an agent reads each target the way people say it, and no due soon as no reminder', async () => {
+  api.me.mockResolvedValue(me('agent'));
+  responseTargetsApi.get.mockResolvedValue(doc({ targets: { urgent: { first_response_minutes: 15, resolution_minutes: 480 }, high: { first_response_minutes: 90, resolution_minutes: null },
+    normal: { first_response_minutes: 60, resolution_minutes: null }, low: { first_response_minutes: null, resolution_minutes: null } }, warn_before_minutes: 0 }));
+  show();
+  const targets = await screen.findByRole('region', { name: 'Targets' });
+  expect(targets).toHaveTextContent('First reply: 15 min · Resolve: 8 h');
+  expect(targets).toHaveTextContent('First reply: 1.5 h · Resolve: No target');
+  expect(targets).toHaveTextContent('First reply: 1 h · Resolve: No target');
+  expect(targets).toHaveTextContent('Due soonNo reminder before the target');
+  // No boxes to leave empty for someone who only reads them.
+  expect(targets).not.toHaveTextContent(/Leave a box empty/);
 });
 
 test('a holiday is added and removed; the same day twice is refused', async () => {
@@ -211,11 +310,11 @@ test('a save made after someone else saved is refused: the card says so, shows t
   responseTargetsApi.set.mockRejectedValueOnce(new mocks.ChangedElsewhereError('Someone saved the response targets since you read them.', { code: 'changed_elsewhere', current: theirs }));
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
-  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business hours'), { target: { value: '2' } });
+  fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business time'), { target: { value: '2' } });
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
   await waitFor(() => expect(sent()).toMatchObject({ updated_at: '2026-10-31T00:00:00Z' }));
   expect(await within(targets).findByRole('alert')).toHaveTextContent(/Someone else changed the response targets; your change was not saved\. They show as they are now/);
-  expect(within(targets).getByLabelText('First reply target for Low, in business hours')).toHaveValue(2);
+  expect(within(targets).getByLabelText('First reply target for Low, in business time')).toHaveValue(2);
   expect(screen.getByRole('region', { name: 'Holidays' })).toHaveTextContent('Christmas');
   // Saving again goes with the version now shown.
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
@@ -229,11 +328,11 @@ test('after a refusal, the fields nobody here touched show and save the other ad
   responseTargetsApi.set.mockRejectedValueOnce(new mocks.ChangedElsewhereError('Someone saved the response targets since you read them.', { code: 'changed_elsewhere', current: theirs }));
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
-  fireEvent.change(within(targets).getByLabelText('First reply target for Normal, in business hours'), { target: { value: '2' } });
+  fireEvent.change(within(targets).getByLabelText('First reply target for Normal, in business time'), { target: { value: '2' } });
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
   await within(targets).findByRole('alert');
-  expect(within(targets).getByLabelText('Due soon, in business hours before the target')).toHaveValue(1.5);
-  expect(within(targets).getByLabelText('First reply target for Normal, in business hours')).toHaveValue(2);
+  expect(within(targets).getByLabelText('Due soon, in business time before the target')).toHaveValue(1.5);
+  expect(within(targets).getByLabelText('First reply target for Normal, in business time')).toHaveValue(2);
   fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
   expect(sent()).toMatchObject({ warn_before_minutes: 90, updated_at: '2026-10-31T02:00:00Z' });

@@ -30,6 +30,10 @@ func writeIntakeError(response http.ResponseWriter, err error) {
 	case errors.As(err, &conflict):
 		body := map[string]any{"code": "gathering_decided", "message": "This card was decided otherwise meanwhile; nothing changed.",
 			"state": conflict.Outcome.State, "decided_by": nil, "decided_by_agent_id": nil, "conversation_id": nil}
+		if conflict.Changed {
+			body["code"], body["message"] = "gathering_changed",
+				"The customer added messages to this card since you read it; nothing was decided. Read the card again (its item_count) and decide."
+		}
 		if conflict.Outcome.DecidedBy != "" {
 			body["decided_by"] = conflict.Outcome.DecidedBy
 		}
@@ -117,6 +121,24 @@ func (a *API) getIntakeGathering(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, detail)
 }
 
+// getIntakeGatheringFile streams one file of an item on a card, so a person sees the picture or video a
+// customer sent before deciding the card. Like an attachment it is a download, never a page; a file the
+// channel could not fetch, or not yet, is 404.
+func (a *API) getIntakeGatheringFile(response http.ResponseWriter, request *http.Request) {
+	workspaceID := principal(request).Workspace.ID
+	index, err := strconv.Atoi(request.PathValue("index"))
+	if err != nil || index < 0 || index > 999 {
+		writeIntakeError(response, store.ErrGatheringNotFound)
+		return
+	}
+	file, err := a.store.IntakeGatheringFile(request.Context(), workspaceID, request.PathValue("id"), request.PathValue("itemId"), index)
+	if err != nil && !errors.Is(err, store.ErrGatheringNotFound) {
+		writeIntakeError(response, err)
+		return
+	}
+	a.streamDownload(response, request, err == nil && file.Status == "stored" && file.Key != "", workspaceID, request.PathValue("itemId"), file.Name, file.Size, file.SHA256, file.Key)
+}
+
 func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.Request) {
 	id := request.PathValue("id")
 	if !uuidShape.MatchString(id) {
@@ -141,9 +163,14 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 	if who.IsToken() {
 		actor.TokenID = who.SessionID
 	}
-	a.decideOnce(response, request, decideIntakeOperation, []string{input.Action, input.ConversationID, input.Command, input.Subject, input.IgnoreReason, input.FollowsDecisionID}, func(ctx context.Context) error {
+	fingerprint := []string{input.Action, input.ConversationID, input.Command, input.Subject, input.IgnoreReason, input.FollowsDecisionID}
+	if input.ItemCount != nil {
+		fingerprint = append(fingerprint, strconv.Itoa(*input.ItemCount))
+	}
+	a.decideOnce(response, request, decideIntakeOperation, fingerprint, func(ctx context.Context) error {
 		_, err := a.intakeService().Decide(ctx, who.Workspace.ID, id, intake.Decision{Action: input.Action, ConversationID: input.ConversationID,
-			Command: input.Command, Subject: input.Subject, IgnoreReason: input.IgnoreReason, FollowsDecisionID: input.FollowsDecisionID}, store.DecidedByAgent, actor)
+			Command: input.Command, Subject: input.Subject, IgnoreReason: input.IgnoreReason, FollowsDecisionID: input.FollowsDecisionID, ItemCount: input.ItemCount},
+			store.DecidedByAgent, actor)
 		return err
 	})
 }
@@ -207,6 +234,8 @@ type intakeDecisionInput struct {
 	IgnoreReason   string `json:"ignore_reason"`
 	// FollowsDecisionID is the AI suggestion of the card the decision follows.
 	FollowsDecisionID string `json:"follows_decision_id"`
+	// ItemCount is how many messages of the card the decider read.
+	ItemCount *int `json:"item_count"`
 }
 
 // ignoreReasons are why a person may say a card is set aside.
@@ -223,6 +252,9 @@ func readIntakeDecision(response http.ResponseWriter, request *http.Request) ([]
 	case input.Action != intake.Create && (input.Command != "" || input.Subject != ""):
 	case input.IgnoreReason != "" && (input.Action != intake.Ignore || !slices.Contains(ignoreReasons, input.IgnoreReason)):
 	case len([]rune(input.Subject)) > 200 || len(input.Command) > 40:
+	case input.ItemCount != nil && *input.ItemCount < 1:
+		writeError(response, http.StatusBadRequest, "invalid_request", "item_count is how many messages of the card you read: 1 or more.")
+		return nil, input, false
 	case input.FollowsDecisionID != "" && !uuidShape.MatchString(input.FollowsDecisionID):
 		writeError(response, http.StatusBadRequest, "invalid_request", "follows_decision_id is not an AI suggestion of this card.")
 		return nil, input, false

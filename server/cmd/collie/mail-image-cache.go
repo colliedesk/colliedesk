@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -23,7 +23,7 @@ func mailImageCacheBytesFromEnv(getenv func(string) string) (int64, error) {
 	}
 	size, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || size <= 0 {
-		return 0, fmt.Errorf("MAIL_IMAGE_CACHE_BYTES must be a whole number of bytes above zero")
+		return 0, configerr.Say("mail_image_cache_invalid", nil)
 	}
 	return size, nil
 }
@@ -56,7 +56,7 @@ func kbVideoMaxBytesFromEnv(getenv func(string) string) (int64, error) {
 	}
 	size, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || size <= 0 {
-		return 0, fmt.Errorf("KB_VIDEO_MAX_BYTES must be a whole number of bytes above zero")
+		return 0, configerr.Say("kb_video_max_invalid", nil)
 	}
 	return size, nil
 }

@@ -12,7 +12,10 @@ import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
+import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
+import type { Duration, Unit } from './target-duration';
 import { can } from '../../../lib/can';
+import '../../../ui/controls.css';
 import './targets.css';
 
 // Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
@@ -30,10 +33,6 @@ function fieldErrors(error: unknown): Record<string, string> {
 // What a PUT takes: the document without what only the server writes or what is the reader's own, with the
 // version it was read at (updated_at): a save after someone else's is refused, 409 changed_elsewhere.
 const withoutStamp = ({ enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
-// Hours in the form, minutes on the wire; a target is in half hours.
-const toHours = (minutes: number | null) => (minutes === null ? '' : String(minutes / 60));
-const toMinutes = (hours: string) => (hours.trim() === '' ? null : Math.round(Number(hours) * 60));
-const halfHours = (hours: string) => hours.trim() === '' || (Number(hours) > 0 && Number.isInteger(Number(hours) * 2));
 
 // A card's save state: someone else's save in between is said in words of this page.
 const cardState = (save: Parameters<typeof saveState>[0]) => {
@@ -77,7 +76,7 @@ export function TargetsRoute() {
   const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
-  return <main className="settings-page panel">
+  return <main className="settings-page panel targets-page">
     <header><h1>{m.heading}</h1><p>{m.description}</p></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/targets" shown={shown} />
@@ -209,60 +208,73 @@ function HolidaysCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-// The form's values of the targets: hours, empty for no target.
-const formOf = (targets: ResponseTargets['targets']) => Object.fromEntries(priorities.map((priority) => [priority,
-  { first: toHours(targets[priority].first_response_minutes), resolve: toHours(targets[priority].resolution_minutes) }])) as Record<Priority, { first: string; resolve: string }>;
+// A number and its unit, each with a name of its own (neither name contains the other).
+function DurationField({ id, label, unitLabel, value, errorId, onChange }: { id?: string; label: string; unitLabel: string; value: Duration; errorId?: string; onChange: (next: Duration) => void }) {
+  return <>
+    <input id={id} type="number" min={0} step="any" inputMode="decimal" aria-label={label} value={value.amount}
+      aria-invalid={errorId ? true : undefined} aria-describedby={errorId} onChange={(event) => onChange({ ...value, amount: event.target.value })} />
+    <select aria-label={unitLabel} value={value.unit} onChange={(event) => onChange({ ...value, unit: event.target.value as Unit })}>
+      {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+    </select>
+  </>;
+}
 
 function TargetsCard({ doc, canManage }: CardProps) {
-  // Typed values lie over the document box by box ("urgent.first", "warn"); an untouched box follows it.
-  const [edits, setEdits] = useState<Partial<Record<string, string>>>({});
-  const base = formOf(doc.targets);
-  const values = Object.fromEntries(priorities.map((priority) => [priority, { first: edits[`${priority}.first`] ?? base[priority].first,
-    resolve: edits[`${priority}.resolve`] ?? base[priority].resolve }])) as Record<Priority, { first: string; resolve: string }>;
-  const warn = edits.warn ?? toHours(doc.warn_before_minutes);
+  // Typed values lie over the document box by box ("urgent.first", "warn"), number and unit together;
+  // an untouched box follows the document.
+  const [edits, setEdits] = useState<Partial<Record<string, Duration>>>({});
+  const fromDoc = (priority: Priority, which: 'first' | 'resolve') => durationOf(doc.targets[priority][which === 'first' ? 'first_response_minutes' : 'resolution_minutes']);
+  const valueOf = (priority: Priority, which: 'first' | 'resolve') => edits[`${priority}.${which}`] ?? fromDoc(priority, which);
+  const warn = edits.warn ?? durationOf(doc.warn_before_minutes);
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
   const server = fieldErrors(save.error);
   const id = useId();
-  const cellBad = (value: string) => checked && !halfHours(value);
-  const warnBad = checked && !(warn.trim() !== '' && Number(warn) >= 0 && Number.isInteger(Number(warn) * 2));
   const priorityName = (priority: Priority) => messages.priorities[priority];
+  const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
   if (!canManage) {
-    return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}><dl className="tg-dl">
+    const read = (minutes: number | null) => (minutes === null ? m.none : spoken(minutes));
+    return <Card id={id} title={m.targetsHeading} lead={m.targetsReadLead}><dl className="tg-dl">
       {priorities.map((priority) => <Row key={priority} label={priorityName(priority)}
-        value={`${m.firstReply}: ${values[priority].first ? `${values[priority].first} h` : m.none} · ${m.resolve}: ${values[priority].resolve ? `${values[priority].resolve} h` : m.none}`} />)}
-      <Row label={m.dueSoon} value={`${warn} ${m.dueSoonUnit(Number(warn))}`} />
+        value={`${m.firstReply}: ${read(doc.targets[priority].first_response_minutes)} · ${m.resolve}: ${read(doc.targets[priority].resolution_minutes)}`} />)}
+      <Row label={m.dueSoon} value={doc.warn_before_minutes === 0 ? m.noReminder : `${spoken(doc.warn_before_minutes)} ${m.beforeTarget}`} />
     </dl><p className="muted-copy">{m.targetsNote}</p></Card>;
   }
+  // Checked on save; the limit is named in the unit the box shows.
+  const targetError = (value: Duration) => (!checked ? undefined
+    : { rule: m.targetRule, max: m.targetMax(limitIn(maxTargetMinutes, value.unit)), none: undefined }[targetProblem(value) ?? 'none']);
   const cell = (priority: Priority, which: 'first' | 'resolve', field: string) => {
-    const error = (cellBad(values[priority][which]) ? m.halfHours : undefined) ?? server[`targets.${priority}.${field}`];
-    return <td data-label={which === 'first' ? m.firstReply : m.resolve}><span className="tg-cell">
-      <input type="number" min={0.5} step={0.5} inputMode="decimal" aria-label={m.targetFor(which === 'first' ? m.firstReply : m.resolve, priorityName(priority))} value={values[priority][which]}
-        aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${priority}-${which}` : undefined}
-        onChange={(event) => { feedback.touch(); setEdits((all) => ({ ...all, [`${priority}.${which}`]: event.target.value })); }} />
-      <span>{m.hoursUnit}</span></span>
-      {error && <span className="error-copy field-note" id={`${id}-${priority}-${which}`}>{error}</span>}</td>;
+    const value = valueOf(priority, which);
+    const error = targetError(value) ?? server[`targets.${priority}.${field}`];
+    const errorId = `${id}-${priority}-${which}`;
+    const what = which === 'first' ? m.firstReply : m.resolve;
+    return <td data-label={what}><span className="tg-cell">
+      <DurationField label={m.targetFor(what, priorityName(priority))} unitLabel={m.unitFor(what, priorityName(priority))} value={value} errorId={error ? errorId : undefined} onChange={edit(`${priority}.${which}`)} /></span>
+      {error && <span className="error-copy field-note" id={errorId}>{error}</span>}</td>;
   };
+  const warnError = server.warn_before_minutes ?? (!checked ? undefined
+    : { rule: m.warnRule, max: m.warnMax(limitIn(maxWarnMinutes, warn.unit)), none: undefined }[warnProblem(warn) ?? 'none']);
   return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}>
     <form className="stacked-form" noValidate onSubmit={(event) => {
       event.preventDefault();
       setChecked(true);
-      const bad = priorities.some((priority) => !halfHours(values[priority].first) || !halfHours(values[priority].resolve)) || !(warn.trim() !== '' && Number(warn) >= 0 && Number.isInteger(Number(warn) * 2));
+      const bad = priorities.some((priority) => targetProblem(valueOf(priority, 'first')) || targetProblem(valueOf(priority, 'resolve'))) || warnProblem(warn);
       if (bad || feedback.pending) return;
-      save.mutate({ ...withoutStamp(doc), warn_before_minutes: toMinutes(warn) ?? 0,
-        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: toMinutes(values[priority].first), resolution_minutes: toMinutes(values[priority].resolve) }])) as ResponseTargets['targets'] },
+      // Checked above: each is whole minutes, or null for an empty target box.
+      const minutes = (value: Duration) => minutesOf(value) ?? null;
+      save.mutate({ ...withoutStamp(doc), warn_before_minutes: minutes(warn) ?? 0,
+        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: minutes(valueOf(priority, 'first')), resolution_minutes: minutes(valueOf(priority, 'resolve')) }])) as ResponseTargets['targets'] },
         { onSuccess: () => setEdits({}) });
     }}>
       <table className="tg-table">
         <thead><tr><th scope="col">{m.priority}</th><th scope="col">{m.firstReply}</th><th scope="col">{m.resolve}</th></tr></thead>
         <tbody>{priorities.map((priority) => <tr key={priority}><th scope="row">{priorityName(priority)}</th>{cell(priority, 'first', 'first_response_minutes')}{cell(priority, 'resolve', 'resolution_minutes')}</tr>)}</tbody>
       </table>
-      <div className={`field${warnBad || server.warn_before_minutes ? ' field-bad' : ''}`}>
+      <div className={`field${warnError ? ' field-bad' : ''}`}>
         <span className="tg-cell"><label htmlFor={`${id}-warn`}>{m.dueSoon}</label>
-          <input id={`${id}-warn`} type="number" min={0} step={0.5} inputMode="decimal" aria-label={m.dueSoonLabel} value={warn}
-            onChange={(event) => { feedback.touch(); setEdits((all) => ({ ...all, warn: event.target.value })); }} /><span>{m.dueSoonUnit(Number(warn))}</span></span>
-        {(warnBad || server.warn_before_minutes) && <span className="error-copy field-note">{server.warn_before_minutes ?? m.halfHours}</span>}
+          <DurationField id={`${id}-warn`} label={m.dueSoonLabel} unitLabel={m.dueSoonUnit} value={warn} errorId={warnError ? `${id}-warn-error` : undefined} onChange={edit('warn')} /><span>{m.beforeTarget}</span></span>
+        {warnError && <span className="error-copy field-note" id={`${id}-warn-error`}>{warnError}</span>}
       </div>
       <p className="muted-copy">{m.targetsNote}</p>
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveTargets)}</button>{feedback.status}</span>

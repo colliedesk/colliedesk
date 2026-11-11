@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 func redeemWithTimezone(t *testing.T, api http.Handler, link, timezone string) string {
@@ -31,27 +33,99 @@ func timezoneOf(t *testing.T, api http.Handler, token string) (string, *string) 
 	return me.Timezone, me.Agent.TimezoneOverride
 }
 
-func TestTheFirstSignInStartsAnAgentOnTheBrowsersTimezoneOnlyOnce(t *testing.T) {
+func workspaceTimezoneOf(t *testing.T, api http.Handler, token string) string {
+	t.Helper()
+	var me struct {
+		Workspace struct {
+			Timezone string `json:"timezone"`
+		} `json:"workspace"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
+	return me.Workspace.Timezone
+}
+
+// The person who created the workspace signs in first: the workspace, and the business hours its response
+// targets count in, start on their browser's zone, and they follow it. It happens once.
+func TestTheCreatorsFirstSignInStartsTheWorkspaceOnTheBrowsersTimezoneOnlyOnce(t *testing.T) {
 	api, service := testAPI(t)
-	workspace, link, err := service.CreateWorkspace(context.Background(), "Zones Desk", "admin@zones.example.com")
+	workspace, link, err := service.CreateWorkspace(context.Background(), "London Desk", "admin@london.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin := redeemWithTimezone(t, api, link, "Asia/Ho_Chi_Minh")
-	if zone, override := timezoneOf(t, api, admin); zone != "Asia/Ho_Chi_Minh" || override == nil {
-		t.Fatalf("after the first sign-in: timezone=%q override=%v, want the browser's Asia/Ho_Chi_Minh as the agent's own", zone, override)
+	admin := redeemWithTimezone(t, api, link, "Europe/London")
+	if zone := workspaceTimezoneOf(t, api, admin); zone != "Europe/London" {
+		t.Fatalf("workspace timezone=%q after the creator's first sign-in, want the browser's Europe/London", zone)
 	}
-	// The agent goes back to the workspace's zone; a later sign-in from another browser keeps that choice.
-	if response := request(t, api, http.MethodPatch, "/api/v1/agents/me/timezone", map[string]any{"timezone": nil}, admin, nil); response.Code != http.StatusOK {
+	if zone, override := timezoneOf(t, api, admin); zone != "Europe/London" || override != nil {
+		t.Fatalf("the creator: timezone=%q override=%v, want Europe/London from the workspace", zone, override)
+	}
+	var targets struct {
+		Timezone *string `json:"timezone"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/response-targets", nil, admin, nil), &targets)
+	if targets.Timezone != nil {
+		t.Fatalf("response targets timezone=%q, want null: they count in the workspace's Europe/London", *targets.Timezone)
+	}
+	again, err := service.Pair(context.Background(), workspace.Slug, "admin@london.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := redeemWithTimezone(t, api, again, "America/Denver")
+	if zone, override := timezoneOf(t, api, second); zone != "Europe/London" || override != nil {
+		t.Fatalf("after a later sign-in: timezone=%q override=%v, want the workspace's Europe/London kept", zone, override)
+	}
+}
+
+// A teammate's first sign-in sets only their own timezone, once; the workspace keeps its zone.
+func TestATeammatesFirstSignInSetsOnlyTheirOwnTimezoneOnlyOnce(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Team Zones Desk", "admin@team-zones.example.com")
+	_, invite := createContractInvite(t, api, admin, "agent@team-zones.example.com", "agent")
+	teammate := redeemWithTimezone(t, api, invite, "Asia/Ho_Chi_Minh")
+	if zone, override := timezoneOf(t, api, teammate); zone != "Asia/Ho_Chi_Minh" || override == nil {
+		t.Fatalf("after the teammate's first sign-in: timezone=%q override=%v, want the browser's Asia/Ho_Chi_Minh as their own", zone, override)
+	}
+	if zone := workspaceTimezoneOf(t, api, admin); zone != "UTC" {
+		t.Fatalf("workspace timezone=%q after a teammate's first sign-in, want UTC unchanged", zone)
+	}
+	// The teammate goes back to the workspace's zone; a later sign-in from another browser keeps that choice.
+	if response := request(t, api, http.MethodPatch, "/api/v1/agents/me/timezone", map[string]any{"timezone": nil}, teammate, nil); response.Code != http.StatusOK {
 		t.Fatalf("same as workspace: status=%d body=%s", response.Code, response.Body.String())
 	}
-	again, err := service.Pair(context.Background(), workspace.Slug, "admin@zones.example.com")
+	again, err := service.Pair(context.Background(), "team-zones-desk", "agent@team-zones.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 	second := redeemWithTimezone(t, api, again, "America/Denver")
 	if zone, override := timezoneOf(t, api, second); zone != "UTC" || override != nil {
 		t.Fatalf("after a later sign-in: timezone=%q override=%v, want the workspace's UTC kept", zone, override)
+	}
+	if zone := workspaceTimezoneOf(t, api, admin); zone != "UTC" {
+		t.Fatalf("workspace timezone=%q after the teammate's later sign-in, want UTC unchanged", zone)
+	}
+}
+
+// An admin who chose UTC on purpose keeps it, even when the choice came before the creator's first sign-in
+// (with an agent token from collie token create): the creator's browser then sets only their own timezone.
+func TestAChosenUTCWorkspaceTimezoneStaysUTCAtTheCreatorsFirstSignIn(t *testing.T) {
+	api, service := testAPI(t)
+	workspace, link, err := service.CreateWorkspace(context.Background(), "Chosen UTC Desk", "admin@chosen-utc.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := service.IssueAgentToken(context.Background(), workspace.Slug, "admin@chosen-utc.example.com", auth.TokenRequest{Label: "setup", LegacyScope: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := request(t, api, http.MethodPatch, "/api/v1/workspace/timezone", map[string]any{"timezone": "UTC"}, token.Token, nil); response.Code != http.StatusOK {
+		t.Fatalf("choose UTC: status=%d body=%s", response.Code, response.Body.String())
+	}
+	admin := redeemWithTimezone(t, api, link, "Europe/London")
+	if zone := workspaceTimezoneOf(t, api, admin); zone != "UTC" {
+		t.Fatalf("workspace timezone=%q, want the chosen UTC kept", zone)
+	}
+	if zone, override := timezoneOf(t, api, admin); zone != "Europe/London" || override == nil {
+		t.Fatalf("the creator: timezone=%q override=%v, want their browser's Europe/London as their own", zone, override)
 	}
 }
 

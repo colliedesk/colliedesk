@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { LogoMark, LogoWordmark } from '../../ui/logo';
+import './auth.css';
 
 interface RedeemPageProps {
   token: string;

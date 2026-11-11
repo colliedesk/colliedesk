@@ -270,8 +270,11 @@ everything else a customer wrote is AI's to decide, whatever conversation the ru
   time, waits in the queue with its suggestion (**AI was not sure**, **AI did not answer**). Nothing is
   opened or joined on its own then, and nothing is ever lost.
 
-A card behind one of the same customer that waits for a person waits right after it, and goes back to
-be decided once that one is.
+At **Auto**, when a customer writes again while their card waits for a person, the new messages join that
+card and AI reads all of it again: a picture first and the words that say what it is a few minutes later
+are decided as one, and AI applies it alone when it is now sure enough. Otherwise the card waits again, with
+every message in it. At Suggest, a card behind one of the same customer that waits for a person waits right
+after it, and goes back to be decided once that one is.
 
 AI reads one card of a customer at a time, in the order they were said. It sees what the customer wrote
 with the messages just before it in the same place and the conversations the card may join, with people
@@ -288,7 +291,10 @@ same place: **match**) or decided by default. While it waits, it lists
 the conversations it may join without the reply going to someone else: in a group, the open or pending
 conversations of that group active in the last 72 hours; in a one-to-one chat, that customer's on the same
 channel; then the ones resolved within the reopen window (7 days unless the channel's intake settings say
-otherwise), which reopen when a card joins them. A closed conversation is never offered.
+otherwise), which reopen when a card joins them. A closed conversation is never offered. On a channel that
+joins only open conversations (Zalo's default), a resolved one is never offered either, and a card added to a
+conversation resolved since opens a new conversation instead: a resolved conversation gets nothing more,
+except through the customer's reopen command.
 
 A person decides a card: **open a conversation** with what it said, as one message (never joining a
 conversation found since; optionally with one of the channel's commands, for its tags and priority, and a

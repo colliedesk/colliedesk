@@ -53,6 +53,8 @@ type Config struct {
 	// ServerOff is true when the operator switched the server's provider off (features.ai_server): Server
 	// is nil, and the features set to it say so until it is on again.
 	ServerOff bool
+	// ServerOffLabel is the name workspaces knew the server's provider by while it is off.
+	ServerOffLabel string
 	// Keys seal workspace keys (MAILBOX_TOKEN_KEYS); without one no key can be stored.
 	Keys tokenseal.Keys
 	// AllowPrivateBaseURLs lets a workspace provider use a private or loopback address and plain
@@ -102,6 +104,9 @@ func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
 // ServerConfigured reports whether the server has a provider.
 func (s *Service) ServerConfigured() bool { return s.config.Server != nil }
+
+// ServerOffers says whether the server's provider runs this feature (its operator offers a model for it).
+func (s *Service) ServerOffers(slot string) bool { return len(s.config.Server.ModelsFor(slot)) > 0 }
 
 func (s *Service) build(spec Spec) (aiprovider.Provider, error) {
 	if s.config.Build != nil {
@@ -874,6 +879,45 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 		turnedOff = []string{}
 	}
 	return turnedOff, err
+}
+
+// ListServerModels asks a server provider not saved yet which models its key may use, so the operator picks
+// the models of each feature instead of typing their ids, with what each costs when the server lists it
+// (OpenRouter), so their prices are filled in. Nothing is stored and nothing is metered.
+func (s *Service) ListServerModels(ctx context.Context, kind aiprovider.Kind, baseURL, apiKey string) ([]string, map[string]aiprovider.ListedPrice, error) {
+	provider, err := s.build(Spec{Kind: kind, BaseURL: baseURL, APIKey: apiKey, Server: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	lister, ok := provider.(aiprovider.ModelLister)
+	if !ok {
+		return nil, nil, &CheckError{Code: aiprovider.ErrorBadRequest}
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.config.CheckTimeout)
+	defer cancel()
+	models, err := lister.Models(ctx)
+	var providerErr *aiprovider.Error
+	if errors.As(err, &providerErr) {
+		return nil, nil, &CheckError{Code: providerErr.Code}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if models == nil {
+		models = []string{}
+	}
+	// Prices are a help: a server that lists none, or fails to, still lists its models.
+	prices := map[string]aiprovider.ListedPrice{}
+	if pricer, ok := provider.(aiprovider.ModelPricer); ok {
+		if listed, err := pricer.ModelPrices(ctx); err == nil {
+			for _, model := range models {
+				if price, ok := listed[model]; ok {
+					prices[model] = price
+				}
+			}
+		}
+	}
+	return models, prices, nil
 }
 
 // PingServer sends one provider check to a server provider (the operator console's check before a change is

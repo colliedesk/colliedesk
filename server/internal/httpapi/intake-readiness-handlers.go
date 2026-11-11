@@ -14,7 +14,7 @@ import (
 )
 
 // Readiness of a chat channel's intake (docs/user/ai.md "When AI acts on its own"): per action, whether
-// people's explicit labels and offline evaluations of the running model and prompt let AI act on its
+// people's explicit labels and offline evaluations of the running prompt (on any model) let AI act on its
 // own, and what one more month at auto would cost. Nothing here calls a model: offline evaluations run
 // with `collie intake-eval` and only their counts come here.
 

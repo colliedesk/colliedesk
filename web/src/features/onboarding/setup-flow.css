@@ -1,0 +1,96 @@
+/* The setup flow (/setup): one step per screen on plain paper, a header with the identity and the way out, and
+   one centred column. The narrow column is this screen's own choice (docs/internals/design.md, Setup flow). */
+.setup-flow { min-height: 100dvh; display: flex; flex-direction: column; background: var(--surface-1); color: var(--text-1); }
+
+/* The header stays on screen while the column scrolls: the workspace and address are never out of view. */
+.setup-flow-head {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: var(--space-3); min-height: 56px;
+  padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); background: var(--surface-1);
+}
+.setup-flow-logo { display: grid; flex: none; }
+.setup-flow-identity { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-size: var(--fs-label); }
+.setup-flow-identity strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.setup-flow-identity span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+.setup-flow-identity span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
+.setup-flow-exit {
+  flex: none; display: grid; place-items: center; width: var(--control, 32px); height: var(--control, 32px); margin-left: auto;
+  border-radius: var(--radius); color: var(--text-3);
+}
+.setup-flow-exit:hover { background: var(--surface-2); color: var(--text-1); }
+.setup-flow-exit svg { width: 18px; height: 18px; }
+/* At the right edge the tooltip opens leftwards, so it is never cut by the window. */
+.setup-flow-exit[data-tip]::after { left: auto; right: 0; translate: none; }
+
+.setup-flow-main { flex: 1; display: flex; justify-content: center; padding: var(--space-12) var(--space-6) var(--space-16); }
+.setup-flow-column { width: 100%; max-width: 36rem; display: grid; align-content: start; gap: var(--space-8); }
+
+.setup-flow-progress { display: flex; align-items: center; gap: var(--space-3); color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.setup-flow-segments { display: flex; gap: var(--space-1); }
+.setup-flow-segments > span { width: 24px; height: 4px; border-radius: var(--radius-full); background: var(--surface-3); }
+/* The step on screen is the long segment, whether its own part is done (ink) or not yet (grey). */
+.setup-flow-segments > [data-current] { width: 48px; background: var(--text-3); }
+.setup-flow-segments > [data-state="done"] { background: var(--accent); }
+
+.setup-flow-title { display: grid; gap: var(--space-2); }
+.setup-flow h1 { margin: 0; font: 500 32px/1.15 var(--font-display); letter-spacing: -0.02em; }
+/* The title takes the focus when a step opens, for screen readers; it is not a control, so no ring. */
+.setup-flow h1:focus { outline: none; }
+.setup-flow-lead { margin: 0; color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
+.setup-flow-recommended {
+  justify-self: start; border-radius: var(--radius-full); padding: 2px var(--space-2); background: var(--surface-3);
+  color: var(--text-2); font-size: var(--fs-label); font-weight: 600;
+}
+
+/* The steps embed Settings' own sections. Here they stand in one column: the title above says what they are for. */
+.setup-flow-body { min-width: 0; }
+.setup-flow-body .settings-sections { display: grid; gap: var(--space-6); }
+.setup-flow-body .settings-card { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); padding: 0; border-top: 0; }
+.setup-flow-body .settings-card + .settings-card { padding-top: var(--space-6); border-top: 1px solid var(--line); }
+.setup-flow-body .setup-layout { grid-template-columns: minmax(0, 1fr); }
+/* The flow counts its own steps above; the email setup's own "Step 2 of 4" beside it would be a second count. */
+.setup-flow-body .setup-of { display: none; }
+/* The email setup's and the invites' own title and introduction say again what the step's title and lead say. */
+.setup-flow-email .setup-card > .section-heading > h2, .setup-flow-email .setup-card > .section-heading > h2 + p,
+.setup-flow-invites .section-heading { display: none; }
+.setup-flow-test { display: grid; gap: var(--space-2); }
+.setup-flow-test p { margin: 0; }
+
+.setup-flow-actions { display: grid; gap: var(--space-3); padding-top: var(--space-6); border-top: 1px solid var(--line); }
+.setup-flow-missing { margin: 0; font-size: var(--fs-small); }
+.setup-flow-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+.setup-flow-later { margin-left: auto; font-size: var(--fs-ui); }
+.setup-flow-buttons button, .setup-flow a.button { min-height: max(40px, var(--control, 32px)); padding: 0 var(--space-5); font-size: var(--fs-ui); }
+.setup-flow a.button {
+  display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); font-weight: 500; text-decoration: none;
+}
+.setup-flow a.button:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.setup-flow a.button.primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.setup-flow a.button.primary-action:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+.setup-flow-inbox { margin-left: auto; }
+/* The summary's list ends on its own line. */
+.setup-flow-summary + .setup-flow-actions { padding-top: 0; border-top: 0; }
+
+.setup-flow-summary { display: grid; margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
+.setup-flow-summary li {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); min-height: 56px;
+  border-bottom: 1px solid var(--line);
+}
+.setup-flow-summary li > a, .setup-flow-summary-title { font-weight: 600; }
+.setup-flow-summary [data-state="done"] .setup-flow-summary-title { color: var(--text-2); font-weight: 500; }
+.setup-flow-summary-state { color: var(--text-3); font-size: var(--fs-small); text-align: right; }
+.setup-flow-mark { display: grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--line-control); border-radius: var(--radius-full); }
+.setup-flow-mark svg { width: 12px; height: 12px; }
+.setup-flow-summary [data-state="waiting"] .setup-flow-mark { border-style: dashed; border-color: var(--text-3); }
+.setup-flow-summary [data-state="done"] .setup-flow-mark { border-color: var(--ok); background: var(--ok); color: var(--surface-1); }
+
+/* A narrow window: the same column, full width, and every control a fingertip's size. */
+@media (max-width: 44rem) {
+  .setup-flow { --control: var(--touch); }
+  .setup-flow-head { padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4); }
+  .setup-flow-main { padding: var(--space-8) var(--space-4) var(--space-12); }
+  .setup-flow-column { gap: var(--space-6); }
+  .setup-flow h1 { font-size: 26px; }
+  .setup-flow-main a { display: inline-flex; align-items: center; min-height: var(--touch); }
+  .setup-flow-buttons .primary-action { flex: 1 1 auto; }
+}

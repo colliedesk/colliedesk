@@ -70,6 +70,9 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 			writeInternalError(response, err)
 			return
 		}
+		// Off the hosted domain the server-wide secret brings only mail to a reply address on
+		// MAIL_FROM_DOMAIN, which reaches Colliedesk without passing the support mailbox.
+		parsed.Direct = !hosted
 		if target.workspaceID == "" && hosted {
 			writeError(response, http.StatusNotFound, "unknown_recipient", "No connected workspace receives mail at this address.")
 			return

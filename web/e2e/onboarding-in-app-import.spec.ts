@@ -18,9 +18,9 @@ test('in-app freshdesk import: an admin reads the account, imports it in the bac
   await fake.start();
   try {
     await redeemLink(page, workspace.url);
-    // The empty inbox leads an admin to the import page.
+    // The empty inbox leads an admin to the import, on its step of the setup flow.
     await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Import from Freshdesk/ }).click();
-    await expect(page).toHaveURL(`${baseURL}/settings/import-freshdesk`);
+    await expect(page).toHaveURL(`${baseURL}/setup/import`);
     await expect(page.getByRole('heading', { name: 'Import from Freshdesk', level: 1 })).toBeVisible();
 
     await page.getByLabel('Freshdesk address').fill('acme.freshdesk.com');

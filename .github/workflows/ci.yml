@@ -171,7 +171,8 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2]
-    runs-on: ubuntu-latest
+    # Pinned: Playwright cannot install Chromium on ubuntu-latest (Ubuntu 26.04). Back to ubuntu-latest once it can.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
@@ -296,7 +297,8 @@ jobs:
             pattern: '^(?=.*@onboarding)(?=.*freshdesk import:)'
           - journey: other
             pattern: '^(?=.*@onboarding)(?!.*freshdesk import:)'
-    runs-on: ubuntu-latest
+    # Pinned: Playwright cannot install Chromium on ubuntu-latest (Ubuntu 26.04). Back to ubuntu-latest once it can.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
@@ -492,8 +494,16 @@ jobs:
         run: sh tests/brand-name-test.sh
       - name: No webhook secret literals (GitHub secret scanning)
         run: sh tests/webhook-secret-literal-test.sh
-      - name: Plugin saves a new token only when Colliedesk accepts it
-        run: sh tests/plugin-token-test.sh
+      - name: Plugin version gate rules (throwaway repositories)
+        run: python3 -I tests/plugin-version-check-test.py
+      - name: A change to plugins/colliedesk raises its version
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          python3 -I .github/scripts/plugin-version-check.py "$BASE_SHA"
       - name: A closed milestone opens its AGENTS.md issue
         run: sh tests/milestone-agents-md-test.sh
       - name: Release tags follow Semantic Versioning from v1.0.0

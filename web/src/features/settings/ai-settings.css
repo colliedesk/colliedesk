@@ -1,5 +1,5 @@
 /* Settings → Built-in AI. Loaded with its lazy part; scrollbars follow base.css. */
-.ai-page { display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
+.ai-page { display: grid; gap: var(--space-3); align-content: start; min-width: 0; max-width: 55rem; }
 .ai-panel-stack { display: grid; gap: var(--space-3); min-width: 0; }
 .ai-loading { min-height: 12rem; }
 .ai-settings .badge { font-size: var(--fs-label); }
@@ -7,6 +7,15 @@
 
 .ai-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
 .ai-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
+/* S7-a: underline tabs, 36px tall, 20px apart; the open one underlined in text-1. */
+.ai-tabs-row { box-shadow: inset 0 -1px var(--line); }
+.ai-tabs-row > .seg-tabs { display: flex; flex: 1 1 auto; gap: var(--space-5); border: 0; border-radius: 0; background: none; padding: 0; }
+.ai-tabs-row > .seg-tabs button { min-height: 36px; border-radius: 0; background: none; padding: 0; color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; box-shadow: none; }
+.ai-tabs-row > .seg-tabs button:hover:not(:disabled) { background: none; color: var(--text-1); }
+.ai-tabs-row > .seg-tabs button[aria-selected="true"], .ai-tabs-row > .seg-tabs button[aria-selected="true"]:hover { background: none; color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--text-1); }
+.ai-tabs-row > .seg-tabs button:focus-visible { outline-offset: -2px; }
+.ai-tabs-row > .ai-add { margin-bottom: var(--space-2); }
+@media (pointer: coarse), (max-width: 30rem) { .ai-tabs-row > .seg-tabs button { min-height: var(--touch); } }
 .ai-narrow { display: none; }
 
 
@@ -36,22 +45,28 @@
 /* Features */
 .ai-slots { overflow: hidden; }
 .ai-slot-head, .ai-slot { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(10rem, 1fr) minmax(10rem, 0.9fr) minmax(8rem, 0.8fr) 4rem; gap: var(--space-4); align-items: center;
-  padding: var(--space-3) var(--space-4); }
-.ai-slot-head { border-bottom: 1px solid var(--line); padding-block: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
+  min-height: 64px; padding: var(--space-3) var(--space-4); }
+.ai-slot-head { min-height: 0; border-bottom: 1px solid var(--line); padding-block: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .ai-slot-head span:last-child { justify-self: end; }
 .ai-slot + .ai-slot { border-top: 1px solid var(--line); }
 .ai-slot-what { display: grid; gap: 2px; min-width: 0; }
-.ai-slot-what strong { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-weight: 600; }
-.ai-slot-what > span { color: var(--text-3); font-size: var(--fs-small); }
+.ai-slot-what strong { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.ai-slot-what > span { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
 .ai-slot select { width: 100%; }
 .ai-cell-label { display: none; }
+.ai-slot-model-fixed { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-small); }
+.ai-select-off { color: var(--text-3); background-color: var(--surface-1); border-style: dashed; }
+.ai-off-text { color: var(--text-3); }
+.ai-tip-anchor { display: block; min-width: 0; }
+.ai-tip-anchor > select { width: 100%; }
+.ai-model-name { overflow-wrap: anywhere; color: var(--text-1); }
 .ai-slot-limit { display: grid; gap: 0; justify-items: start; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .ai-server-meter { grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 22rem); }
 .ai-meter { display: grid; gap: 6px; min-width: 0; }
 .ai-meter-top { display: flex; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; font-size: var(--fs-small); }
-.ai-meter-top strong { font-weight: 600; }
-.ai-meter-top span { color: var(--text-3); font-size: var(--fs-label); }
-.ai-bar { height: 6px; overflow: hidden; border-radius: var(--radius-full); background: var(--surface-3); }
+.ai-meter-top strong { font-size: var(--fs-ui); font-weight: 500; }
+.ai-meter-top span { color: var(--text-3); font-size: var(--fs-small); }
+.ai-bar { height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--surface-3); }
 .ai-bar i { display: block; height: 100%; border-radius: var(--radius-full); background: var(--accent); }
 .ai-bar-full i { background: var(--danger); }
 .ai-usage-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-6); align-items: center; padding: var(--space-3) var(--space-4); }
@@ -262,12 +277,15 @@
   font-size: var(--fs-small); }
 .ai-differ-label { color: var(--text-2); }
 .ai-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
-.ai-chip { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; border-radius: 999px; background: var(--surface-0);
+.ai-chip { display: inline-flex; align-items: center; min-height: 32px; max-width: 100%; border-radius: 999px; background: var(--surface-0);
   box-shadow: 0 0 0 1px var(--line); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); text-decoration: none; overflow-wrap: anywhere; }
 .ai-chip:hover { background: color-mix(in srgb, var(--text-1) 5%, var(--surface-0)); }
 .ai-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-@media (pointer: coarse) { .ai-chip { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-chip { min-height: var(--touch); } }
 @media (max-width: 44rem) { .ai-differ { padding: 0 var(--space-2); } }
 .ai-sources-consent { display: grid; gap: var(--space-1); grid-column: 1 / -1; min-width: 0; margin: 0; border: 0; padding: 0; }
 .ai-sources-consent legend { padding: 0; font-size: var(--fs-small); font-weight: 600; }
 .ai-sources-consent .ai-pick { display: flex; align-items: center; gap: var(--space-2); }
+/* Text links (Change, Setup guide links): a 32px tall target, the line keeps its height. */
+.ai-settings :is(.link-action, .link-button, .ai-slot-limit a) { display: inline-block; margin-block: -7px; padding-block: 7px; }
+@media (pointer: coarse), (max-width: 30rem) { .ai-settings :is(.link-action, .link-button, .ai-slot-limit a) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }

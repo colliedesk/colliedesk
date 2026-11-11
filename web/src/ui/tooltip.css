@@ -1,0 +1,6 @@
+/* The same look as the icon tooltips (data-tip), for text that needs a real layer. */
+.tooltip {
+  z-index: 50; max-width: min(320px, calc(100vw - 16px)); border-radius: var(--radius-sm); background: var(--surface-inverse);
+  color: var(--text-inverse); box-shadow: var(--shadow-2); padding: var(--space-1) var(--space-2); font-family: var(--font-sans);
+  font-size: var(--fs-label); font-weight: 500; line-height: 1.4; pointer-events: none;
+}

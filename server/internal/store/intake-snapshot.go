@@ -123,7 +123,7 @@ func (s *Store) IntakeSnapshotOf(ctx context.Context, workspaceID, gatheringID s
 				snap.Quoted[id] = one[0]
 			}
 		}
-		candidates, err := gatheringCandidates(ctx, tx, workspaceID, g, now)
+		candidates, err := s.gatheringCandidates(ctx, tx, workspaceID, g, now)
 		if err != nil {
 			return snap, err
 		}

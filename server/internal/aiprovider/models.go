@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -130,9 +132,68 @@ func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
+// ListedPrice is what a server lists a model to cost, in US dollars per million tokens.
+type ListedPrice struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cache_read"`
+	CacheWrite float64 `json:"cache_write"`
+}
+
+// ModelPricer is an adapter whose server lists what its models cost (OpenRouter), so an operator's prices
+// are filled in instead of typed.
+type ModelPricer interface {
+	ModelPrices(ctx context.Context) (map[string]ListedPrice, error)
+}
+
+// ModelPrices is what the server lists each model to cost (OpenRouter's pricing, in dollars per token); a
+// model it gives no price is left out, and a server that lists none answers an empty map.
+func (p *openAIProvider) ModelPrices(ctx context.Context) (map[string]ListedPrice, error) {
+	listed, err := p.listModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	perMillion := func(value string) (float64, bool) {
+		number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || number < 0 || math.IsNaN(number) || math.IsInf(number, 0) {
+			return 0, false
+		}
+		return math.Round(number*1e6*1e6) / 1e6, true
+	}
+	prices := map[string]ListedPrice{}
+	for _, model := range listed {
+		if model.Pricing == nil {
+			continue
+		}
+		input, okIn := perMillion(model.Pricing.Prompt)
+		output, okOut := perMillion(model.Pricing.Completion)
+		if !okIn || !okOut {
+			continue
+		}
+		read, _ := perMillion(model.Pricing.InputCacheRead)
+		write, _ := perMillion(model.Pricing.InputCacheWrite)
+		prices[strings.TrimSpace(model.ID)] = ListedPrice{Input: input, Output: output, CacheRead: read, CacheWrite: write}
+	}
+	return prices, nil
+}
+
+// ModelPrices is FakePrices.
+func (f *Fake) ModelPrices(context.Context) (map[string]ListedPrice, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.FakePrices, nil
+}
+
 // listedModel is one model of GET {BaseURL}/models.
 type listedModel struct {
-	ID                  string    `json:"id"`
+	ID string `json:"id"`
+	// Pricing is OpenRouter's: dollars per token, as strings.
+	Pricing *struct {
+		Prompt          string `json:"prompt"`
+		Completion      string `json:"completion"`
+		InputCacheRead  string `json:"input_cache_read"`
+		InputCacheWrite string `json:"input_cache_write"`
+	} `json:"pricing"`
 	SupportedParameters *[]string `json:"supported_parameters"`
 	// ShutdownDate is the day OpenAI turns a model off (YYYY-MM-DD), or null; GET /models
 	// keeps listing a model after it, and every request to it then fails with model_not_found.

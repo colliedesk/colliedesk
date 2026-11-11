@@ -10,7 +10,7 @@ export const connectedAppsMessages = {
   lastUsed: 'Last used',
   active: 'Active',
   needsReconnecting: 'Needs reconnecting',
-  reconnectSteps: 'To use it again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; in Claude Code, run /mcp, choose colliedesk and Authenticate; in Codex, run codex mcp login colliedesk; in Cursor, log in to colliedesk again in Settings → MCP.',
+  reconnectSteps: 'To use it again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; in Claude Code, run /mcp, choose colliedesk (plugin:colliedesk:colliedesk with the Colliedesk plugin) and Authenticate; in Codex, run codex mcp login colliedesk; in Cursor, log in to colliedesk again in Settings → MCP.',
   disconnect: 'Disconnect',
   removingInApp: 'Removing the server in the app does not disconnect it here; Disconnect does.',
 } as const;
@@ -32,7 +32,7 @@ export function ConnectedAppsSection({ sessions, timezone, mcpAddress, onDisconn
   return (
     <section className="settings-card" aria-labelledby="connected-apps-heading">
       <div className="section-heading"><h2 id="connected-apps-heading">{text.heading}</h2><p>{text.description(mcpAddress)}</p></div>
-      <div className="settings-body">
+      <div className="settings-body settings-rows">
         {apps.length === 0 ? <p className="muted-copy">{text.none}</p> : <div className="data-list">{apps.map((session) => {
           const app = session.app!;
           const stale = app.needs_reconnecting || session.revoked_at !== null || Date.parse(session.expires_at) <= Date.now();

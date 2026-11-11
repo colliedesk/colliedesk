@@ -10,21 +10,5 @@
   "keywords": ["helpdesk", "support", "inbox", "mcp"],
   "logo": ".claude-plugin/icon.png",
   "skills": "./skills/",
-  "mcpServers": "./cursor-mcp.json",
-  "variables": {
-    "type": "object",
-    "properties": {
-      "COLLIEDESK_MCP_URL": {
-        "type": "string",
-        "title": "Colliedesk MCP address",
-        "description": "Your Colliedesk address followed by /mcp, for example https://acme.colliedesk.com/mcp"
-      },
-      "COLLIEDESK_TOKEN": {
-        "type": "string",
-        "title": "Agent token",
-        "description": "Create one in Colliedesk under Settings → External AI agents. It starts with cdk_agent_."
-      }
-    },
-    "required": ["COLLIEDESK_MCP_URL", "COLLIEDESK_TOKEN"]
-  }
+  "mcpServers": "./cursor-mcp.json"
 }

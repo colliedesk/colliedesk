@@ -109,7 +109,13 @@ html[data-tips-off] [data-tip]::after { opacity: 0; }
 .pagination [data-tip]::after { top: auto; bottom: calc(100% + var(--space-2)); }
 
 .field { display: grid; align-content: start; gap: var(--space-1); }
-.field-inline { display: flex; align-items: center; gap: var(--space-2); width: fit-content; cursor: pointer; }
+.field-inline { display: flex; align-items: center; gap: var(--space-2); width: fit-content; min-height: var(--control, 32px); cursor: pointer; }   /* the whole row is the target: 32 px, 44 on touch */
+/* A text disclosure's summary is a target too: 32 px tall with a mouse, 44 by touch (menus size their own). */
+details:not(.action-menu, .filter-menu, .view-actions, .status-pick, .email-home-fold, .setup-fold, [class*="menu"], .af-stepcard details) > summary:not([class]) { padding-block: calc((var(--control, 32px) - 1lh) / 2); }
+/* Text links and link buttons keep their line; padding with an equal negative margin gives a finger 44 px. */
+@media (pointer: coarse), (max-width: 30rem) {
+  :is(.link-button, .link-action) { display: inline-block; padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); }
+}
 .field-inline:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
 .input-with-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .input-with-actions input { flex: 1 1 14rem; min-width: 0; }

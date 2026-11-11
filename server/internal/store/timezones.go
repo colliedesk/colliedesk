@@ -46,20 +46,13 @@ func (s *Store) UpdateWorkspaceName(ctx context.Context, workspaceID, name strin
 func (s *Store) UpdateWorkspaceTimezone(ctx context.Context, workspaceID, timezone string) (domain.Workspace, error) {
 	var workspace domain.Workspace
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `UPDATE workspaces SET timezone=$2 WHERE id=$1
+		// The admin chose it, UTC included: a first sign-in never changes it again.
+		if err := tx.QueryRow(ctx, `UPDATE workspaces SET timezone=$2,timezone_chosen_at=now() WHERE id=$1
 			RETURNING id::text,slug,name,timezone`, workspaceID, timezone).
 			Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone); err != nil {
 			return err
 		}
-		// Response targets counted in the workspace's timezone count their clocks again.
-		var own bool
-		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT timezone IS NOT NULL FROM response_targets WHERE workspace_id=$1),true)`, workspaceID).Scan(&own); err != nil {
-			return err
-		}
-		if own {
-			return nil
-		}
-		return targetsChanged(ctx, tx, workspaceID)
+		return workspaceTimezoneChanged(ctx, tx, workspaceID)
 	})
 	if err != nil {
 		return domain.Workspace{}, fmt.Errorf("update workspace timezone: %w", err)
@@ -80,21 +73,56 @@ func (s *Store) UpdateAgentTimezone(ctx context.Context, workspaceID, agentID st
 	return agent, nil
 }
 
-// StartOnBrowserTimezone makes timezone the agent's own at their first sign-in: only while they never chose
-// one, the workspace is still on its UTC default, and the session just made is their first (agent tokens
-// do not count). A later sign-in, from any browser, never changes a choice, including "same as workspace".
-// It reports whether the timezone was set.
-func (s *Store) StartOnBrowserTimezone(ctx context.Context, workspaceID, agentID, timezone string) (bool, error) {
-	var set bool
+// workspaceTimezoneChanged makes response targets counted in the workspace's timezone count their clocks again.
+func workspaceTimezoneChanged(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	var own bool
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT timezone IS NOT NULL FROM response_targets WHERE workspace_id=$1),true)`, workspaceID).Scan(&own); err != nil {
+		return err
+	}
+	if own {
+		return nil
+	}
+	return targetsChanged(ctx, tx, workspaceID)
+}
+
+// BrowserTimezoneStart says what a first sign-in started on the browser's timezone: the workspace's
+// timezone, the agent's own, or neither.
+type BrowserTimezoneStart struct {
+	Workspace bool
+	Agent     bool
+}
+
+// StartOnBrowserTimezone starts a first sign-in on the browser's timezone, only when the session just made
+// is the agent's first (agent tokens do not count), so a later sign-in, from any browser, never changes a
+// choice.
+//
+// The person who created the workspace (its earliest agent: the sign-up makes them with the workspace)
+// starts the workspace on it while its timezone is still the UTC default nobody chose
+// (timezone_chosen_at NULL); they keep following the workspace. Anyone else, or the creator of a
+// workspace whose admin chose UTC, gets it as their own timezone while they never chose one and the
+// workspace is on UTC; a teammate's sign-in never changes the workspace.
+func (s *Store) StartOnBrowserTimezone(ctx context.Context, workspaceID, agentID, timezone string) (BrowserTimezoneStart, error) {
+	var start BrowserTimezoneStart
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE agents a SET timezone_override=$3 WHERE a.workspace_id=$1 AND a.id=$2 AND a.timezone_override IS NULL
+		const firstSession = `(SELECT count(*) FROM sessions s WHERE s.workspace_id=$1 AND s.agent_id=$2 AND s.scope IS NULL)=1`
+		tag, err := tx.Exec(ctx, `UPDATE workspaces w SET timezone=$3 WHERE w.id=$1 AND w.timezone='UTC' AND w.timezone_chosen_at IS NULL
+			AND $2::uuid=(SELECT a.id FROM agents a WHERE a.workspace_id=$1 ORDER BY a.created_at,a.id LIMIT 1)
+			AND `+firstSession, workspaceID, agentID, timezone)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 1 {
+			start.Workspace = true
+			return workspaceTimezoneChanged(ctx, tx, workspaceID)
+		}
+		tag, err = tx.Exec(ctx, `UPDATE agents a SET timezone_override=$3 WHERE a.workspace_id=$1 AND a.id=$2 AND a.timezone_override IS NULL
 			AND (SELECT w.timezone FROM workspaces w WHERE w.id=$1)='UTC'
-			AND (SELECT count(*) FROM sessions s WHERE s.workspace_id=$1 AND s.agent_id=$2 AND s.scope IS NULL)=1`, workspaceID, agentID, timezone)
-		set = tag.RowsAffected() == 1
+			AND `+firstSession, workspaceID, agentID, timezone)
+		start.Agent = err == nil && tag.RowsAffected() == 1
 		return err
 	})
 	if err != nil {
-		return false, fmt.Errorf("start agent on browser timezone: %w", err)
+		return BrowserTimezoneStart{}, fmt.Errorf("start on browser timezone: %w", err)
 	}
-	return set, nil
+	return start, nil
 }

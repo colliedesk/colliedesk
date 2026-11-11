@@ -7,6 +7,7 @@ import { createQueryClient } from './query-client';
 import { presenceViewPart } from './features/inbox/presence-part';
 import { autofixPart } from './features/autofix/autofix-part';
 import { leaveTo } from './lib/leave-to';
+import { answerSignupQuestions } from './features/auth/test-signup-answers';
 import { permissionsOf, rolesOf } from './test-roles';
 import { readPlanIntent } from './features/settings/plan-intent';
 
@@ -30,6 +31,8 @@ beforeAll(async () => {
   await import('./features/inbox/presence-view');
   autofixPart.preload();
   await import('./features/autofix/autofix-chunk');
+  // A sign-up lands on the setup flow, whose first step embeds the email setup.
+  await Promise.all([import('./features/onboarding/setup-flow'), import('./channels/email/panels')]);
 });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -49,6 +52,9 @@ function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; 
   // On APP_ORIGIN of a server with workspace hosts the sign-in answers where the browser continues.
   const continueURL = options.config.workspace_hosts && options.config.app_origin === window.location.origin ? { continue_url: handoffURL } : {};
   let signedIn = options.signedIn;
+  // A sign-up makes its person the new workspace's admin.
+  let agent = me.agent;
+  let permissions = me.permissions;
   fetchMock.mockImplementation((url: string) => {
     const path = url.split('?')[0];
     if (path === '/api/v1/auth/cloud/exchange') {
@@ -56,9 +62,18 @@ function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; 
       if (answer.ok) signedIn = true;
       return Promise.resolve(answer);
     }
-    if (path === '/api/v1/auth/cloud/signup') return Promise.resolve(options.signup ?? json(201, { agent: me.agent, workspace: me.workspace }));
+    if (path === '/api/v1/auth/cloud/signup') {
+      if (options.signup) return Promise.resolve(options.signup);
+      signedIn = true;
+      agent = { ...me.agent, roles: rolesOf('admin') };
+      permissions = permissionsOf('admin');
+      return Promise.resolve(json(201, { agent, workspace: me.workspace, ...continueURL }));
+    }
     if (path === '/api/v1/auth/redeem') { signedIn = true; return Promise.resolve(json(200, { agent: me.agent, workspace: me.workspace })); }
-    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, me) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
+    if (path === '/api/v1/workspace/setup') return Promise.resolve(json(200, { steps: [{ key: 'email', name: 'Receive customer email', state: 'none', detail: null }, { key: 'first_reply', name: 'Answer your first email', state: 'none', detail: null }],
+      complete: false, recommended: null, reply_target_presets: [], reply_target_hours: { kept: false, day_minutes: 540, hours: [] }, reply_target_suggestion: { preset: 'same_day', basis: 'no_history', median_first_reply_minutes: null } }));
+    if (path === '/api/v1/channels') return Promise.resolve(json(200, { items: [], types: [] }));
+    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, { ...me, agent, permissions }) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
     if (path === '/api/v1/config') return Promise.resolve(json(200, options.config));
     if (path === '/api/v1/inbox/activity') return Promise.resolve(json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }));
     return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
@@ -170,9 +185,58 @@ test('on a workspace host, an email that is not an agent there is told so and po
 test('a server without workspace hosts keeps the browser where it is', async () => {
   clerk.signedIn = true;
   serve({ signedIn: false, config: config(false) });
-  open('/sign-in');
+  const router = open('/sign-in');
   expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
   expect(leaveTo).not.toHaveBeenCalled();
+});
+
+test('a new team that signs up without a plan lands on the setup flow, at its first step', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  const router = open('/sign-in?intent=trial');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Receive customer email' })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/setup/email');
+  expect(leaveTo).not.toHaveBeenCalled();
+});
+
+test('on a server with workspace hosts, a new team that signs up without a plan continues to the setup flow on its own host', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  open('/sign-in?intent=trial');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup' });
+});
+
+test('on a server with workspace hosts, a new team that signs up with a plan opens the setup flow with that plan on its own host', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  open('/sign-in?intent=trial&plan=team25');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup?plan=team25' });
+});
+
+test("a new team that signs up from an AI app's consent page goes back to that page, not to the setup flow", async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  const router = open('/sign-in?intent=trial&next=%2Foauth%2Fauthorize%3Fclient_id%3Dcdk_client_x%26state%3Ds1');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/oauth/authorize'));
+  expect(router.state.location.searchStr).toBe('?client_id=cdk_client_x&state=s1');
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/oauth/authorize?client_id=cdk_client_x&state=s1' });
 });
 
 // An identity no workspace uses yet is offered the sign-up form; a visitor with an intent is asked for the name only.

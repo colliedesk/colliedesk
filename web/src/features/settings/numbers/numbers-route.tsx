@@ -11,6 +11,7 @@ import type { Shown } from '../settings-nav';
 import { numbersMessages as m } from './numbers-messages';
 import { can } from '../../../lib/can';
 import './numbers.css';
+import '../settings-v2.css';
 
 // Settings → Conversation numbers: the workspace's number series, each with its code format and next
 // number. Admins add and change them; agents read them.
@@ -40,14 +41,14 @@ export function NumbersRoute() {
   useEffect(() => { if (done) doneNote.current?.focus(); }, [done]);
   const year = yearIn(timezone);
   const label = (item: NumberSeries) => (item.series === 'default' ? m.defaultName : item.series);
-  return <main className="settings-page panel">
+  return <main className="settings-page panel settings-v2">
     <header><h1>{m.heading}</h1><p>{m.description}</p></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/numbers" shown={shown} />
       <div className="settings-sections">
         <section className="settings-card" aria-labelledby="numbers-heading">
           <div className="section-heading"><h2 id="numbers-heading">{m.listLabel}</h2><p>{m.lead}</p></div>
-          <div className="settings-body">
+          <div className="settings-body settings-rows">
             {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
             {series.isPending ? <div className="num-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
               : series.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void series.refetch()}>{m.tryAgain}</button></p>

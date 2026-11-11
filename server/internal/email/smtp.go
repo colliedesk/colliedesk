@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // SMTPTimeout bounds one send to the relay, after SMTPDialTimeout to reach it.
@@ -38,17 +40,17 @@ func SMTPConfigFromEnv(getenv func(string) string) (SMTPConfig, error) {
 	if value := getenv("SMTP_PORT"); value != "" {
 		port, err := strconv.Atoi(value)
 		if err != nil || port < 1 || port > 65535 {
-			return SMTPConfig{}, fmt.Errorf("SMTP_PORT must be a TCP port, got %q", value)
+			return SMTPConfig{}, configerr.Say("smtp_port_invalid", configerr.Params{"value": value})
 		}
 		if port == 465 {
-			return SMTPConfig{}, fmt.Errorf("SMTP_PORT 465 (implicit TLS) is not supported; use port 587 with STARTTLS")
+			return SMTPConfig{}, configerr.Say("smtp_port_implicit_tls", nil)
 		}
 		config.Port = port
 	}
 	if value := getenv("SMTP_STARTTLS"); value != "" {
 		enabled, err := strconv.ParseBool(value)
 		if err != nil {
-			return SMTPConfig{}, fmt.Errorf("SMTP_STARTTLS must be true or false, got %q", value)
+			return SMTPConfig{}, configerr.Say("smtp_starttls_invalid", configerr.Params{"value": value})
 		}
 		config.StartTLS = enabled
 	}

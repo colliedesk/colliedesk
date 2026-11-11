@@ -17,6 +17,8 @@ type Fake struct {
 	Answer func(Request) (Response, error)
 	// FakeModels is what Models lists; ModelsErr, when set, is what it fails with.
 	FakeModels []string
+	// FakePrices is what ModelPrices lists.
+	FakePrices map[string]ListedPrice
 	ModelsErr  error
 	// FakeKind is what Kind reports; empty is KindOpenAICompatible.
 	FakeKind Kind

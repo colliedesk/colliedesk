@@ -318,27 +318,17 @@ func TestPastItsTimeAPersonDecides(t *testing.T) {
 	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||rules_action||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "c")); got != "review/ai_unavailable/archive/true" {
 		t.Fatalf("chatter = %s", got)
 	}
-	// A batch behind a card of its lane waits in the queue right after it.
+	// At auto a batch behind a card of its lane joins it, and the card goes back to be decided.
+	first := d.gatheringOf(t, "c")
 	d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "c", Group: "g2", Text: "hello again"})
 	d.flush(t)
-	behind := d.gatheringOf(t, "c")
-	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, behind); got != "review/lane_blocked" {
-		t.Fatalf("behind a card = %s", got)
+	if got := d.one(t, `SELECT state||'/'||(decide_by IS NOT NULL)::text||'/'||(SELECT count(*) FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id)::text
+		FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.lane_key LIKE '%:loopback_user:c'`); got != "deciding/true/2" {
+		t.Fatalf("the card of c = %s", got)
 	}
 	items := `SELECT string_agg(disposition||'/'||disposition_reason,',') FROM channel_thread_items WHERE workspace_id=$1 AND gathering_id=$2::uuid`
-	if got := d.one(t, items, behind); got != "pending_review/lane_blocked" {
-		t.Fatalf("items behind a card = %s", got)
-	}
-	// Once a person decided the card before it, it goes back to be decided.
-	first := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND review_reason='ai_unavailable' AND lane_key LIKE '%:loopback_user:c'`)
-	if _, err := d.intake().Decide(context.Background(), d.workspaceID, first, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
-		t.Fatal(err)
-	}
-	if got := d.one(t, `SELECT state||'/'||(decide_by IS NOT NULL)::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, behind); got != "deciding/true" {
-		t.Fatalf("after the card before it = %s", got)
-	}
-	if got := d.one(t, items, behind); got != "gathering/deciding" {
-		t.Fatalf("items after the card before it = %s", got)
+	if got := d.one(t, items, first); got != "gathering/deciding,gathering/deciding" {
+		t.Fatalf("items of the card = %s", got)
 	}
 }
 

@@ -44,6 +44,42 @@ type emailChannelSettings struct {
 	// mailbox connection, shown under its provider.
 	Gmail     gmailSettings     `json:"gmail"`
 	Microsoft microsoftSettings `json:"microsoft"`
+	// MailThroughMailbox is set once customer mail arrived through the support mailbox (store.Delivery.Forwarded's
+	// rule); until then new mail may still reach the old help desk.
+	MailThroughMailbox bool `json:"mail_through_mailbox"`
+	// AnswersBeforeForwarding is where the customer's answer to a reply goes until then: "colliedesk" when this
+	// server receives its platform reply addresses, else "support_mailbox".
+	AnswersBeforeForwarding string `json:"answers_before_forwarding"`
+	// MailSwitch is the workspace's mailboxes whose customer mail does not arrive here yet, the same on
+	// every email channel's settings.
+	MailSwitch mailSwitch `json:"mail_switch"`
+}
+
+type mailSwitch struct {
+	// Imported: the workspace finished an import, so that mail still arrives in the old help desk.
+	Imported  bool            `json:"imported"`
+	Mailboxes []mailboxToMove `json:"mailboxes"`
+}
+
+type mailboxToMove struct {
+	ChannelID      string `json:"channel_id"`
+	Name           string `json:"name"`
+	SupportAddress string `json:"support_address"`
+	OldHelpDesk    bool   `json:"old_help_desk"`
+}
+
+// mailSwitchOf lists the switched-on channels with a support address of the team's own that no customer
+// mail has come through yet. A hosted forwarding address, of the current workspace address name or an
+// earlier one, has no mailbox to move.
+func mailSwitchOf(state store.EmailSettingsState, hostedDomain string) mailSwitch {
+	result := mailSwitch{Imported: state.Imported, Mailboxes: []mailboxToMove{}}
+	for _, channel := range state.Channels {
+		if channel.Enabled && !channel.Forwarded && email.HostedSlug(channel.SupportAddress, hostedDomain) == "" {
+			result.Mailboxes = append(result.Mailboxes, mailboxToMove{ChannelID: channel.ChannelID, Name: channel.Name, SupportAddress: channel.SupportAddress,
+				OldHelpDesk: channel.OldHelpDesk})
+		}
+	}
+	return result
 }
 
 // emailSettings describes the channel's sending. serverRefused is whether a reply of it waits because
@@ -67,6 +103,11 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy, DomainVerification: "txt", SendingPause: pause,
 		SMTP:  smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""},
 		Gmail: a.gmailSettings(gmail), Microsoft: a.microsoftSettings(channelID, microsoftConnection)}
+	// The worker's condition for the platform Reply-To before forwarding (emailoutbox.Options.ReceivesPlatformReplies).
+	settings.AnswersBeforeForwarding = "support_mailbox"
+	if config.ReceivesPlatformReplies() {
+		settings.AnswersBeforeForwarding = "colliedesk"
+	}
 	// Only while the server has its Microsoft settings: without them a waiting reply fails as not configured.
 	settings.Microsoft.ServerCredentials = serverRefused && microsoftConnection != nil && settings.Microsoft.Available
 	if a.resend != nil {
@@ -121,7 +162,8 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 // workspace's sending is paused.
 func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Request, channel *domain.EmailChannel) {
 	workspace := principal(request).Workspace
-	pause, err := a.store.GetEmailPause(request.Context(), workspace.ID)
+	// The pause, the import and every channel's forwarding come in one query.
+	state, err := a.store.EmailSettingsState(request.Context(), workspace.ID)
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -140,7 +182,14 @@ func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Req
 			}
 		}
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(workspace.Slug, channel, pause, mailbox, serverRefused))
+	settings := a.emailSettings(workspace.Slug, channel, state.Pause, mailbox, serverRefused)
+	settings.MailSwitch = mailSwitchOf(state, a.config.Email.HostedMailDomain)
+	for _, item := range state.Channels {
+		if channel != nil && item.ChannelID == channel.ChannelID {
+			settings.MailThroughMailbox = item.Forwarded
+		}
+	}
+	writeJSON(response, http.StatusOK, settings)
 }
 
 // requestedEmailChannel reads the email channel a route acts on: the one its id names, or the default

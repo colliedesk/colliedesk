@@ -26,9 +26,12 @@ An admin, in this order:
    accounts, so what they write in a group is never a request.
 6. **Messages**: the commands customers type, what the OA says, the words for each status and when a
    resolved conversation closes ([The Messages tab](#the-messages-tab)).
-7. **Review**: decide the cards in [Review](review.md). A card decided as AI suggested, or otherwise, is
+7. **Resolved means done**: a message never joins a resolved or closed conversation, whether the rules,
+   AI intake (Suggest or Auto) or a reply to an old message would have put it there: it starts a new
+   conversation. Only the customer's **Reopen** command reopens one.
+8. **Review**: decide the cards in [Review](review.md). A card decided as AI suggested, or otherwise, is
    what tells whether AI is ready.
-8. **Auto**: raise Intake for Groups to Auto. The dialog says which actions are ready, and **Let it … alone
+9. **Auto**: raise Intake for Groups to Auto. The dialog says which actions are ready, and **Let it … alone
    anyway** opens one before its labels do ([When AI acts on its own](ai.md#when-ai-acts-on-its-own)).
 
 ## Connect an OA

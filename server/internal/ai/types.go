@@ -77,6 +77,12 @@ type Server struct {
 	Models map[string][]string `json:"models"`
 }
 
+// ServerOff is the server's provider while its operator switched it off: no workspace can pick it, and
+// the features set to it say so.
+type ServerOff struct {
+	Label string `json:"label"`
+}
+
 // Slot is one feature's setting. Active is whether it runs now: on, and its provider and model are
 // still there. A slot that is on but cannot run says why in OffReason.
 type Slot struct {
@@ -122,7 +128,9 @@ type Event struct {
 
 // Settings is everything Settings → Built-in AI shows.
 type Settings struct {
-	Server    *Server    `json:"server"`
+	Server *Server `json:"server"`
+	// ServerOff is set while the operator switched the server's provider off; null otherwise.
+	ServerOff *ServerOff `json:"server_off"`
 	Providers []Provider `json:"providers"`
 	Slots     []Slot     `json:"slots"`
 	// Events are the newest changes, newest first.

@@ -119,12 +119,13 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 
 func exportWorkspaceRow(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
 	var workspace export.Workspace
-	err := tx.QueryRow(ctx, `SELECT id::text,slug,name,timezone,status_history_since FROM workspaces WHERE id=$1`, workspaceID).
-		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone, &workspace.StatusHistorySince)
+	err := tx.QueryRow(ctx, `SELECT id::text,slug,name,timezone,status_history_since,timezone_chosen_at FROM workspaces WHERE id=$1`, workspaceID).
+		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone, &workspace.StatusHistorySince, &workspace.TimezoneChosenAt)
 	if err != nil {
 		return fmt.Errorf("export workspace: %w", err)
 	}
 	workspace.StatusHistorySince = domain.UTC(workspace.StatusHistorySince)
+	workspace.TimezoneChosenAt = domain.UTCOptional(workspace.TimezoneChosenAt)
 	return sink.Workspace(workspace)
 }
 

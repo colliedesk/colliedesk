@@ -1,8 +1,37 @@
 # Connect Codex
 
 Connect [Codex](https://developers.openai.com/codex) to Colliedesk. The Codex CLI, its IDE
-extension and the ChatGPT desktop app share one configuration, `~/.codex/config.toml`; the token
-stays in an environment variable and never in that file.
+extension and the ChatGPT desktop app share one configuration, `~/.codex/config.toml`.
+
+## Connect to Colliedesk Cloud with the plugin
+
+The Colliedesk plugin adds the MCP server of Colliedesk Cloud, `https://app.colliedesk.com/mcp`, and the
+[agent skills](agent-skills.md). It signs in with OAuth: no token to create or paste.
+
+1. Install the plugin:
+
+   ```sh
+   codex plugin marketplace add colliedesk/colliedesk
+codex plugin add colliedesk@colliedesk
+   ```
+
+2. Sign in:
+
+   ```sh
+   codex mcp login colliedesk
+   ```
+
+3. Your browser opens Colliedesk. Sign in if it asks, choose the workspace and choose **Allow**.
+
+`codex mcp list` shows `colliedesk` as logged in, and **Settings → External AI agents → Connected
+AI apps** in Colliedesk lists Codex. Codex acts as you, with everything you can do in the workspace you
+allowed; see [Connected AI apps](sessions.md#connected-ai-apps). To use another workspace, run
+`codex mcp logout colliedesk`, then sign in again and choose that workspace. Remove the plugin with
+`codex plugin remove colliedesk@colliedesk`; then choose **Disconnect** next to Codex in Settings.
+
+## Connect with an agent token
+
+For a server you run yourself, or to give Codex fewer permissions than you hold, use an agent token.
 
 ## Before you start
 

@@ -163,6 +163,12 @@ the PR or ruleset change.
 [docs/general-availability.md](docs/general-availability.md) says what general availability
 guarantees (upgrades, export, Cloud backups, uptime, self-hosted installs). A change that makes one of
 its statements untrue updates that page in the same PR.
+The Claude Code, Cursor and Codex plugin (`plugins/colliedesk`) has its own version, `version` in
+`.claude-plugin/plugin.json`: a PR that changes anything in that folder raises it (patch for a fix or
+wording, minor for a new skill or file, major when an install stops working as before), or installs
+from the colliedesk marketplace never get the change. `.codex-plugin/plugin.json` carries the same
+version. CI enforces both
+(`.github/scripts/plugin-version-check.py`, `tests/plugin-version-check-test.py`).
 
 ## Issues and the roadmap
 

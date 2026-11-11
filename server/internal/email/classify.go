@@ -144,6 +144,12 @@ func PlatformReplyFrom(token, messageID, domain string) string {
 	if match := replyIDPattern.FindStringSubmatch(messageID); match != nil {
 		return "reply+" + token + "-" + match[1] + "@" + domain
 	}
+	return PlatformReplyTo(token, domain)
+}
+
+// PlatformReplyTo is the conversation's reply address on the platform domain, reply+<token>@<domain>.
+// Mail to it always reaches Colliedesk, whatever the support mailbox forwards to.
+func PlatformReplyTo(token, domain string) string {
 	return "reply+" + token + "@" + domain
 }
 

@@ -21,8 +21,8 @@ docker compose exec server /app/collie intake-eval \
    on its own at the thresholds (the scope's unless `--thresholds` says) and how many of those were wrong;
    the calls' latency.
 3. `--record` keeps the counts for the scope, the model and this server's prompt version. A newer run of
-   the same dataset replaces the older one, and a run counts for nothing once intake moves to another
-   model or the server to another prompt version. The same is
+   the same dataset replaces the older one. A run keeps counting when intake moves to another model, and
+   counts for nothing once the server moves to another prompt version. The same is
    `POST /api/v1/channels/{id}/ai/intake/evaluations` (an agent token's record waits for a person).
 
 ## The dataset

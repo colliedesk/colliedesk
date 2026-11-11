@@ -30,6 +30,8 @@
   --fs-label: 12px;                  /* meta, labels, kbd */
   --fs-small: 13px;                  /* secondary rows */
   --fs-body: 16px;                   /* site body */
+  --fs-heading: 24px;                /* app page titles (design token, serif) */
+  --fs-display-sm: 40px;             /* design token: the smaller display size */
   --fs-h2: 40px;
   --fs-display: 60px;
   --lh-ui: 1.45;

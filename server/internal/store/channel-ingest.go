@@ -134,7 +134,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// A decision of a gathering applies only while it is undecided and holds exactly these events.
 	var pending pendingGathering
 	if request.Intake != nil {
-		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs); err != nil {
+		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs, request.Intake); err != nil {
 			return result, err
 		}
 	}
@@ -563,7 +563,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	switch decision := rules.Decide(facts); decision.Action {
 	case rules.Archive:
 		if aiOn(level) && rules.AIDecides(facts, decision) {
-			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+			return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 		}
 		// Chatter of a scope that opens conversations only on a command is kept, not opened. A message a
 		// join-open scope could join nowhere stays unresolved in its chat, where it is seen and counted.
@@ -594,7 +594,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return finish(result)
 	case rules.Review:
 		if aiOn(level) && rules.AIDecides(facts, decision) {
-			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+			return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 		}
 		// Collected messages that named no command wait for a person to decide what they are.
 		if level == "" {
@@ -710,7 +710,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		decision = request.Intake.basisOf(decision, pending)
 	}
 	if aiOn(level) && rules.AIDecides(facts, decision) {
-		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+		return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 	}
 	if contactID == "" {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
@@ -718,6 +718,18 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	conversationID := decision.ConversationID
+	// A channel that joins only open conversations never adds to a resolved or closed one, whoever decided
+	// (the rules, AI intake, a person accepting a suggestion made before it was resolved): a new conversation
+	// starts. A reopen command naming it is the one way back.
+	if conversationID != "" && channel.Settings.JoinPolicy.JoinsOnlyOpen() && decision.Rule != rules.CommandReopen {
+		var open bool
+		if err := tx.QueryRow(ctx, `SELECT status IN ('open','pending') FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&open); err != nil {
+			return result, fmt.Errorf("read the joined conversation's status: %w", err)
+		}
+		if !open {
+			conversationID = ""
+		}
+	}
 	// What intake said the batch adds to a conversation it joins; the rules never say.
 	replyKind := ""
 	if request.Intake != nil && conversationID != "" {
@@ -1055,6 +1067,9 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 		return found, nil
 	}
 	joins := func(status string, updatedAt time.Time) bool {
+		if policy.JoinsOnlyOpen() {
+			return status == "open" || status == "pending"
+		}
 		if policy.Kind != channels.JoinWithinDays || (status != "resolved" && status != "closed") {
 			return true
 		}

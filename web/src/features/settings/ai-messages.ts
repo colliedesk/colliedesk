@@ -147,6 +147,8 @@ export const aiMessages = {
   pickProvider: 'Pick a provider',
   providerFor: (slot: string) => `${slot} provider`,
   modelFor: (slot: string) => `${slot} model`,
+  modelByServer: 'Set by the server',
+  serverOffTip: (label: string) => `${label}, the server's default AI provider, is turned off. Pick another provider, or wait until the server's operator turns it on again.`,
   switchFor: (slot: string) => `${slot} on`,
   addFirst: 'Add a provider first, then turn this on.',
   saving: 'Saving…',

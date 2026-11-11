@@ -34,6 +34,29 @@ If the gate fails:
 3. Check for N+1 queries, tenant-unscoped scans, missing filter/order indexes, and repeated search scans.
 4. Optimize the query or infrastructure. Do not raise the 100 ms threshold.
 
+## Email channel settings budget
+
+`TestEmailChannelSettingsLatencyBudget` holds `store.EmailSettingsState` to 20 ms p95. It is what
+`GET /api/v1/channels/email` reads besides the channel: the sending pause, a finished import, and whether
+customer mail came through each mailbox (`mail_switch`). The inbox reads it on every load for its line
+about moving the mail. The fixture is the worst case for the forwarding rule: three mailboxes, the default
+one with 20,000 forwarded customer mail, the other two with none, and 30,000 dropped mail in every journal;
+a fourth mailbox without any journal entry; a second workspace of the same size plus 500,000 dropped mail.
+Same method as the inbox activity budget: 10 warm-up calls, then
+200 timed calls of the store call.
+
+The partial index `channel_inbound_events_channel_messages` (`workspace_id, channel_id`, holding only the
+entries that became a message and did not arrive directly) keeps the check of a mailbox that never forwarded
+to its own entries. Without it the planner walked every entry of the workspace that became a message
+(`channel_inbound_events_message`), growing with the mail of the other mailboxes: 30–45 ms p95 on this
+fixture, 0.2–0.5 ms with it. Its condition is the query's own, so a lookup of one message still uses
+`channel_inbound_events_message` (`TestTheJournalRowOfAMessageIsFoundByIndex`). The check for a channel
+without any journal entry is a scalar subquery, `(SELECT 1 … ORDER BY received_at DESC LIMIT 1) IS NULL`,
+read through `channel_inbound_events_channel_idx`. Do not write it as `NOT EXISTS (… LIMIT 1)`: PostgreSQL
+drops ORDER BY and LIMIT inside EXISTS, and for a channel without entries the planner then scanned the whole
+journal, every workspace's entries (28–33 ms p95 on this fixture, 0.5 ms as a scalar subquery). Do not widen
+the 20 ms.
+
 ## Import status budget
 
 `TestImportStatusLatencyBudget` holds the store calls behind `GET /api/v1/imports/{id}` to 20 ms p95
@@ -88,6 +111,19 @@ has 300 conversations. The candidates start from the group's items (`channel_thr
 from the workspace's conversations. Five warm-up calls, then 40
 timed. A card and its items are found by uuid: comparing `id::text` to a parameter skips the index and
 took 17 ms on the dev host; the uuid compare takes 2 ms. Do not widen either budget.
+
+## Setup progress budget
+
+`TestSetupProgressLatencyBudget` holds the store call behind `GET /api/v1/workspace/setup` to 50 ms p95. The
+inbox reads it on every load while the setup guide shows, and the setup flow polls it every 5 seconds. The
+timed path is the slowest one: an admin of a workspace whose reply targets are off, so the median first
+reply of the imported history is read for the reply targets suggestion. The fixture is 10,000 imported
+conversations in the last 30 days and 2,000 older ones (a customer message, a received notice and a reply
+each), beside a second workspace with 4,000. Ten warm-up reads, then 50 timed: 25–32 ms locally on
+2026-11-11. The median is skipped when nobody would use it: reply targets on, an import running, or a
+caller without `workspace:update` (`TestSetupSuggestionIsLeftOutWhenTargetsAreOnOrTheCallerCannotChangeThem`).
+Seeding 30,000 conversations of five messages took 70 s, so the fixture was cut instead. Do not widen the
+50 ms.
 
 ## AI draft read budget
 
@@ -190,6 +226,27 @@ and an article with its chat box are help center pages and keep the inbox's 200 
 locally). Their scripts have budgets of their own, gzip: chat.js 25 KB (11 KB), widget.js 6 KB (2 KB),
 chat.css 8 KB (6 KB), `TestTheChatFilesStayInTheirBudget`; none of them is in the web app's bundle.
 
+On 2026-11-10 and 11 the gate failed on main in 3 of 6 runs (106 to 119 ms) with nothing new on its
+path: since 2026-11-05 the same code measured 50 to 157 ms from one CI run to the next, so the gate
+had no headroom. Measured per step on the dev host, median of 20 turns per language: the database took
+28 ms (the excerpt search's scoring 18 ms, the set of articles 2 to 3 ms, the size of the knowledge
+base 1.5 ms), and Go took 19 ms before the call: the chat filter's phone number pattern over the
+excerpts (up to 180 KB) 12 ms, and the folding of every long article the search excerpts 6 ms. Both
+scale with the CPU a busy runner leaves. The filter now reads the articles' phone numbers only at the
+first sentence of an answer that holds one, and then only in the runs of characters a number is made
+of; folding sends only the characters outside ASCII through NFD. Go before the call is now about
+6 ms: median 47 to 30 ms (primary language) and 50 to 35 ms (French) locally, and p95 102–106 ms to
+64–69 ms with the test on one CPU beside a busy loop. The scoring is the floor of what is left:
+reading each vector directly or through `strip` instead of `|| ''::tsvector` took the same time.
+
+The same day the gate was found to pass without measuring: run again in one binary (`-count=2`), it
+found no AI retrieval rows (the first run's cleanup had removed them and nothing was queued to build
+them again), every turn ended `no_source` before the provider, and it passed at p95 −2562047 h.
+Every timed turn must now call the provider, or the gate fails. It and `TestAIRetrievalLatencyBudget`
+clear the fixture's retrieval rows before they seed their own and when they end; this gate queues
+every published article and builds its rows as the worker does. Both measure in any order and
+with any `-count`.
+
 ## Results budget
 
 `TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
@@ -280,6 +337,8 @@ On 2026-10-25 Settings → Channels (its pages, the channel registry and every c
 On 2026-10-27 Autofix (the bridge to the customer's own coding agent) kept in the first bundle only the rail's Fixes link with its wrench icon and count (`useAutofixStatus`, one `GET /api/v1/autofix/status` a minute), the two routes, the slots in the conversation details and under the thread header, the Settings menu item, the request card's branch for Autofix calls, the composer's listener for a reply put in from elsewhere (`colliedesk:insert-reply`, used by Draft reply): 203,612 → 204,698 bytes (+1,086), CSS 16,828 → 16,833. Every Autofix screen (the conversation block, the send dialog, Fixes, Settings → Autofix, the request detail) is one lazy part, `autofix-chunk`: 25,451 bytes gzip plus 4,339 of CSS; the rail link preloads it on hover and focus. That leaves 102 bytes under the gate: the next feature has to move something out first. Measured with Playwright on a local `collie serve` (Chromium, 1,280 px, the Autofix routes answered by the test page, median of 5): rail → Fixes with its groups 68 ms, a click on a conversation → its Autofix block with the track 37 ms. Going to GitHub to confirm a fix leaves the app and is not counted; the page it comes back to shows the fix as Sending at once and reads it again every 3 seconds while it sends. On 2026-10-28 the Autofix end-to-end test (P6) measured it again against a real `collie serve`, PostgreSQL and the GitHub stand-in (`cmd/github-stand-in`), not routes answered by the test page: Chromium, 1,280 px, an Apple M4, assets cached, median of 5, each time read in the page (`performance.now()` checked every animation frame, since Playwright's own retries add up to 250 ms that are not the app's). Rail → Fixes with its groups 28 ms; a click on a conversation → its Autofix block with the track 38 ms; back from GitHub (the callback's redirect and a full load of the conversation's address) → the block's Sending or Sent badge 116 ms from the start of that navigation. The first bundle is 204,705 bytes (raw size unchanged; +7 gzip only from the new chunk names it references), `autofix-chunk` 25,782 bytes gzip (P6 fixes: the GitHub address is checked before leaving and a refusal is said; the issue's creator on the timeline) plus 4,312 of CSS.
 
 On 2026-10-29 the AI chat (Settings → Built-in AI → AI chat, a chat's transcript at `/settings/ai/chats/<id>`, the Help chat channel's panels) went into the existing lazy parts: the first bundle keeps only the `help_chat` value of the conversation channel and the AI settings route as a splat (`/settings/ai/$`, one route for the page and its transcripts instead of one more). The help chat panels read the help center's address with their own small request rather than the knowledge base's API module, which would have become a shared chunk the first bundle lists. On top of the lazy-only words moved out of `messages.ts` the same day, the first bundle is 199,668 bytes, CSS 17,312.
+
+On 2026-10-30 the setup flow (`/setup`, one step per screen) became a lazy part, `setup-flow` (3.4 KB gzip plus 1.4 KB of CSS); the steps it embeds come from their existing chunks (the email channel's panels, `import-route`) and a small shared one (`use-invites`). The first bundle keeps the two routes, the full-screen branch of the layout and `preloadSetupStep`, which the guide's step links call on hover and focus to fetch the flow, the setup data and what the step embeds together: 201,094 → 201,421 bytes (+327), CSS unchanged at 17,695.
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
 
