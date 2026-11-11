@@ -28,6 +28,8 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    `server/internal/httpapi/route-effect.go`: a GET reads, a POST, PUT or PATCH changes, every DELETE
    and every route that differs from its method has a row), never from a flag on the tool. A route
    that starts to send, delete for good or revoke updates its row, and every tool on it follows.
+   `openWorldHint` comes from `routesReachingOutside` in the same file: a route that emails or
+   messages a customer, calls a third party, or changes the public help center gets a row there.
    `TestEveryRouteSaysWhatItDoes` and `TestToolsOnABodyDecidedRouteSayWhatTheirBodyDoes` fail otherwise.
 7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
    A person finishes the task in the fewest steps and screens, and every screen says the next step.

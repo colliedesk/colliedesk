@@ -110,3 +110,85 @@ var routeEffects = map[string]Effect{
 	"DELETE /api/v1/autofix/connectors/{kind}":                 Changes,
 	"DELETE /api/v1/roles/{id}":                                Changes,
 }
+
+// RouteReachesOutside says the route may reach people or systems outside the workspace (the MCP
+// openWorldHint): it emails or messages a customer, calls a third party in the request or in a job it
+// queues, or changes what the public help center shows. "May": a route that does so only for some
+// bodies or states is listed too.
+func RouteReachesOutside(route string) bool { _, ok := routesReachingOutside[route]; return ok }
+
+// RoutesReachingOutsideTable returns routesReachingOutside, for the gate tests.
+func RoutesReachingOutsideTable() map[string]string { return maps.Clone(routesReachingOutside) }
+
+// routesReachingOutside lists each such route with what it reaches. On the two routes the body decides
+// (ByBody), a tool reaches outside only when its body is Final: a reply, a started conversation.
+var routesReachingOutside = map[string]string{
+	// A customer or someone outside the team gets a message.
+	"POST /api/v1/conversations":                                 "starts the conversation by email",
+	"POST /api/v1/conversations/{id}/messages":                   "a reply is emailed",
+	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": "sends the reply again",
+	"PATCH /api/v1/conversations/{id}":                           "a status change may tell the customer in their chat",
+	"PATCH /api/v1/conversations":                                "status changes may tell the customers in their chats",
+	"POST " + intakeDecideRoute:                                  "creating replays the chat, which may send the received notice",
+	"POST /api/v1/channels/{id}/held/replay":                     "replaying may send the received notice",
+	"POST /api/v1/billing/migration-request":                     "emails Colliedesk support",
+	"POST " + problemReportPath:                                  "files the report with Colliedesk support",
+
+	// A third party is called, in the request or in a job it queues.
+	"POST /api/v1/ai/chat/preview":                               "AI provider",
+	"POST /api/v1/conversations/{id}/ai-drafts":                  "AI provider",
+	"POST /api/v1/conversations/{id}/ai-triage":                  "AI provider",
+	"POST /api/v1/intake/gatherings/{id}/requeue":                "AI provider",
+	"POST /api/v1/ai/models":                                     "AI provider",
+	"POST /api/v1/ai/providers":                                  "AI provider",
+	"PATCH /api/v1/ai/providers/{id}":                            "AI provider",
+	"PUT /api/v1/ai/providers/{id}/key":                          "AI provider",
+	"POST /api/v1/ai/providers/{id}/check":                       "AI provider",
+	"POST /api/v1/imports":                                       "Freshdesk",
+	"POST /api/v1/imports/{id}/start":                            "Freshdesk",
+	"POST /api/v1/conversations/{id}/fixes":                      "Cursor or GitHub",
+	"POST /api/v1/autofix/fixes/{id}/retry":                      "Cursor or GitHub",
+	"POST /api/v1/autofix/fixes/{id}/cancel":                     "Cursor or GitHub",
+	"PUT /api/v1/autofix/connectors/cursor_api/key":              "Cursor",
+	"POST /api/v1/autofix/connectors/{kind}/check":               "Cursor",
+	"GET /api/v1/autofix/github/installations/{id}/repositories": "GitHub",
+	"POST /api/v1/autofix/repos":                                 "GitHub",
+	"DELETE /api/v1/autofix/github/installations/{id}":           "GitHub",
+	"POST /api/v1/billing/checkout":                              "billing provider",
+	"POST /api/v1/billing/portal":                                "billing provider",
+	"POST /api/v1/channels/email/domain-verification":            "DNS or the mail provider",
+	"POST /api/v1/channels/{id}/email/domain-verification":       "DNS or the mail provider",
+	"POST /api/v1/help-center/domain/check":                      "DNS and the custom domain",
+	"DELETE /api/v1/channels/email":                              "revokes the Google grant",
+	"DELETE /api/v1/channels/email/gmail":                        "revokes the Google grant",
+	"DELETE /api/v1/channels/{id}/email/gmail":                   "revokes the Google grant",
+	"DELETE /api/v1/channels/{id}":                               "revokes an email channel's Google grant",
+
+	// What the public help center, a public link or the public web form shows.
+	"PUT /api/v1/help-center":                                                        "public site",
+	"PUT /api/v1/help-center/theme":                                                  "public site",
+	"PUT /api/v1/help-center/languages":                                              "public site",
+	"PUT /api/v1/help-center/search-console":                                         "public site",
+	"PUT /api/v1/help-center/domain":                                                 "public site",
+	"DELETE /api/v1/help-center/domain":                                              "public site",
+	"PATCH /api/v1/workspace/slug":                                                   "public site address",
+	"PATCH /api/v1/kb/collections/{id}":                                              "public site",
+	"POST /api/v1/kb/collections/{id}/restore":                                       "public site",
+	"PUT /api/v1/kb/order":                                                           "public site",
+	"PUT /api/v1/kb/collections/{id}/translations/{locale}":                          "public site",
+	"DELETE /api/v1/kb/collections/{id}/translations/{locale}":                       "public site",
+	"POST /api/v1/kb/articles":                                                       "may publish",
+	"PATCH /api/v1/kb/articles/{id}":                                                 "may change a published article",
+	"DELETE /api/v1/kb/articles/{id}":                                                "may unpublish",
+	"POST /api/v1/kb/articles/{id}/restore":                                          "may republish",
+	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":                       "may change a published article",
+	"POST /api/v1/kb/articles/{id}/translations":                                     "may publish",
+	"PATCH /api/v1/kb/articles/{id}/translations/{locale}":                           "may change a published translation",
+	"DELETE /api/v1/kb/articles/{id}/translations/{locale}":                          "may unpublish",
+	"POST /api/v1/kb/articles/{id}/translations/{locale}/restore":                    "may republish",
+	"POST /api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore": "may change a published translation",
+	"POST /api/v1/kb/media/{id}/replace":                                             "published articles show it",
+	"POST /api/v1/kb/media-replacements/{id}/undo":                                   "published articles show it",
+	"POST /api/v1/results/share-link":                                                "a public link",
+	"PUT /api/v1/channels/web-form":                                                  "the public form",
+}

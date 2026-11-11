@@ -25,6 +25,11 @@ func TestEveryRouteSaysWhatItDoes(t *testing.T) {
 			t.Errorf("routeEffects in %s lists %s, which is not a route", routeEffectFile, key)
 		}
 	}
+	for key := range httpapi.RoutesReachingOutsideTable() {
+		if !routes[key] {
+			t.Errorf("routesReachingOutside in %s lists %s, which is not a route", routeEffectFile, key)
+		}
+	}
 }
 
 // A route whose effect depends on the body (a note or a reply on the same route) cannot give a tool its
@@ -64,6 +69,41 @@ func TestToolHintsFollowFromTheirRoutes(t *testing.T) {
 		found++
 		if spec.ReadOnly() != w.readOnly || spec.Destructive() != w.destructive {
 			t.Errorf("%s: readOnly=%v destructive=%v, want %v %v", spec.Name, spec.ReadOnly(), spec.Destructive(), w.readOnly, w.destructive)
+		}
+	}
+	if found != len(want) {
+		t.Errorf("found %d of the %d tools of this test in the catalog", found, len(want))
+	}
+}
+
+// openWorldHint is true when a tool may reach people or systems outside the workspace: it emails or
+// messages a customer, calls a third party (an AI provider, GitHub, Cursor, Freshdesk, DNS, billing),
+// or changes what the public help center shows. Worked examples, from what each handler does.
+func TestToolOpenWorldFollowsFromTheirRoutes(t *testing.T) {
+	want := map[string]bool{
+		"colliedesk_inbox_search":              false, // reads the workspace
+		"colliedesk_note_add":                  false, // a note stays in the team
+		"colliedesk_reply_send":                true,  // emails the customer
+		"colliedesk_conversation_create":       false,
+		"colliedesk_conversation_start":        true,
+		"colliedesk_conversation_update":       true,  // a status change may tell the customer in their chat
+		"colliedesk_ai_models_list":            true,  // read-only, but asks the AI provider
+		"colliedesk_github_repositories_list":  true,  // read-only, but asks GitHub
+		"colliedesk_kb_article_update":         true,  // may change a published article
+		"colliedesk_results_share_link_create": true,  // a public link
+		"colliedesk_email_test_message_send":   false, // the message goes from the agent to its own channel
+		"colliedesk_saved_reply_create":        false,
+		"colliedesk_ai_slot_set":               false, // switches AI on; the calls come later, not from this tool
+	}
+	found := 0
+	for _, spec := range mcpserver.Catalog() {
+		w, ok := want[spec.Name]
+		if !ok {
+			continue
+		}
+		found++
+		if spec.OpenWorld() != w {
+			t.Errorf("%s: openWorld=%v, want %v", spec.Name, spec.OpenWorld(), w)
 		}
 	}
 	if found != len(want) {

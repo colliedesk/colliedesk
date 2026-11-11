@@ -32,3 +32,18 @@ func (s Spec) effect() httpapi.Effect {
 	}
 	return strongest
 }
+
+// OpenWorld says the tool may reach people or systems outside the workspace: a route it calls emails
+// or messages a customer, calls a third party, or changes the public help center. On a route the body
+// decides, only a Final body (a reply, a started conversation) reaches outside.
+func (s Spec) OpenWorld() bool {
+	for _, key := range s.REST {
+		if !httpapi.RouteReachesOutside(key) {
+			continue
+		}
+		if httpapi.RouteEffect(key) != httpapi.ByBody || s.BodyEffect == httpapi.Final {
+			return true
+		}
+	}
+	return false
+}
