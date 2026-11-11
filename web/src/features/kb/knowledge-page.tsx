@@ -172,7 +172,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
       {publicNow === false && <div className="kb-notice" role="status">
         <Icon name="globe" />
         <span><strong>{kbMessages.helpCenterIsOff}</strong> {kbMessages.helpCenterIsOffDetail}</span>
-        {holds('help_center:update') && <a className="button-link" href="/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>}
+        {holds('help_center:update') && <a className="button-link" href="/knowledge/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>}
       </div>}
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
       <OrderAnnouncement message={moves.message} />

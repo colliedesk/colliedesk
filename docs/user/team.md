@@ -1,6 +1,6 @@
 # Manage your team
 
-**Settings → Team** lists everyone who can sign in to the workspace: name, email, roles, whether
+**Settings → Members → Team** lists everyone who can sign in to the workspace: name, email, roles, whether
 they are **Active** or **Deactivated**, and when they were last active. Seeing the list needs
 `team:read`. Renaming people, changing their roles, deactivating and reactivating them needs
 `team:manage_roles` (the Admin role has it); without it the list is read-only. To add someone, see
@@ -12,7 +12,7 @@ they are **Active** or **Deactivated**, and when they were last active. Seeing t
 A display name is what the team sees instead of the email address: in the team list, the assignee
 lists, on notes, and in the account menu. The `{{agent.name}}` variable of a saved reply uses it too.
 
-- **Your own name:** in **Settings → Profile**, type it in **Display name**, then select **Save
+- **Your own name:** in **Settings → Account → Profile**, type it in **Display name**, then select **Save
   name**.
 - **Someone else's name** (`team:manage_roles`): select **Rename** in their row, type the name, then select
   **Save**. Use it to correct a typo or to name someone who has not signed in yet.

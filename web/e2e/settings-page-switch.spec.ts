@@ -44,14 +44,15 @@ test('moving between settings pages never blanks the screen, and a link loads it
   // Chunks arrive late, as over a real network.
   await page.route('**/assets/*.js', (route) => setTimeout(() => void route.continue(), 400));
 
-  const blank = await framesWithoutNav(page, () => nav.getByRole('link', { name: 'Roles', exact: true }).click(),
-    page.getByRole('heading', { level: 1, name: 'Roles' }));
-  await expect(page).toHaveURL(`${baseURL}/settings/roles`);
-  expect(blank, 'frames without the Settings nav while Roles loaded').toBe(0);
+  const blank = await framesWithoutNav(page, () => nav.getByRole('link', { name: 'Response targets', exact: true }).click(),
+    page.getByRole('heading', { level: 1, name: 'Response targets' }));
+  await expect(page).toHaveURL(`${baseURL}/settings/targets`);
+  expect(blank, 'frames without the Settings nav while Response targets loaded').toBe(0);
 
-  // Pointing at Email under Channels asks for the page's chunk and the channel list together.
+  // Pointing at Email under Channels asks for the page's chunk and, through the route's loader, what the page
+  // reads outside it (the email channel's panels; the channel list, unless it is already there) together.
   const chunk = page.waitForRequest(/\/assets\/channels-route-[^/]+\.js$/);
-  const list = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/channels' && request.method() === 'GET', { timeout: 1000 });
+  const panels = page.waitForRequest(/\/assets\/panels-[^/]+\.js$/, { timeout: 1000 });
   await nav.getByRole('link', { name: 'Email', exact: true }).hover();
-  await Promise.all([chunk, list]);
+  await Promise.all([chunk, panels]);
 });

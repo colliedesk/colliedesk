@@ -294,6 +294,19 @@ The contact lookup by id is the call that depends on table size. It must compare
 
 It runs in the normal Go suite and in CI (about 11 seconds, most of it seeding). Do not raise the threshold or shrink the fixture to pass.
 
+## MCP tool list budget
+
+A client that loads every tool pays the whole tool list in its context on each session, before any
+work. `TestToolsListStaysWithinItsBudget` (package `mcpserver`) lists the tools through the real `/mcp`
+endpoint and holds the JSON at or below 600,000 bytes. On 2026-11-12 it was 574,966 bytes for 246
+tools (about 144,000 tokens), and 305,002 bytes without the output schemas: the output schemas are the
+first place to cut. Clients with tool search (Claude Code) load a tool only when it is needed; others
+load all of it.
+
+When a new tool does not fit, shorten output schemas and descriptions or merge tools. When that is not
+enough, split the list into toolsets a client chooses, with the daily inbox tools as the default. Do
+not raise the budget to pass.
+
 ## Ticket open (timeline read and request order)
 
 A ticket opens on three independent reads: the list, the conversation detail and its messages (plus time entries). `inbox-route.test.tsx` pins that a ticket opened by its address requests messages, time entries, list and detail at once, before the list or the detail answers, and that these go out before the side lists (agents, tags, saved replies, email channel). A browser allows six HTTP/1.1 connections per host, so a request queued behind the side lists is a request the person waits for. `TestTimelineReadWithHeavyHTMLMailStaysInBudget` holds `GET .../messages` for 60 HTML messages with 30 remote images each (HTML rewritten to proxy addresses, no image host called) to 100 ms p95 (measured 38 ms).
@@ -365,7 +378,7 @@ On 2026-10-31 the Zalo OA pages, conversation numbers and response targets (thei
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
-A lazy part renders nothing until its chunk is there. That is right for a piece of a page, and wrong for a whole page: until 2026-11-12 the router showed a route whose page was a lazy part at once, so the first visit to most Settings pages, Knowledge, Results, Review, Contacts and the setup flow showed no page at all, rail aside, for as long as the chunk took (65 to 274 ms measured locally at 150 ms a request); people took it for a reload. A route whose page is a lazy part now has `loader: () => part.ready()`: the router keeps the current page on screen until the next one can show. A loader also starts what the page reads outside its chunk (Billing, Channels, the setup flow), with the chunk and not after it. Every router `Link` and every plain link to a page of the app (`lib/in-app-links.ts`) loads its page ahead on hover and focus. The gate is `src/routes-never-blank.test.tsx`: it opens every route of the app in a fresh module graph, with no chunk loaded and no request answered, and fails when the first render after the router finished loading has no page frame (`main`). A `beforeLoad` with side effects returns early on `preload`.
+A lazy part renders nothing until its chunk is there. That is right for a piece of a page, and wrong for a whole page: until 2026-11-12 the router showed a route whose page was a lazy part at once, so the first visit to most Settings pages, Knowledge, Results, Review, Contacts and the setup flow showed no page at all, rail aside, for as long as the chunk took (65 to 274 ms measured locally at 150 ms a request); people took it for a reload. A route whose page is a lazy part now has `loader: pageChunk(part)`: moving inside the app, the router keeps the current page on screen until the next one can show; on the first load nothing is on screen to keep, so the loader only starts the chunk and the rail and the page's frame show at once (waiting there held the whole app, rail included, until the chunk came). A loader also starts what the page reads outside its chunk (Billing, Channels, the setup flow), with the chunk and not after it. Every router `Link` and every plain link to a page of the app (`lib/in-app-links.ts`) loads its page ahead on hover and focus. The gate is `src/routes-never-blank.test.tsx`: in a fresh module graph (no chunk loaded, no request answered) it opens the app on the inbox, moves to every route of the app, and fails when the first render after the move has no page frame (`main`) or shows a placeholder waiting for the chunk (`data-chunk-loading`); it also opens a page whose chunk never arrives and expects the rail. A `beforeLoad` with side effects returns early on `preload`.
 
 ## Operator console bundle
 

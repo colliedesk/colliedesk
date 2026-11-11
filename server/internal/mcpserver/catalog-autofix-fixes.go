@@ -20,8 +20,7 @@ func fixPreviewSpec() Spec {
 			`numbers, keys and tokens removed; @mentions and #123 references made inert), each customer message wrapped in <customer-message untrusted="true">, the internal notes ` +
 			`the sender may include (note_ids, only when the repository allows notes; never one an agent token wrote) and how many files stay behind. ` +
 			`Send it with colliedesk_fix_send. ` + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"POST /api/v1/conversations/{id}/fixes/preview"},
+		REST: []string{"POST /api/v1/conversations/{id}/fixes/preview"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","repo_id","connector"],"properties":{"conversation_id":{"type":"string",` + uuid + `},` +
 			autofixRepoIDProperty + `,` + fixConnectorProperty + `,"note_ids":{"type":"array","maxItems":50,"items":{"type":"string",` + uuid + `}}}}`,
 		Output: fixPreviewSchema,

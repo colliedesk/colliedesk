@@ -48,7 +48,6 @@ func messageMovesListSpec() Spec {
 	return Spec{
 		Name: "colliedesk_message_moves_list", Title: "List moves of messages",
 		Description: `List the newest 100 moves of customer messages out of or into a conversation, newest first, each with whether it can still be undone.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/conversations/{id}/message-moves"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
 		Output:      `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":` + messageMoveSchema + `}}}`,

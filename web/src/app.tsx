@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRouteWithContext, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRouteWithContext, redirect, rootRouteId, createRoute, createRouter, useRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart, contactPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
-import { closedScreen, firstOpenArea, railAreasFor } from './lib/areas';
+import { closedScreen, firstOpenArea, knowledgeHome, railAreasFor } from './lib/areas';
+import { isPhone } from './lib/use-phone';
+import { keepContentScroll } from './lib/content-scroll';
 import { PermissionsContext } from './lib/permissions-context';
 import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
@@ -19,6 +21,7 @@ import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-inte
 import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
+import { settingsAddress } from './features/settings/settings-anchors';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
@@ -32,6 +35,7 @@ import { kbPart } from './features/kb/kb-part';
 import { channelsRoutePart, preloadChannelsPage } from './features/settings/channels/channels-preload';
 import { preloadSetupStep, setupFlowPart } from './features/onboarding/setup-flow-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
+import type { LazyPart } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
 import { forgetAllDrafts } from './features/inbox/reply-draft-storage';
@@ -41,12 +45,10 @@ import { useInAppLinks } from './lib/in-app-links';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
-// Each Settings route's loader waits for its chunk, so the router keeps the page on screen, Settings nav included,
-// until the next one can show: moving between Settings pages never blanks the screen as a reload would.
 const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
-const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
-const numbersRoutePart = lazyPart(() => import('./features/settings/numbers/numbers-route'));
+// Settings → Data carries the Freshdesk import's steps, so it is a chunk of its own.
+const dataRoutePart = lazyPart(() => import('./features/settings/data-route'));
 const rolesRoutePart = lazyPart(() => import('./features/settings/roles/roles-route'));
 const targetsRoutePart = lazyPart(() => import('./features/settings/targets/targets-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
@@ -60,10 +62,21 @@ const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 // A trial offer link is opened once by a few admins: its page loads from its own chunk.
 const trialOfferPart = lazyPart(() => import('./features/auth/trial-offer-page'));
 
+// pageChunk is the loader of a route whose page is a lazy part. Moving inside the app, it waits for the page's
+// chunk, so the router keeps the current page on screen, Settings nav included, until the next one can show:
+// the screen never goes blank as a reload would (routes-never-blank.test.tsx holds every route to it). On the
+// first load there is no page to keep: it only starts the chunk, and the rail and the page's frame show at once.
+let pageOnScreen = false;
+const pageChunk = (part: LazyPart<unknown>) => () => (pageOnScreen ? part.ready() : part.preload());
+
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
+  useEffect(() => { pageOnScreen = true; }, []);
   // A bare link to a page of the app opens without reloading, wherever it is written.
   useInAppLinks();
+  // A page opened starts at its top, and Back returns to where it was, in the content pane too (content-scroll.ts).
+  const router = useRouter();
+  useEffect(() => keepContentScroll(router), [router]);
   // The public page of a results share link has no session and no rail.
   // The consent page of an AI app's OAuth sign-in has no rail either: it checks its own session. So does the
   // page of a trial offer link, which a locked workspace must reach past its locked screen.
@@ -122,6 +135,8 @@ function AppLayout() {
   const closed = me.data ? closedScreen(path, me.data) : undefined;
   if (closed && path === '/') return <Navigate to={firstOpenArea(me.data)} replace />;
   const shows = (permission: TokenPermission) => !me.data || can(me.data, permission);
+  // Knowledge opens on what the session reads of it: the articles, the media or the help center's settings.
+  const knowledge = me.data ? knowledgeHome(me.data) : '/knowledge';
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
@@ -135,7 +150,7 @@ function AppLayout() {
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
         {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
-      {(shows('kb_articles:read') || shows('kb_media:read')) && <Link to={me.data && !can(me.data, 'kb_articles:read') ? '/knowledge/media' : '/knowledge'} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+      {knowledge && <Link to={knowledge} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
       {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
         onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
@@ -171,14 +186,14 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({ component: AppLa
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 // The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
-const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId', loader: () => contactPart.ready(),
+const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId', loader: pageChunk(contactPart),
   component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
 // The knowledge base is its own chunk (features/kb/kb-chunk.ts); its filters are in the address.
 const kbFailed = <main className="settings-page"><PartUnavailable /></main>;
 const knowledgeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   validateSearch: (search: Record<string, unknown>): { collection?: string; q?: string; status?: 'draft' | 'published' } => ({
     ...(typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
     ...(typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {}),
@@ -200,7 +215,7 @@ const mediaSearch = (search: Record<string, unknown>): { q?: string; kind?: 'ima
 const mediaRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/media',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   validateSearch: mediaSearch,
   component: function Media() {
     const search = mediaRoute.useSearch();
@@ -210,19 +225,19 @@ const mediaRoute = createRoute({
 const unusedMediaRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/media/unused',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   component: () => <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="unused" search={{}} />} />,
 });
 const mediaTrashRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/media/trash',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   component: () => <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="trash" search={{}} />} />,
 });
 const newArticleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/new',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   validateSearch: (search: Record<string, unknown>): { collection?: string } => (typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
   component: function NewArticle() {
     const { collection } = newArticleRoute.useSearch();
@@ -232,7 +247,7 @@ const newArticleRoute = createRoute({
 const articleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/articles/$articleId',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   component: function Article() {
     const { articleId } = articleRoute.useParams();
     // key: another article starts with its own form, not the last one's edits.
@@ -243,7 +258,7 @@ const articleRoute = createRoute({
 const languagesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/languages',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   validateSearch: (search: Record<string, unknown>): { locale?: string; state?: 'missing' | 'outdated' | 'translated' } => ({
     ...(typeof search.locale === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(search.locale) ? { locale: search.locale } : {}),
     ...(search.state === 'missing' || search.state === 'outdated' || search.state === 'translated' ? { state: search.state } : {}),
@@ -254,27 +269,55 @@ const languagesRoute = createRoute({
   },
 });
 // One language of an article, beside the original; it also starts a translation.
+// The help center's own settings, beside the articles it publishes; they were a section of Settings.
+const helpCenterSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/settings',
+  loader: pageChunk(kbPart),
+  component: () => <Part part={kbPart} failed={kbFailed} render={({ HelpCenterSettingsRoute }) => <HelpCenterSettingsRoute />} />,
+});
 const translationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/articles/$articleId/translations/$locale',
-  loader: () => kbPart.ready(),
+  loader: pageChunk(kbPart),
   component: function Translation() {
     const { articleId, locale } = translationRoute.useParams();
     return <Part part={kbPart} failed={kbFailed} render={({ TranslationRoute }) => <TranslationRoute key={`${articleId}-${locale}`} articleId={articleId} locale={locale} />} />;
   },
 });
-// While the chunk loads the page keeps its frame and title, so a slow network shows Settings at once and
-// nothing jumps when the sections arrive. A chunk that cannot load says so, with Reload page: a browser
-// keeps a failed import failed until the page loads again.
-function SettingsPage() {
+// Settings is one page per item of its menu (#528), each at its own address under /settings/. While the
+// chunk loads a page keeps its frame and title, so a slow network shows the page at once and nothing jumps
+// when the sections arrive. A chunk that cannot load says so, with Reload page: a browser keeps a failed
+// import failed until the page loads again.
+type SettingsChunk = typeof import('./features/settings/settings-route');
+function SettingsChunkPage({ title, render }: { title: string; render: (chunk: SettingsChunk) => ReactNode }) {
   const part = settingsRoutePart.use();
-  if (part.status === 'ready') return <part.module.SettingsRoute />;
-  return <main className="settings-page" aria-busy={part.status === 'loading'}>
-    <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
+  if (part.status === 'ready') return render(part.module);
+  // data-chunk-loading: the routes' loaders wait for the chunk, so the router never shows this while it loads.
+  return <main className="settings-page" aria-busy={part.status === 'loading'} data-chunk-loading={part.status === 'loading' || undefined}>
+    <header><h1>{title}</h1></header>
     {part.status === 'error' ? <PartUnavailable /> : <p role="status" className="muted-copy">{messages.loadingList}</p>}
   </main>;
 }
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', loader: () => settingsRoutePart.ready(), component: SettingsPage });
+// /settings is the menu on a phone and Account elsewhere. A link to a section of the old one-page Settings
+// (/settings#invites-heading, in bookmarks, emails and MCP answers) opens the page that holds it now
+// (settings-anchors.ts), and so does a refused export link (/settings?export_error=…).
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings',
+  loader: pageChunk(settingsRoutePart),
+  beforeLoad: ({ location }) => {
+    const address = settingsAddress(location.hash, location.searchStr);
+    // On a phone the menu and a settings page take turns on the screen, as the inbox list and a conversation do.
+    if (address !== '/settings/account' || !isPhone()) throw redirect({ href: address, replace: true });
+  },
+  component: () => <SettingsChunkPage title={messages.settings} render={({ SettingsIndexRoute }) => <SettingsIndexRoute />} /> });
+const accountRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/account', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={messages.account} render={({ AccountRoute }) => <AccountRoute />} /> });
+const generalRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/general', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={messages.general} render={({ GeneralRoute }) => <GeneralRoute />} /> });
+const membersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/members', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={messages.members} render={({ MembersRoute }) => <MembersRoute />} /> });
+const savedRepliesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/saved-replies', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={messages.savedReplies} render={({ SavedRepliesRoute }) => <SavedRepliesRoute />} /> });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
 // The tab and the channel filter of Review are in the address, so a link opens the same list.
@@ -282,7 +325,7 @@ type ReviewSearch = { tab?: 'dismissed' | 'decided'; channel?: string; scope?: s
 const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/review',
-  loader: () => reviewRoutePart.ready(),
+  loader: pageChunk(reviewRoutePart),
   validateSearch: (search: Record<string, unknown>): ReviewSearch => ({
     ...(search.tab === 'dismissed' || search.tab === 'decided' ? { tab: search.tab } : {}),
     // A channel alone filters by the channel; its scope narrows it further.
@@ -311,7 +354,7 @@ const billingRoute = createRoute({
   path: '/settings/billing',
   loader: ({ context: { queryClient } }) => {
     if (queryClient && billingReadable(queryClient.getQueryData<Me>(['me']), queryClient.getQueryData<PublicConfig>(['public-config']))) void queryClient.prefetchQuery({ queryKey: ['billing'], queryFn: api.billing });
-    return billingRoutePart.ready();
+    return pageChunk(billingRoutePart)();
   },
   // `buy=<plan>` is the link the website uses to send a visitor straight into that plan's checkout.
   validateSearch: (search: Record<string, unknown>): { checkout: 'success' | ''; buy?: string } => ({
@@ -337,50 +380,47 @@ const billingRoute = createRoute({
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
-const importRoute = createRoute({
+// Settings → Data: the Freshdesk import and the whole-workspace export. The import was a page of its own:
+// its address (in import emails and older guides) opens Data.
+const dataRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/settings/import-freshdesk',
-  loader: () => importRoutePart.ready(),
-  component: function Import() {
-    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
-  },
+  path: '/settings/data',
+  loader: pageChunk(dataRoutePart),
+  component: () => <Part part={dataRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ DataRoute }) => <DataRoute />} />,
 });
-// Settings → Roles: the list, a new role (optionally from another) and one role.
+const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/import-freshdesk',
+  beforeLoad: () => { throw redirect({ to: '/settings/data', replace: true }); } });
+// Settings → Members → a role: a new role (optionally from another) and one role. The list of roles is a
+// section of Members; its old address opens it there.
 const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
-const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles', loader: () => rolesRoutePart.ready(),
-  component: () => <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'list' }} />} /> });
-const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new', loader: () => rolesRoutePart.ready(),
+const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
+  beforeLoad: () => { throw redirect({ to: '/settings/members', hash: 'roles-heading', replace: true }); } });
+const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new', loader: pageChunk(rolesRoutePart),
   validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
   component: function NewRole() {
     const { from } = newRoleRoute.useSearch();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'new', from }} />} />;
   } });
-const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/$roleId', loader: () => rolesRoutePart.ready(),
+const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/$roleId', loader: pageChunk(rolesRoutePart),
   component: function OneRole() {
     const { roleId } = roleRoute.useParams();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
   } });
-// Settings → Conversation numbers: the workspace's number series.
-const numbersRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/settings/numbers',
-  loader: () => numbersRoutePart.ready(),
-  component: function Numbers() {
-    return <Part part={numbersRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ NumbersRoute }) => <NumbersRoute />} />;
-  },
-});
+// Conversation numbers were a page of their own; they are a section of General now.
+const numbersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/numbers',
+  beforeLoad: () => { throw redirect({ to: '/settings/general', hash: 'numbers-heading', replace: true }); } });
 // Settings → Response targets: business hours and the targets of each priority.
 const targetsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/targets',
-  loader: () => targetsRoutePart.ready(),
+  loader: pageChunk(targetsRoutePart),
   component: function Targets() {
     return <Part part={targetsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ TargetsRoute }) => <TargetsRoute />} />;
   },
 });
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
 const aiRoute = createRoute({
-  getParentRoute: () => rootRoute, path: '/settings/ai/$', loader: () => aiRoutePart.ready(),
+  getParentRoute: () => rootRoute, path: '/settings/ai/$', loader: pageChunk(aiRoutePart),
   component: function AISettings() {
     // The path is read here, not in render: the part calls render only once its chunk has loaded.
     const path = aiRoute.useParams()._splat ?? '';
@@ -401,7 +441,7 @@ function ChannelsSettings({ path, search }: { path: string; search: ChannelsSear
 const channelRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
   // The loader also asks for what the page reads, so a hover, a click or a typed address asks for everything at once.
-  loader: ({ context: { queryClient }, location }) => { if (queryClient) preloadChannelsPage(queryClient, location.pathname); return channelsRoutePart.ready(); },
+  loader: ({ context: { queryClient }, location }) => { if (queryClient) preloadChannelsPage(queryClient, location.pathname); return pageChunk(channelsRoutePart)(); },
   component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
 });
 // The setup flow is its own chunk (setup-flow-part.ts); one component reads the step in the address.
@@ -413,7 +453,7 @@ function SetupFlow({ step }: { step?: string }) {
 // The loader asks for what a step reads with its chunk, so a hover, a click, a typed address or the sign-up asks for everything at once.
 function setupLoader(queryClient: QueryClient | undefined, step?: string) {
   if (queryClient) preloadSetupStep(queryClient, step);
-  return setupFlowPart.ready();
+  return pageChunk(setupFlowPart)();
 }
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', loader: ({ context: { queryClient } }) => setupLoader(queryClient), component: () => <SetupFlow /> });
 const setupStepRoute = createRoute({
@@ -423,7 +463,7 @@ const setupStepRoute = createRoute({
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/results',
-  loader: () => resultsRoutePart.ready(),
+  loader: pageChunk(resultsRoutePart),
   validateSearch: (search: Record<string, unknown>): { window?: '7d' } => (search.window === '7d' ? { window: '7d' } : {}),
   component: function Results() {
     const { window } = resultsRoute.useSearch();
@@ -441,20 +481,20 @@ function AutofixScreen({ render }: { render: (chunk: typeof import('./features/a
 const fixesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/fixes',
-  loader: () => (autofixPreviewOn() ? autofixPart.ready() : undefined),
+  loader: () => (autofixPreviewOn() ? pageChunk(autofixPart)() : undefined),
   validateSearch: (search: Record<string, unknown>): { repo?: unknown; agent?: unknown } => search,
   component: () => <AutofixScreen render={({ FixesScreen }) => <FixesScreen />} />,
 });
 const autofixSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/autofix',
-  loader: () => (autofixPreviewOn() ? autofixPart.ready() : undefined),
+  loader: () => (autofixPreviewOn() ? pageChunk(autofixPart)() : undefined),
   component: () => <AutofixScreen render={({ AutofixSettingsRoute }) => <AutofixSettingsRoute />} />,
 });
 const resultsShareRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/r',
-  loader: () => resultsSharePart.ready(),
+  loader: pageChunk(resultsSharePart),
   component: () => <Part part={resultsSharePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsShareRoute }) => <ResultsShareRoute />} />,
 });
 const signInRoute = createRoute({
@@ -502,7 +542,7 @@ const oauthAuthorizeRoute = createRoute({
 const trialOfferRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/trial-offer',
-  loader: () => trialOfferPart.ready(),
+  loader: pageChunk(trialOfferPart),
   component: function TrialOfferLink() {
     const { search, pathname } = window.location;
     return <Part part={trialOfferPart} failed={<main className="settings-page"><PartUnavailable /></main>}
@@ -510,7 +550,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

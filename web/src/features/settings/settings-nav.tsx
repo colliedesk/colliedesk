@@ -1,36 +1,38 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { can } from '../../lib/can';
 import type { Permissions } from '../../lib/can';
 import { track } from '../../lib/product-analytics';
 import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
+import { ChevronLeftIcon } from '../../ui/icons';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
 
-export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels'
+// Settings is one page per item of this menu (#528). '/settings' is the menu itself, a page of its own on a
+// phone; '/settings/roles' is a role's page, under Members.
+export type SettingsPath = '/settings' | '/settings/account' | '/settings/general' | '/settings/members' | '/settings/saved-replies' | '/settings/data'
+  | '/settings/billing' | '/settings/ai' | '/settings/autofix' | '/settings/channels'
   | '/settings/channels/type/email' | '/settings/channels/type/web_form' | '/settings/channels/type/help_chat'
-  | '/settings/channels/type/zalo' | '/settings/numbers' | '/settings/targets' | '/settings/roles';
+  | '/settings/channels/type/zalo' | '/settings/targets' | '/settings/roles';
 // sub: the pages under an item, listed below it (Channels: one per channel type).
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean; sub?: NavItem[] }
-interface NavGroup { label: string; items: NavItem[] }
+interface NavGroup { label?: string; items: NavItem[] }
 
-// hrefFor links a section on the same page by its anchor alone, and one on the other settings page by path and anchor.
-export function hrefFor(item: NavItem, page: SettingsPath): string {
-  if (!item.hash) return item.to;
-  return `${item.to === page ? '' : item.to}#${item.hash}`;
+// hrefFor links a page by its path, and a section of one by its anchor as well.
+export function hrefFor(item: NavItem): string {
+  return item.hash ? `${item.to}#${item.hash}` : item.to;
 }
 
-const sectionByHash: Record<string, SettingsSection> = {
-  'profile-heading': 'profile', 'preferences-heading': 'preferences', 'general-heading': 'general', 'team-heading': 'team',
-  'invites-heading': 'invites', 'agents-heading': 'agents', 'connected-apps-heading': 'connected_apps', 'sessions-heading': 'sessions',
-  'saved-replies-heading': 'saved_replies', 'help-center-heading': 'help_center', 'export-heading': 'export',
+const sectionByPage: Partial<Record<SettingsPath, SettingsSection>> = {
+  '/settings/account': 'account', '/settings/general': 'general', '/settings/members': 'members', '/settings/channels': 'channels', '/settings/targets': 'targets',
+  '/settings/ai': 'ai', '/settings/saved-replies': 'saved_replies', '/settings/data': 'data', '/settings/billing': 'billing',
 };
-const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : item.to === '/settings/ai' ? 'ai' : item.to.startsWith('/settings/channels') ? 'channels' : undefined);
+const sectionOf = (item: NavItem): SettingsSection | undefined => sectionByPage[item.to] ?? (item.to.startsWith('/settings/channels') ? 'channels' : undefined);
 
 type RenderLink = (item: NavItem, page: SettingsPath) => ReactNode;
-const plainLink: RenderLink = (item, page) =>
-  <a href={hrefFor(item, page)} aria-current={item.current ? 'page' : undefined}>{item.label}</a>;
+const plainLink: RenderLink = (item) =>
+  <a href={hrefFor(item)} aria-current={item.current ? 'page' : undefined}>{item.label}</a>;
 
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
@@ -42,45 +44,64 @@ export interface Shown { general: boolean; team: boolean; channels: boolean; sav
 export function byPermission(shown: Shown, me: Permissions): Shown {
   if (!me) return shown;
   return { ...shown, general: can(me, 'workspace:update'), team: can(me, 'team:read'), roles: can(me, 'team:read'), invites: can(me, 'team:read'),
-    exportData: can(me, 'workspace:export'), importData: can(me, 'imports:run'), agents: shown.agents !== false && can(me, 'team:create_tokens'),
+    exportData: can(me, 'workspace:export'), importData: can(me, 'imports:run'),
+    // Someone who may revoke teammates' sessions finds their agent tokens on AI & agents, without making tokens.
+    agents: shown.agents !== false && (can(me, 'team:create_tokens') || can(me, 'team:revoke')),
     channels: shown.channels && can(me, 'channels:read'), conversations: can(me, 'conversations:read'), ai: shown.ai !== false && can(me, 'ai_settings:read'),
     savedReplies: shown.savedReplies && can(me, 'saved_replies:read'), helpCenter: shown.helpCenter !== false && can(me, 'help_center:read') };
 }
 
-// settingsNavGroups lists what this person can see: their own account, then the shared workspace.
+// settingsNavGroups lists the pages this person can see: their own account, then the shared workspace,
+// then its data and billing. A page shows when the person can see one of its sections at least.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
-  const section = (label: string, hash: string, visible = true): NavItem[] => (visible ? [{ label, to: '/settings', hash }] : []);
-  return [
-    { label: messages.settingsYourAccount, items: [...section(messages.profile, 'profile-heading'), ...section(messages.preferences, 'preferences-heading')] },
+  const item = (label: string, to: SettingsPath, visible = true, current = page === to): NavItem[] => (visible ? [{ label, to, current }] : []);
+  const groups: NavGroup[] = [
+    { items: item(messages.account, '/settings/account') },
     { label: messages.settingsWorkspace, items: [
-      ...section(messages.general, 'general-heading', shown.general),
-      ...section(messages.team, 'team-heading', shown.team),
-      ...(shown.roles ? [{ label: messages.roles, to: '/settings/roles' as const, current: page === '/settings/roles' }] : []),
-      ...section(messages.invites, 'invites-heading', shown.invites !== false),
-      ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
-      // Response targets and conversation numbers read conversations, not channels.
-      ...(shown.conversations ?? shown.channels ? [{ label: messages.responseTargets, to: '/settings/targets' as const, current: page === '/settings/targets' }] : []),
-      // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
-      // While in preview it shows only in a browser that turned it on (autofix-preview.ts).
-      ...(shown.autofix !== false && autofixPreviewOn() ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
-      // Everyone's own AI apps connected with OAuth, above the agent tokens as on the page.
-      ...section(messages.connectedApps, 'connected-apps-heading'),
-      ...section(messages.aiAgents, 'agents-heading', shown.agents),
-      ...section(messages.sessions, 'sessions-heading'),
+      // Conversation numbers read conversations, not the workspace's own settings, and the way to the help
+      // center's settings reads the help center: General shows for either too.
+      ...item(messages.general, '/settings/general', shown.general || Boolean(shown.conversations) || Boolean(shown.helpCenter)),
+      ...item(messages.members, '/settings/members', shown.team || shown.invites === true || shown.roles === true, page === '/settings/members' || page === '/settings/roles'),
       ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels', sub: [
         { label: messages.emailNav, to: '/settings/channels/type/email' as const, current: page === '/settings/channels/type/email' },
         { label: messages.webFormNav, to: '/settings/channels/type/web_form' as const, current: page === '/settings/channels/type/web_form' },
         { label: messages.helpChatNav, to: '/settings/channels/type/help_chat' as const, current: page === '/settings/channels/type/help_chat' },
         { label: messages.zaloNav, to: '/settings/channels/type/zalo' as const, current: page === '/settings/channels/type/zalo' },
       ] }] : []),
-      ...(shown.conversations ?? shown.channels ? [{ label: messages.conversationNumbers, to: '/settings/numbers' as const, current: page === '/settings/numbers' }] : []),
-      ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
-      ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
-      ...section(messages.exportHeading, 'export-heading', shown.exportData),
-      ...(shown.importData ? [{ label: messages.importFreshdesk, to: '/settings/import-freshdesk' as const, current: page === '/settings/import-freshdesk' }] : []),
-      ...(shown.billing ? [{ label: messages.planAndBilling, to: '/settings/billing' as const, current: page === '/settings/billing' }] : []),
+      // Response targets read conversations, not channels.
+      ...item(messages.responseTargets, '/settings/targets', shown.conversations ?? shown.channels),
+      ...item(messages.aiAndAgents, '/settings/ai', Boolean(shown.ai) || Boolean(shown.agents)),
+      ...item(messages.savedReplies, '/settings/saved-replies', shown.savedReplies),
+      // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
+      // While in preview it shows only in a browser that turned it on (autofix-preview.ts).
+      ...item(messages.autofix, '/settings/autofix', shown.autofix !== false && autofixPreviewOn()),
+    ] },
+    { label: messages.settingsDataAndBilling, items: [
+      ...item(messages.dataPage, '/settings/data', Boolean(shown.importData) || shown.exportData),
+      // Plan and billing exists only on the hosted cloud, for those who read the billing.
+      ...item(messages.planAndBilling, '/settings/billing', shown.billing),
     ] },
   ];
+  return groups.filter((group) => group.items.length > 0);
+}
+
+// Each settings page draws its own menu, so the link pressed is gone once the page it opens is drawn. The
+// address it opened is kept here until that page's menu is drawn, which then gives keyboard focus back to
+// its current item, or to the page's title where the menu is not shown (a page on a phone).
+let opening: string | undefined;
+function rememberOpening(event: MouseEvent<HTMLElement>, page: SettingsPath) {
+  const to = (event.target as HTMLElement).closest('a')?.getAttribute('href')?.split(/[?#]/)[0];
+  opening = to && to !== page ? to : undefined;
+}
+function focusOpened(nav: HTMLElement | null, page: SettingsPath) {
+  if (!nav || opening !== page) return;
+  opening = undefined;
+  const current = nav.querySelector<HTMLElement>('[aria-current="page"]');
+  if (current && getComputedStyle(nav).display !== 'none') { current.focus(); return; }
+  const title = nav.closest('main')?.querySelector<HTMLElement>('h1');
+  if (!title) return;
+  title.tabIndex = -1;
+  title.focus();
 }
 
 export function SettingsNav({ shown: given, page }: { shown: Shown; page: SettingsPath }) {
@@ -90,18 +111,23 @@ export function SettingsNav({ shown: given, page }: { shown: Shown; page: Settin
   const me = useContext(QueryClientContext)?.getQueryData<{ permissions: string[] }>(['me']);
   const shown = byPermission(given, me);
   const nav = useRef<HTMLElement>(null);
-  // On a narrow screen the links are one row that scrolls sideways: the current page is brought into it,
-  // again when links appear before it.
+  // Between a phone and a wide screen the links are one row that scrolls sideways: the current page is
+  // brought into it, again when links appear before it.
   const links = JSON.stringify(shown);
   useEffect(() => {
     nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [page, links]);
-  return (
-    <nav ref={nav} className="settings-nav" aria-label={messages.settingsSections}>
-      {settingsNavGroups(shown, page).map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
+  useEffect(() => focusOpened(nav.current, page), [page]);
+  // On a phone the menu is a page of its own (/settings), as the inbox list is: every other settings page
+  // shows the way back to it where the menu would be (layout.css).
+  const index = page === '/settings';
+  return <>
+    {!index && <a className="settings-back" href="/settings" onClick={(event) => rememberOpening(event, page)}><ChevronLeftIcon />{messages.allSettings}</a>}
+    <nav ref={nav} onClick={(event) => rememberOpening(event, page)} className={index ? 'settings-nav settings-nav-index' : 'settings-nav'} aria-label={messages.settingsSections}>
+      {settingsNavGroups(shown, page).map((group, at) => <div key={group.label ?? at}>{group.label && <p className="settings-group-label">{group.label}</p>}
         <ul>{group.items.map((item) => <li key={item.label} className={item.sub ? 'settings-nav-parent' : undefined} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}
           {item.sub && <ul className="settings-nav-sub" aria-label={item.label}>{item.sub.map((sub) => <li key={sub.label}>{renderLink(sub, page)}</li>)}</ul>}</li>)}</ul>
       </div>)}
     </nav>
-  );
+  </>;
 }

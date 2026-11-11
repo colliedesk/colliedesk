@@ -2,7 +2,7 @@
 
 Colliedesk stores every time in UTC and shows it in your timezone.
 
-- **Your timezone** (everyone, **Settings → Profile**): choose your own timezone, or
+- **Your timezone** (everyone, **Settings → Account → Profile**): choose your own timezone, or
   **Same as workspace** to follow the workspace default.
 - **Workspace timezone** (admins, **Settings → General**): the default for everyone who has not
   chosen their own, and the zone business hours count in ([response targets](response-targets.md)).

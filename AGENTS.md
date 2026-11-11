@@ -24,6 +24,13 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    only shrink (ceilings in the test).
    `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
    `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
+   A tool's `readOnlyHint` and `destructiveHint` come from what its routes do (`routeEffects` in
+   `server/internal/httpapi/route-effect.go`: a GET reads, a POST, PUT or PATCH changes, every DELETE
+   and every route that differs from its method has a row), never from a flag on the tool. A route
+   that starts to send, delete for good or revoke updates its row, and every tool on it follows.
+   `openWorldHint` comes from `routesReachingOutside` in the same file: a route that emails or
+   messages a customer, calls a third party, or changes the public help center gets a row there.
+   `TestEveryRouteSaysWhatItDoes` and `TestToolsOnABodyDecidedRouteSayWhatTheirBodyDoes` fail otherwise.
 7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
    A person finishes the task in the fewest steps and screens, and every screen says the next step.
    An AI agent finishes the same task in the fewest MCP calls: a tool's name and description say
@@ -32,6 +39,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    before and after. Gates: `TestEveryToolHasADocSentence`, `TestLookupToolsReturnNamesNotJustIDs`,
    `TestToolArgumentsAreValidatedAgainstTheSchema`,
    `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
+   `TestToolsListStaysWithinItsBudget` (the tool list a client loads, `docs/internals/performance.md`),
    the onboarding journeys below; agent journeys with call budgets are tracked in #374.
 
 ## Glossary
@@ -75,8 +83,8 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - Tests first (red → green), at the public seams: HTTP API, CLI, web components.
 - Go tests use a real PostgreSQL (`TEST_DATABASE_URL`); never mock the database.
 - `make test` before pushing; `make e2e` for user-visible flows.
-- A page that loads from its own chunk (`ui/lazy-part.tsx`) gives its route `loader: () => part.ready()`, so the
-  router keeps the current page until the next one can show. `web/src/routes-never-blank.test.tsx` opens every
+- A page that loads from its own chunk (`ui/lazy-part.tsx`) gives its route `loader: pageChunk(part)` (`web/src/app.tsx`),
+  so the router keeps the current page until the next one can show; the first load shows the rail at once. `web/src/routes-never-blank.test.tsx` opens every
   route with no chunk loaded and fails on a blank page (`docs/internals/performance.md`).
 - Market is international: timestamps are stored and returned in UTC; the UI formats them in the
   agent's IANA timezone. No country-specific defaults.

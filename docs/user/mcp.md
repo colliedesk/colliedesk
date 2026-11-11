@@ -20,10 +20,10 @@ token that holds `messages:send` only when you want it to write to customers.
   how to connect again.
 - An app connected with OAuth acts as you, with everything you can do in the workspace you allowed it
   in, as your roles are on each call; see [Connected AI apps](sessions.md#connected-ai-apps).
-- An agent token is created in **Settings → External AI agents**, as described in
+- An agent token is created in **Settings → AI & agents → External AI agents**, as described in
   [Agent tokens](sessions.md#agent-tokens): it follows a role (one whose permissions you all hold), or holds a fixed
   list of your permissions. Give it only what the job needs. The token is shown once; revoke it in
-  **Settings → Sessions**.
+  **Settings → AI & agents → Sessions**.
 
 ### Connect an app with OAuth
 
@@ -38,7 +38,7 @@ open [Colliedesk in the Claude directory](https://claude.ai/directory/connectors
    there), check the app's name, the workspace and where the answer goes, and choose **Allow**.
    **Cancel** tells the app no. When the answer goes to a program on your computer (Claude Code,
    Codex), the page warns you: allow only if you just started connecting from that computer.
-3. The app is connected. It shows in **Settings → External AI agents → Connected AI apps**.
+3. The app is connected. It shows in **Settings → Account → Connected AI apps**.
 
 If you build your own app: an app that registers itself (dynamic client registration) can send people
 back only to this computer (`localhost`), to its own app scheme (`cursor://…`), or to a known AI app's
@@ -300,7 +300,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_results_get` | Shows the [results page](results.md): your numbers for the last 30 and 7 days next to the history you imported | `results:read` |
 | `colliedesk_results_share_link_get` | Shows whether the results page has an active share link, who made it and when it was last opened; never the link itself | `results:share` |
 | `colliedesk_results_share_link_create` | Creates a share link of the results page; the old link stops working | `results:share` |
-| `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `results:share` |
+| `colliedesk_results_share_link_revoke` | Turns off the results page's share link. Cannot be undone | `results:share` |
 | `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `profile:update` |
 | `colliedesk_setup_progress_get` | Shows the six getting-started steps by name (email, import, AI drafts, reply targets, invite, first reply), where each stands, and the reply targets presets | `conversations:read` |
 | `colliedesk_setup_guide_set` | Hides the [setup guide](setup-guide.md) from your inbox, or shows it again | `profile:update` |
@@ -339,7 +339,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_coding_agent_disable` | Turns off a coding agent for Autofix; fixes not sent yet are cancelled, fixes already sent go on | `autofix_settings:update` |
 | `colliedesk_coding_agent_check` | Checks a coding agent: the GitHub App and private repositories, or Cursor's key and its repositories | `autofix_settings:read` |
 | `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation | `autofix_settings:manage_credentials` |
-| `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `autofix_settings:manage_credentials` |
+| `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again. Cannot be undone | `autofix_settings:manage_credentials` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint: true` (every other tool states `false`), and their descriptions tell the

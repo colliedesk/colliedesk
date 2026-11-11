@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createQueryClient } from './query-client';
 import { permissionsOf, rolesOf } from './test-roles';
@@ -8,8 +8,9 @@ import { permissionsOf, rolesOf } from './test-roles';
 // A page the router shows is never blank. Most pages load from a chunk of their own (ui/lazy-part.tsx), and a
 // part renders nothing until its chunk is there; a route whose loader does not wait for the chunk is shown
 // empty, rail and frame included, for as long as the chunk takes: it looks like the browser reloaded.
-// Every route of the app is checked, so a route added later is checked too: each is opened in a fresh module
-// graph (no chunk loaded yet), the router finishes loading it, and its very first render must show the page.
+// Every route of the app is checked, so a route added later is checked too: in a fresh module graph (no chunk
+// loaded yet) the app opens on the inbox, moves to the route, and the first render after the move must show the
+// page, not a placeholder waiting for the chunk (data-chunk-loading).
 
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -54,9 +55,28 @@ test.each(await paths())('%s is not blank on its first render', async (path) => 
   const queryClient = createQueryClient();
   queryClient.setQueryData(['me'], me);
   queryClient.setQueryData(['public-config'], config);
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [addressOf(path)] }), context: { queryClient } });
-  await router.load();
-  const { container } = render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>);
-  // A page draws its frame (main) at once, with its own loading state inside while its data is on its way.
-  expect(container.querySelector('main'), `${path} shows no page until its chunk arrives: give the route a loader that waits for it, loader: () => thePart.ready()`).not.toBeNull();
+  // The app is on the inbox (first bundle); the move to the route is what is checked.
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }), context: { queryClient } });
+  const { container, findByRole } = render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>);
+  await findByRole('navigation', { name: 'Main' });
+  await act(async () => { await router.navigate({ href: addressOf(path) }); });
+  // A page draws its frame (main) at once, with its own loading state inside while its data is on its way. A
+  // placeholder that stands in for the page while its chunk loads (data-chunk-loading) is not the page.
+  const fix = 'give the route a loader that waits for its chunk, loader: pageChunk(thePart)';
+  expect(container.querySelector('main'), `${path} shows no page until its chunk arrives: ${fix}`).not.toBeNull();
+  expect(container.querySelector('[data-chunk-loading]'), `${path} shows a placeholder until its chunk arrives: ${fix}`).toBeNull();
 }, 30_000);
+
+// On the first load there is no page on screen to keep: the rail shows at once, whatever the page's chunk takes.
+test('opening the app on a page whose chunk has not arrived shows the rail at once', async () => {
+  vi.resetModules();
+  vi.doMock('./features/settings/targets/targets-route', () => new Promise(() => {}));
+  const { routeTree } = await import('./app');
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(['me'], me);
+  queryClient.setQueryData(['public-config'], config);
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/settings/targets'] }), context: { queryClient } });
+  const { findByRole } = render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>);
+  expect(await findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  vi.doUnmock('./features/settings/targets/targets-route');
+});

@@ -2,6 +2,9 @@
 // opens, so they live in the knowledge base chunk and not in the first bundle.
 export const kbMessages = {
   heading: 'Knowledge base',
+  // The Settings tab of the knowledge base: the help center's own settings, which were a section of Settings.
+  settingsTab: 'Settings',
+  helpCenterDescription: 'The public pages of your published knowledge base articles.',
   description: 'Articles in Markdown, grouped in collections. Published articles appear on the help center while it is on.',
   allArticles: 'All articles',
   collections: 'Collections',

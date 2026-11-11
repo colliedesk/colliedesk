@@ -36,7 +36,7 @@ test('seats count pending invites too, and say so', () => {
 
 test('Invite people leads to the invites of the team settings', () => {
   show(founding);
-  expect(within(row('Agents')).getByRole('link', { name: 'Invite people' })).toHaveAttribute('href', '/settings#invites-heading');
+  expect(within(row('Agents')).getByRole('link', { name: 'Invite people' })).toHaveAttribute('href', '/settings/members#invites-heading');
 });
 
 test('before the migration is asked for, its one button is the only ink button on the page', () => {

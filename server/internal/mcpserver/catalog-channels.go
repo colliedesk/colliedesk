@@ -29,11 +29,10 @@ func channelsListSpec() Spec {
 		Title: "List the channels",
 		Description: `List the workspace's channels (its support email, its web form...) with their state (working, waiting for its first message, off, needs_attention with a reason code), ` +
 			`how many messages each holds because it was off, how many replies were not sent while it was off, and the channel types this server runs with how many of each the workspace has. A workspace may have several channels of a type (two support mailboxes, two web forms); one of each type is its default (is_default), which an admin can move.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["channels","types"],"properties":{"channels":{"type":"array","items":{"type":"object"}},"types":{"type":"array","items":{"type":"object"}}}}`,
-		run:      channelsList,
+		REST:   []string{"GET /api/v1/channels"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["channels","types"],"properties":{"channels":{"type":"array","items":{"type":"object"}},"types":{"type":"array","items":{"type":"object"}}}}`,
+		run:    channelsList,
 	}
 }
 
@@ -41,7 +40,6 @@ func channelsGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_get", Title: "Show a channel",
 		Description: `Show one channel with its configuration as its type shows it (never a secret). A Zalo channel's config has the absolute verification_prefix_url and webhook_url to give the person for the Zalo app.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/channels/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
 		Output:      channelOutput,
@@ -54,8 +52,7 @@ func channelsEventsSpec() Spec {
 		Name: "colliedesk_channels_events", Title: "Show the history of the channels",
 		Description: `Show who added, renamed, turned on or off, changed or removed a channel, changed a secret (only its last four characters), and opened or discarded held messages, newest first. ` +
 			`Give channel_id for one channel; give the next_cursor of a page for the page after it.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/events"},
+		REST: []string{"GET /api/v1/channels/events"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `},` +
 			`"cursor":{"type":"string","maxLength":200}}}`,
 		Output: `{"type":"object","required":["events","next_cursor"],"properties":{"events":{"type":"array","items":{"type":"object"}},"next_cursor":{"type":["string","null"]}}}`,
@@ -141,7 +138,6 @@ func channelsDeleteSpec() Spec {
 		Name:        "colliedesk_channels_delete",
 		Title:       "Remove a channel",
 		Description: `Remove a channel: its configuration and secrets are deleted, its conversations stay with its name. Removing email disconnects it. It cannot be undone: add the channel again to get it back.`,
-		Destructive: true,
 		REST:        []string{"DELETE /api/v1/channels/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
 		Output:      `{"type":"object","required":["deleted"],"properties":{"deleted":{"type":"boolean"}}}`,
@@ -154,7 +150,6 @@ func channelsHeldDiscardSpec() Spec {
 		Name:        "colliedesk_channels_held_discard",
 		Title:       "Discard the messages a channel held",
 		Description: `Throw away messages a channel held while it was off (all, or those of event_ids). It cannot be undone; the history keeps how many. To keep them, use colliedesk_channels_held_replay.`,
-		Destructive: true,
 		REST:        []string{"POST /api/v1/channels/{id}/held/discard"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,` + heldEventIDs + `}}`,
 		Output:      `{"type":"object","required":["discarded"],"properties":{"discarded":{"type":"integer"}}}`,

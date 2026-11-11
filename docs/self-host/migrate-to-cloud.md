@@ -10,7 +10,7 @@ There is no self-service import of a workspace export yet, so HC Labs does the i
 
 ## Steps
 
-1. Export the workspace: in the app, open **Settings → Export all data**. Details are in
+1. Export the workspace: in the app, open **Settings → Data → Export all data**. Details are in
    [export all your data](../user/export.md).
 2. Check that the ZIP file contains `manifest.json`. A file without it is incomplete; export again.
 3. Email [support@colliedesk.com](mailto:support@colliedesk.com) with the subject "Migrate to Cloud".

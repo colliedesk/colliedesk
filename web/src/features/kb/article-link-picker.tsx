@@ -31,7 +31,7 @@ export function articleLink(article: Pick<KBArticleSummary, 'title' | 'url'>, te
 // there is nothing to link instead of listing addresses that answer 404. All of it is in this chunk; the
 // reply box holds only the button.
 // The settings open in a new tab, so the draft and the files in the reply box stay where they are.
-const openHelpCenterSettings = () => { window.open('/settings#help-center-heading', '_blank', 'noopener'); };
+const openHelpCenterSettings = () => { window.open('/knowledge/settings#help-center-heading', '_blank', 'noopener'); };
 
 export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }: ArticleLinkPickerProps) {
   const [text, setText] = useState('');

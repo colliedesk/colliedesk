@@ -281,6 +281,21 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (min-width: 44.01rem) {
   .conversation-center .composer { max-height: 75dvh; overflow-y: auto; }
 }
+/* On a phone the settings menu is a page of its own (/settings) and every other settings page goes back to
+   it, as the inbox list and a conversation take turns: the way back shows where the menu was. */
+/* The way back to the settings menu, a phone's only. */
+.settings-layout > .settings-back { display: none; }
+@media (max-width: 44rem) {
+  .settings-layout > .settings-back { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; min-height: var(--touch); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
+  .settings-nav:not(.settings-nav-index) { display: none; }
+  .settings-nav-index { display: grid; gap: var(--space-4); overflow: visible; padding-bottom: 0; mask-image: none; }
+  .settings-nav-index > div { display: block; }
+  .settings-nav-index .settings-group-label { display: block; }
+  .settings-nav-index ul { display: grid; gap: 0; margin: var(--space-2) 0 0; }
+  .settings-nav-index .settings-nav-parent { display: block; }
+  .settings-nav-index .settings-nav-sub { display: grid; padding-left: var(--space-3); }
+  .settings-nav-index a { white-space: normal; border: 0; padding: 0 var(--space-2); }
+}
 @media (max-width: 44rem) {
   .app-main, .app-content, .app-sheet { overflow: visible; }
   .app-main { gap: 0; padding: 0; }

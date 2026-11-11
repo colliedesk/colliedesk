@@ -6,7 +6,7 @@ environment variable.
 
 ## Before you start
 
-1. Sign in to Colliedesk and open **Settings → External AI agents**.
+1. Sign in to Colliedesk and open **Settings → AI & agents → External AI agents**.
 2. Name the token (for example "Cursor on my laptop"), choose what it may do (follow a role,
    or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
    See [Agent tokens](sessions.md#agent-tokens).
@@ -67,7 +67,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 ## Remove it
 
 Delete the `colliedesk` entry from `~/.cursor/mcp.json`, or turn it off in **Cursor Settings →
-MCP**. Then revoke the token in **Settings → Sessions**: it stops working at once, wherever it was
+MCP**. Then revoke the token in **Settings → AI & agents → Sessions**: it stops working at once, wherever it was
 copied.
 
 ## Other hosts

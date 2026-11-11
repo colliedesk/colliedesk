@@ -125,7 +125,7 @@ test('while the help center is off, the page says published articles are not pub
   serve({ ...base, 'GET /api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }) });
   open();
   expect((await screen.findByText('The help center is off.')).closest('[role="status"]')).toHaveTextContent('only agents can read them');
-  expect(screen.getByRole('link', { name: 'Turn on in Settings' })).toHaveAttribute('href', '/settings#help-center-heading');
+  expect(screen.getByRole('link', { name: 'Turn on in Settings' })).toHaveAttribute('href', '/knowledge/settings#help-center-heading');
   const row = (await screen.findByRole('link', { name: /Reset your password/ })).closest('li')!;
   expect(row).toHaveTextContent('not public: help center off');
   expect(within(row).queryByRole('link', { name: 'Open Reset your password on the help center' })).not.toBeInTheDocument();

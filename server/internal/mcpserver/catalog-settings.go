@@ -58,9 +58,8 @@ func workspaceSettingsGetSpec() Spec {
 		Title: "Show the workspace settings",
 		Description: `Show the workspace's name, address (slug) and timezone, and your own timezone (the team member this token acts as). ` +
 			`Times in Colliedesk are stored in UTC; the timezone decides how they are shown and what "today" means.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/auth/me"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/auth/me"},
+		Input: noArguments,
 		Output: `{"type":"object","required":["workspace","your_timezone"],"properties":{"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}},` +
 			`"your_timezone":{"type":"string"},"your_timezone_is_the_workspace_default":{"type":"boolean"}}}`,
 		run: workspaceSettingsGet,
@@ -148,7 +147,6 @@ func invitesListSpec() Spec {
 		Name:        "colliedesk_invites_list",
 		Title:       "List invites",
 		Description: `List the workspace's invites, newest first, with their state (pending, accepted, revoked, expired). The one-time link of an invite is never shown.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/auth/invites"},
 		Input:       noArguments,
 		Output:      `{"type":"object","required":["invites"],"properties":{"invites":{"type":"array","items":` + inviteSchema + `}}}`,
@@ -177,7 +175,6 @@ func inviteRevokeSpec() Spec {
 		Name:        "colliedesk_invite_revoke",
 		Title:       "Revoke an invite",
 		Description: `Revoke a pending invite, so its link stops working and its seat is free. It cannot be undone: a new invite is needed. ` + confirmFirst,
-		Destructive: true,
 		REST:        []string{"DELETE /api/v1/auth/invites/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["invite_id"],"properties":{"invite_id":{"type":"string",` + uuid + `,"description":"From colliedesk_invites_list."}}}`,
 		Output:      `{"type":"object","required":["revoked"],"properties":{"revoked":{"type":"boolean"}}}`,
@@ -191,11 +188,10 @@ func sessionsListSpec() Spec {
 		Title: "List sessions and agent tokens",
 		Description: `List sign-ins and agent tokens, most recently used first: whose they are, how each token got its permissions (a role it follows, or a list picked when it was made), and whether they are active. ` +
 			`With team:revoke you see the whole workspace; otherwise only those of the person this token acts as. No token value is ever shown.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/auth/sessions"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["sessions"],"properties":{"sessions":{"type":"array","items":` + sessionSchema + `}}}`,
-		run:      sessionsList,
+		REST:   []string{"GET /api/v1/auth/sessions"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["sessions"],"properties":{"sessions":{"type":"array","items":` + sessionSchema + `}}}`,
+		run:    sessionsList,
 	}
 }
 
@@ -206,11 +202,10 @@ func sessionRevokeSpec() Spec {
 		Description: `Sign out a session or revoke an agent token of the workspace, for example a lost laptop or a leaked token. It cannot be undone: the person signs in again, ` +
 			`or makes a new token. Your own person's sessions and tokens need nothing more; another person's need team:revoke, and you cannot sign out someone who holds a permission you lack. ` +
 			`To revoke the token you use now, call colliedesk_token_revoke. ` + confirmFirst,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/auth/sessions/{id}"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["session_id"],"properties":{"session_id":{"type":"string",` + uuid + `,"description":"From colliedesk_sessions_list."}}}`,
-		Output:      `{"type":"object","required":["revoked"],"properties":{"revoked":{"type":"boolean"}}}`,
-		run:         sessionRevoke,
+		REST:   []string{"DELETE /api/v1/auth/sessions/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["session_id"],"properties":{"session_id":{"type":"string",` + uuid + `,"description":"From colliedesk_sessions_list."}}}`,
+		Output: `{"type":"object","required":["revoked"],"properties":{"revoked":{"type":"boolean"}}}`,
+		run:    sessionRevoke,
 	}
 }
 
@@ -219,7 +214,6 @@ func webFormGetSpec() Spec {
 		Name:        "colliedesk_web_form_get",
 		Title:       "Show the web form settings",
 		Description: `Show whether the website contact form is on, which website origins may post to it, and the path they post to.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/channels/web-form"},
 		Input:       noArguments,
 		Output:      `{"type":"object","required":["web_form"],"properties":{"web_form":` + webFormSchema + `}}`,
@@ -248,11 +242,10 @@ func emailChannelGetSpec() Spec {
 		Title: "Show the email channel",
 		Description: `Show an email channel: the support address, whether an inbound secret is set (never the secret), where to forward mail, ` +
 			`the DNS record that verifies the sending domain, and the address replies are sent from. ` + emailChannelChoice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/email", "GET /api/v1/channels/{id}/email"},
-		Input:    emailChannelInput,
-		Output:   `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
-		run:      emailChannelGet,
+		REST:   []string{"GET /api/v1/channels/email", "GET /api/v1/channels/{id}/email"},
+		Input:  emailChannelInput,
+		Output: `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
+		run:    emailChannelGet,
 	}
 }
 
@@ -297,9 +290,8 @@ func emailForwardingConfirmationGetSpec() Spec {
 			`This reads the newest one that reached the channel in the last 24 hours: code, confirm_url, received_at and the conversation it opened. ` +
 			`confirm_url is null unless the email passed the trusted sender check and the link is on Google's own host; give the code or link to the person who set up forwarding, never open it yourself. ` +
 			`Not found when none arrived. It reads only.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/{id}/email/forwarding-confirmation"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"The email channel, from colliedesk_channels_list."}}}`,
+		REST:  []string{"GET /api/v1/channels/{id}/email/forwarding-confirmation"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"The email channel, from colliedesk_channels_list."}}}`,
 		Output: `{"type":"object","required":["code","confirm_url","received_at","conversation_id"],"properties":{"code":{"type":"string"},` +
 			`"confirm_url":{"type":["string","null"]},"received_at":{"type":"string"},"conversation_id":{"type":"string"}}}`,
 		run: emailForwardingConfirmationGet,
@@ -327,9 +319,8 @@ func billingGetSpec() Spec {
 		Description: `Show the hosted cloud plan: trial end, whether the workspace is locked, the subscription status and period end, seats used and the limits. ` +
 			`On a self-hosted server there is no plan. ` +
 			`To buy a plan, open the billing portal or ask for a Freshdesk migration, use colliedesk_billing_action. migration_requested_at is when someone last asked for one (null when none did).`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/billing"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/billing"},
+		Input: noArguments,
 		Output: `{"type":"object","properties":{"billing":{"type":"object","properties":{"plan":{"type":"string"},"status":{"type":"string"},"locked":{"type":"boolean"},` +
 			`"trial_ends_at":{"type":"string"},"current_period_end":{"type":["string","null"]},"cancel_at_period_end":{"type":"boolean"},"migration_requested_at":{"type":["string","null"]},"limits":{"type":"object"},"usage":{"type":"object"}}}},"required":["billing"]}`,
 		run: billingGet,

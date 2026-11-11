@@ -29,11 +29,10 @@ func autofixStatusSpec() Spec {
 		Title: "Show Autofix counts",
 		Description: `Show whether Autofix is set up (connected_repos, repositories not paused) and how many fixes wait for a person (failed, merged and not yet released, ` +
 			`or sent and silent for 30 minutes) or are running.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/autofix/status"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["connected_repos","needs_person","running"],"properties":{"connected_repos":{"type":"integer"},"needs_person":{"type":"integer"},"running":{"type":"integer"}}}`,
-		run:      autofixStatus,
+		REST:   []string{"GET /api/v1/autofix/status"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["connected_repos","needs_person","running"],"properties":{"connected_repos":{"type":"integer"},"needs_person":{"type":"integer"},"running":{"type":"integer"}}}`,
+		run:    autofixStatus,
 	}
 }
 
@@ -44,8 +43,7 @@ func fixesListSpec() Spec {
 		Description: `List the workspace's fixes (conversations sent to a coding agent: Claude or Copilot through a GitHub issue, Cursor through its API), newest first, in pages, ` +
 			`optionally one group (needs_person, running or done), one repository (repo_id, from colliedesk_fix_get or the settings) and one agent (connector). ` + fixesDescriptionStates +
 			`Read one with colliedesk_fix_get for what was sent and its timeline. ` + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/autofix/fixes"},
+		REST: []string{"GET /api/v1/autofix/fixes"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"group":{"type":"string","enum":["needs_person","running","done"]},` +
 			`"repo_id":{"type":"string",` + uuid + `},"connector":{"type":"string","enum":["claude_issue","copilot_issue","cursor_api"]},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":100,"default":50},"cursor":{"type":"string","maxLength":200,"description":"next_cursor of the page before."}}}`,
@@ -60,11 +58,10 @@ func fixGetSpec() Spec {
 		Title: "Show an Autofix fix",
 		Description: `Show one fix: where it is, its issue, Cursor run and pull request links, exactly what was sent (sent_title, sent_body) and its timeline (events). ` +
 			fixesDescriptionStates + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/autofix/fixes/{id}"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["fix_id"],"properties":{` + fixIDProperty + `}}`,
-		Output:   `{"type":"object","required":["fix"],"properties":{"fix":` + fixSchema + `}}`,
-		run:      fixGet,
+		REST:   []string{"GET /api/v1/autofix/fixes/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["fix_id"],"properties":{` + fixIDProperty + `}}`,
+		Output: `{"type":"object","required":["fix"],"properties":{"fix":` + fixSchema + `}}`,
+		run:    fixGet,
 	}
 }
 
@@ -73,7 +70,6 @@ func conversationFixesListSpec() Spec {
 		Name:        "colliedesk_conversation_fixes_list",
 		Title:       "List a conversation's Autofix fixes",
 		Description: `List every fix of a conversation, the latest attempt first. ` + fixesDescriptionStates + untrustedNotice,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/conversations/{id}/fixes"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
 		Output:      `{"type":"object","required":["fixes"],"properties":{"fixes":{"type":"array","items":` + fixSchema + `}}}`,
@@ -156,8 +152,8 @@ func cursorKeyRemoveSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_cursor_key_remove",
 		Title: "Remove the Cursor key of Autofix",
-		Description: `Erase the workspace's Cursor key now: Cursor takes no new fix until a key is set again with colliedesk_cursor_key_set; runs already sent go on at Cursor ` +
-			`and are followed again once a key is set.`,
+		Description: `Erase the workspace's Cursor key now. It cannot be undone: no copy is kept, so a key is set again with colliedesk_cursor_key_set. ` +
+			`Cursor takes no new fix until then; runs already sent go on at Cursor and are followed again once a key is set.`,
 
 		REST:   []string{"DELETE /api/v1/autofix/connectors/cursor_api/key"},
 		Input:  noArguments,
