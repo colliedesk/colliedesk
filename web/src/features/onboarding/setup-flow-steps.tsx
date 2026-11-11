@@ -18,8 +18,10 @@ const importPart = lazyPart(() => import('../settings/import-route'));
 
 interface StepProps {
   admin: boolean;
-  // canInvite is Settings → Team's own permission to invite: the invite step needs it, not managing channels.
+  // canInvite: the person may list and create invites (team:read and team:invite), not managing channels.
   canInvite: boolean;
+  // canRevoke: the person may revoke a pending invite (team:revoke).
+  canRevoke: boolean;
   timezone: string;
   navigate: (href: string, replace?: boolean) => void;
 }
@@ -76,12 +78,12 @@ function EmailStep({ admin, timezone, navigate }: StepProps) {
     && <Setup key={channel?.id ?? 'new'} channel={channel} list={list} canManage={admin} timezone={timezone} navigate={navigate} create={create} returnTo="/setup/email" />} /></div>;
 }
 
-function InviteStep({ canInvite, timezone }: StepProps) {
+function InviteStep({ canInvite, canRevoke, timezone }: StepProps) {
   // Without the permission nothing is asked for, as in Settings.
   const { section, revokeFailed } = useInvites(canInvite);
   return <div className="setup-flow-invites">
     {revokeFailed && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
-    <InvitesSection {...section} timezone={timezone} canCreateInvites={canInvite} />
+    <InvitesSection {...section} timezone={timezone} canCreateInvites={canInvite} canRevokeInvites={canRevoke} />
   </div>;
 }
 

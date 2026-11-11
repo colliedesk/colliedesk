@@ -118,7 +118,8 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
 - **Admins** see all six steps.
 - **Everyone else** sees only the steps their roles can take, in the guide and in the setup flow:
   email and the import need `channels:update`, AI drafts `ai_settings:update`, reply targets
-  `workspace:update`, inviting `team:invite`, as in Settings.
+  `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
+  Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email is everyone's step.
 - **Hide** removes the guide from your inbox only. Other team members keep their own choice.
   To bring it back, open **Preferences** and turn on **Show the setup guide**.

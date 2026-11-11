@@ -6,12 +6,16 @@ import type { Permissions } from '../../lib/can';
 // it, whether the guide has anything left to show.
 export const doneStates: Record<SetupStepKey, string> = { email: 'working', import: 'done', ai_drafts: 'on', reply_targets: 'on', invite: 'joined', first_reply: 'sent' };
 
-// The permission a step's own screen needs, as in Settings: managing channels sets up email and the import,
-// turning AI drafts on is Built-in AI's ai_settings:update, saving reply targets workspace:update, and inviting is
-// Settings → Team's own permission. Answering the first email needs none beyond reading the inbox.
-const stepPermission: Partial<Record<SetupStepKey, TokenPermission>> = {
-  email: 'channels:update', import: 'channels:update', ai_drafts: 'ai_settings:update', reply_targets: 'workspace:update', invite: 'team:invite',
+// The permissions a step's own screen needs, as in Settings: managing channels sets up email and the import,
+// turning AI drafts on is Built-in AI's ai_settings:update, saving reply targets workspace:update; the invite step
+// lists the invites and the roles (team:read) and creates one (team:invite). Answering the first email needs none
+// beyond reading the inbox.
+const stepPermissions: Partial<Record<SetupStepKey, TokenPermission[]>> = {
+  email: ['channels:update'], import: ['channels:update'], ai_drafts: ['ai_settings:update'], reply_targets: ['workspace:update'], invite: ['team:invite', 'team:read'],
 };
+
+// mayTake is true when the person holds every permission the step's screen needs.
+export const mayTake = (me: Permissions, key: SetupStepKey) => (stepPermissions[key] ?? []).every((needed) => can(me, needed));
 
 // The steps offered on the way: they show their state, but the four core steps alone decide whether the setup
 // has work left, as the server's complete does.
@@ -19,10 +23,7 @@ const offers: ReadonlySet<SetupStepKey> = new Set(['ai_drafts', 'reply_targets']
 
 // visibleSteps are the steps this person can take, by the permissions of their roles.
 export function visibleSteps(progress: SetupProgress, me: Permissions) {
-  return progress.steps.filter((step) => {
-    const needed = stepPermission[step.key];
-    return !needed || can(me, needed);
-  });
+  return progress.steps.filter((step) => mayTake(me, step.key));
 }
 
 export const stepIsDone = (step: { key: SetupStepKey; state: string }) => doneStates[step.key] === step.state;

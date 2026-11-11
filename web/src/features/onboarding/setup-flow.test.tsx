@@ -39,7 +39,7 @@ const invite = { id: '33333333-3333-4333-8333-333333333333', email: 'kim@example
 
 // world is what the server holds; creating an invite moves the invite step on, as the server does.
 // permissions replaces what the role holds, for a custom role.
-function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup: Progress; signedOut?: boolean; setupDown?: boolean }) {
+function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup: Progress; signedOut?: boolean; setupDown?: boolean; invites?: unknown[] }) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0];
     const method = init?.method ?? 'GET';
@@ -56,7 +56,7 @@ function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup:
       world.setup = { ...world.setup, steps: world.setup.steps.map((step) => (step.key === 'invite' ? { ...step, state: 'invited' } : step)) };
       return json(201, { invite, url: 'https://desk.example.com/sign-in?token=one-time-invite' });
     }
-    if (path === '/api/v1/auth/invites') return json(200, { items: [] });
+    if (path === '/api/v1/auth/invites') return json(200, { items: world.invites ?? [] });
     if (path === '/api/v1/roles') return json(200, { items: builtInRoles });
     return json(404, { error: { code: 'not_found', message: 'no' } });
   });
@@ -180,6 +180,32 @@ test('a person who manages channels but may not invite never gets the invite ste
   const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
   expect(asked).not.toContain('/api/v1/auth/invites');
   expect(asked).not.toContain('/api/v1/roles');
+});
+
+test('a person who may invite but not read the team never gets the invite step, and the invites and roles are not asked for', async () => {
+  serve({ role: 'admin', permissions: permissionsOf('admin').filter((name) => name !== 'team:read'), setup: progress() });
+  const router = open('/setup/invite');
+  await title('Receive customer email');
+  expect(router.state.location.pathname).toBe('/setup/email');
+  expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveTextContent('Step 1 of 3');
+  const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
+  expect(asked).not.toContain('/api/v1/auth/invites');
+  expect(asked).not.toContain('/api/v1/roles');
+});
+
+test('a person who may invite but not revoke sees a pending invite without Revoke', async () => {
+  serve({ role: 'agent', permissions: [...permissionsOf('agent'), 'team:invite'], setup: progress({ invite: 'invited' }), invites: [{ ...invite, expires_at: '2099-01-01T00:00:00Z' }] });
+  open('/setup/invite');
+  await title('Invite your team');
+  expect(await screen.findByText('kim@example.com')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+});
+
+test('a person who may invite and revoke can revoke a pending invite in the setup flow', async () => {
+  serve({ role: 'agent', permissions: [...permissionsOf('agent'), 'team:invite', 'team:revoke'], setup: progress({ invite: 'invited' }), invites: [{ ...invite, expires_at: '2099-01-01T00:00:00Z' }] });
+  open('/setup/invite');
+  await title('Invite your team');
+  expect(await screen.findByRole('button', { name: 'Revoke' })).toBeInTheDocument();
 });
 
 test('the summary lists every step with its state, links back to each unfinished one and opens the inbox', async () => {
