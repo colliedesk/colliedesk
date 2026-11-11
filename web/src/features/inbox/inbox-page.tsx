@@ -100,6 +100,8 @@ interface InboxPageProps {
   failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   canManage?: boolean;
+  // canManageChannels: the person may change channels (channels:update): the links into a channel's settings.
+  canManageChannels?: boolean;
   currentAgentId?: string;
   // onBulkUpdate resolves when every listed conversation changed, and rejects when none did.
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
@@ -150,7 +152,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -239,7 +241,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         <header>
           <div className="list-title"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} />
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
-          <MailSwitchLine settings={defaultMailbox} canManage={canManage} />
+          <MailSwitchLine settings={defaultMailbox} canManageChannels={canManageChannels} />
           <div className="list-head">
             <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} currentAgentId={currentAgentId} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
               views={viewsMenu} />
@@ -259,7 +261,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onTestMessage={onTestMessage} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManage} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
+        <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManageChannels} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
           afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
             currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           before={selected && <Part part={messageMovesPart} render={(part) => <part.MessageMovesLog key={selected.id} conversation={selected} timeline={timeline}
@@ -269,7 +271,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           messageMenu={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />)}
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
         {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
-          {canManage && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
+          {canManageChannels && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
         {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
         {selected && answerGoesToMailbox(replyMailbox) && <p className="composer-from">{messages.answerGoesToMailbox}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}

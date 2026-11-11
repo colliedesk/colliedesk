@@ -23,6 +23,7 @@ const disconnected: EmailChannelSettings = {
   },
   mail_through_mailbox: false,
   answers_before_forwarding: 'colliedesk',
+  mail_switch: { imported: false, mailboxes: [] },
 };
 const connected: EmailChannelSettings = {
   ...disconnected,

@@ -8674,6 +8674,7 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            mail_switch: components["schemas"]["EmailMailSwitch"];
             /** @description Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the current support address). Until it has, new customer mail may still arrive in the team's old help desk, and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@` address, dropped mail and mail under an earlier support address do not count. False without a channel. */
             mail_through_mailbox: boolean;
             /**
@@ -8703,6 +8704,21 @@ export interface components {
             /** Format: uri */
             inbound_url: string;
             smtp: components["schemas"]["SMTPStatus"];
+        };
+        /** @description The workspace's support mailboxes whose customer mail does not arrive here yet, the same on every email channel's settings. The inbox shows one line while `mailboxes` is not empty. */
+        EmailMailSwitch: {
+            /** @description Whether the workspace finished an import from another help desk (and did not undo it). Then new customer mail to the mailboxes below still arrives in that old help desk. */
+            imported: boolean;
+            /** @description The switched-on email channels with a support address of the team's own whose customer mail has not arrived through the mailbox yet (`mail_through_mailbox` false), the default channel first. A channel whose support address is under the server's hosted mail domain has no mailbox to move and is never listed, also after the workspace address name changed. Empty when nothing is left to move. */
+            mailboxes: components["schemas"]["EmailMailboxToMove"][];
+        };
+        EmailMailboxToMove: {
+            /** Format: uuid */
+            channel_id: string;
+            /** @description The channel's name. */
+            name: string;
+            /** Format: email */
+            support_address: string;
         };
         GmailSettings: {
             /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off). */

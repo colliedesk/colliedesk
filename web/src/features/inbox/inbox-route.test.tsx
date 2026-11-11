@@ -1301,3 +1301,91 @@ test('a bulk close takes the waiting draft of the open conversation away at once
   fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
 });
+
+// The inbox's line about moving the mail and the reply box's note read the email settings: the default
+// mailbox's for the line, the mailbox the open conversation's replies leave from for the note.
+const SUPPORT = '88888888-8888-4888-8888-888888888888';
+const SALES = '55555555-5555-4555-8555-555555555555';
+const switchSettings = (id: string, address: string, waiting: string[], answers: 'colliedesk' | 'support_mailbox' = 'colliedesk') => ({
+  channel: { channel_id: id, support_address: address, domain_verified_at: null }, inbound_url: 'https://desk.example.com/x', hosted_address: null,
+  smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: address,
+  mail_through_mailbox: !waiting.includes(id), answers_before_forwarding: answers,
+  mail_switch: { imported: true, mailboxes: waiting.map((channel) => ({ channel_id: channel, name: channel === SALES ? 'Sales' : 'Support',
+    support_address: channel === SALES ? 'sales@desk.example' : 'support@desk.example' })) },
+});
+const salesRef = { id: SALES, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { id: SALES, type: 'email', name: 'Sales', enabled: true, instead_of: null } };
+const answerToMailbox = 'The customer\'s answer goes to your mailbox until it forwards here.';
+const openOn = (ref: unknown) => {
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  testRouter.params = { conversationId: alpha.id };
+  return alpha;
+};
+
+test('Move your mail is offered to whoever may change channels, also without the AI settings permission, and only to them', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  api.emailChannel.mockResolvedValue(switchSettings(SUPPORT, 'support@desk.example', [SUPPORT]) as never);
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: [...permissionsOf('agent'), 'channels:update'] });
+    const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByRole('link', { name: 'Move your mail' })).toHaveAttribute('href', `/settings/channels/${SUPPORT}/setup?step=forward`);
+    first.unmount();
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: [...permissionsOf('agent'), 'ai_settings:update'] });
+    renderRoute();
+    expect(await screen.findByText(/An admin can move it\./)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Move your mail' })).toBeNull();
+  } finally {
+    api.emailChannel.mockReset();
+  }
+});
+
+test('the reply box speaks of the mailbox the open conversation\'s replies leave from, not of the default one', async () => {
+  try {
+    // The default mailbox does not forward yet; Sales, which carries this conversation's replies, does.
+    openOn(salesRef);
+    api.emailChannel.mockResolvedValue(switchSettings(SUPPORT, 'support@desk.example', [SUPPORT], 'support_mailbox') as never);
+    api.emailChannelOf.mockResolvedValue(switchSettings(SALES, 'sales@desk.example', [SUPPORT], 'support_mailbox'));
+    const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText(/New customer mail to support@desk\.example still arrives/)).toBeInTheDocument();
+    await waitFor(() => expect(api.emailChannelOf).toHaveBeenCalledWith(SALES));
+    expect(screen.queryByText(answerToMailbox)).toBeNull();
+    first.unmount();
+
+    // Sales does not forward yet: its answer goes to its mailbox.
+    api.emailChannelOf.mockResolvedValue(switchSettings(SALES, 'sales@desk.example', [SUPPORT, SALES], 'support_mailbox'));
+    const second = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText(answerToMailbox)).toBeInTheDocument();
+    second.unmount();
+
+    // Replies that leave through a chat have no mailbox: nothing is said, whatever the default mailbox's state.
+    openOn({ id: '44444444-4444-4444-8444-444444444444', type: 'zalo', name: 'Zalo', enabled: true, deleted: false,
+      replies_via: { id: '44444444-4444-4444-8444-444444444444', type: 'zalo', name: 'Zalo', enabled: true, instead_of: null } });
+    renderRoute();
+    expect(await screen.findByText(/New customer mail to support@desk\.example still arrives/)).toBeInTheDocument();
+    expect(screen.queryByText(answerToMailbox)).toBeNull();
+  } finally {
+    api.emailChannel.mockReset();
+    api.emailChannelOf.mockReset();
+  }
+});
+
+test('with a conversation open on another mailbox, the default mailbox is asked for beside it, not after it', async () => {
+  try {
+    openOn(salesRef);
+    api.conversations.mockReturnValue(new Promise(() => {})); // the list never answers in this test
+    api.emailChannelOf.mockReturnValue(new Promise(() => {})); // nor does Sales' settings
+    api.emailChannel.mockReturnValue(new Promise(() => {}) as never);
+    renderRoute();
+    await waitFor(() => expect(api.emailChannelOf).toHaveBeenCalledWith(SALES));
+    expect(api.emailChannel).toHaveBeenCalled();
+  } finally {
+    api.emailChannel.mockReset();
+    api.emailChannelOf.mockReset();
+  }
+});

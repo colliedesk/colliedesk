@@ -1,25 +1,35 @@
 import type { EmailChannelSettings } from '../../api/schemas';
-import { addressSaved } from '../../channels/email/setup-state';
 import { messages } from '../../messages';
 
-// beforeMailSwitch: the team's own support address has brought no customer mail through its mailbox yet
-// (a test message does not count), so new mail may still reach the old help desk. A channel still on its
-// forwarding address has no mailbox of the team's own to move.
-const beforeMailSwitch = (settings: EmailChannelSettings | undefined): settings is EmailChannelSettings =>
-  Boolean(settings?.channel) && addressSaved(settings) && settings?.mail_through_mailbox === false;
+// "a, b and c": the product's English writes lists without a comma before and.
+// mailboxesToMove reads the list defensively: the inbox must render from a partial settings object too.
+const mailboxesToMove = (settings: EmailChannelSettings | undefined) => settings?.mail_switch?.mailboxes ?? [];
 
-// MailSwitchLine sits under the inbox title until the default mailbox forwards here. Its action opens
-// step 2 of that channel's email setup (forwarding) for a person who can change the channel.
-export function MailSwitchLine({ settings, canManage }: { settings?: EmailChannelSettings; canManage?: boolean }) {
-  if (!beforeMailSwitch(settings)) return null;
-  const id = settings.channel?.channel_id;
+const addressList = new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' });
+
+// MailSwitchLine sits under the inbox title while a mailbox of the team brought no customer mail here yet
+// (a test message does not count). The server lists those mailboxes (mail_switch), leaving out a hosted
+// forwarding address, which has no mailbox to move. After an import that mail still reaches the old help
+// desk. Its action opens step 2 of the first one's email setup (forwarding) for a person who can change channels.
+export function MailSwitchLine({ settings, canManageChannels }: { settings?: EmailChannelSettings; canManageChannels?: boolean }) {
+  const mailboxes = mailboxesToMove(settings);
+  const first = mailboxes[0];
+  if (!settings || !first) return null;
+  const addresses = addressList.format(mailboxes.map((mailbox) => mailbox.support_address));
+  const imported = settings.mail_switch.imported;
+  const said = imported
+    ? `${messages.mailStillInOldHelpDesk(addresses)}${settings.answers_before_forwarding === 'colliedesk' ? ` ${messages.repliesComeBackHere}` : ''}`
+    : messages.mailNotHereYet(addresses);
   return <p className="mail-switch">
-    {messages.mailStillInOldHelpDesk}{settings.answers_before_forwarding === 'colliedesk' && ` ${messages.repliesComeBackHere}`}
-    {canManage && id && <> <a className="link-action" href={`/settings/channels/${encodeURIComponent(id)}/setup?step=forward`}>{messages.moveYourMail}</a></>}
+    {said}{' '}
+    {canManageChannels
+      ? <a className="link-action" href={`/settings/channels/${encodeURIComponent(first.channel_id)}/setup?step=forward`}>{imported ? messages.moveYourMail : messages.forwardYourMailbox}</a>
+      : messages.adminCanMoveMail}
   </p>;
 }
 
 // answerGoesToMailbox: on a server that cannot receive replies on its sending domain, the customer's answer to
-// a reply goes to the support mailbox, which does not forward here yet.
+// a reply goes to the support mailbox of this channel, which does not forward here yet.
 export const answerGoesToMailbox = (settings: EmailChannelSettings | undefined) =>
-  beforeMailSwitch(settings) && settings.answers_before_forwarding === 'support_mailbox';
+  settings?.answers_before_forwarding === 'support_mailbox' && Boolean(settings.channel)
+  && mailboxesToMove(settings).some((mailbox) => mailbox.channel_id === settings.channel?.channel_id);

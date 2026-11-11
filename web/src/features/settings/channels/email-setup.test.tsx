@@ -212,6 +212,28 @@ test('the inbox\'s Move your mail opens step 2 even after a test message marked 
   expect(screen.queryByRole('textbox', { name: 'Support address' })).not.toBeInTheDocument();
 });
 
+test('after only a test message, step 2 says no customer mail came through the mailbox yet, and turns to First email received when it does, without a reload', async () => {
+  // The test message made the channel working; the server says no customer mail came through the mailbox.
+  const detail = waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: false }));
+  const { client } = show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('Test message received. No customer mail through your mailbox yet.'));
+  expect(forward).not.toHaveTextContent('First email received');
+  channelsApi.get.mockResolvedValue({ ...detail, last_inbound_at: '2026-10-29T00:40:00Z' });
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: true }));
+  act(() => { client.setQueryData(['inbox-activity'], { now: '2026-10-29T00:40:05Z', new_conversations: [{ id: CONVERSATION, created_at: '2026-10-29T00:40:00Z' }], assigned_to_me: [], updated: [], viewing: [] }); });
+  await waitFor(() => expect(within(forward).getByRole('status')).toHaveTextContent('First email received 12:40 AM'));
+});
+
+test('folded, step 2 after only a test message says no customer mail came through the mailbox yet', async () => {
+  waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { mail_through_mailbox: false }));
+  show(`${MAIN}/setup`);
+  expect(await screen.findByRole('group', { name: /Send replies from/ })).toHaveTextContent('Step 3 of 4');
+  expect(step(/Forward its mail to Colliedesk/)).toHaveTextContent('Test message received. No customer mail through your mailbox yet.');
+});
+
 test('step 2 flips to First email received when inbox activity brings a conversation, without a reload, and Continue opens step 3', async () => {
   const detail = waitingChannel();
   const { client } = show(`${MAIN}/setup`);

@@ -71,7 +71,12 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   The inbox line "New customer mail still arrives in your old help desk" reads the same rule through the
   email channel's settings (`mail_through_mailbox`, `store.EmailChannelForwarded`), and
   `answers_before_forwarding` reads `email.Config.ReceivesPlatformReplies`, the worker's condition. Both
-  share one query and one condition, so the line and the Reply-To cannot disagree.
+  share one query and one condition, so the line and the Reply-To cannot disagree. `mail_switch` applies the
+  rule to every email channel of the workspace in the same query as the sending pause
+  (`store.EmailSettingsState`), so the settings cost no extra round trip per channel. The server, not the
+  web app, leaves out a support address under the hosted mail domain (`email.HostedSlug`): after a new
+  workspace address name the channel keeps its old hosted address, which no longer equals `hosted_address`,
+  so a comparison with it would call that address the team's own.
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
   verified by Resend. Both steps are needed, in this order:

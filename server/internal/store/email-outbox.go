@@ -53,29 +53,22 @@ type Delivery struct {
 	Forwarded bool
 }
 
-// channelForwardedBefore is true for a channel with a journal entry that became a message, is not marked
-// direct and arrived while the channel had its current support address (entries from before the envelope
-// named the address count); or, for a channel without a journal, one that received a customer message
-// before the journal existed.
-const channelForwardedBefore = `SELECT EXISTS(SELECT 1 FROM channel_inbound_events e JOIN email_channels s ON s.workspace_id=e.workspace_id AND s.channel_id=e.channel_id
-		WHERE e.workspace_id=$1 AND e.channel_id=$2 AND e.message_id IS NOT NULL AND NOT COALESCE((e.raw->>'direct')::boolean,false)
+// forwardedRule is true for the email channel whose id is the SQL expression channel, of workspace $1, with
+// a journal entry that became a message, is not marked direct and arrived while the channel had its
+// current support address (entries from before the envelope named the address count); or, for a channel
+// without a journal, one that received a customer message before the journal existed. The journal check
+// reads one entry in the order of channel_inbound_events_channel_idx: without the order, the planner may scan
+// the table for a mailbox whose entries lie behind those of the others.
+func forwardedRule(channel string) string {
+	return `(EXISTS(SELECT 1 FROM channel_inbound_events e JOIN email_channels s ON s.workspace_id=e.workspace_id AND s.channel_id=e.channel_id
+		WHERE e.workspace_id=$1 AND e.channel_id=` + channel + ` AND e.message_id IS NOT NULL AND NOT COALESCE((e.raw->>'direct')::boolean,false)
 			AND COALESCE(e.raw->>'support_address',s.support_address)=s.support_address)
-	OR (NOT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2) AND (` + channelReceivedBefore + `))`
-
-// EmailChannelForwarded reports whether mail that passed the channel's current support mailbox became a
-// message on it: the rule Delivery.Forwarded follows. Until then the mailbox may still forward to the old
-// help desk.
-func (s *Store) EmailChannelForwarded(ctx context.Context, workspaceID, channelID string) (bool, error) {
-	forwarded, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-		var forwarded bool
-		err := tx.QueryRow(ctx, channelForwardedBefore, workspaceID, channelID).Scan(&forwarded)
-		return forwarded, err
-	})
-	if err != nil {
-		return false, fmt.Errorf("check forwarded mail: %w", err)
-	}
-	return forwarded, nil
+	OR (NOT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=` + channel + ` ORDER BY received_at DESC LIMIT 1)
+		AND ` + receivedRule(channel) + `))`
 }
+
+// channelForwardedBefore is forwardedRule for the channel $2.
+var channelForwardedBefore = `SELECT ` + forwardedRule("$2")
 
 // DeliveryMailbox is the connected mailbox a reply leaves through, with its sealed grant. Its provider is
 // Grant.Provider.

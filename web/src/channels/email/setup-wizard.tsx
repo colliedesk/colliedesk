@@ -44,7 +44,8 @@ export function EmailSetup({ channel, named = false, step, canManage, timezone, 
     remember({ skipped: [...new Set([...(memory.skipped ?? []), step])] });
     advance(step);
   };
-  useRefetchOnActivity(id ?? '', Boolean(id) && open === 'forward' && states.forward !== 'done');
+  // Also after a test message marked step 2 done: it updates once customer mail comes through the mailbox.
+  useRefetchOnActivity(id ?? '', Boolean(id) && open === 'forward' && (states.forward !== 'done' || data?.mail_through_mailbox === false));
   const refresh = () => Promise.all(['email-channel', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: key === 'channel' ? [key, id] : [key] })));
   const address = data?.channel?.support_address;
   const finished = steps.every((step) => states[step] === 'done');
@@ -66,7 +67,8 @@ export function EmailSetup({ channel, named = false, step, canManage, timezone, 
   };
   const summary: Record<StepID, () => ReactNode> = {
     address: () => <span className="setup-value">{address}</span>,
-    forward: () => <span className="setup-pill">{channel?.last_inbound_at ? m.firstEmail(clockTime(channel.last_inbound_at, timezone)) : m.firstEmail('')}</span>,
+    forward: () => <span className="setup-pill">{data?.mail_through_mailbox === false ? m.onlyTestMessage
+      : channel?.last_inbound_at ? m.firstEmail(clockTime(channel.last_inbound_at, timezone)) : m.firstEmail('')}</span>,
     replies: () => <span className="muted-copy">{repliesSummary(data)}</span>,
     test: () => <span className="setup-pill">{m.testDelivered}</span>,
   };

@@ -34,6 +34,25 @@ If the gate fails:
 3. Check for N+1 queries, tenant-unscoped scans, missing filter/order indexes, and repeated search scans.
 4. Optimize the query or infrastructure. Do not raise the 100 ms threshold.
 
+## Email channel settings budget
+
+`TestEmailChannelSettingsLatencyBudget` holds `store.EmailSettingsState` to 20 ms p95. It is what
+`GET /api/v1/channels/email` reads besides the channel: the sending pause, a finished import, and whether
+customer mail came through each mailbox (`mail_switch`). The inbox reads it on every load for its line
+about moving the mail. The fixture is the worst case for the forwarding rule: three mailboxes, the default
+one with 20,000 forwarded customer mail, the other two with none, and 30,000 dropped mail in every journal;
+a second workspace is of the same size. Same method as the inbox activity budget: 10 warm-up calls, then
+200 timed calls of the store call.
+
+The partial index `channel_inbound_events_channel_messages` (`workspace_id, channel_id`, holding only the
+entries that became a message and did not arrive directly) keeps the check of a mailbox that never forwarded
+to its own entries. Without it the planner walked every entry of the workspace that became a message
+(`channel_inbound_events_message`), growing with the mail of the other mailboxes: 30–45 ms p95 on this
+fixture, 0.2–0.5 ms with it. Its condition is the query's own, so a lookup of one message still uses
+`channel_inbound_events_message` (`TestTheJournalRowOfAMessageIsFoundByIndex`). The check for a channel
+without any journal entry reads one entry in `received_at` order: without that order the planner scanned the
+table. Do not widen the 20 ms.
+
 ## Import status budget
 
 `TestImportStatusLatencyBudget` holds the store calls behind `GET /api/v1/imports/{id}` to 20 ms p95

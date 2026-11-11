@@ -21,6 +21,11 @@ func TestTheEmailChannelToolSaysWhetherMailArrivedThroughTheSupportMailbox(t *te
 	if at(t, got, "email_channel", "mail_through_mailbox") != false || at(t, got, "email_channel", "answers_before_forwarding") != "colliedesk" {
 		t.Fatalf("before forwarding, on a server that receives platform replies = %v", got)
 	}
+	// The same list the inbox line names: every mailbox of the team's own whose customer mail does not arrive yet.
+	if at(t, got, "email_channel", "mail_switch", "imported") != false || at(t, got, "email_channel", "mail_switch", "mailboxes", 0, "support_address") != "help@switch-tools.example.com" ||
+		at(t, got, "email_channel", "mail_switch", "mailboxes", 0, "name") == nil {
+		t.Fatalf("mail switch before forwarding = %v", at(t, got, "email_channel"))
+	}
 
 	plain := newEnv(t)
 	own := plain.newWorkspace("Switch Tools Plain", "admin@switch-tools-plain.example.com")

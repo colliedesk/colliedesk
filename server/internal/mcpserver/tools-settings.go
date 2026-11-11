@@ -82,6 +82,14 @@ type restEmailSettings struct {
 	} `json:"microsoft"`
 	MailThroughMailbox      bool   `json:"mail_through_mailbox"`
 	AnswersBeforeForwarding string `json:"answers_before_forwarding"`
+	MailSwitch              struct {
+		Imported  bool `json:"imported"`
+		Mailboxes []struct {
+			ChannelID      string `json:"channel_id"`
+			Name           string `json:"name"`
+			SupportAddress string `json:"support_address"`
+		} `json:"mailboxes"`
+	} `json:"mail_switch"`
 }
 
 func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
@@ -355,6 +363,11 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 	view := map[string]any{"connected": settings.Channel != nil, "inbound_url": settings.InboundURL, "hosted_address": settings.HostedAddress,
 		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom,
 		"mail_through_mailbox": settings.MailThroughMailbox, "answers_before_forwarding": settings.AnswersBeforeForwarding}
+	mailboxes := make([]map[string]any, 0, len(settings.MailSwitch.Mailboxes))
+	for _, mailbox := range settings.MailSwitch.Mailboxes {
+		mailboxes = append(mailboxes, map[string]any{"channel_id": mailbox.ChannelID, "name": mailbox.Name, "support_address": mailbox.SupportAddress})
+	}
+	view["mail_switch"] = map[string]any{"imported": settings.MailSwitch.Imported, "mailboxes": mailboxes}
 	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false}
 	if connection := settings.Gmail.Connection; connection != nil {
 		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error

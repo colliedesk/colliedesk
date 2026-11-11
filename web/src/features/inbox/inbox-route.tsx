@@ -350,7 +350,7 @@ export function InboxRoute() {
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={can(me.data, 'ai_settings:update')}
+    canManage={can(me.data, 'ai_settings:update')} canManageChannels={isAdmin}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} viewers={viewing}
