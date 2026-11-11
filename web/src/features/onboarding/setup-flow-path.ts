@@ -1,4 +1,5 @@
 import type { SetupStepKey } from '../../api/schemas';
+import { nothingToDo } from './setup-steps';
 
 type Step = { key: SetupStepKey; state: string };
 
@@ -7,6 +8,8 @@ type Step = { key: SetupStepKey; state: string };
 const ownPartDone: Record<SetupStepKey, ReadonlySet<string>> = {
   email: new Set(['waiting', 'working']),
   import: new Set(['running', 'done']),
+  ai_drafts: new Set(['on']),
+  reply_targets: new Set(['on']),
   invite: new Set(['invited', 'joined']),
   first_reply: new Set(['sent']),
 };
@@ -15,8 +18,10 @@ export const ownPartIsDone = (step: Step) => ownPartDone[step.key].has(step.stat
 
 export const stepPath = (key: SetupStepKey | 'done') => `/setup/${key}`;
 
-// firstOpenStep is where /setup starts: the first step whose own part is not done, else the summary.
-export const firstOpenStep = (steps: Step[]): SetupStepKey | 'done' => steps.find((step) => !ownPartIsDone(step))?.key ?? 'done';
+// firstOpenStep is where /setup starts: the first step whose own part is not done and that has something to do
+// here (AI drafts without any AI has none), else the summary.
+export const firstOpenStep = (steps: Step[]): SetupStepKey | 'done' =>
+  steps.find((step) => !ownPartIsDone(step) && !nothingToDo(step))?.key ?? 'done';
 
 // The address after a step (the summary after the last) and before it (none before the first).
 export const nextPath = (steps: Step[], index: number) => stepPath(steps[index + 1]?.key ?? 'done');

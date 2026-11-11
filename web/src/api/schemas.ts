@@ -273,14 +273,26 @@ export const inviteSchema = z.object({
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema, continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
-const setupStepKeys = ['email', 'import', 'invite', 'first_reply'] as const;
+const setupStepKeys = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'] as const;
 export type SetupStepKey = (typeof setupStepKeys)[number];
+const presetTargetSchema = z.object({ first_response_minutes: z.number().int().nullable().optional(), resolution_minutes: z.number().int().nullable().optional() });
+const replyTargetPresetKeySchema = z.enum(['within_the_hour', 'same_day', 'next_business_day']);
 export const setupProgressSchema = z.object({
-  steps: z.array(z.object({ key: z.enum(setupStepKeys), state: z.enum(['none', 'waiting', 'working', 'needs_attention', 'running', 'done', 'alone', 'invited', 'joined', 'sent']), detail: z.string().nullable() })),
+  steps: z.array(z.object({ key: z.enum(setupStepKeys), name: z.string(),
+    state: z.enum(['none', 'waiting', 'working', 'needs_attention', 'running', 'done', 'on', 'nothing_to_read', 'unavailable', 'alone', 'invited', 'joined', 'sent']), detail: z.string().nullable() })),
   complete: z.boolean(),
   recommended: z.enum(['email', 'import', 'invite']).nullable(),
+  reply_target_presets: z.array(z.object({ key: replyTargetPresetKeySchema, name: z.string(),
+    targets: z.object({ urgent: presetTargetSchema, high: presetTargetSchema, normal: presetTargetSchema, low: presetTargetSchema }) })),
+  // The hours a preset applies with, and one business day of them in minutes.
+  reply_target_hours: z.object({ kept: z.boolean(), day_minutes: z.number().int().positive(),
+    hours: z.array(z.object({ day: z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']), open: z.boolean(), from: z.string().optional(), to: z.string().optional() })) }),
+  // Null once targets are on, or for someone who may not change them.
+  reply_target_suggestion: z.object({ preset: replyTargetPresetKeySchema, basis: z.enum(['history', 'no_history', 'import_running']), median_first_reply_minutes: z.number().int().nullable() }).nullable(),
 }) satisfies z.ZodType<Generated<'SetupProgress'>>;
 export type SetupProgress = z.infer<typeof setupProgressSchema>;
+export type ReplyTargetPreset = SetupProgress['reply_target_presets'][number];
+export type ReplyTargetPresetKey = ReplyTargetPreset['key'];
 export const setupGuideHiddenSchema = z.object({ hidden: z.boolean() }) satisfies z.ZodType<JsonResponse<'setSetupGuideHidden', 200>>;
 export const meSchema = z.object({
   agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), token: tokenGrantSchema.nullable(), permissions: z.array(tokenPermissionSchema).catch([]),

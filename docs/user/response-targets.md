@@ -1,7 +1,10 @@
 # Response targets
 
 Response targets measure how fast conversations are answered and resolved, in business hours: someone with
-`workspace:update` (an admin) sets them under Settings → Response targets; every teammate sees them.
+`workspace:update` (an admin) sets them under Settings → Response targets; every teammate sees them. A new
+team can also pick one of three presets in the [setup flow](setup-guide.md#setup-flow) (**Set reply
+targets**): it saves the preset's targets, turns them on with business hours Monday to Friday, 09:00 to
+18:00 (or the hours already set here, which it keeps), and sets due soon to 30 minutes.
 
 1. **Business hours**: a timezone (the workspace's unless you pick another), the hours each weekday is open
    (a day not open is closed; 00:00 to 24:00 is the whole day), and holidays. Time outside them does not

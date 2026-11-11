@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -72,7 +74,10 @@ func insertImport(t *testing.T, pool *pgxpool.Pool, slug, state string) {
 }
 
 func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
-	api, service, pool := testAPIWithPool(t)
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.AI = fakeAIConfig(&aiprovider.Fake{})
+		serverDrafts(config)
+	})
 	admin := createSession(t, api, service, "Setup Desk", "admin@setup.example.com")
 	slug := workspaceSlug(t, api, admin)
 
@@ -81,8 +86,8 @@ func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
 	if fresh.Complete {
 		t.Fatal("a fresh workspace must not be complete")
 	}
-	if got := fresh.keys(); len(got) != 4 || got[0] != "email" || got[3] != "first_reply" {
-		t.Fatalf("default order = %v, want email, import, invite, first_reply", got)
+	if got := fresh.keys(); len(got) != 6 || got[0] != "email" || got[5] != "first_reply" {
+		t.Fatalf("default order = %v, want email, import, ai_drafts, reply_targets, invite, first_reply", got)
 	}
 
 	secret := connectEmail(t, api, admin, "support@setup.example.com")
@@ -113,8 +118,25 @@ func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1 WHERE message_id=$1`, reply); err != nil {
 		t.Fatal(err)
 	}
+	// AI drafts and reply targets are offers: the four core steps alone complete the setup, so the guide of a
+	// workspace that finished them before these steps existed stays hidden while they stay done.
+	answered := readSetup(t, api, admin)
+	wantSetup(t, answered, "working", "done", "joined", "sent")
+	if got := []string{answered.state(t, "ai_drafts"), answered.state(t, "reply_targets")}; got[0] != "none" || got[1] != "none" {
+		t.Fatalf("ai_drafts, reply_targets = %v, want none, none", got)
+	}
+	if !answered.Complete {
+		t.Fatalf("the four core steps are done, setup = %+v", answered)
+	}
+	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "server", "enabled": true, "default_level": "suggest"}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("PUT draft status=%d body=%s", response.Code, response.Body.String())
+	}
+	targets := map[string]any{"enabled": true, "hours": []any{map[string]any{"day": "mon", "open": true, "from": "09:00", "to": "18:00"}},
+		"targets": map[string]any{"normal": map[string]any{"first_response_minutes": 480}}}
+	if response := request(t, api, http.MethodPut, "/api/v1/response-targets", targets, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("PUT targets status=%d body=%s", response.Code, response.Body.String())
+	}
 	done := readSetup(t, api, admin)
-	wantSetup(t, done, "working", "done", "joined", "sent")
 	if !done.Complete {
 		t.Fatalf("every step is done, setup = %+v", done)
 	}
@@ -130,7 +152,7 @@ func TestSetupProgressIsOrderedByTheSignUpGoal(t *testing.T) {
 			t.Fatal(err)
 		}
 		view := readSetup(t, api, admin)
-		if got := view.keys(); got[0] != first || got[len(got)-1] != "first_reply" || len(got) != 4 {
+		if got := view.keys(); got[0] != first || got[len(got)-1] != "first_reply" || len(got) != 6 {
 			t.Fatalf("goal %s: order = %v, want %s first and first_reply last", goal, got, first)
 		}
 		if goal == "ai_agents" || goal == "other" {

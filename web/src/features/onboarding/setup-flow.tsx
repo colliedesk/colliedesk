@@ -9,6 +9,10 @@ import { FlowProgress, SetupFlowFrame } from './setup-flow-frame';
 import { flowMessages as m } from './setup-flow-messages';
 import { firstOpenStep, nextPath, ownPartIsDone, previousPath, stepPath } from './setup-flow-path';
 import { StepBody } from './setup-flow-steps';
+import { FlowActions } from './setup-flow-actions';
+import type { FlowMoves } from './setup-flow-actions';
+import { AIDraftsStep } from './setup-ai-drafts-step';
+import { ReplyTargetsStep } from './setup-reply-targets-step';
 import { SetupSummary } from './setup-flow-summary';
 import { setupMessages } from './setup-messages';
 import { mayTake, visibleSteps } from './setup-steps';
@@ -65,23 +69,24 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
   const next = nextPath(steps, index);
   const back = previousPath(steps, index);
   const following = steps[index + 1];
+  const moves: FlowMoves = { back, later: next, next: () => navigate(next), nextLabel: following ? m.next(setupMessages.title[following.key]) : m.finish };
+  const importState = steps.find((item) => item.key === 'import')?.state;
   return <SetupFlowFrame me={me.data}>
     <FlowProgress steps={steps} current={index} />
     <div className="setup-flow-title">
       {setup.data?.recommended === stepKey && <span className="setup-flow-recommended">{setupMessages.recommended}</span>}
-      <h1 ref={heading} tabIndex={-1}>{setupMessages.title[stepKey]}</h1>
+      <h1 ref={heading} tabIndex={-1}>{m.heading[stepKey] ?? setupMessages.title[stepKey]}</h1>
       <p className="setup-flow-lead">{m.lead[stepKey]}</p>
     </div>
-    <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} canInvite={mayTake(me.data, 'invite')} canRevoke={can(me.data, 'team:revoke')} timezone={me.data.timezone} navigate={navigate} /></div>
-    {/* The moves between steps. The main button names the step it opens: the email setup inside has a Continue
-        of its own, for its own parts. */}
-    <nav className="setup-flow-actions" aria-label={m.flowNav}>
-      {missing && <p id={missingID} className="muted-copy setup-flow-missing">{missing}</p>}
-      <div className="setup-flow-buttons">
-        {back && <a className="button setup-flow-back" href={back}>{m.back}</a>}
-        <a className="link-action setup-flow-later" href={next}>{m.later}</a>
-        <button type="button" className="primary-action" disabled={!ready} aria-describedby={missing ? missingID : undefined} onClick={() => navigate(next)}>{following ? m.next(setupMessages.title[following.key]) : m.finish}</button>
-      </div>
-    </nav>
+    {/* AI drafts and reply targets have a main button of their own (Turn on AI drafts, Use Same day). */}
+    {stepKey === 'ai_drafts' ? <AIDraftsStep state={current.state} workspace={me.data.workspace.name} moves={moves} />
+      : stepKey === 'reply_targets' && setup.data ? <ReplyTargetsStep state={current.state} setup={setup.data} zone={me.data.workspace.timezone} importState={importState} moves={moves} />
+      : <>
+        <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} canInvite={mayTake(me.data, 'invite')} canRevoke={can(me.data, 'team:revoke')} timezone={me.data.timezone} navigate={navigate} /></div>
+        {/* The moves between steps. The main button names the step it opens: the email setup inside has a Continue
+            of its own, for its own parts. */}
+        <FlowActions back={back} later={next} missing={missing ? { id: missingID, text: missing } : undefined}
+          primary={<button type="button" className="primary-action" disabled={!ready} aria-describedby={missing ? missingID : undefined} onClick={moves.next}>{moves.nextLabel}</button>} />
+      </>}
   </SetupFlowFrame>;
 }

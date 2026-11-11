@@ -73,7 +73,7 @@ func NewBusinessCalendar(zone string, days []BusinessDay, holidays []Holiday) (B
 		if !clockTime.MatchString(day.To) && day.To != "24:00" {
 			return BusinessCalendar{}, &CalendarError{Field: field + ".to", Message: "Use a time such as 17:00, or 24:00 for midnight."}
 		}
-		from, to := minutes(day.From), minutes(day.To)
+		from, to := ClockMinutes(day.From), ClockMinutes(day.To)
 		if to <= from {
 			return BusinessCalendar{}, &CalendarError{Field: field + ".to", Message: "Ends before it starts."}
 		}
@@ -88,7 +88,8 @@ func NewBusinessCalendar(zone string, days []BusinessDay, holidays []Holiday) (B
 	return calendar, nil
 }
 
-func minutes(clock string) int {
+// ClockMinutes reads a validated clock time, "08:30" or "24:00", as minutes after midnight.
+func ClockMinutes(clock string) int {
 	var hours, mins int
 	_, _ = fmt.Sscanf(clock, "%d:%d", &hours, &mins)
 	return hours*60 + mins

@@ -3,6 +3,7 @@ import { fireEvent, render as renderPlain, screen, within } from '@testing-libra
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { SetupChecklist } from './setup-checklist';
+import { guideHasWork } from './setup-steps';
 import type { SetupProgress } from '../../api/schemas';
 import { permissionsOf } from '../../test-roles';
 
@@ -155,4 +156,69 @@ test('Escape inside the open guide folds it', () => {
   fireEvent.keyDown(screen.getByRole('link', { name: /Invite your team/ }), { key: 'Escape' });
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Finish setting up/ })).toHaveFocus();
+});
+
+// The setup as the server gives it now: AI drafts and reply targets between the import and the invites.
+const sixSteps = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'];
+const withNewSteps = (states: Record<string, string>) => {
+  const all = { email: 'working', import: 'done', ai_drafts: 'none', reply_targets: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
+  return { steps: sixSteps.map((key) => ({ key, state: all[key], detail: null })), complete: false, recommended: null } as unknown as SetupProgress;
+};
+
+test('an admin sees AI drafts and reply targets after the import, each linking to its screen of the setup flow', () => {
+  render(<SetupChecklist progress={withNewSteps({ ai_drafts: 'nothing_to_read' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.querySelector('.setup-title')?.textContent)).toEqual(
+    ['Receive customer email', 'Import from Freshdesk', 'Turn on AI drafts', 'Set reply targets', 'Invite your team', 'Answer your first email']);
+  expect(screen.getByText('2 of 6')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Turn on AI drafts/ })).toHaveAttribute('href', '/setup/ai_drafts');
+  expect(screen.getByRole('link', { name: /Set reply targets/ })).toHaveAttribute('href', '/setup/reply_targets');
+  expect(rows()[2]).toHaveTextContent('Better after an import or an article');
+  expect(rows()[3]).toHaveTextContent('Today puts the closest deadline first');
+  fireEvent.click(screen.getByRole('link', { name: /Set reply targets/ }));
+  expect(tracked).toHaveBeenCalledWith('onboarding_step_started', { step: 'reply_targets' });
+});
+
+test('AI drafts and reply targets read Done once they are on; without built-in AI the drafts row has nothing to do and is not counted', () => {
+  render(<SetupChecklist progress={withNewSteps({ ai_drafts: 'unavailable', reply_targets: 'on' })} me={adminMe} defaultOpen onHide={vi.fn()} />);
+  expect(rows()[2]).toHaveTextContent('Nothing to do: no built-in AI on this server');
+  expect(rows()[2]).toHaveAttribute('data-state', 'none');
+  expect(rows()[2].querySelector('.setup-time')).toBeNull();
+  expect(rows()[3]).toHaveTextContent('Done');
+  expect(rows()[3]).toHaveAttribute('data-state', 'done');
+  expect(screen.getByText('3 of 5')).toBeInTheDocument();
+});
+
+// AI drafts and reply targets are offers: the four core steps decide whether the guide has work left.
+test('a workspace that finished the four core steps has nothing left in the guide, whatever the offers say', () => {
+  const core = { email: 'working', import: 'done', invite: 'joined', first_reply: 'sent' };
+  expect(guideHasWork(withNewSteps({ ...core, ai_drafts: 'none', reply_targets: 'none' }), adminMe)).toBe(false);
+  expect(guideHasWork(withNewSteps({ ...core, ai_drafts: 'unavailable', reply_targets: 'none' }), adminMe)).toBe(false);
+  expect(guideHasWork(withNewSteps({ ...core, first_reply: 'none', ai_drafts: 'on', reply_targets: 'on' }), adminMe)).toBe(true);
+});
+
+// Each offer follows the permission its own call needs: turning drafts on is ai_settings:update, saving
+// targets workspace:update; managing channels gives neither.
+test('a person sees AI drafts only with ai_settings:update and reply targets only with workspace:update', () => {
+  const without = (name: string) => ({ permissions: permissionsOf('admin').filter((item) => item !== name) });
+  const { unmount } = render(<SetupChecklist progress={withNewSteps({})} me={without('ai_settings:update')} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'reply_targets', 'invite', 'first_reply']);
+  unmount();
+  render(<SetupChecklist progress={withNewSteps({})} me={without('workspace:update')} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'ai_drafts', 'invite', 'first_reply']);
+});
+
+// The drafts step reads the AI settings first (GET /api/v1/ai needs ai_settings:read).
+test('a person who may change but not read the AI settings does not see AI drafts', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={{ permissions: permissionsOf('admin').filter((item) => item !== 'ai_settings:read') }} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'reply_targets', 'invite', 'first_reply']);
+});
+
+test('an agent whose role may change AI settings and targets, but not channels, gets both offers', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={{ permissions: [...permissionsOf('agent'), 'ai_settings:update', 'workspace:update'] }} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['ai_drafts', 'reply_targets', 'first_reply']);
+});
+
+test('an agent who is not an admin never sees the AI drafts and reply targets steps', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={agentMe} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.querySelector('.setup-title')?.textContent)).toEqual(['Answer your first email']);
 });

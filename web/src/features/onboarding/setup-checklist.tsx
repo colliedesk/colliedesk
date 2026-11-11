@@ -8,7 +8,7 @@ import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { setupMessages } from './setup-messages';
-import { stepIsDone, visibleSteps } from './setup-steps';
+import { nothingToDo, stepIsDone, visibleSteps } from './setup-steps';
 import type { Permissions } from '../../lib/can';
 import './setup-checklist.css';
 
@@ -44,8 +44,10 @@ interface SetupChecklistProps {
 export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide }: SetupChecklistProps) {
   const client = useQueryClient();
   const steps = visibleSteps(progress, me);
-  const done = steps.filter(stepIsDone).length;
-  const firstTodo = steps.find((step) => !stepIsDone(step))?.key;
+  // A step with nothing to do here is shown but not counted.
+  const counted = steps.filter((step) => !nothingToDo(step));
+  const done = counted.filter(stepIsDone).length;
+  const firstTodo = counted.find((step) => !stepIsDone(step))?.key;
   const [choice, setChoice] = useState(storedChoice);
   const open = choice ?? defaultOpen;
   const launcher = useRef<HTMLButtonElement>(null);
@@ -63,7 +65,7 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
     event.stopPropagation();
     toggle(false);
   };
-  const share = steps.length === 0 ? 0 : done / steps.length;
+  const share = counted.length === 0 ? 0 : done / counted.length;
 
   // A step that turns done while this is on screen is reported once; what was done on arrival is not.
   const seenDone = useRef<Set<SetupStepKey>>(undefined);
@@ -82,7 +84,7 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
         <button type="button" ref={launcher} className="setup-launcher" aria-expanded={false} onClick={() => toggle(true)}>
           <span className="setup-ring" aria-hidden="true" style={{ '--share': share } as CSSProperties} />
           <span className="setup-launcher-title">{setupMessages.heading}</span>
-          <span className="setup-count">{setupMessages.progress(done, steps.length)}</span>
+          <span className="setup-count">{setupMessages.progress(done, counted.length)}</span>
         </button>
       </div>
     );
@@ -92,12 +94,12 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
       <section className="setup-guide" aria-label={setupMessages.heading} onKeyDown={fold}>
         <header>
           <h2>{setupMessages.heading}</h2>
-          <span className="setup-count">{setupMessages.progress(done, steps.length)}</span>
+          <span className="setup-count">{setupMessages.progress(done, counted.length)}</span>
           <button type="button" className="link-action" title={setupMessages.hideHint} onClick={onHide}>{setupMessages.hide}</button>
           <button type="button" ref={minimize} className="icon-button setup-minimize" aria-label={setupMessages.minimize} aria-expanded
             data-tip={setupMessages.minimize} onClick={() => toggle(false)}><ChevronDownIcon /></button>
         </header>
-        <div className="setup-bar" role="progressbar" aria-label={setupMessages.progressLabel} aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={done}>
+        <div className="setup-bar" role="progressbar" aria-label={setupMessages.progressLabel} aria-valuemin={0} aria-valuemax={counted.length} aria-valuenow={done}>
           <span style={{ width: `${share * 100}%` }} />
         </div>
         <ol>
@@ -111,9 +113,10 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
           </li>}
           {steps.map((step) => {
             const finished = stepIsDone(step);
+            const idle = nothingToDo(step);
             const primary = step.key === firstTodo;
             return (
-              <li key={step.key} className="setup-step" data-state={finished ? 'done' : 'todo'} data-step={step.key}>
+              <li key={step.key} className="setup-step" data-state={finished ? 'done' : idle ? 'none' : 'todo'} data-step={step.key}>
                 <span className="setup-mark" aria-hidden="true">{finished && <CheckIcon />}</span>
                 <a href={target(step.key)} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
                   onPointerEnter={() => preloadSetupStep(client, step.key)} onFocus={() => preloadSetupStep(client, step.key)}>
@@ -123,7 +126,7 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
                     {(setupMessages.state[step.key] as Record<string, string>)[step.state] ?? ''}
                   </span>
                 </a>
-                {!finished && <span className="setup-time">{setupMessages.time[step.key]}</span>}
+                {!finished && !idle && <span className="setup-time">{setupMessages.time[step.key]}</span>}
               </li>
             );
           })}

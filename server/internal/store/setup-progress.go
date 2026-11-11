@@ -11,25 +11,50 @@ import (
 
 // Setup step keys and states, as the API returns them.
 const (
-	SetupEmail      = "email"
-	SetupImport     = "import"
-	SetupInvite     = "invite"
-	SetupFirstReply = "first_reply"
+	SetupEmail        = "email"
+	SetupImport       = "import"
+	SetupAIDrafts     = "ai_drafts"
+	SetupReplyTargets = "reply_targets"
+	SetupInvite       = "invite"
+	SetupFirstReply   = "first_reply"
 )
+
+// setupNames are the steps as the setup guide names them.
+var setupNames = map[string]string{
+	SetupEmail: "Receive customer email", SetupImport: "Import from Freshdesk", SetupAIDrafts: "Turn on AI drafts",
+	SetupReplyTargets: "Set reply targets", SetupInvite: "Invite your team", SetupFirstReply: "Answer your first email",
+}
 
 // SetupStep is one step of getting started. Detail is a reason code for a step that needs attention.
 type SetupStep struct {
 	Key    string  `json:"key"`
+	Name   string  `json:"name"`
 	State  string  `json:"state"`
 	Detail *string `json:"detail"`
 }
 
-// SetupProgress is where a workspace stands on getting started, the goal's step first.
+// SetupProgress is where a workspace stands on getting started, the goal's step first. Complete counts the
+// four core steps only: AI drafts and reply targets are offers that never hold the setup back.
 type SetupProgress struct {
 	Steps       []SetupStep `json:"steps"`
 	Complete    bool        `json:"complete"`
 	Recommended *string     `json:"recommended"`
+	// The reply targets the reply_targets step offers, the hours they apply with, and the one that fits the
+	// team (nil when nobody would use it).
+	ReplyTargetPresets    []ReplyTargetPreset    `json:"reply_target_presets"`
+	ReplyTargetHours      ReplyTargetHours       `json:"reply_target_hours"`
+	ReplyTargetSuggestion *ReplyTargetSuggestion `json:"reply_target_suggestion"`
 }
+
+// SetupOptions are what the server and the caller add to the workspace's own state: ServerDrafts, whether this
+// server offers built-in AI for reply drafts; CanSetTargets, whether the caller may change the reply targets.
+type SetupOptions struct {
+	ServerDrafts  bool
+	CanSetTargets bool
+}
+
+// setupOffers are the steps offered on the way, which complete does not wait for.
+var setupOffers = map[string]bool{SetupAIDrafts: true, SetupReplyTargets: true}
 
 // setupFirstStep is the step each sign-up goal starts with; any other goal keeps the usual order.
 var setupFirstStep = map[string]string{"leave_helpdesk": SetupImport, "shared_inbox": SetupEmail, "lower_cost": SetupInvite}
@@ -50,7 +75,7 @@ func importFinishedAfter(since string) string {
 
 // SetupProgress reads the workspace's setup steps. A reply counts once an outgoing message was
 // delivered; a note, a queued reply and a failed one do not.
-func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.Time) (SetupProgress, error) {
+func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.Time, options SetupOptions) (SetupProgress, error) {
 	goal, err := s.OnboardingGoal(ctx, workspaceID)
 	if err != nil {
 		return SetupProgress{}, err
@@ -59,9 +84,11 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	if err != nil {
 		return SetupProgress{}, err
 	}
-	var importState, invite, firstReply string
+	var importState, invite, firstReply, aiDrafts, replyTargets string
+	var hours ReplyTargetHours
+	var suggestion *ReplyTargetSuggestion
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT
+		err := tx.QueryRow(ctx, `SELECT
 			CASE
 				WHEN `+importFinished+` THEN 'done'
 				WHEN EXISTS (SELECT 1 FROM import_jobs WHERE workspace_id=$1 AND kind='import' AND state IN ('previewing','previewed','queued','running','retry_wait','waiting_key')) THEN 'running'
@@ -73,22 +100,33 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 			CASE WHEN EXISTS (SELECT 1 FROM messages m JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 				WHERE m.workspace_id=$1 AND m.kind='outgoing' AND m.notice_kind IS NULL AND o.status='sent') THEN 'sent' ELSE 'none' END`,
 			workspaceID, now).Scan(&importState, &invite, &firstReply)
+		if err != nil {
+			return err
+		}
+		aiDrafts, replyTargets, hours, suggestion, err = setupAIAndTargets(ctx, tx, workspaceID, now, options, importState)
+		return err
 	})
 	if err != nil {
 		return SetupProgress{}, fmt.Errorf("read setup progress: %w", err)
 	}
 	steps := map[string]SetupStep{
-		SetupEmail:      {Key: SetupEmail, State: emailState, Detail: emailDetail},
-		SetupImport:     {Key: SetupImport, State: importState},
-		SetupInvite:     {Key: SetupInvite, State: invite},
-		SetupFirstReply: {Key: SetupFirstReply, State: firstReply},
+		SetupEmail:        {Key: SetupEmail, State: emailState, Detail: emailDetail},
+		SetupImport:       {Key: SetupImport, State: importState},
+		SetupAIDrafts:     {Key: SetupAIDrafts, State: aiDrafts},
+		SetupReplyTargets: {Key: SetupReplyTargets, State: replyTargets},
+		SetupInvite:       {Key: SetupInvite, State: invite},
+		SetupFirstReply:   {Key: SetupFirstReply, State: firstReply},
 	}
-	order := []string{SetupEmail, SetupImport, SetupInvite}
-	progress := SetupProgress{Steps: make([]SetupStep, 0, 4)}
+	// AI drafts read what the import brought; reply targets come before the invites, so teammates see due
+	// times from their first day.
+	base := []string{SetupEmail, SetupImport, SetupAIDrafts, SetupReplyTargets, SetupInvite}
+	order := base
+	progress := SetupProgress{Steps: make([]SetupStep, 0, len(base)+1), ReplyTargetPresets: ReplyTargetPresets(hours.DayMinutes),
+		ReplyTargetHours: hours, ReplyTargetSuggestion: suggestion}
 	if goal != nil {
 		if lead, ok := setupFirstStep[*goal]; ok {
 			order = []string{lead}
-			for _, key := range []string{SetupEmail, SetupImport, SetupInvite} {
+			for _, key := range base {
 				if key != lead {
 					order = append(order, key)
 				}
@@ -100,8 +138,10 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	}
 	progress.Complete = true
 	for _, key := range append(order, SetupFirstReply) {
-		progress.Steps = append(progress.Steps, steps[key])
-		progress.Complete = progress.Complete && setupDone(steps[key])
+		step := steps[key]
+		step.Name = setupNames[key]
+		progress.Steps = append(progress.Steps, step)
+		progress.Complete = progress.Complete && (setupOffers[key] || setupDone(steps[key]))
 	}
 	return progress, nil
 }
@@ -114,6 +154,8 @@ func setupDone(step SetupStep) bool {
 		return step.State == "done"
 	case SetupInvite:
 		return step.State == "joined"
+	case SetupAIDrafts, SetupReplyTargets:
+		return step.State == "on"
 	}
 	return step.State == "sent"
 }
