@@ -74,7 +74,8 @@ On a phone the flow is the same single column, and every button is large enough 
 
 - **Admins** see all four steps.
 - **Everyone else** sees only the steps their roles can take, in the guide and in the setup flow:
-  email and the import need `channels:update`, inviting needs `team:invite`, as in Settings.
+  email and the import need `channels:update`, inviting needs `team:invite` and `team:read` (to list
+  the invites and the roles), as in Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email is everyone's step.
 - **Hide** removes the guide from your inbox only. Other team members keep their own choice.
   To bring it back, open **Preferences** and turn on **Show the setup guide**.

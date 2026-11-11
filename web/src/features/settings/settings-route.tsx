@@ -94,7 +94,7 @@ export function SettingsRoute() {
   // A link to a section (the nav from another settings page, a pasted address) arrives before the sections do.
   useScrollToHashWhenReady(!loading);
   return <SettingsPage loading={loading} sessions={sessions.data?.items ?? []} invites={invites.section.invites} timezone={me.data?.timezone ?? 'UTC'}
-    canCreateInvites={can(me.data, 'team:invite')} canManageWorkspace={can(me.data, 'workspace:update')} showBilling={showBilling}
+    canCreateInvites={can(me.data, 'team:invite')} canRevokeInvites={can(me.data, 'team:revoke')} canManageWorkspace={can(me.data, 'workspace:update')} showBilling={showBilling}
     exportSection={can(me.data, 'workspace:export') ? <ExportAllData /> : undefined} inviteRoles={roles.data?.items}
     workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
     workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)} onSetWorkspaceName={(name) => workspaceName.mutate(name)}

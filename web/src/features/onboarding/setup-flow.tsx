@@ -11,7 +11,7 @@ import { firstOpenStep, nextPath, ownPartIsDone, previousPath, stepPath } from '
 import { StepBody } from './setup-flow-steps';
 import { SetupSummary } from './setup-flow-summary';
 import { setupMessages } from './setup-messages';
-import { visibleSteps } from './setup-steps';
+import { mayTake, visibleSteps } from './setup-steps';
 import './setup-flow.css';
 
 // While the flow is open the server's progress is read again this often: what others finish (the first email,
@@ -72,7 +72,7 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
       <h1 ref={heading} tabIndex={-1}>{setupMessages.title[stepKey]}</h1>
       <p className="setup-flow-lead">{m.lead[stepKey]}</p>
     </div>
-    <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} canInvite={can(me.data, 'team:invite')} timezone={me.data.timezone} navigate={navigate} /></div>
+    <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} canInvite={mayTake(me.data, 'invite')} canRevoke={can(me.data, 'team:revoke')} timezone={me.data.timezone} navigate={navigate} /></div>
     {/* The moves between steps. The main button names the step it opens: the email setup inside has a Continue
         of its own, for its own parts. */}
     <nav className="setup-flow-actions" aria-label={m.flowNav}>

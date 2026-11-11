@@ -323,3 +323,23 @@ test('a narrow role sees only what it may read, and Settings asks for nothing el
   for (const name of ['Team', 'Invites', 'Saved replies', 'Help center', 'Channels', 'Built-in AI', 'Roles']) expect(within(nav).queryByRole('link', { name }), name).not.toBeInTheDocument();
   expect(within(nav).getByRole('link', { name: 'Conversation numbers' })).toBeInTheDocument();
 });
+
+// Revoking an invite is its own permission (team:revoke), apart from creating one.
+test('Settings offers Revoke on a pending invite only to a person who may revoke invites', async () => {
+  const pending = { id: '44444444-4444-4444-8444-444444444444', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
+    created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
+  show('admin');
+  api.invites.mockResolvedValue({ items: [pending] });
+  cleanup();
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
+  const invites = await screen.findByRole('region', { name: 'Invites' });
+  await within(invites).findByText('kim@example.com');
+  expect(within(invites).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  cleanup();
+  api.me.mockResolvedValue({ ...me('admin'), permissions: permissionsOf('admin').filter((name) => name !== 'team:revoke') });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
+  const without = await screen.findByRole('region', { name: 'Invites' });
+  await within(without).findByText('kim@example.com');
+  expect(within(without).getByRole('button', { name: 'Create invite' })).toBeInTheDocument();
+  expect(within(without).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+});
