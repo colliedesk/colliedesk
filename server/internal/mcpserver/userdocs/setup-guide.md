@@ -104,7 +104,9 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
 ## Who sees it
 
 - **Admins** see all six steps.
-- **Agents** see only the steps they can take, in the guide and in the setup flow.
+- **Everyone else** sees only the steps their roles can take, in the guide and in the setup flow:
+  email, the import, AI drafts and reply targets need `channels:update`, inviting needs `team:invite`, as in Settings.
+  Answering the first email is everyone's step.
 - **Hide** removes the guide from your inbox only. Other team members keep their own choice.
   To bring it back, open **Preferences** and turn on **Show the setup guide**.
 

@@ -9,6 +9,7 @@ import { messages } from '../../messages';
 import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { setupMessages } from './setup-messages';
 import { stepIsDone, visibleSteps } from './setup-steps';
+import type { Permissions } from '../../lib/can';
 import './setup-checklist.css';
 
 // Each step is done on its screen of the setup flow.
@@ -28,7 +29,8 @@ function storeChoice(open: boolean) {
 
 interface SetupChecklistProps {
   progress: SetupProgress;
-  admin: boolean;
+  // me holds the permissions that decide which steps this person takes.
+  me: Permissions;
   goal?: OnboardingGoal | null;
   // Open until the agent folds it, for an inbox with no conversation for the guide to cover.
   defaultOpen?: boolean;
@@ -36,12 +38,12 @@ interface SetupChecklistProps {
 }
 
 // SetupChecklist lists what is left before the team can receive and answer customer email. The
-// server orders the steps by the sign-up goal; this only drops the ones the agent cannot take.
+// server orders the steps by the sign-up goal; this only drops the ones the person's roles cannot take.
 // It waits in a corner of the screen, folded to one button with the count, so it never covers a
 // conversation the agent did not ask it to.
-export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onHide }: SetupChecklistProps) {
+export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide }: SetupChecklistProps) {
   const client = useQueryClient();
-  const steps = visibleSteps(progress, admin);
+  const steps = visibleSteps(progress, me);
   const done = steps.filter(stepIsDone).length;
   const firstTodo = steps.find((step) => !stepIsDone(step))?.key;
   const [choice, setChoice] = useState(storedChoice);
@@ -72,7 +74,7 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
     }
     seenDone.current = now;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, admin]);
+  }, [progress, me]);
 
   if (!open) {
     return (
