@@ -365,6 +365,8 @@ On 2026-10-31 the Zalo OA pages, conversation numbers and response targets (thei
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
+A lazy part renders nothing until its chunk is there. That is right for a piece of a page, and wrong for a whole page: until 2026-11-12 the router showed a route whose page was a lazy part at once, so the first visit to most Settings pages, Knowledge, Results, Review, Contacts and the setup flow showed no page at all, rail aside, for as long as the chunk took (65 to 274 ms measured locally at 150 ms a request); people took it for a reload. A route whose page is a lazy part now has `loader: () => part.ready()`: the router keeps the current page on screen until the next one can show. A loader also starts what the page reads outside its chunk (Billing, Channels, the setup flow), with the chunk and not after it. Every router `Link` and every plain link to a page of the app (`lib/in-app-links.ts`) loads its page ahead on hover and focus. The gate is `src/routes-never-blank.test.tsx`: it opens every route of the app in a fresh module graph, with no chunk loaded and no request answered, and fails when the first render after the router finished loading has no page frame (`main`). A `beforeLoad` with side effects returns early on `preload`.
+
 ## Operator console bundle
 
 The operator console is a build of its own (`web/vite.operator.config.ts`, served under `/operator/`): none

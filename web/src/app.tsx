@@ -3,7 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { Link, Navigate, Outlet, createRootRouteWithContext, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
-import { ContactsPart } from './features/contacts/contact-part';
+import { ContactsPart, contactPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
@@ -149,11 +149,10 @@ function AppLayout() {
 
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
-// preload="intent": hover or focus runs the page's loader, which loads its chunk, so the click shows it at once.
 function settingsRouterLink(item: NavItem) {
   // /settings/channels, the type homes under it and /settings/ai are routes with a splat, paths the route types do not list.
   return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}` | '/settings/ai'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined} preload="intent">{item.label}</Link>;
+    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -172,13 +171,14 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({ component: AppLa
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 // The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
-const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId',
+const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId', loader: () => contactPart.ready(),
   component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
 // The knowledge base is its own chunk (features/kb/kb-chunk.ts); its filters are in the address.
 const kbFailed = <main className="settings-page"><PartUnavailable /></main>;
 const knowledgeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge',
+  loader: () => kbPart.ready(),
   validateSearch: (search: Record<string, unknown>): { collection?: string; q?: string; status?: 'draft' | 'published' } => ({
     ...(typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
     ...(typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {}),
@@ -200,6 +200,7 @@ const mediaSearch = (search: Record<string, unknown>): { q?: string; kind?: 'ima
 const mediaRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/media',
+  loader: () => kbPart.ready(),
   validateSearch: mediaSearch,
   component: function Media() {
     const search = mediaRoute.useSearch();
@@ -209,16 +210,19 @@ const mediaRoute = createRoute({
 const unusedMediaRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/media/unused',
+  loader: () => kbPart.ready(),
   component: () => <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="unused" search={{}} />} />,
 });
 const mediaTrashRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/media/trash',
+  loader: () => kbPart.ready(),
   component: () => <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="trash" search={{}} />} />,
 });
 const newArticleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/new',
+  loader: () => kbPart.ready(),
   validateSearch: (search: Record<string, unknown>): { collection?: string } => (typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
   component: function NewArticle() {
     const { collection } = newArticleRoute.useSearch();
@@ -228,6 +232,7 @@ const newArticleRoute = createRoute({
 const articleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/articles/$articleId',
+  loader: () => kbPart.ready(),
   component: function Article() {
     const { articleId } = articleRoute.useParams();
     // key: another article starts with its own form, not the last one's edits.
@@ -238,6 +243,7 @@ const articleRoute = createRoute({
 const languagesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/languages',
+  loader: () => kbPart.ready(),
   validateSearch: (search: Record<string, unknown>): { locale?: string; state?: 'missing' | 'outdated' | 'translated' } => ({
     ...(typeof search.locale === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(search.locale) ? { locale: search.locale } : {}),
     ...(search.state === 'missing' || search.state === 'outdated' || search.state === 'translated' ? { state: search.state } : {}),
@@ -251,6 +257,7 @@ const languagesRoute = createRoute({
 const translationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/articles/$articleId/translations/$locale',
+  loader: () => kbPart.ready(),
   component: function Translation() {
     const { articleId, locale } = translationRoute.useParams();
     return <Part part={kbPart} failed={kbFailed} render={({ TranslationRoute }) => <TranslationRoute key={`${articleId}-${locale}`} articleId={articleId} locale={locale} />} />;
@@ -275,6 +282,7 @@ type ReviewSearch = { tab?: 'dismissed' | 'decided'; channel?: string; scope?: s
 const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/review',
+  loader: () => reviewRoutePart.ready(),
   validateSearch: (search: Record<string, unknown>): ReviewSearch => ({
     ...(search.tab === 'dismissed' || search.tab === 'decided' ? { tab: search.tab } : {}),
     // A channel alone filters by the channel; its scope narrows it further.
@@ -313,8 +321,9 @@ const billingRoute = createRoute({
   // Runs before sign-in is known, so the plan is kept through the sign-in and sign-up round trip.
   // `buy` is then removed from the address: Back or a reload after the checkout must not start another.
   // The ad keys of the link are kept too: the redirect to sign-up carries only the plan.
-  beforeLoad: ({ search, location }) => {
-    if (!search.buy) return;
+  // A link loading the page ahead (preload) is not a visit: nothing is remembered and nothing redirects.
+  beforeLoad: ({ search, location, preload }) => {
+    if (preload || !search.buy) return;
     rememberCheckoutIntent(search.buy);
     rememberSignupAttribution(location.searchStr);
     throw redirect({ to: '/settings/billing', search: { checkout: search.checkout }, replace: true });
@@ -399,19 +408,22 @@ const channelRoute = createRoute({
 function SetupFlow({ step }: { step?: string }) {
   const navigate = useNavigate();
   const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
-  // A step opened without the guide's hover first (a typed address, the sign-up) still asks for everything at once.
-  const client = useQueryClient();
-  useEffect(() => { preloadSetupStep(client, step); }, [client, step]);
   return <Part part={setupFlowPart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ SetupFlowRoute }) => <SetupFlowRoute step={step} navigate={go} />} />;
 }
-const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: () => <SetupFlow /> });
+// The loader asks for what a step reads with its chunk, so a hover, a click, a typed address or the sign-up asks for everything at once.
+function setupLoader(queryClient: QueryClient | undefined, step?: string) {
+  if (queryClient) preloadSetupStep(queryClient, step);
+  return setupFlowPart.ready();
+}
+const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', loader: ({ context: { queryClient } }) => setupLoader(queryClient), component: () => <SetupFlow /> });
 const setupStepRoute = createRoute({
-  getParentRoute: () => rootRoute, path: '/setup/$step',
+  getParentRoute: () => rootRoute, path: '/setup/$step', loader: ({ context: { queryClient }, params }) => setupLoader(queryClient, params.step),
   component: function SetupStep() { return <SetupFlow step={setupStepRoute.useParams().step} />; },
 });
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/results',
+  loader: () => resultsRoutePart.ready(),
   validateSearch: (search: Record<string, unknown>): { window?: '7d' } => (search.window === '7d' ? { window: '7d' } : {}),
   component: function Results() {
     const { window } = resultsRoute.useSearch();
@@ -429,6 +441,7 @@ function AutofixScreen({ render }: { render: (chunk: typeof import('./features/a
 const fixesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/fixes',
+  loader: () => (autofixPreviewOn() ? autofixPart.ready() : undefined),
   validateSearch: (search: Record<string, unknown>): { repo?: unknown; agent?: unknown } => search,
   component: () => <AutofixScreen render={({ FixesScreen }) => <FixesScreen />} />,
 });
@@ -441,6 +454,7 @@ const autofixSettingsRoute = createRoute({
 const resultsShareRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/r',
+  loader: () => resultsSharePart.ready(),
   component: () => <Part part={resultsSharePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsShareRoute }) => <ResultsShareRoute />} />,
 });
 const signInRoute = createRoute({
@@ -464,7 +478,7 @@ const signInRoute = createRoute({
   // which plan, if any, this sign-in is for (see signInCheckoutIntent, signInPlanIntent). The utm_* keys and
   // ad click IDs of the website's links are kept for the sign-up from the raw address: the parsed search
   // would turn `utm_content=07` into a number (see rememberSignupAttribution).
-  beforeLoad: ({ search, location }) => { signInCheckoutIntent(search); signInPlanIntent(search); rememberSignupAttribution(location.searchStr); },
+  beforeLoad: ({ search, location, preload }) => { if (preload) return; signInCheckoutIntent(search); signInPlanIntent(search); rememberSignupAttribution(location.searchStr); },
   component: function SignIn() {
     const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
     const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });
@@ -488,6 +502,7 @@ const oauthAuthorizeRoute = createRoute({
 const trialOfferRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/trial-offer',
+  loader: () => trialOfferPart.ready(),
   component: function TrialOfferLink() {
     const { search, pathname } = window.location;
     return <Part part={trialOfferPart} failed={<main className="settings-page"><PartUnavailable /></main>}
@@ -496,7 +511,8 @@ const trialOfferRoute = createRoute({
 });
 
 export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
-export const router = createRouter({ routeTree, context: {} });
+// Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
+export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
