@@ -186,7 +186,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
 			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain,
-				ReceivesPlatformReplies: emailConfig.PlatformInboundSecret != "", Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
+				ReceivesPlatformReplies: emailConfig.ReceivesPlatformReplies(), Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
 				SwitchedOff: map[string]bool{domain.MailboxGoogle: off[serverconfig.FeatureGmail], domain.MailboxMicrosoft: off[serverconfig.FeatureMicrosoft]}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly

@@ -34,6 +34,20 @@ type SetupProgress struct {
 // setupFirstStep is the step each sign-up goal starts with; any other goal keeps the usual order.
 var setupFirstStep = map[string]string{"leave_helpdesk": SetupImport, "shared_inbox": SetupEmail, "lower_cost": SetupInvite}
 
+// importFinished is true for a workspace ($1) with an import that finished and was not undone.
+var importFinished = importFinishedAfter("")
+
+// importFinishedAfter is importFinished for an import that finished at or after the SQL timestamp since; empty
+// is any time.
+func importFinishedAfter(since string) string {
+	when := ""
+	if since != "" {
+		when = ` AND i.finished_at>=` + since
+	}
+	return `EXISTS (SELECT 1 FROM import_jobs i WHERE i.workspace_id=$1 AND i.kind='import' AND i.state='finished'` + when + `
+	AND NOT EXISTS (SELECT 1 FROM import_jobs u WHERE u.workspace_id=$1 AND u.kind='undo' AND u.undo_of=i.id AND u.state='finished'))`
+}
+
 // SetupProgress reads the workspace's setup steps. A reply counts once an outgoing message was
 // delivered; a note, a queued reply and a failed one do not.
 func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.Time) (SetupProgress, error) {
@@ -49,8 +63,7 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT
 			CASE
-				WHEN EXISTS (SELECT 1 FROM import_jobs i WHERE i.workspace_id=$1 AND i.kind='import' AND i.state='finished'
-					AND NOT EXISTS (SELECT 1 FROM import_jobs u WHERE u.workspace_id=$1 AND u.kind='undo' AND u.undo_of=i.id AND u.state='finished')) THEN 'done'
+				WHEN `+importFinished+` THEN 'done'
 				WHEN EXISTS (SELECT 1 FROM import_jobs WHERE workspace_id=$1 AND kind='import' AND state IN ('previewing','previewed','queued','running','retry_wait','waiting_key')) THEN 'running'
 				ELSE 'none' END,
 			CASE

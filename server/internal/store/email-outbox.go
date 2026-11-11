@@ -53,14 +53,23 @@ type Delivery struct {
 	Forwarded bool
 }
 
-// channelForwardedBefore is true for a channel with a journal entry that became a message, is not marked
-// direct and arrived while the channel had its current support address (entries from before the envelope
-// named the address count); or, for a channel without a journal, one that received a customer message
-// before the journal existed.
-const channelForwardedBefore = `SELECT EXISTS(SELECT 1 FROM channel_inbound_events e JOIN email_channels s ON s.workspace_id=e.workspace_id AND s.channel_id=e.channel_id
-		WHERE e.workspace_id=$1 AND e.channel_id=$2 AND e.message_id IS NOT NULL AND NOT COALESCE((e.raw->>'direct')::boolean,false)
+// forwardedRule is true for the email channel whose id is the SQL expression channel, of workspace $1, with
+// a journal entry that became a message, is not marked direct and arrived while the channel had its
+// current support address (entries from before the envelope named the address count); or, for a channel
+// without a journal, one that received a customer message before the journal existed. "Without a journal"
+// is a scalar subquery reading one entry in the order of channel_inbound_events_channel_idx: PostgreSQL drops
+// ORDER BY and LIMIT inside EXISTS, and NOT EXISTS then scans the whole table, every workspace's entries, for
+// a channel that has none.
+func forwardedRule(channel string) string {
+	return `(EXISTS(SELECT 1 FROM channel_inbound_events e JOIN email_channels s ON s.workspace_id=e.workspace_id AND s.channel_id=e.channel_id
+		WHERE e.workspace_id=$1 AND e.channel_id=` + channel + ` AND e.message_id IS NOT NULL AND NOT COALESCE((e.raw->>'direct')::boolean,false)
 			AND COALESCE(e.raw->>'support_address',s.support_address)=s.support_address)
-	OR (NOT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2) AND (` + channelReceivedBefore + `))`
+	OR ((SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=` + channel + ` ORDER BY received_at DESC LIMIT 1) IS NULL
+		AND ` + receivedRule(channel) + `))`
+}
+
+// channelForwardedBefore is forwardedRule for the channel $2.
+var channelForwardedBefore = `SELECT ` + forwardedRule("$2")
 
 // DeliveryMailbox is the connected mailbox a reply leaves through, with its sealed grant. Its provider is
 // Grant.Provider.

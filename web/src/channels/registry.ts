@@ -40,6 +40,8 @@ export interface SetupProps extends HomeProps {
   // returnTo: the page a sign-in the setup sends the browser to comes back to, when the setup is shown
   // outside the channel's own pages (the setup flow).
   returnTo?: string;
+  // step: the step the address names (?step=), opened first even when it is done; an unknown one is ignored.
+  step?: string;
 }
 
 export interface ChannelPanels {
