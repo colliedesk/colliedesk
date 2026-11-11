@@ -194,6 +194,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_reply_draft_restore` | Brings an earlier written draft (replaced, expired or discarded) back above the reply box, with its files | `ai_assist:create` |
 | `colliedesk_workspace_export` | Gives a one-time download link of a workspace export | `workspace:export` |
 | `colliedesk_billing_action` | Starts a plan checkout or opens the billing portal for the person to pay, or requests a Freshdesk data migration | `billing:manage` |
+| `colliedesk_trial_offer_accept` | Reads or accepts a trial offer link an operator sent: the trial then ends 14 days from that moment | `billing:manage` |
 | `colliedesk_email_channel_disconnect` | Disconnects the default email channel. Cannot be undone | `channels:manage_credentials` |
 | `colliedesk_email_secret_rotate` | Gives an email channel a new inbound secret, shown once. Cannot be undone | `channels:manage_credentials` |
 | `colliedesk_gmail_connect` | Starts connecting Gmail for sending replies; the person behind the token agrees on Google's page | `channels:manage_credentials` |

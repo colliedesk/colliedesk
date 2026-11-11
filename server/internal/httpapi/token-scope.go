@@ -286,14 +286,18 @@ var routeAccess = map[string]TokenAccess{
 
 	// Allowing an AI app makes a grant that acts with everything its person holds: a grant that allowed
 	// apps would leave them connected after it was disconnected, like a token that made tokens.
-	"POST " + oauthAllowRoutePath:                     personOnly("an app connected by another app would outlive its disconnection: a person allows each app in a browser"),
-	"POST /api/v1/auth/tokens":                        personOnlyNeeding(auth.PermTeamCreateTokens, "a token that makes tokens outlives its own revocation: revoking it would leave the tokens it made behind"),
-	"POST /api/v1/auth/invites":                       need(auth.PermTeamInvite),
-	"GET /api/v1/export":                              need(auth.PermWorkspaceExport),
-	"POST /api/v1/export/link":                        need(auth.PermWorkspaceExport),
-	"POST /api/v1/billing/checkout":                   need(auth.PermBillingManage),
-	"POST /api/v1/billing/portal":                     need(auth.PermBillingManage),
-	"POST /api/v1/billing/migration-request":          need(auth.PermBillingManage),
+	"POST " + oauthAllowRoutePath:            personOnly("an app connected by another app would outlive its disconnection: a person allows each app in a browser"),
+	"POST /api/v1/auth/tokens":               personOnlyNeeding(auth.PermTeamCreateTokens, "a token that makes tokens outlives its own revocation: revoking it would leave the tokens it made behind"),
+	"POST /api/v1/auth/invites":              need(auth.PermTeamInvite),
+	"GET /api/v1/export":                     need(auth.PermWorkspaceExport),
+	"POST /api/v1/export/link":               need(auth.PermWorkspaceExport),
+	"POST /api/v1/billing/checkout":          need(auth.PermBillingManage),
+	"POST /api/v1/billing/portal":            need(auth.PermBillingManage),
+	"POST /api/v1/billing/migration-request": need(auth.PermBillingManage),
+	// Any member of the offer's workspace may read a trial offer link they were sent; the answer names the
+	// members who can accept it. Accepting changes the trial, which is billing.
+	"GET /api/v1/trial-offer":                         anyone,
+	"POST /api/v1/trial-offer/accept":                 need(auth.PermBillingManage),
 	"DELETE /api/v1/channels/email":                   need(auth.PermChannelsManageCredentials),
 	"POST /api/v1/channels/email/secret":              need(auth.PermChannelsManageCredentials),
 	"PATCH /api/v1/workspace/slug":                    need(auth.PermWorkspaceUpdate),

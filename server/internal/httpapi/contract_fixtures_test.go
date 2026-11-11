@@ -18,11 +18,14 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type contractFixture struct {
+	// trialOfferToken is an open trial offer of the main workspace to read; trialAcceptToken one to accept.
+	trialOfferToken, trialAcceptToken string
 	// The operator console: a link to redeem, a token that reads and asks, one to sign out, and a
 	// browser session.
 	operatorLink, operatorToken, operatorLogoutToken, operatorCookie string
@@ -247,6 +250,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		}
 	}
 	imports := seedImportJobs(t, pool, workspaceID(t, api, adminToken))
+	trialOfferToken := seedTrialOffer(t, pool, workspaceID(t, api, adminToken))
+	trialAcceptToken := seedTrialOffer(t, pool, workspaceID(t, api, adminToken))
 	aiProviderID := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract key", "api_key": "sk-contract-0001", "models": []string{"claude-sonnet-5-5", "claude-haiku-5-5"}})
 	// Reply drafts run on a provider of their own, which the provider cases leave alone.
 	draftsProvider := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract drafts", "api_key": "sk-contract-0004", "models": []string{"claude-sonnet-5-5"}})
@@ -295,7 +300,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	oauthClientID := registerContractOAuthClient(t, api)
-	return contractFixture{oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{trialOfferToken: trialOfferToken, trialAcceptToken: trialAcceptToken, oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -449,4 +454,14 @@ func registerContractOAuthClient(t *testing.T, api http.Handler) string {
 	}
 	decode(t, response, &body)
 	return body.ClientID
+}
+
+// seedTrialOffer makes an open trial offer for the workspace, as the operator command does, and returns its token.
+func seedTrialOffer(t *testing.T, pool *pgxpool.Pool, workspace string) string {
+	t.Helper()
+	_, token, err := store.New(pool).CreateTrialOffer(context.Background(), workspace, "ops", time.Now(), store.TrialOfferMaxValidity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
 }

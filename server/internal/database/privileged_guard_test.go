@@ -69,6 +69,7 @@ var privilegedCallSites = []string{
 	"internal/store/sla-alerts.go: PrivilegeSLAClaim",
 	"internal/store/sla.go: PrivilegeSLAClaim",
 	"internal/store/status-notices.go: PrivilegeStatusNoticeClaim",
+	"internal/store/trial-offers.go: PrivilegeTrialOffer",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
 	"internal/trialreminder/trialreminder.go: PrivilegeTrialReminder",
 }
@@ -89,6 +90,7 @@ var poolFiles = []string{
 	"cmd/collie/plan.go",
 	"cmd/collie/retention.go",
 	"cmd/collie/serve.go",
+	"cmd/collie/trial-offer.go",
 	"cmd/collie/trial.go",
 	"cmd/collie/undo.go",
 	"internal/auth/service.go",

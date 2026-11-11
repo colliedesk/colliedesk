@@ -13,10 +13,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const trialUsage = "usage: collie trial set --workspace <slug> --ends <RFC3339 time, for example 2026-12-01T00:00:00Z> [--by <name>]"
+const trialUsage = "usage: collie trial set --workspace <slug> --ends <RFC3339 time, for example 2026-12-01T00:00:00Z> [--by <name>]\n" +
+	"       " + trialOfferUsage + "\n       " + trialOffersUsage + "\n       " + trialOfferRevokeUsage
 
-// trialCommand lets an operator set when a workspace's trial ends.
-func trialCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
+// trialCommand lets an operator set when a workspace's trial ends, or send a team an offer to continue it.
+func trialCommand(ctx context.Context, pool *pgxpool.Pool, origin string, args []string, output io.Writer) error {
+	if len(args) > 0 && args[0] == "offer" {
+		return trialOfferCommand(ctx, pool, origin, args[1:], output)
+	}
+	if len(args) > 0 && args[0] == "offers" {
+		return trialOffersCommand(ctx, pool, args[1:], output)
+	}
 	if len(args) == 0 || args[0] != "set" {
 		return errors.New(trialUsage)
 	}

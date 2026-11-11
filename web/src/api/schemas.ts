@@ -62,6 +62,17 @@ export const billingSchema = z.object({
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int(), storage_bytes: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
 export const exportLinkSchema = z.object({ url: z.string().min(1), expires_in_seconds: z.number().int() }) satisfies z.ZodType<Generated<'ExportLink'>>;
+// A trial offer link an operator sent, and what the signed-in person can do with it.
+export const trialOfferSchema = z.object({
+  id: z.string().uuid(), state: z.enum(['open', 'accepted', 'expired', 'revoked']), workspace_name: z.string(), expires_at: z.string().datetime(),
+  accepted_at: z.string().datetime().nullable(), accepted_by: z.string().nullable(), revoked_at: z.string().datetime().nullable(),
+  trial_ends_at: z.string().datetime(), plan: z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']), extends_to: z.string().datetime(),
+  can_accept: z.boolean(), refusal: z.enum(['accepted', 'expired', 'revoked', 'has_plan', 'not_admin']).nullable(), accept_by: z.array(z.string()),
+}) satisfies z.ZodType<Generated<'TrialOffer'>>;
+export type TrialOffer = z.infer<typeof trialOfferSchema>;
+export const trialOfferAcceptedSchema = z.object({
+  offer: trialOfferSchema, previous_trial_ends_at: z.string().datetime(), trial_ends_at: z.string().datetime(), extended: z.boolean(),
+}) satisfies z.ZodType<Generated<'TrialOfferAccepted'>>;
 export const migrationRequestSchema = z.object({ freshdesk_address: z.string(), times: z.string(), requested_at: z.string().datetime() }) satisfies z.ZodType<Generated<'MigrationRequest'>>;
 export const foundingSlotsSchema = z.object({ slots: z.number().int(), taken: z.number().int().nullable(), open: z.boolean() }) satisfies z.ZodType<Generated<'FoundingSlots'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;

@@ -12,7 +12,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -270,6 +270,19 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
   return schema.parse(response.status === 204 ? undefined : await response.json());
 }
 
+// trialOfferCall is request for the trial offer page, which explains every refusal itself: a 403 or 404
+// keeps its code and message instead of becoming a bare failure.
+async function trialOfferCall<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+  if (response.status === 401) throw new UnauthorizedError();
+  if (!response.ok) {
+    const refused = await invalidRequest(response);
+    if (response.status === 403 && refused instanceof InvalidRequestError) throw new PermissionError(refused.message, refused.detail);
+    throw refused;
+  }
+  return schema.parse(await response.json());
+}
+
 export async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
   if (!response.ok) noteFailure(path, init, response);
@@ -366,6 +379,12 @@ export const api = {
   foundingSlots: () => request('/api/v1/founding', foundingSlotsSchema),
   requestMigration: (input: RequestBody<'createMigrationRequest'>, key: string) => request('/api/v1/billing/migration-request', migrationRequestSchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createMigrationRequest'>(input) }),
+  // A trial offer link: what it offers (reading changes nothing), and accepting it. Every refusal keeps its
+  // code (trial_offer_not_found, trial_offer_other_workspace, permission_missing, trial_offer_expired…).
+  trialOffer: (token: string) => trialOfferCall(`/api/v1/trial-offer?${new URLSearchParams({ token }).toString()}`, trialOfferSchema),
+  // key names one press: a retry of it answers the same acceptance instead of "already accepted".
+  acceptTrialOffer: (token: string, key: string) => trialOfferCall('/api/v1/trial-offer/accept', trialOfferAcceptedSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'acceptTrialOffer'>({ token }) }),
   exchangeCloudSession,
   signUpCloud,
   requestExportLink,
