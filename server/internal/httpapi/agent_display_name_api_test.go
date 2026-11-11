@@ -115,7 +115,7 @@ func TestAdminRenamesAnotherAgentAndClearsTheName(t *testing.T) {
 	if got := myDisplayName(t, f, f.ann); got != "Ann from Support" {
 		t.Fatalf("Ann's /auth/me display_name = %q", got)
 	}
-	if member := f.member(t, "ann@team.example.com"); member.Role != "agent" || member.DeactivatedAt != nil {
+	if member := f.member(t, "ann@team.example.com"); member.Role.main() != "agent" || member.DeactivatedAt != nil {
 		t.Fatalf("a rename changed the role or state: %+v", member)
 	}
 	if status, failure := f.patch(t, f.admin, f.annID, map[string]any{"display_name": ""}); status != http.StatusOK {
@@ -148,38 +148,32 @@ func TestAdminCannotRenameAnAgentOfAnotherWorkspace(t *testing.T) {
 
 func TestDisplayNameThroughAgentTokens(t *testing.T) {
 	f := newTeamFixture(t)
-	// The token owner's own name never reaches a customer by itself: draft sets it, read files a request.
+	// The token owner's own name: profile:update sets it; a token without it is refused and nothing changes.
 	draft := issueToken(t, f.api, f.ann, "Ann's assistant", "draft").Token
 	if response := request(t, f.api, http.MethodPatch, "/api/v1/agents/me/display-name", map[string]any{"display_name": "Ann L."}, draft, nil); response.Code != http.StatusOK {
 		t.Fatalf("draft token self rename status=%d body=%s", response.Code, response.Body.String())
 	}
 	read := issueToken(t, f.api, f.ann, "Ann's reader", "read").Token
-	filed := accepted(t, f.api, http.MethodPatch, "/api/v1/agents/me/display-name", map[string]any{"display_name": "Annie"}, read)
-	if !strings.Contains(filed.Summary, "ann@team.example.com") || !strings.Contains(filed.Summary, "Ann L. → Annie") {
-		t.Errorf("read token request summary = %q, want who and Ann L. → Annie", filed.Summary)
+	if from := refused(t, f.api, http.MethodPatch, "/api/v1/agents/me/display-name", map[string]any{"display_name": "Annie"}, read, "profile:update"); from != "token" {
+		t.Errorf("a read token's rename is missing from %q, want token (Ann holds profile:update)", from)
 	}
 	if got := myDisplayName(t, f, f.ann); got != "Ann L." {
-		t.Fatalf("the read token's request changed the name before approval: %q", got)
+		t.Fatalf("a refused rename changed the name: %q", got)
 	}
 
-	// Renaming is not about the admin role, so an admin token renames anyone, an admin included, directly.
+	// An Admin token renames anyone, an admin included, at once; a role sent with it is refused.
 	adminToken := issueToken(t, f.api, f.admin, "Ops", "admin").Token
 	for _, id := range []string{f.bobID, f.adminID} {
 		if status, failure := f.patch(t, adminToken, id, map[string]any{"display_name": "Renamed"}); status != http.StatusOK {
 			t.Fatalf("admin token rename of %s status=%d error=%+v", id, status, failure)
 		}
 	}
-	// A rename sent together with an admin-role change still waits for a person.
-	promote := accepted(t, f.api, http.MethodPatch, "/api/v1/agents/"+f.bobID, map[string]any{"role": "admin", "display_name": "Boss Bob"}, adminToken)
-	if !strings.Contains(promote.Summary, "agent → admin") || !strings.Contains(promote.Summary, "Renamed → Boss Bob") {
-		t.Errorf("promotion summary = %q, want the role and the name change", promote.Summary)
-	}
-	if got := displayNameOf(t, f, f.admin, "bob@team.example.com"); got != "Renamed" {
-		t.Fatalf("a pending request renamed Bob to %q", got)
+	if response := request(t, f.api, http.MethodPatch, "/api/v1/agents/"+f.bobID, map[string]any{"role": "admin", "display_name": "Boss Bob"}, adminToken, nil); response.Code != http.StatusBadRequest {
+		t.Fatalf("a role sent to PATCH /agents/{id} status=%d, want 400 (roles change with PUT /agents/{id}/roles)", response.Code)
 	}
 	send := issueToken(t, f.api, f.admin, "Sender", "send").Token
-	below := accepted(t, f.api, http.MethodPatch, "/api/v1/agents/"+f.annID, map[string]any{"display_name": "Ann Q."}, send)
-	if !strings.Contains(below.Summary, "Ann L. → Ann Q.") {
-		t.Errorf("send token rename summary = %q, want Ann L. → Ann Q.", below.Summary)
+	refused(t, f.api, http.MethodPatch, "/api/v1/agents/"+f.annID, map[string]any{"display_name": "Ann Q."}, send, "team:manage_roles")
+	if got := displayNameOf(t, f, f.admin, "ann@team.example.com"); got != "Ann L." {
+		t.Fatalf("a refused rename renamed Ann to %q", got)
 	}
 }

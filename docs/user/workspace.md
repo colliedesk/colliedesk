@@ -10,7 +10,7 @@ change it. Customers see the workspace name in one place: it is the title of you
 
 ## Rename the workspace
 
-Only admins can rename the workspace.
+Only people with `workspace:update` (the Admin role) can rename the workspace.
 
 1. Open **Settings → General**.
 2. Type the new name in **Workspace name**.
@@ -49,6 +49,7 @@ stays on the server's one address.
 ## API and AI agents
 
 - `PATCH /api/v1/workspace/name` with `{"name": "Acme Support Team"}` renames the workspace. It needs
-  an admin session or an admin agent token; an agent gets 403.
-- An AI agent uses `colliedesk_workspace_rename` (admin tier). With a lower tier, Colliedesk files it as
-  an [agent request](agent-requests.md) for an admin to approve.
+  `workspace:update` (the Admin role has it), from a person or an agent token; without it the answer is
+  403 `permission_missing`.
+- An AI agent uses `colliedesk_workspace_rename` (`workspace:update`), and changes the address with
+  `colliedesk_workspace_slug_change`. A token created before roles cannot; it needs a new token.

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { TrialSurvey } from './trial-survey';
 
 // The analytics boundary: what PostHog would receive.
@@ -12,9 +13,9 @@ const key = 'colliedesk-survey-switch-blocker-v1';
 
 function meWith(overrides: { role?: 'admin' | 'agent'; plan?: string; endsIn?: number } = {}) {
   return {
-    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ada@example.com', display_name: '', role: overrides.role ?? 'admin', timezone_override: null },
+    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ada@example.com', display_name: '', roles: rolesOf(overrides.role ?? 'admin'), timezone_override: null }, permissions: permissionsOf(overrides.role ?? 'admin'),
     workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-    timezone: 'UTC', scope: null,
+    timezone: 'UTC', token: null,
     plan: { plan: overrides.plan ?? 'trial', trial_ends_at: inDays(overrides.endsIn ?? 5), locked: false, trial_extended: false, agents_over: 0, seat_paused: false },
   } as never;
 }

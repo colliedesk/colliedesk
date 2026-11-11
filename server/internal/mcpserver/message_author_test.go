@@ -16,8 +16,8 @@ func TestConversationGetNamesTheAuthorAndTheTokenOfEachTeamMessage(t *testing.T)
 	if got := at(t, written, "message", "author"); got != "Ada Admin" {
 		t.Errorf("note_add author = %v, want Ada Admin (the member the token acts as)", got)
 	}
-	if label, scope := at(t, written, "message", "written_by_agent_token", "label"), at(t, written, "message", "written_by_agent_token", "scope"); label != "test draft" || scope != "draft" {
-		t.Errorf("note_add token = %v/%v, want test draft/draft", label, scope)
+	if label, actsAs := at(t, written, "message", "written_by_agent_token", "label"), at(t, written, "message", "written_by_agent_token", "acts_as"); label != "test draft" || actsAs != "Ada Admin" {
+		t.Errorf("note_add token = %v acting as %v, want test draft acting as Ada Admin", label, actsAs)
 	}
 
 	thread := e.ok(e.connect(f.w.read, ""), "colliedesk_conversation_get", map[string]any{"conversation_id": f.c2})
@@ -33,8 +33,8 @@ func TestConversationGetNamesTheAuthorAndTheTokenOfEachTeamMessage(t *testing.T)
 	if _, marked := person.(map[string]any)["written_by_agent_token"]; marked {
 		t.Errorf("a person's note must not carry written_by_agent_token: %v", person)
 	}
-	if label, scope := at(t, agent, "written_by_agent_token", "label"), at(t, agent, "written_by_agent_token", "scope"); label != "test draft" || scope != "draft" {
-		t.Errorf("token note: written_by_agent_token = %v/%v, want test draft/draft: %v", label, scope, agent)
+	if label, actsAs := at(t, agent, "written_by_agent_token", "label"), at(t, agent, "written_by_agent_token", "acts_as"); label != "test draft" || actsAs != "Ada Admin" {
+		t.Errorf("token note: written_by_agent_token = %v acting as %v, want test draft acting as Ada Admin: %v", label, actsAs, agent)
 	}
 }
 

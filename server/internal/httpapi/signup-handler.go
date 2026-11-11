@@ -3,10 +3,12 @@ package httpapi
 import (
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 )
 
@@ -54,19 +56,23 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		Source        *string `json:"source"`
 		Timezone      string  `json:"timezone"`
 		Next          string  `json:"next"`
+		// Attribution is the sign-in link's utm_* keys and click IDs, as the sign-in page kept them.
+		Attribution map[string]string `json:"attribution"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A workspace name is required.")
 		return
 	}
 	onboarding := domain.Onboarding{Goal: input.Goal, Role: input.Role, Source: input.Source}
+	// A tracking value the server does not accept is dropped, never refused: it must not cost a trial.
+	attribution := domain.ParseAttribution(input.Attribution, a.now())
 	verified, err := a.cloud.Verify(request.Context(), token)
 	if err != nil {
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return
 	}
 	ip := clientIP(request, a.config.TrustedProxies)
-	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding})
+	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding, Attribution: attribution})
 	switch {
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The identity provider returned an email address this service cannot use.")
@@ -104,6 +110,12 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	// Counted only once the person has a session, so a failed sign-in is not a started trial. The
 	// answers are fixed lists, never free text, and the event carries no email.
 	properties := onboarding.Properties()
+	if tracked := attribution.Properties(); tracked != nil {
+		if properties == nil {
+			properties = map[string]any{}
+		}
+		maps.Copy(properties, tracked)
+	}
 	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {
 		if properties == nil {
 			properties = map[string]any{}
@@ -117,9 +129,36 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		properties["internal"] = true
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
+	a.queueStartTrial(request, workspace.ID, attribution, ip)
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
 	if !a.finishBrowserSignIn(response, request, &result, input.Next) {
 		return
 	}
 	writeJSON(response, http.StatusCreated, result)
+}
+
+// queueStartTrial queues the report to Meta of a trial that came from a Meta ad. It only writes a row
+// (metaconversions.Worker sends it), and a failure is logged: the trial exists either way. The Meta pixel's
+// _fbp cookie goes with it when the browser has one: colliedesk.com sets it on .colliedesk.com only after
+// the visitor accepted cookies there. Without a click ID nothing is queued, cookie or not.
+func (a *API) queueStartTrial(request *http.Request, workspaceID string, attribution domain.Attribution, clientIP string) {
+	if !a.config.MetaConversions.Enabled() || attribution.FBCLID == "" {
+		return
+	}
+	err := metaconversions.RecordStartTrial(request.Context(), a.db, metaconversions.StartTrial{
+		WorkspaceID: workspaceID, FBCLID: attribution.FBCLID, ClickIDSeenAt: attribution.ClickIDSeenAt, At: a.now(),
+		ClientIP: clientIP, UserAgent: request.UserAgent(), SourceURL: a.config.Origin + "/sign-in", FBP: cookieValue(request, "_fbp"),
+	})
+	if err != nil {
+		slog.Error("meta StartTrial not queued", "workspace", workspaceID, "error", err)
+	}
+}
+
+// cookieValue is the value of the named cookie on request, or "".
+func cookieValue(request *http.Request, name string) string {
+	cookie, err := request.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
 }

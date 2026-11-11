@@ -8,6 +8,8 @@ import { presenceViewPart } from './features/inbox/presence-part';
 import { autofixPart } from './features/autofix/autofix-part';
 import { leaveTo } from './lib/leave-to';
 import { answerSignupQuestions } from './features/auth/test-signup-answers';
+import { permissionsOf, rolesOf } from './test-roles';
+import { readPlanIntent } from './features/settings/plan-intent';
 
 // Each workspace's desk runs on its own host; APP_ORIGIN finds workspaces and signs new teams up. Clerk
 // is the identity provider and leaving the page is the browser's: both are external boundaries here.
@@ -22,7 +24,7 @@ vi.mock('./lib/leave-to', () => ({ leaveTo: vi.fn() }));
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
-afterEach(() => { fetchMock.mockReset(); vi.mocked(leaveTo).mockReset(); clerk.signedIn = false; });
+afterEach(() => { fetchMock.mockReset(); vi.mocked(leaveTo).mockReset(); clerk.signedIn = false; window.sessionStorage.clear(); });
 
 beforeAll(async () => {
   presenceViewPart.preload();
@@ -35,9 +37,9 @@ beforeAll(async () => {
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const me = {
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'agent', timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('agent'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, plan: null,
+  timezone: 'UTC', token: null, permissions: permissionsOf('agent'), plan: null,
 };
 const handoffURL = 'https://beta-desk.example.com/sign-in?next=%2Fsettings#handoff=one-time';
 // appOrigin is where this page runs (jsdom's origin) on APP_ORIGIN, or another origin on a workspace host.
@@ -46,12 +48,13 @@ function config(workspaceHosts: boolean, appOrigin = window.location.origin) {
     limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 }, product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
 }
 
-function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; exchange?: Response }) {
+function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; exchange?: Response; signup?: Response }) {
   // On APP_ORIGIN of a server with workspace hosts the sign-in answers where the browser continues.
   const continueURL = options.config.workspace_hosts && options.config.app_origin === window.location.origin ? { continue_url: handoffURL } : {};
   let signedIn = options.signedIn;
   // A sign-up makes its person the new workspace's admin.
   let agent = me.agent;
+  let permissions = me.permissions;
   fetchMock.mockImplementation((url: string) => {
     const path = url.split('?')[0];
     if (path === '/api/v1/auth/cloud/exchange') {
@@ -59,11 +62,17 @@ function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; 
       if (answer.ok) signedIn = true;
       return Promise.resolve(answer);
     }
+    if (path === '/api/v1/auth/cloud/signup') {
+      if (options.signup) return Promise.resolve(options.signup);
+      signedIn = true;
+      agent = { ...me.agent, roles: rolesOf('admin') };
+      permissions = permissionsOf('admin');
+      return Promise.resolve(json(201, { agent, workspace: me.workspace, ...continueURL }));
+    }
     if (path === '/api/v1/auth/redeem') { signedIn = true; return Promise.resolve(json(200, { agent: me.agent, workspace: me.workspace })); }
-    if (path === '/api/v1/auth/cloud/signup') { signedIn = true; agent = { ...me.agent, role: 'admin' }; return Promise.resolve(json(201, { agent, workspace: me.workspace, ...continueURL })); }
     if (path === '/api/v1/workspace/setup') return Promise.resolve(json(200, { steps: [{ key: 'email', state: 'none', detail: null }, { key: 'first_reply', state: 'none', detail: null }], complete: false, recommended: null }));
     if (path === '/api/v1/channels') return Promise.resolve(json(200, { items: [], types: [] }));
-    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, { ...me, agent }) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
+    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, { ...me, agent, permissions }) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
     if (path === '/api/v1/config') return Promise.resolve(json(200, options.config));
     if (path === '/api/v1/inbox/activity') return Promise.resolve(json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }));
     return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
@@ -110,6 +119,59 @@ test('a buyer signing in on APP_ORIGIN takes the plan to the workspace host in t
   expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ next: '/settings/billing?buy=team_monthly' });
 });
 
+test('a visitor from the Team 25 trial link takes the plan to the workspace host in the address', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true) });
+  open('/sign-in?intent=trial&plan=team25');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ next: '/?plan=team25' });
+  expect(readPlanIntent()).toBe('team25');
+});
+
+test('a plan other than team25 in the trial link is ignored', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true) });
+  open('/sign-in?intent=trial&plan=solo');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body)).next).toBeUndefined();
+  expect(readPlanIntent()).toBeUndefined();
+});
+
+test('a buyer of Founding keeps the checkout page in the address, not the Team 25 plan', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true) });
+  open('/sign-in?buy=founding&plan=team25');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ next: '/settings/billing?buy=founding' });
+});
+
+test('on a workspace host, a hand-off that names Team 25 remembers it and opens the inbox without it in the address', async () => {
+  serve({ signedIn: false, config: config(true, 'https://app.example.com') });
+  const router = open('/sign-in?next=%2F%3Fplan%3Dteam25#handoff=one-time');
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
+  expect(router.state.location.search).not.toHaveProperty('plan');
+  expect(readPlanIntent()).toBe('team25');
+  expect(calls('/api/v1/billing')).toHaveLength(0);
+});
+
+test('on a workspace host, a hand-off naming any other plan remembers nothing', async () => {
+  serve({ signedIn: false, config: config(true, 'https://app.example.com') });
+  open('/sign-in?next=%2F%3Fplan%3Dsolo#handoff=one-time');
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(readPlanIntent()).toBeUndefined();
+});
+
+test('a pairing link with the Team 25 plan signs in to the inbox and remembers the plan', async () => {
+  serve({ signedIn: false, config: config(false) });
+  const router = open('/sign-in?token=pairing-token&plan=team25');
+  fireEvent.click(await screen.findByRole('button', { name: /sign in|continue|open/i }));
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
+  expect(JSON.parse(String(calls('/api/v1/auth/redeem')[0][1].body))).toMatchObject({ token: 'pairing-token', next: '/?plan=team25' });
+  expect(readPlanIntent()).toBe('team25');
+});
+
 test('on a workspace host, an email that is not an agent there is told so and pointed to find its workspace', async () => {
   clerk.signedIn = true;
   serve({ signedIn: false, config: config(true, 'https://app.example.com'), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
@@ -150,4 +212,62 @@ test('on a server with workspace hosts, a new team that signs up without a plan 
   await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
   const [, init] = calls('/api/v1/auth/cloud/signup')[0];
   expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup' });
+});
+
+// An identity no workspace uses yet is offered the sign-up form; a visitor with an intent is asked for the name only.
+const notAnAgent = () => json(403, { error: { code: 'forbidden', message: 'no' } });
+async function submitSignup(button: string) {
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  fireEvent.click(screen.getByRole('button', { name: button }));
+  await waitFor(() => expect(calls('/api/v1/auth/cloud/signup')).toHaveLength(1));
+  return JSON.parse(String(calls('/api/v1/auth/cloud/signup')[0][1].body)) as Record<string, unknown>;
+}
+
+test.each([
+  ['a Founding buyer', '/sign-in?buy=founding', 'Create workspace and continue to payment'],
+  ['a Team 25 trial visitor', '/sign-in?intent=trial&plan=team25', 'Start free trial'],
+])('%s signs up with the workspace name alone', async (_who, address, button) => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  open(address);
+  expect(await screen.findByText('Tell us about your team (optional)')).toBeInTheDocument();
+  const body = await submitSignup(button);
+  expect(body).toMatchObject({ workspace_name: 'Acme Support' });
+  for (const answer of ['goal', 'role', 'source']) expect(body).not.toHaveProperty(answer);
+});
+
+test('a sign-up from an ad link sends the post and the click it came from, then forgets them', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  open('/sign-in?intent=trial&plan=team25&utm_source=tiktok&utm_content=post-07&fbclid=IwAR_x&token_like=drop%20me');
+  const body = await submitSignup('Start free trial');
+  expect(body.attribution).toEqual({ utm_source: 'tiktok', utm_content: 'post-07', fbclid: 'IwAR_x', click_id_seen_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) as unknown });
+  await waitFor(() => expect(window.sessionStorage.getItem('colliedesk.signup-attribution')).toBeNull());
+});
+
+test('a Founding buyer from an ad link signs up with the click it came from', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  const router = open('/settings/billing?buy=founding&utm_source=meta&fbclid=IwAR_y');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/sign-in'));
+  const body = await submitSignup('Create workspace and continue to payment');
+  expect(body.attribution).toEqual({ utm_source: 'meta', fbclid: 'IwAR_y', click_id_seen_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) as unknown });
+});
+
+test('a sign-up without an ad link sends no attribution', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  open('/sign-in?intent=trial&plan=team25');
+  expect(await submitSignup('Start free trial')).not.toHaveProperty('attribution');
+});
+
+test('a plain trial sign-up still asks the three questions and refuses to go on without them', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: notAnAgent() });
+  open('/sign-in?intent=trial');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  expect(screen.queryByText(/\(optional\)/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Answer each question to continue.');
+  expect(calls('/api/v1/auth/cloud/signup')).toHaveLength(0);
 });

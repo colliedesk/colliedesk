@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
@@ -43,8 +46,12 @@ type channelBody struct {
 	UnsentCount   int              `json:"unsent_count"`
 	LastInboundAt *string          `json:"last_inbound_at"`
 	IsDefault     bool             `json:"is_default"`
-	CreatedAt     time.Time        `json:"created_at"`
-	UpdatedAt     time.Time        `json:"updated_at"`
+	// ProcessingPausedAt is when the channel's processing was paused; null while it runs.
+	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
+	// PausedCount is how many messages wait while it is paused (0 while it runs).
+	PausedCount int       `json:"paused_count"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	// DeletedAt is set on a removed channel, which only the list with include_removed shows.
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
@@ -52,6 +59,19 @@ type channelBody struct {
 type channelDetailBody struct {
 	channelBody
 	Config any `json:"config"`
+	// Settings are what the channel stores over its type's defaults, EffectiveSettings the rules in
+	// force; both are left out for a removed channel.
+	Settings          json.RawMessage    `json:"settings,omitempty"`
+	EffectiveSettings *channels.Settings `json:"effective_settings,omitempty"`
+}
+
+func detailBody(a *API, public store.ChannelPublic) channelDetailBody {
+	body := channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config, Settings: public.Settings}
+	if public.Settings != nil {
+		effective := public.Channel.Settings
+		body.EffectiveSettings = &effective
+	}
+	return body
 }
 
 func optionalText(value string) *string {
@@ -70,11 +90,11 @@ func (a *API) channelJSON(public store.ChannelPublic) channelBody {
 	return channelBody{ID: channel.ID, Type: channel.Type, Name: channel.Name, Enabled: channel.Enabled,
 		Status:  channelStateBody{State: public.Status.State, ReasonCode: optionalText(public.Status.ReasonCode), Message: optionalText(public.Status.Message)},
 		Summary: public.Summary, Capabilities: capabilities, HeldCount: public.Held, UnsentCount: public.Unsent, LastInboundAt: public.LastSeen,
-		IsDefault: channel.IsDefault, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
+		IsDefault: channel.IsDefault, ProcessingPausedAt: channel.ProcessingPausedAt, PausedCount: public.Paused, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
 }
 
 func (a *API) writeChannelDetail(response http.ResponseWriter, status int, public store.ChannelPublic) {
-	writeJSON(response, status, channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config})
+	writeJSON(response, status, detailBody(a, public))
 }
 
 // writeChannelConflict answers a value another channel of the workspace has: 409 with the field and
@@ -145,8 +165,13 @@ func writeHeld(response http.ResponseWriter, held *channels.HeldError) {
 	if held.Count == 1 {
 		noun = "message"
 	}
+	message := fmt.Sprintf("This channel holds %d %s that arrived while it was off. Open or discard them first.", held.Count, noun)
+	if held.Queued > 0 {
+		message = fmt.Sprintf("This channel holds %d %s, %d of them in cards of the intake queue: decide those cards in the queue, open or discard the rest, then remove it.",
+			held.Count, noun, held.Queued)
+	}
 	writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "channel_has_held", "held_count": held.Count,
-		"message": fmt.Sprintf("This channel holds %d %s that arrived while it was off. Open or discard them first.", held.Count, noun)})})
+		"queued_count": held.Queued, "message": message})})
 }
 
 // channelID reads the {id} of a channel route; anything but a UUID is no channel.
@@ -263,7 +288,7 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 			return nil, errAnswered
 		}
 		a.recordActivation(workspaceID, nil, public)
-		return channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config}, nil
+		return detailBody(a, public), nil
 	})
 }
 
@@ -273,14 +298,16 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	var input struct {
-		Name      *string         `json:"name"`
-		Enabled   *bool           `json:"enabled"`
-		IsDefault *bool           `json:"is_default"`
-		Config    json.RawMessage `json:"config"`
-		Settings  json.RawMessage `json:"settings"`
+		Name             *string         `json:"name"`
+		Enabled          *bool           `json:"enabled"`
+		IsDefault        *bool           `json:"is_default"`
+		Config           json.RawMessage `json:"config"`
+		Settings         json.RawMessage `json:"settings"`
+		ProcessingPaused *bool           `json:"processing_paused"`
 	}
-	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.IsDefault == nil && input.Config == nil && input.Settings == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config or settings.")
+	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.IsDefault == nil && input.Config == nil && input.Settings == nil &&
+		input.ProcessingPaused == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config, settings or processing_paused.")
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
@@ -290,7 +317,8 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	if _, err := a.store.UpdateChannel(request.Context(), workspaceID, id,
-		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request)); err != nil {
+		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings,
+			ProcessingPaused: input.ProcessingPaused}, channelActor(request)); err != nil {
 		writeChannelError(response, err)
 		return
 	}
@@ -480,6 +508,11 @@ func eventFacts(event store.ChannelEvent) ([]string, *int) {
 		if name, ok := detail["name"].(string); ok {
 			fields = append(fields, name)
 		}
+	case "ai_changed":
+		// The AI feature whose level changed; the levels themselves are in the AI history.
+		if slot, ok := detail["slot"].(string); ok {
+			fields = append(fields, slot)
+		}
 	case "held_replayed", "held_discarded":
 		if n, ok := detail["count"].(float64); ok {
 			value := int(n)
@@ -508,6 +541,28 @@ func (k channelRouteKit) FindChannel(ctx context.Context, account string) (chann
 
 func (k channelRouteKit) WriteError(w http.ResponseWriter, status int, code, message string) {
 	writeError(w, status, code, message)
+}
+
+func (k channelRouteKit) Credential(ctx context.Context, channel channels.Channel, name string) (string, bool, error) {
+	if channel.Type != k.kind {
+		return "", false, channels.ErrNotFound
+	}
+	value, _, found, err := k.api.store.OpenChannelCredential(ctx, channel.WorkspaceID, channel.ID, name)
+	return value, found, err
+}
+
+func (k channelRouteKit) InWorkspace(ctx context.Context, channel channels.Channel, fn func(pgx.Tx) error) error {
+	if channel.Type != k.kind {
+		return channels.ErrNotFound
+	}
+	return k.api.store.InWorkspace(ctx, channel.WorkspaceID, fn)
+}
+
+func (k channelRouteKit) SiteVerificationHeld(ctx context.Context, code string) (bool, error) {
+	if k.kind != zalo.Type {
+		return false, nil
+	}
+	return k.api.store.ZaloSiteVerificationHeld(ctx, code)
 }
 
 func (k channelRouteKit) Channel(ctx context.Context, workspaceID, id string) (channels.Channel, bool, error) {
@@ -564,13 +619,71 @@ func (a *API) channelHelpCenterAdditions() func(ctx context.Context, at channels
 	}
 }
 
+// channelFiles answers the channel types' public files (channels.File) before the mux: GET or HEAD of a
+// name a type's File matches in its directory, charged to the client address before the lookup. A name
+// the type does not find, another method and every other path go on to next, so they answer exactly as a
+// path the server does not have. Like the types' Routes they are outside Routes() and tokenTiers: no
+// session and no token reaches them.
+func (a *API) channelFiles(next http.Handler) http.Handler {
+	type served struct {
+		dir   string
+		file  channels.File
+		serve func(context.Context, string) (channels.PublicFile, bool, error)
+	}
+	var files []served
+	for _, definition := range a.store.Channels().Definitions() {
+		for _, file := range definition.Files {
+			files = append(files, served{dir: "/api/v1" + file.Dir + "/", file: file, serve: file.Serve(channelRouteKit{api: a, kind: definition.Type})})
+		}
+	}
+	if len(files) == 0 {
+		return next
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet && request.Method != http.MethodHead {
+			next.ServeHTTP(response, request)
+			return
+		}
+		for _, f := range files {
+			name, below := strings.CutPrefix(request.URL.Path, f.dir)
+			if !below || !f.file.Name.MatchString(name) {
+				continue
+			}
+			if allowed, wait := a.channelFileLookups.allow(clientAddress(request, a.config.TrustedProxies), a.now()); !allowed {
+				response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+				writeError(response, http.StatusTooManyRequests, "too_many_requests", "Too many requests from this address; try again shortly.")
+				return
+			}
+			file, found, err := f.serve(request.Context(), name)
+			if err != nil {
+				slog.Error("serve a channel file", "path", request.URL.Path, "error", err)
+				writeError(response, http.StatusInternalServerError, "internal_error", "Try again.")
+				return
+			}
+			if !found {
+				break
+			}
+			response.Header().Set("Content-Type", file.ContentType)
+			response.Header().Set("X-Content-Type-Options", "nosniff")
+			response.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(file.MaxAge.Seconds())))
+			response.Header().Set("Content-Length", strconv.Itoa(len(file.Body)))
+			response.WriteHeader(http.StatusOK)
+			if request.Method == http.MethodGet {
+				_, _ = response.Write(file.Body)
+			}
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
+}
+
 // channelTypeRoutes are the routes the registered types declare, mounted under /api/v1 with the
 // permission each declares.
 func (a *API) channelTypeRoutes() []routeSpec {
 	var specs []routeSpec
 	for _, definition := range a.store.Channels().Definitions() {
 		for _, route := range definition.Routes {
-			permission := auth.PermissionAccessWrite
+			permission := auth.PermissionSession
 			if route.Public {
 				permission = auth.PermissionPublic
 			}

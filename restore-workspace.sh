@@ -117,6 +117,15 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ai_slots' AND column_name = 'automatic') THEN
         UPDATE ai_slots SET automatic = false WHERE workspace_id = '$wid';
     END IF;
+    -- With levels (default_level, channel_ai_levels) the same: what ran by itself goes a step down.
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ai_slots' AND column_name = 'default_level') THEN
+        UPDATE ai_slots SET default_level = 'suggest' WHERE workspace_id = '$wid' AND default_level = 'auto';
+        UPDATE ai_slots SET default_level = 'off' WHERE workspace_id = '$wid' AND slot = 'draft' AND default_level = 'suggest';
+    END IF;
+    IF to_regclass('channel_ai_levels') IS NOT NULL THEN
+        UPDATE channel_ai_levels SET level = 'suggest' WHERE workspace_id = '$wid' AND level = 'auto';
+        UPDATE channel_ai_levels SET level = 'off' WHERE workspace_id = '$wid' AND slot = 'draft' AND level = 'suggest';
+    END IF;
 END
 \$\$;
 SQL

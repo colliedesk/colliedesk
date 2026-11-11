@@ -63,9 +63,31 @@ test('a link refused by the plan says the link is fine and the workspace is full
 test('a visitor who came to buy Founding is greeted as a buyer, not sent to an admin', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" cloudSignIn={<div>form</div>} />);
 	expect(screen.getByRole('heading', { level: 1, name: 'Join Founding' })).toBeInTheDocument();
-	expect(screen.getByText('Create your account with your work email. Then name your workspace and pay on the next screen.')).toBeInTheDocument();
+	expect(screen.getByText('Enter your work email and we will send you a one-time code. Then you name your workspace and pay.')).toBeInTheDocument();
+	expect(screen.queryByText(/next screen/i)).not.toBeInTheDocument();
 	expect(screen.queryByText(/admin/i)).not.toBeInTheDocument();
 	expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
+});
+
+test('the Founding page states its price and promises right under the title, and tells an existing customer the form signs them in', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" cloudSignIn={<div>form</div>} />);
+	const title = screen.getByRole('heading', { level: 1, name: 'Join Founding' });
+	const offer = screen.getByText('$99 every 3 months · up to 10 agents · 30-day money-back guarantee');
+	expect(title.nextElementSibling).toBe(offer);
+	expect(screen.getByText('Already have a workspace? The same form signs you in.')).toBeInTheDocument();
+});
+
+test('a buy link for another plan names no Founding price but still tells an existing customer to sign in', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="team_monthly" cloudSignIn={<div>form</div>} />);
+	expect(screen.queryByText(/\$99/)).not.toBeInTheDocument();
+	expect(screen.queryByText(/money-back/i)).not.toBeInTheDocument();
+	expect(screen.getByText('Already have a workspace? The same form signs you in.')).toBeInTheDocument();
+});
+
+test('a buyer who already has a workspace and must pick one is not shown the sign-in hint', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" workspaces={[{ slug: 'alpha', name: 'Alpha Support' }]} />);
+	expect(screen.queryByText('Already have a workspace? The same form signs you in.')).not.toBeInTheDocument();
+	expect(screen.getByRole('button', { name: 'Alpha Support' })).toBeInTheDocument();
 });
 
 test('the sign-in brand side shows the Colliedesk wordmark as one named image', () => {
@@ -100,10 +122,19 @@ test('the sign-up hint under the form names no sign-in provider', () => {
 	expect(screen.queryByText(/google|microsoft/i)).not.toBeInTheDocument();
 });
 
-test('the brand side says plainly that Colliedesk is alpha', () => {
-	render(<RedeemPage token="" cloudEnabled cloudSignIn={<div>form</div>} />);
-	expect(screen.getByText('Colliedesk is alpha: any release may still change the interface.')).toBeInTheDocument();
-	expect(screen.queryByText(/beta/i)).not.toBeInTheDocument();
+test('on Colliedesk Cloud the brand side links what general availability guarantees and the status page', () => {
+	render(<RedeemPage token="" cloudEnabled hostedCloud cloudSignIn={<div>form</div>} />);
+	expect(screen.getByRole('link', { name: 'What general availability guarantees' }))
+		.toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/general-availability.md');
+	expect(screen.getByRole('link', { name: 'Service status' })).toHaveAttribute('href', 'https://status.colliedesk.com');
+	expect(screen.queryByText(/alpha|beta/i)).not.toBeInTheDocument();
+});
+
+test('a self-hosted server links the guarantees but not the status page of Colliedesk Cloud', () => {
+	render(<RedeemPage token="abc" />);
+	expect(screen.getByRole('link', { name: 'What general availability guarantees' })).toBeInTheDocument();
+	expect(screen.queryByRole('link', { name: 'Service status' })).not.toBeInTheDocument();
+	expect(screen.queryByText(/alpha|beta/i)).not.toBeInTheDocument();
 });
 
 test('where sign-up is on, the page links the terms, the privacy policy and the pricing with a short consent line', () => {

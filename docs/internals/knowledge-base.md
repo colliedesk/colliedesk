@@ -15,7 +15,8 @@ The public help center is in `help-center.md`.
   has no column for in `source_meta`; only an import writes them, the API never does, the export carries
   them, and the help center never renders `source_html`.
 - **Copied from saved replies.** Versions, the 30-day trash, optimistic writes with `updated_at`, the
-  version columns (person, token, approved request) and the `send` tier follow saved replies; the
+  version columns (person, token, and the approved request of a change from before requests were
+  removed) follow saved replies; the
   change schema is shared (`domain.KBArticleChange` is `SavedReplyChange`). A version stores title,
   slug, text, status and collection; restoring one brings back title, slug and text only, so a restore
   never publishes or moves an article by surprise.
@@ -120,10 +121,8 @@ The public help center is in `help-center.md`.
   on the links, so a save that committed a link while the DELETE waited would lose its item. Uploading
   in the library (`keep=true`) or naming an item or writing its alt text keeps it. A Freshdesk undo
   leaves kept images.
-- **The library's trash goes by batch.** Trash, restore and purge take at most 100 ids (an agent
-  request names them all, so a person approves exactly what moves); "all unused" moves 500 a call
-  under one `kb_media_batches` row, so one Undo restores everything. A token below `send` calling
-  `trash-unused` files a request for `POST /kb/media/trash` with the ids it would move, never "all".
+- **The library's trash goes by batch.** Trash, restore and purge take at most 100 ids; "all unused"
+  moves 500 a call under one `kb_media_batches` row, so one Undo restores everything.
   `before` (when the page was read) keeps an item uploaded since out of it. Batches go after 30 days.
 - **A replacement is a new version, not new bytes.** An id always names the same bytes (cache
   `immutable`), so replacing writes the other item's id into every live article's current text and
@@ -178,11 +177,50 @@ The public help center is in `help-center.md`.
   is 404; it counts toward the plan, and its thumbnail is the video's in the library.
 - **Limits:** 10,000 library items per workspace, the trash included (`domain.MaxKBMedia`, counted
   under `lockKB`); 5 MiB, 8,192 px on a side and 40 megapixels per image.
-- **Tiers.** Reads are `read`; writes, publishing and image uploads are `send` like saved replies (a
-  publish reaches customers, but it is a version and can be undone); `PUT /help-center` is `admin`.
-  A lower tier's write becomes an agent request, except an image: its bytes are refused with
-  `files_need_approval`, like a multipart upload.
+- **Permissions.** Reads need `kb_articles:read`/`kb_media:read`; writes `kb_articles:create`,
+  `:update`, `:delete` and `kb_media:*`; anything the help center shows also `kb_articles:publish`
+  (a publish reaches customers, but it is a version and can be undone); `PUT /help-center` needs
+  `help_center:update`. A call without the permission is 403 `permission_missing`.
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
+
+## Translations
+
+Migration `20261105100000-kb-translations`; code `store/kb-translations.go`, `httpapi/kb-translation-handlers.go`,
+MCP `catalog-kb-translations.go`. Product decision (2026-11-05): a translation is a language version of
+the same article, as Freshdesk does it, never an article of its own.
+
+- **One row per article and language** (`kb_article_translations`, key workspace, article, locale),
+  with its own slug, status, search fields, `outdated` flag and soft delete. The key stays, so a
+  translation in the trash blocks a new one in that language (`translation_exists`): restore it.
+- **Versions in a table of their own** (`kb_article_translation_versions`), append-only like
+  `kb_article_versions`. Not a `locale` column on the article's versions: every "newest version of the
+  article" read (import rerun and undo, `last_change`) would then see translation versions. The
+  migration gives every existing translation version 1 of kind `import`; a translation with no version
+  at all is treated as the import's (`KBTranslationImportedLast`).
+- **Languages.** The primary language is `help_centers.locale`; the others are `help_center_languages`
+  (visible false by default, so the upgrade adds every imported language hidden and changes nothing
+  public). Creating or publishing a translation needs a listed language other than the primary one;
+  a translation already in an unlisted language (an import from an account with another primary
+  language) stays readable, editable and deletable and is listed as `unlisted`. Dropping a language
+  that holds a translation or collection name (trash included) is refused (`language_in_use`), so a
+  translation is never left without its language by a settings change.
+- **Outdated is set in Go, not by a trigger.** `markKBTranslationsOutdated` runs in `changeKBArticle`
+  (edit, version restore) and `ReimportKBArticle`, comparing the title and text before and after. A
+  media replacement and an import's link rewrite change the article and its translations alike, so
+  they must not mark anything outdated; a trigger on `kb_articles` could not tell them apart. Clearing
+  is explicit (`PATCH outdated false`), recorded as `mark_current`, or with an edit in the same call.
+- **Publishing a translation needs `kb_articles:publish`** whenever it is or becomes published, like
+  an article. Marking it up to date or outdated alone does not change what customers read and does not.
+  Showing or hiding a language does (`HelpCenterLanguagesShownChange`).
+- **Media.** `linkKBMedia` already reads every translation's text, so images of a translation are
+  linked to the article and survive the purge; a media replacement records a `media_replace` version
+  of each translation it rewrote.
+- **Collection names** (`kb_collection_translations`) have no versions, like collections. `source_meta`
+  is set while a row is as an import wrote it; a person's write clears it. The import adds a missing
+  name back on every run and replaces only its own, so deleting an imported name is undone by the next
+  run (owner decision 2026-11-05), and undo removes only rows still the import's.
+- **Purge.** `PurgeKBTrash` deletes translations 30 days in the trash (`PrivilegeKBPurge`); versions
+  go by cascade, as do an article's translations with it.
 
 ## Editor (web app)
 
@@ -261,7 +299,12 @@ The public help center is in `help-center.md`.
   and sent back whole still saves; the save locks the `help_centers` row before the media rows, an
   order no other path reverses.
 - **A generated column cannot be copied in.** `restore-workspace.sh` skips columns with
-  `attgenerated` set; the database computes `kb_articles.search` again.
+  `attgenerated` set; the database computes `kb_articles.search` and `kb_article_translations.search` again.
+- **Write the article row lock first.** Every path that writes a translation locks the article's row
+  (`lockKBArticleRow`) before the translation's, as the import, the link rewrite and the media
+  replacement do; taking them the other way round deadlocks against an article save.
+- **A test that inserts a translation by SQL needs a slug** (NOT NULL since the translations migration)
+  and `status 'published'` if AI retrieval should read it.
 - **One file can back several rows.** Storage keys are content addresses, so an image and an attachment
   with the same bytes share a file, and so can a thumbnail or poster. `DiscardObject` checks
   `kb_media.storage_key`, `thumb_storage_key` and `poster_storage_key`; without that, deleting the
@@ -283,8 +326,6 @@ The public help center is in `help-center.md`.
   and 25 ms on CI against the 25 ms budget; the copy takes it to 7–8 ms locally. The alt text cannot go
   into the library index instead: with the name, 500 characters of 4 bytes pass the 2,704 bytes a
   btree entry holds (measured: 2,880).
-- **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
-  413; a send token writes it directly.
 - **Row-level security turns GIN off for `@@`.** Postgres uses a condition as an index condition on a
   table with row-level security only when its function is leakproof, so the policy is checked first;
   `ts_match_vq` (`@@`) is not (`pg_proc.proleakproof`), and marking it needs a superuser. Every
@@ -309,7 +350,7 @@ The public help center is in `help-center.md`.
   inferred from the measurements, not read in its source). Measured on Postgres 17.11 on 2026-10-20,
   `to_tsvector('simple', repeat('_a', n))`: 0.34 s at 10,000 characters, 1.4 s at 20,000, 5.6 s at
   40,000, 34 s at 100,000 (the longest text), each holding one database core on every create, edit,
-  import or approved request. Runs of 200 characters separated by spaces cost the same per character
+  or import. Runs of 200 characters separated by spaces cost the same per character
   whatever the total, so the cost is the square of one run, not of the text. Fuzzing every pair of ASCII
   punctuation, letters, digits, non-ASCII letters, combining marks and spaces, triples and quintuples
   found these triggers: `_` next to a letter or digit, `/` with `.` or `~`, `@` after a word with

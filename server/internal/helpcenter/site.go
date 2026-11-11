@@ -135,8 +135,8 @@ func New(config Config) *Site {
 	if parsed, err := url.Parse(config.Origin); err == nil {
 		site.originHost = strings.ToLower(parsed.Hostname())
 	}
-	site.notFound = site.pages.render("missing", page{Lang: "en", Title: "Page not found", Style: pathPrefix + strings.TrimPrefix(stylePath, "/") + site.pages.styleName})
-	site.notFoundOnHost = site.pages.render("missing", page{Lang: "en", Title: "Page not found", Style: stylePath + site.pages.styleName})
+	site.notFound = site.pages.render("missing", page{Lang: "en", T: uiTexts["en"], Title: "Page not found", Style: pathPrefix + strings.TrimPrefix(stylePath, "/") + site.pages.styleName})
+	site.notFoundOnHost = site.pages.render("missing", page{Lang: "en", T: uiTexts["en"], Title: "Page not found", Style: stylePath + site.pages.styleName})
 	return site
 }
 
@@ -317,13 +317,21 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.writeNotFound(response, base == "")
 		return
 	}
+	// On its custom domain the help center says whose it is, for the custom domain check (CheckAddress).
+	if at.host != "" {
+		response.Header().Set(MarkerHeader, Marker(at.workspaceID, at.host))
+	}
 	view := s.newView(site, base, channels.HelpCenterAdditions{})
 	reached := s.helpCenterAt(view, base)
 	if route != nil {
 		route.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), helpCenterKey{}, reached)))
 		return
 	}
-	if s.config.Additions != nil && (sub == "/" || sub == "" || sub == "/search" || strings.HasPrefix(sub, "/c/") || strings.HasPrefix(sub, "/a/")) {
+	pageSub := sub
+	if _, rest, _, ok := view.splitLanguage(sub); ok && languagePage(rest) {
+		pageSub = rest
+	}
+	if s.config.Additions != nil && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
 		additions, err := s.config.Additions(ctx, reached)
 		if err != nil {
 			s.writeError(response, err)
@@ -333,10 +341,42 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 			view = s.newView(site, base, additions)
 		}
 	}
+	// A language customers see has the help center's pages below /<locale>; /<primary locale>/... is
+	// the page without it. The segment counts only when it names one of them, so every path the help
+	// center had before keeps its meaning.
+	if lang, rest, segment, ok := view.splitLanguage(sub); ok && languagePage(rest) {
+		if segment != lang {
+			moveTo(response, request, base+"/"+lang+rest+query(request))
+			return
+		}
+		view, sub = view.in(lang), rest
+		if sub == "" {
+			sub = "/"
+		}
+	} else if _, rest, segment, _ := view.splitLanguage(sub); len(view.site.Languages) > 0 && strings.EqualFold(segment, view.site.Locale) && rest != "" && languagePage(rest) {
+		moveTo(response, request, base+rest+query(request))
+		return
+	} else if _, rest, segment, _ := view.splitLanguage(sub); len(view.site.Languages) > 0 && strings.EqualFold(segment, view.site.Locale) && rest == "" {
+		moveTo(response, request, view.home+query(request))
+		return
+	}
 	switch {
 	case sub == "/" || sub == "":
-		// One address for the home page: no trailing slash below /help/, no query.
-		if request.URL.RawQuery != "" || base != "" && request.URL.Path != base {
+		keep := false
+		if view.lang == "" && len(view.site.Languages) > 0 {
+			response.Header().Add("Vary", "Accept-Language")
+			chosen := request.URL.Query()
+			keep = len(chosen) == 1 && strings.EqualFold(chosen.Get("lang"), view.site.Locale)
+			if request.URL.RawQuery == "" {
+				if lang := view.homeLanguage(request); lang != "" {
+					response.Header().Set("Cache-Control", "no-store")
+					http.Redirect(response, request, view.in(lang).home, http.StatusFound)
+					return
+				}
+			}
+		}
+		// One address for the home page: no trailing slash below /help/ (or after the language), no query.
+		if request.URL.RawQuery != "" && !keep || view.root != "" && request.URL.Path != view.root {
 			moveTo(response, request, view.home)
 			return
 		}
@@ -366,6 +406,14 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		}
 		s.writeSiteNotFound(response, view)
 	}
+}
+
+// query is the request's query with its "?", or "".
+func query(request *http.Request) string {
+	if request.URL.RawQuery == "" {
+		return ""
+	}
+	return "?" + request.URL.RawQuery
 }
 
 // helpCenterKey holds the channels.HelpCenter of a request to a channel type's route.
@@ -408,7 +456,9 @@ func (s *Site) redirect(response http.ResponseWriter, request *http.Request, tar
 	http.Redirect(response, request, target, http.StatusMovedPermanently)
 }
 
-// view is one help center as its pages show it.
+// view is one help center as its pages show it, in one language. base and address are the help
+// center's own (its assets live there, in every language); root and rootAddress are where the pages of
+// the view's language are: base itself for the primary language, base/<locale> for another.
 type view struct {
 	site domain.HelpCenterSite
 	base string
@@ -419,6 +469,47 @@ type view struct {
 	brand   brand
 	// additions are what the channel types add to its pages now.
 	additions channels.HelpCenterAdditions
+	// lang is the language of the pages, "" for the primary one (site.Locale).
+	lang              string
+	root, rootAddress string
+	text              uiText
+	// tag is the part of the ETag every language shares.
+	tag string
+}
+
+// locale is the language tag of the view's pages.
+func (v view) locale() string {
+	if v.lang == "" {
+		return v.site.Locale
+	}
+	return v.lang
+}
+
+// in is the view of the same help center in language lang ("" the primary one).
+func (v view) in(lang string) view {
+	v.lang, v.root, v.rootAddress = lang, v.base, v.address
+	if lang != "" {
+		v.root, v.rootAddress = v.base+"/"+lang, v.address+"/"+lang
+	}
+	v.home = v.root
+	if v.home == "" {
+		v.home = "/"
+	}
+	v.text = textFor(v.locale())
+	sum := sha256.Sum256([]byte(v.tag + "\x00" + lang))
+	v.etag = `"` + hex.EncodeToString(sum[:12]) + `"`
+	return v
+}
+
+// language finds the shown language a path segment names, ignoring case: the language as the help
+// center lists it, and whether it is one.
+func (v view) language(segment string) (string, bool) {
+	for _, lang := range v.site.Languages {
+		if strings.EqualFold(lang, segment) {
+			return lang, true
+		}
+	}
+	return "", false
 }
 
 // helpCenterAt is the help center as a channel type's route sees it.
@@ -435,7 +526,7 @@ func (s *Site) helpCenterAt(v view, base string) channels.HelpCenter {
 	}
 	site := v.site
 	return channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, Trial: site.Trial, Address: v.address, Base: base,
-		NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }, Look: look}
+		NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }, Look: look, Languages: site.Languages}
 }
 
 func (s *Site) newView(site domain.HelpCenterSite, base string, additions channels.HelpCenterAdditions) view {
@@ -443,14 +534,16 @@ func (s *Site) newView(site domain.HelpCenterSite, base string, additions channe
 	if home == "" {
 		home = "/"
 	}
-	// Everything a page shows besides the knowledge base itself: the build, the trial (noindex), the
-	// title, language and name the header uses, the address and the brand. The brand counts what is
-	// shown, not only the saved theme: a logo moved to the trash changes no content version.
+	// Everything a page shows besides the knowledge base itself: the build (its templates and the chat's
+	// words count too, for a build whose version stays "dev"), the trial (noindex), the title, language
+	// and name the header uses, the address and the brand. The brand counts what is shown, not only the
+	// saved theme: a logo moved to the trash changes no content version.
 	brand := newBrand(site)
 	address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
-		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, brand.key, additions.Version}, "\x00")))
-	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: address, brand: brand, additions: additions}
+		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, chatVersion, brand.key, additions.Version, strings.Join(site.Languages, ",")}, "\x00")))
+	v := view{site: site, base: base, home: home, address: address, brand: brand, additions: additions, tag: hex.EncodeToString(sum[:12])}
+	return v.in("")
 }
 
 func (v view) title() string {
@@ -536,7 +629,7 @@ func (s *Site) writeSiteNotFound(response http.ResponseWriter, v view) {
 }
 
 func (s *Site) writeBusy(response http.ResponseWriter, wait time.Duration, base string) {
-	body := s.pages.render("busy", page{Lang: "en", Title: "Too many requests", Style: base + stylePath + s.pages.styleName})
+	body := s.pages.render("busy", page{Lang: "en", T: uiTexts["en"], Title: "Too many requests", Style: base + stylePath + s.pages.styleName})
 	header := response.Header()
 	securityHeaders(header)
 	header.Set("Content-Type", "text/html; charset=utf-8")

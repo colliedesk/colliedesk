@@ -6,17 +6,36 @@ import type { Generated, JsonResponse } from './schemas';
 // AI settings load with their settings page, a lazy part, so their schemas and calls are not in the first bundle.
 
 const nullableDate = z.string().datetime().nullable();
-export const aiSlotNameSchema = z.enum(['triage', 'draft', 'chat']) satisfies z.ZodType<Generated<'AISlotName'>>;
+export const aiSlotNameSchema = z.enum(['triage', 'draft', 'chat', 'intake']) satisfies z.ZodType<Generated<'AISlotName'>>;
+export const aiLevelSchema = z.enum(['off', 'suggest', 'auto']) satisfies z.ZodType<Generated<'AILevel'>>;
+const intakeOptionsSchema = z.object({
+  create_threshold: z.number().optional(), attach_threshold: z.number().optional(), ignore_threshold: z.number().optional(),
+  attach_requires_single_candidate: z.boolean().optional(), auto_max_age_seconds: z.number().int().optional(), reopen_window_days: z.number().int().optional(),
+  sources: z.record(z.string(), z.boolean()).optional(), instructions: z.string().optional(), redact_keywords: z.array(z.string()).optional(),
+  contact_labels: z.object({ account: z.array(z.string()).optional(), id: z.array(z.string()).optional() }).optional(),
+  redact_patterns: z.array(z.object({ pattern: z.string(), mask: z.enum(['phone', 'id_number', 'account_number', 'hidden']) })).optional(),
+  gate_override: z.array(z.enum(['create', 'attach', 'ignore'])).optional(), gate_override_reason: z.string().optional(),
+}) satisfies z.ZodType<Generated<'IntakeOptions'>>;
+const aiChannelLevelSchema = z.object({
+  channel_id: z.string().uuid(), channel_name: z.string(), scope: z.string(), slot: aiSlotNameSchema, level: aiLevelSchema, effective_level: aiLevelSchema,
+  off_reason: z.enum(['workspace_off']).nullable(), options: intakeOptionsSchema.nullable(), updated_by: z.string().uuid().nullable(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'AIChannelLevel'>>;
+const aiSourceConsentSchema = z.object({
+  source_class: z.string(), consented_by: z.string().uuid().nullable(), consented_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'AISourceConsent'>>;
 const kindSchema = z.enum(['anthropic', 'openai_compatible']) satisfies z.ZodType<Generated<'AIProviderKind'>>;
+const aiRoutingSchema = z.object({
+  data_collection: z.enum(['allow', 'deny']), zdr: z.boolean(),
+}) satisfies z.ZodType<Generated<'AIProviderRouting'>>;
 export const aiProviderSchema = z.object({
   id: z.string().uuid(), kind: kindSchema, label: z.string(), base_url: z.string().nullable(), auth_kind: z.enum(['api_key', 'none']),
   key_hint: z.string().nullable(), models: z.array(z.string()), check_status: z.enum(['ok', 'failing']), check_error_code: z.string().nullable(),
   checked_at: z.string().datetime(), created_by: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
-  used_by: z.array(aiSlotNameSchema),
+  used_by: z.array(aiSlotNameSchema), routing: aiRoutingSchema.nullable(),
 }) satisfies z.ZodType<Generated<'AIProvider'>>;
 export const aiSlotSchema = z.object({
   slot: aiSlotNameSchema, source: z.enum(['server', 'provider', 'none']), provider_id: z.string().uuid().nullable(), model: z.string().nullable(),
-  effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), automatic: z.boolean(), auto_parts: z.array(z.enum(['tags', 'priority', 'assignee'])),
+  fallback_model: z.string().nullable(), effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), default_level: aiLevelSchema, automatic: z.boolean(), auto_parts: z.array(z.enum(['tags', 'priority', 'assignee'])),
   active: z.boolean(),
   off_reason: z.enum(['server_provider_missing', 'server_provider_off', 'model_not_offered']).nullable(),
   consented_by: z.string().uuid().nullable(), consented_at: nullableDate, updated_by: z.string().uuid().nullable(), updated_at: nullableDate,
@@ -26,6 +45,7 @@ export const aiSlotSchema = z.object({
 export const aiAutomaticSchema = z.object({
   per_day: z.number().int(), per_minute: z.number().int(), used_today: z.number().int(), paused_until: nullableDate,
   draft_per_day: z.number().int(), drafts_today: z.number().int(), drafts_paused_until: nullableDate, drafts_reserved_until: nullableDate,
+  intake_per_day: z.number().int(), intake_today: z.number().int(), intake_paused_until: nullableDate,
 }) satisfies z.ZodType<Generated<'AIAutomaticLimits'>>;
 const aiAllowanceSchema = z.object({
   limit_micro_usd: z.number().int(), used_micro_usd: z.number().int(), resets_at: z.string().datetime(),
@@ -34,24 +54,39 @@ const aiAllowanceSchema = z.object({
 export const aiUsageSchema = z.object({
   month: z.string(), allowance: aiAllowanceSchema.nullable(),
   rows: z.array(z.object({
-    feature: z.enum(['check', 'triage', 'draft', 'chat']), billed_to: z.enum(['server', 'workspace_key']), provider_label: z.string(),
+    feature: z.enum(['check', 'triage', 'draft', 'chat', 'intake']), billed_to: z.enum(['server', 'workspace_key']), provider_label: z.string(),
     calls: z.number().int(), failed: z.number().int(), automatic: z.number().int(), input_tokens: z.number().int(), output_tokens: z.number().int(),
-    cost_micro_usd: z.number().int().nullable(),
+    cost_micro_usd: z.number().int().nullable(), provider_cost: z.number().nullable(),
   })),
 }) satisfies z.ZodType<Generated<'AIUsage'>>;
 const aiEventSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['provider_added', 'provider_changed', 'provider_key_changed', 'provider_removed', 'slot_changed', 'automatic_limits_changed', 'chat_deleted']),
+  id: z.string().uuid(), kind: z.enum(['provider_added', 'provider_changed', 'provider_key_changed', 'provider_removed', 'slot_changed', 'automatic_limits_changed', 'chat_deleted', 'channel_level_changed', 'source_consent_changed']),
   actor_agent_id: z.string().uuid().nullable(), actor_name: z.string().nullable(), via_token: z.boolean(),
   provider_id: z.string().uuid().nullable(), provider_label: z.string().nullable(), slot: aiSlotNameSchema.nullable(),
   detail: z.record(z.string(), z.unknown()), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'AIEvent'>>;
 export const aiSettingsSchema = z.object({
   server: z.object({ kind: kindSchema, label: z.string(), models: z.record(z.string(), z.array(z.string())) }).nullable(),
+  server_off: z.object({ label: z.string() }).nullable(),
   providers: z.array(aiProviderSchema), slots: z.array(aiSlotSchema), events: z.array(aiEventSchema),
   provider_limit: z.number().int(), can_store_keys: z.boolean(), allow_private_base_urls: z.boolean(),
   automatic: aiAutomaticSchema, allowance: aiAllowanceSchema.nullable(), auto_triage: z.object({ applied: z.number().int(), undone: z.number().int() }),
   auto_draft_estimate: z.object({ customer_messages: z.number().int(), draft_cost_micro_usd: z.number().int().nullable() }),
+  channels: z.array(aiChannelLevelSchema), source_consents: z.array(aiSourceConsentSchema),
 }) satisfies z.ZodType<JsonResponse<'getAISettings', 200>>;
+const channelAISchema = z.object({
+  channel_id: z.string().uuid(),
+  scopes: z.array(z.object({
+    scope: z.string(),
+    slots: z.array(z.object({
+      slot: aiSlotNameSchema, level: aiLevelSchema.nullable(), effective_level: aiLevelSchema, source: z.enum(['scope', 'channel', 'workspace']),
+      off_reason: z.enum(['workspace_off']).nullable(), options: intakeOptionsSchema.nullable(),
+      // The server's last lowering of the level; an older server sends nothing.
+      lowered: z.object({ at: z.string().datetime(), reason: z.enum(['model_changed', 'recipient_changed']) }).nullable().optional(),
+    })),
+  })),
+}) satisfies z.ZodType<JsonResponse<'getChannelAI', 200>>;
+const removedConsentSchema = z.object({ removed: z.boolean() }) satisfies z.ZodType<JsonResponse<'removeAISourceConsent', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 const aiModelListSchema = z.object({ models: z.array(z.string()) }) satisfies z.ZodType<JsonResponse<'listAIModels', 200>>;
 
@@ -98,13 +133,30 @@ export type AIProvider = z.infer<typeof aiProviderSchema>;
 export type AISlot = z.infer<typeof aiSlotSchema>;
 export type AIEvent = z.infer<typeof aiEventSchema>;
 export type AISlotName = z.infer<typeof aiSlotNameSchema>;
+export type AILevel = z.infer<typeof aiLevelSchema>;
+export type AIChannelLevel = z.infer<typeof aiChannelLevelSchema>;
+const labelCountsSchema = z.object({ labels: z.number().int(), correct: z.number().int(), wrong: z.number().int(), severe: z.number().int() });
+const intakeReadinessSchema = z.object({
+  channel_id: z.string().uuid(), scope: z.string(), model: z.string(), prompt_version: z.string(),
+  actions: z.array(labelCountsSchema.extend({
+    action: z.enum(['create', 'attach', 'ignore']), gate: z.enum(['open', 'closed', 'overridden']), needed: z.number().int(), accuracy_needed: z.number(),
+    missing: z.array(z.enum(['labels', 'accuracy', 'severe', 'junk'])), live: labelCountsSchema,
+    evaluation: labelCountsSchema.extend({ run_at: z.string().datetime() }).nullable(),
+  })),
+  applied: z.object({ decisions: z.number().int(), corrected: z.number().int(), correction_rate: z.number().nullable() }),
+  estimate: z.object({ days: z.number().int(), cards: z.number().int(), ai_calls: z.number().int(),
+    cost_per_call: z.object({ micro_usd: z.number().int().nullable(), provider_cost: z.number().nullable() }) }),
+}) satisfies z.ZodType<Generated<'IntakeReadiness'>>;
+export type IntakeReadiness = z.infer<typeof intakeReadinessSchema>;
+export type ChannelAI = z.infer<typeof channelAISchema>;
+export type ChannelAIInput = RequestBody<'setChannelAI'>;
 export type AIUsage = z.infer<typeof aiUsageSchema>;
 export type AIAutomatic = z.infer<typeof aiAutomaticSchema>;
 export type AIProviderInput = RequestBody<'addAIProvider'>;
 export type AISlotInput = RequestBody<'setAISlot'>;
 export type AIModelsInput = RequestBody<'listAIModels'>;
 
-const json = <Operation extends 'addAIProvider' | 'listAIModels' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits'>(value: RequestBody<Operation>): string => JSON.stringify(value);
+const json = <Operation extends 'addAIProvider' | 'listAIModels' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits' | 'setChannelAI'>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 export const aiApi = {
   settings: () => request('/api/v1/ai', aiSettingsSchema),
@@ -116,7 +168,15 @@ export const aiApi = {
   setKey: (id: string, apiKey: string) => request(`/api/v1/ai/providers/${id}/key`, aiProviderSchema, { method: 'PUT', body: json<'setAIProviderKey'>({ api_key: apiKey }) }),
   check: (id: string) => request(`/api/v1/ai/providers/${id}/check`, aiProviderSchema, { method: 'POST' }),
   remove: (id: string) => request(`/api/v1/ai/providers/${id}`, removedSchema, { method: 'DELETE' }),
+  // What intake may send besides the conversation's text: images customers sent, the customer's profile.
+  setSourceConsent: (source: string) => request(`/api/v1/ai/source-consents/${encodeURIComponent(source)}`, aiSourceConsentSchema, { method: 'PUT' }),
+  removeSourceConsent: (source: string) => request(`/api/v1/ai/source-consents/${encodeURIComponent(source)}`, removedConsentSchema, { method: 'DELETE' }),
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
+  // A channel's levels on each of its scopes; setting one answers the levels after the change.
+  channel: (id: string) => request(`/api/v1/channels/${id}/ai`, channelAISchema),
+  readiness: (id: string, scope: string) => request(`/api/v1/channels/${id}/ai/intake/readiness?scope=${encodeURIComponent(scope)}`, intakeReadinessSchema),
+  setChannel: (id: string, slot: AISlotName, input: ChannelAIInput) =>
+    request(`/api/v1/channels/${id}/ai/${slot}`, channelAISchema, { method: 'PUT', body: json<'setChannelAI'>(input) }),
   usage: (month: string) => request(`/api/v1/ai/usage?month=${encodeURIComponent(month)}`, aiUsageSchema),
   chatUsage: () => request('/api/v1/ai/chat/usage', aiChatUsageSchema),
   chatSessions: (filter: AIChatFilter) => {

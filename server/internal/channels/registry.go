@@ -3,7 +3,12 @@ package channels
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 )
+
+// scopeKey is what conversations.channel_scope and channel_ai_levels.scope hold.
+var scopeKey = regexp.MustCompile(`^[a-z_]{1,40}$`)
 
 // Errors of the frame, the same for every type.
 var (
@@ -28,12 +33,16 @@ func (e *NameTakenError) Error() string {
 
 // HeldError refuses to remove a channel that still holds messages that arrived while it was off:
 // removed, they would be out of reach in the app and still count toward storage.
-type HeldError struct{ Count int }
+// Queued of them belong to cards of the intake queue still to be decided, which are decided there.
+type HeldError struct{ Count, Queued int }
 
 func (e *HeldError) Error() string {
 	noun := "messages"
 	if e.Count == 1 {
 		noun = "message"
+	}
+	if e.Queued > 0 {
+		return fmt.Sprintf("the channel holds %d %s, %d of them in cards of the intake queue still to be decided", e.Count, noun, e.Queued)
 	}
 	return fmt.Sprintf("the channel holds %d %s that arrived while it was off", e.Count, noun)
 }
@@ -58,6 +67,22 @@ func NewRegistry(adapters ...Adapter) (*Registry, error) {
 		}
 		if definition.WhenOff != OffHold && definition.WhenOff != OffRefuse {
 			return nil, fmt.Errorf("channel type %s: WhenOff must be %q or %q", definition.Type, OffHold, OffRefuse)
+		}
+		for _, scope := range definition.Scopes {
+			if !scopeKey.MatchString(scope) {
+				return nil, fmt.Errorf("channel type %s: scope %q must be 1 to 40 lower-case letters and underscores (conversations and AI levels store it)", definition.Type, scope)
+			}
+		}
+		for _, scope := range definition.SharedScopes {
+			if !slices.Contains(definition.Scopes, scope) {
+				return nil, fmt.Errorf("channel type %s: shared scope %q must be one of its scopes", definition.Type, scope)
+			}
+		}
+		for _, scope := range definition.IntakeScopes {
+			rules, ok := definition.Defaults.Scopes[scope]
+			if !slices.Contains(definition.Scopes, scope) || !ok || rules.Gather == nil {
+				return nil, fmt.Errorf("channel type %s: intake scope %q must be one of its scopes and collect its messages (a Gather in Defaults)", definition.Type, scope)
+			}
 		}
 		if adapter.Outbound() == nil && definition.RepliesVia == "" {
 			return nil, fmt.Errorf("channel type %s sends nothing and names no type that sends its replies", definition.Type)

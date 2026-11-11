@@ -1,22 +1,28 @@
 package mcpserver
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/colliedesk/colliedesk/server/internal/auth"
-	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
-var tierMeaning = map[string]string{
-	"read":  "You can read the inbox. You cannot change anything.",
-	"draft": "You can read, change status, priority, assignee and tags, and add private notes. Nothing you do reaches a customer.",
-	"send":  "You may do everything a team member can, including replying to customers by email. A reply cannot be called back: confirm it with the user first.",
-	"custom": "This token holds its own list of permissions (permissions below): use only the tools listed in tools_you_can_use. " +
-		"Anything else, and anything that waits for a person's approval, comes back as a request a person decides.",
-	"admin": "You may also change workspace settings, agents, channels, revoke invites and agent tokens, as the admin who created this token, while that person is an admin. " +
-		"Creating tokens or invites, any change to an admin or making one, signing out another person, export, billing, disconnecting email, a new inbound secret and the workspace address still wait for a person's approval.",
+// permissionsMeaning tells a model what its permissions mean; legacyMeaning is added for a token made
+// before roles, which lost the actions that used to wait for a person.
+const (
+	permissionsMeaning = "You act as %s with these permissions: what this token was given, limited to what %s holds now. " +
+		"A call outside them is refused with permission_missing, which names the permission and how to get it. Nothing is queued: a call you may make runs at once."
+	legacyMeaning = " This token was made before roles, so some actions it could once ask a person for are refused. " +
+		"A new token from Settings → External AI agents acts at once on everything it is given."
+)
+
+type whoamiToken struct {
+	Kind       string   `json:"kind"`
+	Role       *string  `json:"role"`
+	Given      []string `json:"given"`
+	LegacyTier *string  `json:"legacy_tier"`
+	// Stopped is set while the token follows a role its person no longer holds all of.
+	Stopped string `json:"stopped,omitempty"`
 }
 
 type whoamiOut struct {
@@ -26,15 +32,15 @@ type whoamiOut struct {
 		Timezone string `json:"timezone"`
 	} `json:"workspace"`
 	Agent struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
-		Role  string `json:"role"`
+		Name  string   `json:"name"`
+		Email string   `json:"email"`
+		Roles []string `json:"roles"`
 	} `json:"agent"`
-	TokenTier       string   `json:"token_tier"`
-	TierMeaning     string   `json:"tier_meaning"`
-	Permissions     []string `json:"permissions"`
-	WorkspaceLocked bool     `json:"workspace_locked"`
-	ToolsYouCanUse  []string `json:"tools_you_can_use"`
+	Token              *whoamiToken `json:"token"`
+	Permissions        []string     `json:"permissions"`
+	PermissionsMeaning string       `json:"permissions_meaning"`
+	WorkspaceLocked    bool         `json:"workspace_locked"`
+	ToolsYouCanUse     []string     `json:"tools_you_can_use"`
 }
 
 func whoami(c *call, _ map[string]any) (any, error) {
@@ -42,27 +48,45 @@ func whoami(c *call, _ map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := whoamiOut{WorkspaceLocked: me.Plan != nil && me.Plan.Locked}
-	scope := ""
-	if me.Scope != nil {
-		scope = *me.Scope
-		out.TokenTier = scope
-	}
-	out.TierMeaning = tierMeaning[out.TokenTier]
-	out.Workspace.Name, out.Workspace.Slug, out.Workspace.Timezone = me.Workspace.Name, me.Workspace.Slug, me.Workspace.Timezone
-	out.Agent.Name, out.Agent.Email, out.Agent.Role = agentName(me.Agent), me.Agent.Email, me.Agent.Role
-	out.Permissions = me.Permissions
+	out := whoamiOut{WorkspaceLocked: me.Plan != nil && me.Plan.Locked, Permissions: me.Permissions}
 	if out.Permissions == nil {
 		out.Permissions = []string{}
 	}
-	who := auth.Principal{Scope: scope, Permissions: me.Permissions}
+	out.Workspace.Name, out.Workspace.Slug, out.Workspace.Timezone = me.Workspace.Name, me.Workspace.Slug, me.Workspace.Timezone
+	name := agentName(me.Agent)
+	out.Agent.Name, out.Agent.Email, out.Agent.Roles = name, me.Agent.Email, roleNames(me.Agent.Roles)
+	out.PermissionsMeaning = fmt.Sprintf(permissionsMeaning, name, name)
+	if grant := me.Token; grant != nil {
+		out.Token = &whoamiToken{Kind: grant.Kind, Given: grant.Permissions, LegacyTier: grant.LegacyTier}
+		if out.Token.Given == nil {
+			out.Token.Given = []string{}
+		}
+		if grant.Role != nil {
+			out.Token.Role = &grant.Role.Name
+			if grant.RoleHeld != nil && !*grant.RoleHeld {
+				out.Token.Stopped = tokenStopped
+			}
+		}
+		if grant.Kind == "legacy" {
+			out.PermissionsMeaning += legacyMeaning
+		}
+	}
 	out.ToolsYouCanUse = []string{}
 	for _, spec := range Catalog() {
-		if toolOpen(spec, who) {
+		if toolOpen(spec, out.Permissions) {
 			out.ToolsYouCanUse = append(out.ToolsYouCanUse, spec.Name)
 		}
 	}
 	return out, nil
+}
+
+// roleNames are the names of roles, in the order the server gives them (Admin, Agent, then by name).
+func roleNames(roles []restRoleRef) []string {
+	names := make([]string, len(roles))
+	for index, role := range roles {
+		names[index] = role.Name
+	}
+	return names
 }
 
 type contactsArgs struct {
@@ -122,10 +146,10 @@ func tagsList(c *call, _ map[string]any) (any, error) {
 }
 
 type agentRow struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Email string   `json:"email"`
+	Roles []string `json:"roles"`
 }
 
 func agentsList(c *call, _ map[string]any) (any, error) {
@@ -135,34 +159,7 @@ func agentsList(c *call, _ map[string]any) (any, error) {
 	}
 	rows := make([]agentRow, len(agents))
 	for index, agent := range agents {
-		rows[index] = agentRow{ID: agent.ID, Name: agentName(agent), Email: agent.Email, Role: agent.Role}
+		rows[index] = agentRow{ID: agent.ID, Name: agentName(agent), Email: agent.Email, Roles: roleNames(agent.Roles)}
 	}
 	return map[string]any{"agents": rows, "count": len(rows)}, nil
-}
-
-// routeAccess is how each route is classified for tokens (httpapi's table), read once.
-var routeAccess = httpapi.TokenAccessTable()
-
-// toolOpen reports whether a token can use the tool: a preset token by its tier, as the tool states
-// it; a custom token when it holds the permission of every route the tool calls (for a route the
-// handler decides by the body, the least it needs). A route that always waits for a person is open
-// to call: the call becomes a request.
-func toolOpen(spec Spec, who auth.Principal) bool {
-	// Operator tools never open to a workspace token, whatever it holds: they are served on OperatorPath only.
-	if spec.Tier == auth.ScopeOperator {
-		return false
-	}
-	if spec.Tier == "any" {
-		return true
-	}
-	if who.Scope != auth.ScopeCustom {
-		return auth.ScopeAllows(who.Scope, spec.Tier)
-	}
-	for _, key := range spec.REST {
-		access := routeAccess[key]
-		if !access.Approval && access.Permission != "" && !who.Allows(access.Permission) {
-			return false
-		}
-	}
-	return true
 }

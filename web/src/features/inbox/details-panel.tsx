@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { UpdateConversationRequest } from '../../api/client';
 import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { clockLine, slaOf } from '../../lib/sla';
 import { messages } from '../../messages';
+import { CheckIcon, ChevronRightIcon, UserIcon } from '../../ui/icons';
+import { ActionMenu } from './action-menu';
 import { AITriageSlot } from './ai-triage-slot';
+import { StatusLabel } from './conversation-labels';
+import { mayTell, noticesOf } from './status-tell';
 import { AutofixDetails } from '../autofix/autofix-slot';
+import { useHolds } from '../../lib/permissions-context';
 
 interface DetailsPanelProps {
   conversation?: Conversation;
@@ -18,6 +24,8 @@ interface DetailsPanelProps {
   onClose?: () => void;
   // Narrows the list to this customer's conversations.
   onShowContactConversations?: (contactId: string) => void;
+  // Narrows the list to the conversations of the customer's organization (the organization filter).
+  onShowOrganizationConversations?: (organization: string) => void;
   // Triage suggestions are on in the workspace; onTriageApplied reads the conversation again after a part is applied.
   aiTriage?: boolean;
   onTriageApplied?: () => void;
@@ -30,7 +38,43 @@ interface DetailsPanelProps {
   autofix?: boolean;
 }
 
-export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting, autofix = false }: DetailsPanelProps) {
+const statusOrder = ['pending', 'resolved', 'closed', 'open'] as const;
+
+// Status is a menu, not a select: a closed select fires change on every arrow key in some browsers, and each
+// step would change the conversation (and on a chat tell the customer). Where a status may tell, Tell the
+// customer comes first, ticked each time the menu opens.
+function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; onUpdate?: DetailsPanelProps['onUpdate'] }) {
+  const [tell, setTell] = useState(true);
+  const id = useId();
+  const status = conversation?.status ?? 'open';
+  // Asked only where a status may tell: a chat whose channel is on and has words (the server's word).
+  const asks = conversation ? mayTell(conversation) : false;
+  const channel = conversation?.channel_ref?.name ?? messages.theChannel;
+  const others = statusOrder.filter((value) => value !== status);
+  const notices = conversation ? noticesOf(conversation) : [];
+  const told = others.filter((value) => notices?.includes(value));
+  const quiet = others.filter((value) => !told.includes(value));
+  return <div className="property-row status-pick-row"><span id={`${id}-label`}>{messages.status}</span>
+    <ActionMenu<Conversation['status']> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate}
+      summary={<span id={`${id}-value`}><StatusLabel status={status} /></span>}
+      onToggle={(open) => { if (open) setTell(true); }}
+      onApply={(value) => conversation && onUpdate?.(conversation.id, !asks || tell ? { status: value } : { status: value, notify: false })}>
+      {(apply) => <>
+        {asks && <>
+          <label className="field-inline status-pick-tell"><input type="checkbox" checked={tell} onChange={(event) => setTell(event.target.checked)} /><span>{messages.tellCustomer}</span></label>
+          <small className="status-pick-which">{!tell ? messages.tellUnticked : notices === undefined ? messages.tellUnknown(channel)
+            : told.length === 0 ? messages.tellNone(channel) : messages.tellWhich(channel, told.map((value) => messages.statusChange[value]), quiet.map((value) => messages.statusChange[value]))}</small>
+        </>}
+        {(['open', 'pending', 'resolved', 'closed'] as const).filter((value) => value !== status)
+          .map((value) => <button type="button" key={value} onClick={() => apply(value)}><StatusLabel status={value} /></button>)}
+      </>}
+    </ActionMenu></div>;
+}
+
+export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, onShowOrganizationConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting, autofix = false }: DetailsPanelProps) {
+  const holds = useHolds();
+  const readsTeam = holds('team:read');
+  const readsTags = holds('tags:read');
   const [tagName, setTagName] = useState('');
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
@@ -46,39 +90,48 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
         <h2>{messages.properties}</h2>
-        <label className="property-row"><span>{messages.status}</span><select value={conversation?.status ?? 'open'} disabled={!conversation}
-          onChange={(event) => conversation && onUpdate?.(conversation.id, { status: event.target.value as UpdateConversationRequest['status'] })}>
-          {Object.entries(messages.statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select></label>
+        <StatusPick key={conversation?.id} conversation={conversation} onUpdate={onUpdate} />
         <label className="property-row"><span>{messages.priority}</span><select value={conversation?.priority ?? 'normal'} disabled={!conversation}
           onChange={(event) => conversation && onUpdate?.(conversation.id, { priority: event.target.value as UpdateConversationRequest['priority'] })}>
           {Object.entries(messages.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
         <label className="property-row"><span>{messages.assignee}</span><select value={conversation?.assignee_id ?? ''} disabled={!conversation}
           onChange={(event) => conversation && onUpdate?.(conversation.id, { assignee_id: event.target.value || null })}>
-          <option value="">{messages.unassigned}</option>
-          {agents.filter((agent) => !agent.deactivated_at || agent.id === conversation?.assignee_id).map((agent) =>
+          {/* The signed-in agent is Me, first; teammates follow and Unassigned comes last, as in the Filter menu. */}
+          {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
+          {agents.filter((agent) => agent.id !== currentAgentId && (!agent.deactivated_at || agent.id === conversation?.assignee_id)).map((agent) =>
             <option key={agent.id} value={agent.id}>{agent.display_name || agent.email}{agent.deactivated_at ? ` ${messages.deactivatedSuffix}` : ''}</option>)}
+          {/* Without the team list (team:read) a teammate's name is unknown here; the choice still shows who holds it. */}
+          {!readsTeam && conversation?.assignee_id && conversation.assignee_id !== currentAgentId && <option value={conversation.assignee_id}>{messages.anotherTeammate}</option>}
+          <option value="">{messages.unassigned}</option>
         </select></label>
       </section>
+      {conversation && slaOf(conversation) && <Targets sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
       <fieldset className="details-section" disabled={!conversation}><legend>{messages.tags}</legend>
-        <div className="tag-choices">
+        {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
+        {!readsTags ? <p className="tag-names">{conversation?.tags.map((tag) => tag.name).join(', ') || messages.noTagsYet}</p> : <div className="tag-choices">
           {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
           {tags.map((tag) => {
             const checked = conversation?.tags.some((item) => item.id === tag.id) ?? false;
             return <label className="tag-check" key={tag.id}><input type="checkbox" checked={checked}
               onChange={() => conversation && (checked ? onRemoveTag?.(conversation.id, tag.id) : onAddTag?.(conversation.id, tag.id))} />{tag.name}</label>;
           })}
-        </div>
-        <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
+        </div>}
+        {readsTags && holds('tags:create') && <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
           <input aria-label={messages.newTagName} placeholder={messages.newTagName} value={tagName} onChange={(event) => setTagName(event.target.value)} />
           <button type="submit" disabled={!conversation || !tagName.trim()}>{messages.createTag}</button>
-        </form>
+        </form>}
       </fieldset>
       {conversation && (
         <section className="details-section conversation-source">
-          {onShowContactConversations && <button type="button" className="link-button" onClick={() => onShowContactConversations(conversation.contact_id)}>
-            {messages.showContactConversations(conversation.contact_name)}</button>}
+          <h2>{messages.contact}</h2>
+          {conversation.contact_organization && <div className="property-row conversation-organization"><span>{messages.organization}</span>
+            {onShowOrganizationConversations
+              ? <button type="button" className="link-button" title={messages.showOrganizationConversations(conversation.contact_organization)}
+                onClick={() => onShowOrganizationConversations(conversation.contact_organization ?? '')}>{conversation.contact_organization}</button>
+              : <span>{conversation.contact_organization}</span>}</div>}
+          {onShowContactConversations && <button type="button" className="details-link" onClick={() => onShowContactConversations(conversation.contact_id)}>
+            <UserIcon /><span>{messages.showContactConversations(conversation.contact_name)}</span><ChevronRightIcon /></button>}
         </section>
       )}
       {conversation?.origin && <ConversationOriginBlock origin={conversation.origin} timezone={timezone} />}
@@ -95,4 +148,15 @@ function ConversationOriginBlock({ origin, timezone }: { origin: ConversationOri
       {origin.due_at && <span>{messages.dueAt} <time dateTime={origin.due_at}>{formatDate(origin.due_at, timezone)}</time></span>}
     </section>
   );
+}
+
+// Targets: each clock in full, read only. The server counts business hours; the details say what it counted.
+function Targets({ sla, timezone, canManage }: { sla: NonNullable<ReturnType<typeof slaOf>>; timezone: string; canManage: boolean }) {
+  const rows: [string, ReturnType<typeof clockLine>][] = [[messages.targetFirstReply, clockLine(sla.first_response, timezone)], [messages.targetResolve, clockLine(sla.resolution, timezone)]];
+  return <section className="details-section" aria-labelledby="details-targets">
+    <h2 id="details-targets">{messages.targets}</h2>
+    {rows.map(([label, line]) => <div className="target-row" key={label}><span>{label}</span>
+      <span className={`target-value${line.tone ? ` target-${line.tone}` : ''}`}><span>{line.tone === 'met' && <CheckIcon />}{line.text}</span>{line.detail && <small>{line.detail}</small>}</span></div>)}
+    <p className="targets-foot">{messages.targetsFoot}{canManage && <> <a href="/settings/targets">{messages.editTargets}</a></>}</p>
+  </section>;
 }

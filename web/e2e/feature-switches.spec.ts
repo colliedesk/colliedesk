@@ -41,9 +41,13 @@ async function repliesBlock(page: Page) {
 async function saveSwitch(page: Page, name: string, on: boolean) {
   const control = page.getByRole('switch', { name });
   await (on ? control.check() : control.uncheck());
-  await page.getByRole('button', { name: 'Review and save' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Save and apply' }).click();
-  await expect(page.getByRole('status').filter({ hasText: /Saved v(\d+)\./ })).toBeVisible();
+  // Save saves at once unless the change asks for more (a phrase, a code): then the review asks for it.
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const review = page.getByRole('dialog');
+  const savedStatus = page.getByRole('status').filter({ hasText: /Saved v(\d+)\./ });
+  await expect(review.or(savedStatus).first()).toBeVisible();
+  if (await review.isVisible()) await review.getByRole('button', { name: 'Save and apply' }).click();
+  await expect(savedStatus).toBeVisible();
   const saved = (await page.getByRole('status').filter({ hasText: /Saved v(\d+)\./ }).textContent())?.match(/v(\d+)/)?.[1];
   await expect(page.getByRole('banner').getByRole('status')).toHaveText(new RegExp(`Running v${saved} · 1 of 1 processes`), { timeout: 15_000 });
 }

@@ -377,6 +377,14 @@ func (f *fakeFreshdesk) serveSolutions(w http.ResponseWriter, r *http.Request, p
 		byLanguage, _ := fixture["translations"].(map[string]any)
 		language, _ := byLanguage[parts[4]].(map[string]any)
 		f.page(w, r, items(map[string]any{"t": language}, "t", parts[2]))
+	case len(parts) == 4 && (parts[1] == "categories" || parts[1] == "folders"):
+		byLanguage, _ := fixture["names"].(map[string]any)
+		names, _ := byLanguage[parts[3]].(map[string]any)
+		if name, ok := names[parts[1][:1]+parts[2]]; ok {
+			writeJSON(w, http.StatusOK, name)
+			return
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	}

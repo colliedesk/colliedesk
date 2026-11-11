@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -13,38 +16,109 @@ import (
 type issuedToken struct {
 	Token   string `json:"token"`
 	Session struct {
-		ID         string  `json:"id"`
-		AgentEmail string  `json:"agent_email"`
-		Label      string  `json:"label"`
-		Scope      *string `json:"scope"`
+		ID         string `json:"id"`
+		AgentEmail string `json:"agent_email"`
+		Label      string `json:"label"`
+		Token      *struct {
+			Kind        string   `json:"kind"`
+			Permissions []string `json:"permissions"`
+		} `json:"token"`
 	} `json:"session"`
 }
 
-func issueToken(t *testing.T, api http.Handler, sessionToken, label, scope string) issuedToken {
+// issueToken makes an agent token of the person signed in with sessionToken. tier is a shorthand the
+// tests kept from the tiers: read, draft and send give the old tier's list of permissions (a fixed
+// token), admin follows the Admin role.
+func issueToken(t *testing.T, api http.Handler, sessionToken, label, tier string) issuedToken {
 	t.Helper()
-	response := request(t, api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": label, "scope": scope}, sessionToken, nil)
+	body := map[string]any{"label": label}
+	if tier == "admin" {
+		body["role_id"] = roleID(t, api, sessionToken, "Admin")
+	} else {
+		body["permissions"] = tierPermissions(t, tier)
+	}
+	return issueTokenWith(t, api, sessionToken, body)
+}
+
+// issueTokenWith makes a token from a body of POST /api/v1/auth/tokens.
+func issueTokenWith(t *testing.T, api http.Handler, sessionToken string, body map[string]any) issuedToken {
+	t.Helper()
+	response := request(t, api, http.MethodPost, "/api/v1/auth/tokens", body, sessionToken, nil)
 	if response.Code != http.StatusCreated {
-		t.Fatalf("create %s token status=%d body=%s", scope, response.Code, response.Body.String())
+		t.Fatalf("create token %v status=%d body=%s", body, response.Code, response.Body.String())
 	}
 	var issued issuedToken
 	decode(t, response, &issued)
 	return issued
 }
 
-// scopeRefused reports whether response is the 403 scope_insufficient refusal and returns its message.
-func scopeRefused(t *testing.T, response *httptest.ResponseRecorder) (bool, string) {
+// customToken makes a token holding exactly permissions.
+func customToken(t *testing.T, api http.Handler, sessionToken, label string, permissions ...string) string {
+	t.Helper()
+	return issueTokenWith(t, api, sessionToken, map[string]any{"label": label, "permissions": permissions}).Token
+}
+
+// tierPermissions is what an old tier held (frozen before roles), without the agent request permissions.
+func tierPermissions(t *testing.T, tier string) []string {
+	t.Helper()
+	data, err := os.ReadFile("testdata/legacy-token-access.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frozen struct {
+		Presets map[string][]string `json:"presets"`
+	}
+	if err := json.Unmarshal(data, &frozen); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, name := range frozen.Presets[tier] {
+		if !strings.HasPrefix(name, "agent_requests:") {
+			names = append(names, name)
+		}
+	}
+	if names == nil {
+		t.Fatalf("no tier %q", tier)
+	}
+	return names
+}
+
+// roleID finds a role of the caller's workspace by name.
+func roleID(t *testing.T, api http.Handler, token, name string) string {
+	t.Helper()
+	response := request(t, api, http.MethodGet, "/api/v1/roles", nil, token, nil)
+	var roles struct {
+		Items []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"items"`
+	}
+	decode(t, response, &roles)
+	for _, role := range roles.Items {
+		if role.Name == name {
+			return role.ID
+		}
+	}
+	t.Fatalf("no role %q: status=%d body=%s", name, response.Code, response.Body.String())
+	return ""
+}
+
+// permissionMissing reports whether response is the 403 permission_missing refusal and returns what it
+// says is missing and from whom.
+func permissionMissing(t *testing.T, response *httptest.ResponseRecorder) (bool, []string, string) {
 	t.Helper()
 	if response.Code != http.StatusForbidden {
-		return false, ""
+		return false, nil, ""
 	}
 	var body struct {
 		Error struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
+			Code    string   `json:"code"`
+			Missing []string `json:"missing_permissions"`
+			From    string   `json:"missing_from"`
 		} `json:"error"`
 	}
 	decode(t, response, &body)
-	return body.Error.Code == "scope_insufficient", body.Error.Message
+	return body.Error.Code == "permission_missing", body.Error.Missing, body.Error.From
 }
 
 func TestAgentTokenIsShownOnceListedWithScopeAndRevocable(t *testing.T) {
@@ -53,7 +127,7 @@ func TestAgentTokenIsShownOnceListedWithScopeAndRevocable(t *testing.T) {
 
 	issued := issueToken(t, api, admin, "Claude Code", "draft")
 	if issued.Token == "" || issued.Session.Label != "Claude Code" || issued.Session.AgentEmail != "admin@token.example.com" ||
-		issued.Session.Scope == nil || *issued.Session.Scope != "draft" {
+		issued.Session.Token == nil || issued.Session.Token.Kind != "custom" || len(issued.Session.Token.Permissions) != len(tierPermissions(t, "draft")) {
 		t.Fatalf("unexpected token response: %+v", issued)
 	}
 
@@ -71,9 +145,11 @@ func TestAgentTokenIsShownOnceListedWithScopeAndRevocable(t *testing.T) {
 	}
 	var list struct {
 		Items []struct {
-			ID         string  `json:"id"`
-			Label      string  `json:"label"`
-			Scope      *string `json:"scope"`
+			ID    string `json:"id"`
+			Label string `json:"label"`
+			Token *struct {
+				Kind string `json:"kind"`
+			} `json:"token"`
 			LastSeenAt string  `json:"last_seen_at"`
 			RevokedAt  *string `json:"revoked_at"`
 		} `json:"items"`
@@ -81,16 +157,19 @@ func TestAgentTokenIsShownOnceListedWithScopeAndRevocable(t *testing.T) {
 	decode(t, listed, &list)
 	scopes := map[string]*string{}
 	for _, item := range list.Items {
-		scopes[item.Label] = item.Scope
+		scopes[item.Label] = nil
+		if item.Token != nil {
+			scopes[item.Label] = &item.Token.Kind
+		}
 		if item.ID == issued.Session.ID && (item.Label != "Claude Code" || item.LastSeenAt == "" || item.RevokedAt != nil) {
 			t.Fatalf("listed token = %+v", item)
 		}
 	}
-	if scope := scopes["Claude Code"]; scope == nil || *scope != "draft" {
-		t.Fatalf("token scope in list = %v, want draft", scope)
+	if scope := scopes["Claude Code"]; scope == nil || *scope != "custom" {
+		t.Fatalf("token kind in list = %v, want custom", scope)
 	}
 	if scope, ok := scopes["Browser session"]; !ok || scope != nil {
-		t.Fatalf("a full session must list scope null: present=%v scope=%v", ok, scope)
+		t.Fatalf("a person's session must list token null: present=%v token=%v", ok, scope)
 	}
 
 	me := request(t, api, http.MethodGet, "/api/v1/auth/me", nil, issued.Token, nil)
@@ -109,13 +188,13 @@ func TestAgentTokenRequestIsValidated(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Token Validation", "admin@validation.example.com")
 	cases := map[string]map[string]any{
-		"empty label":       {"label": "", "scope": "read"},
-		"blank label":       {"label": "   ", "scope": "read"},
-		"label too long":    {"label": strings.Repeat("a", 81), "scope": "read"},
-		"missing scope":     {"label": "Agent"},
+		"empty label":       {"label": "", "permissions": []string{"tags:read"}},
+		"blank label":       {"label": "   ", "permissions": []string{"tags:read"}},
+		"label too long":    {"label": strings.Repeat("a", 81), "permissions": []string{"tags:read"}},
+		"no role or list":   {"label": "Agent"},
 		"unknown scope":     {"label": "Agent", "scope": "owner"},
 		"owner is no scope": {"label": "Agent", "scope": "owner"},
-		"unknown field":     {"label": "Agent", "scope": "read", "role": "admin"},
+		"unknown field":     {"label": "Agent", "permissions": []string{"tags:read"}, "role": "admin"},
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -126,10 +205,8 @@ func TestAgentTokenRequestIsValidated(t *testing.T) {
 		})
 	}
 	scope := request(t, api, http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "Agent", "scope": "owner"}, admin, nil)
-	for _, tier := range []string{"read", "draft", "send"} {
-		if !strings.Contains(scope.Body.String(), tier) {
-			t.Fatalf("scope error does not list %q: %s", tier, scope.Body.String())
-		}
+	if !strings.Contains(scope.Body.String(), "role_id") || !strings.Contains(scope.Body.String(), "permissions") {
+		t.Fatalf("a scope's refusal does not say what to send instead: %s", scope.Body.String())
 	}
 	var list struct {
 		Items []struct{} `json:"items"`
@@ -165,12 +242,12 @@ func TestTokenOfAnAdminHasTheAgentRoleAndAnAgentGetsOnlyTheirOwn(t *testing.T) {
 	var me struct {
 		Agent struct {
 			Email string `json:"email"`
-			Role  string `json:"role"`
 		} `json:"agent"`
+		Permissions []string `json:"permissions"`
 	}
 	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, adminToken.Token, nil), &me)
-	if me.Agent.Role != "agent" || me.Agent.Email != "admin@roles.example.com" {
-		t.Fatalf("token of an admin acts as %+v, want the agent role", me.Agent)
+	if slices.Contains(me.Permissions, "kb_media:purge") || !slices.Contains(me.Permissions, "messages:send") || me.Agent.Email != "admin@roles.example.com" {
+		t.Fatalf("a send token of an admin may do %v as %s, want what it was given", me.Permissions, me.Agent.Email)
 	}
 
 	_, agentURL := createContractInvite(t, api, admin, "agent@roles.example.com", "agent")

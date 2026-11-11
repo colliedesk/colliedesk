@@ -31,9 +31,9 @@ the empty inbox opens the same page.
   ([several mailboxes](#several-mailboxes)).
 
 Below the table, folded, are the settings of the default address that people rarely change:
-**Sender name**, **Your domain** (verified or not), **Send a test message**, and **Change forwarding
-address or disconnect** (the **Workspace address name** on Colliedesk Cloud, and a link to each
-address's page, where **Disconnect email** is).
+**Sender name**, **Your domain** (verified or not), **Send a test message**, and on Colliedesk Cloud
+**Change forwarding address** (the **Workspace address name**). To disconnect an address, select
+**Manage** on its row, then **Disconnect email**.
 
 Old links keep working: `/settings/channels/<id>` opens the address's page, and a link with a tab
 (`/settings/channels/type/email?tab=replies`) opens that tab of the default address.
@@ -98,6 +98,15 @@ address.
 
 Forwarded mail keeps its original sender, so the conversation is with your customer, not with your
 mailbox.
+
+You can answer customers before your mailbox forwards here, for example while it still forwards to
+your old help desk: the customer's answer to a reply sent from Colliedesk still comes back to Colliedesk
+and joins the conversation. Until mail has arrived through your support mailbox, a reply's `Reply-To` is
+the conversation's `reply+…@` address on the server's sending domain, not your support address. A test
+message, Gmail's forwarding confirmation, mail that is dropped and mail that arrived under an earlier
+support address do not count. Once forwarded mail arrives, new replies use your support address again, and answers to earlier replies still arrive. On your own server this needs the sending domain to
+receive mail ([self-host email](../self-host/email.md)); otherwise replies always use your support
+address.
 
 **Change the forwarding address** (folded under the step, Colliedesk Cloud only) holds the
 **Workspace address name**: the part before `.colliedesk.com`. The old address stops receiving mail
@@ -191,8 +200,8 @@ The next reply uses the new name, on every way a reply leaves: your own domain, 
 Line breaks and other control characters are refused. On Colliedesk Cloud a name with a well-known
 brand in it (for example "PayPal Support") is refused, as at sign-up. If it is your own brand, contact
 us: the operator sets the name for you with `collie email sender-name`
-([self-hosting guide](../self-host/email.md#set-a-sender-name-with-a-brand-in-it)). Only admins can
-change it; other teammates see it.
+([self-hosting guide](../self-host/email.md#set-a-sender-name-with-a-brand-in-it)). Changing it needs
+`channels:update` (the admins); other teammates see it.
 
 Saving the sender name changes only the name. The support address, its domain verification and the
 sending domain stay as they are.
@@ -246,10 +255,10 @@ they did before Gmail was connected (the server's SMTP relay). A reply that was 
 fails with a note and can be retried. **Use another Gmail account** replaces the connected account.
 Disconnecting the whole email channel also disconnects Gmail.
 
-Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect_request` and
-`colliedesk_gmail_disconnect_request` file a request, and the admin who approves it gets Google's
-page. On Colliedesk Cloud the request card shows the same note on Google data first. See
-[Agent requests](agent-requests.md).
+An AI agent whose token holds `channels:manage_credentials` disconnects Gmail at once
+(`colliedesk_gmail_disconnect`). Connecting needs Google's consent, so `colliedesk_gmail_connect`
+answers Google's address: only the person the token acts as can finish it, by opening it within 10
+minutes in a browser signed in to Colliedesk and agreeing on Google's page.
 
 ### Self-hosted
 
@@ -312,9 +321,9 @@ retried.
 larger than 3 MB and it goes through Microsoft 365, the reply box warns you. If Microsoft refuses the
 reply, it is marked **Delivery failed** with the reason and keeps its files: remove a file and retry.
 
-Agents (AI) cannot connect or disconnect Microsoft 365 themselves: `colliedesk_microsoft_connect_request`
-and `colliedesk_microsoft_disconnect_request` file a request, and the admin who approves it gets
-Microsoft's sign-in page. See [Agent requests](agent-requests.md).
+An AI agent whose token holds `channels:manage_credentials` disconnects Microsoft 365 at once
+(`colliedesk_microsoft_disconnect`). `colliedesk_microsoft_connect` answers Microsoft's sign-in
+address: only the person the token acts as can finish it, signed in to Colliedesk.
 
 On a server you run, Microsoft 365 sending needs your own app registration in Microsoft Entra. See
 [send replies through Microsoft 365](../self-host/email.md#send-replies-through-microsoft-365).
@@ -356,7 +365,8 @@ act on the default mailbox, as before.
 ## Send from your own domain
 
 Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
-`reply+…@` address on the server's sending domain, with `Reply-To` set to your support address.
+`reply+…@` address on the server's sending domain, with `Reply-To` set to your support address
+(before your mailbox forwards here, to the conversation's `reply+…@` address).
 Customer replies still reach you and thread. **Settings → Email** (step 3 of the setup, or the address's **Replies** tab) shows **Replies are sent
 from …** with the current address. Verify the domain to send as your support address.
 
@@ -445,7 +455,8 @@ A customer reply joins the conversation when any of these match, in this order:
 
 1. `In-Reply-To` names a message in the conversation.
 2. `References` names a message in the conversation.
-3. The reply went to the reply address in our `Reply-To` (`support+r-<token>@example.com`).
+3. The reply went to the reply address in our `Reply-To` (`support+r-<token>@example.com`, or
+   `reply+<token>@` on the server's sending domain before your mailbox forwards here).
 
 Otherwise the message starts a new conversation. A reply to a **Resolved** or **Closed**
 conversation reopens it.

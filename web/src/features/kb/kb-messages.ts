@@ -35,6 +35,7 @@ export const kbMessages = {
   published: 'Published',
   noArticles: 'No articles here yet.',
   noMatches: 'No article matches this search.',
+  noCollectionsYet: 'No collections yet.',
   noCollections: 'Start with a collection, such as "Getting started" or "Billing". Every article belongs to one.',
   articleCount: (count: number) => `${count} ${count === 1 ? 'article' : 'articles'}`,
   loadMore: 'Show more',

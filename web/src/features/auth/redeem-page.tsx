@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { LogoMark, LogoWordmark } from '../../ui/logo';
+import './auth.css';
 
 interface RedeemPageProps {
   token: string;
@@ -22,10 +23,12 @@ interface RedeemPageProps {
   signedOut?: boolean;
   // trial is true for the website's "Start free trial" link; the page then greets a new team.
   trial?: boolean;
+  // hostedCloud is true on Colliedesk Cloud (cloud sign-in with billing), whose status page the page links.
+  hostedCloud?: boolean;
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false, trial = false,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false, trial = false, hostedCloud = false,
 }: RedeemPageProps) {
   const buyer = !token && cloudEnabled && buying !== undefined;
   // A new team can only start a trial where sign-up is on; a buy link wins, since the buyer pays at once.
@@ -35,7 +38,10 @@ export function RedeemPage({
       <div className="signin-brand">
         <div className="signin-brand-lockup"><LogoMark size={40} /><LogoWordmark /></div>
         <p className="signin-tagline">{messages.signInTagline}</p>
-        <p className="signin-status">{messages.signInAlpha}</p>
+        <p className="signin-status">
+          <a href={messages.gaGuaranteesURL} target="_blank" rel="noreferrer">{messages.gaGuarantees}</a>
+          {hostedCloud && <>{' · '}<a href={messages.statusURL} target="_blank" rel="noreferrer">{messages.serviceStatus}</a></>}
+        </p>
         <p className="signin-footnote">{messages.signInFootnote}</p>
       </div>
       <section className="redeem-panel">
@@ -43,6 +49,7 @@ export function RedeemPage({
         {signedOut && <p role="alert" className="muted-copy">{messages.signedOutCloud}</p>}
         {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
         <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
+        {buyer && buying === 'founding' && <p className="signin-offer">{messages.buyingFoundingOffer}</p>}
         <p>{buyer ? messages.buyingExplanation : newTeam ? messages.cloudTrialExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
         {(buyer || newTeam) && <p className="muted-copy">{messages.workspaceExplained}</p>}
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
@@ -55,7 +62,7 @@ export function RedeemPage({
             </div>
           </> : cloudSignIn}
           {newTeam && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialWorkspace}</p>}
-          {newTeam && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialSignInInstead}</p>}
+          {(newTeam || buyer) && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialSignInInstead}</p>}
           {!buyer && !newTeam && signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
           {!buyer && !newTeam && <p className="muted-copy">{messages.oneTimeLinkInstead}</p>}
           {/* Where a visitor can start a workspace, the page says what they agree to and links the prices. */}

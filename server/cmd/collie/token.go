@@ -9,9 +9,10 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-const tokenUsage = "usage: collie token create --workspace <slug> --email <agent email> (--scope <read|draft|send|admin> | --permission <resource:action>...) --label <text>"
+const tokenUsage = "usage: collie token create --workspace <slug> --email <agent email> (--role <role name> | --permission <resource:action>...) --label <text>"
 
 // tokenCommand lets an operator give an agent a scoped token without a browser sign-in.
 func tokenCommand(ctx context.Context, service *auth.Service, args []string, output io.Writer) error {
@@ -22,23 +23,47 @@ func tokenCommand(ctx context.Context, service *auth.Service, args []string, out
 	flags.SetOutput(io.Discard)
 	workspace := flags.String("workspace", "", "workspace slug")
 	email := flags.String("email", "", "email of the agent the token acts as")
-	scope := flags.String("scope", "", "tier: "+strings.Join(auth.ScopeNames, ", "))
+	role := flags.String("role", "", "a role of the workspace, by name, whose permissions the person all holds (an admin may pick any); the token follows it")
+	scope := flags.String("scope", "", "deprecated: read, draft or send become that tier's old list of permissions, admin the Admin role")
 	label := flags.String("label", "", "name shown in Settings → Sessions")
 	var permissions permissionFlags
 	flags.Var(&permissions, "permission", "a permission (resource:action) instead of a tier; repeat for more")
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || *workspace == "" || *email == "" {
 		return errors.New(tokenUsage)
 	}
-	created, err := service.IssueAgentToken(ctx, *workspace, *email, auth.TokenRequest{Label: *label, Scope: *scope, Permissions: permissions})
+	switch *scope {
+	case "":
+		if *role == "" && permissions == nil {
+			return errors.New("give the token a role it follows (--role <name>) or permissions (--permission <resource:action>, repeat for more)")
+		}
+	case "read", "draft", "send", "admin":
+		if _, err := fmt.Fprintln(stderr, "--scope is deprecated: tiers were replaced by roles. Use --role <name> or --permission <resource:action>."); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("--scope %s is not a tier; --scope is deprecated: use --role <name> or --permission <resource:action>", *scope)
+	}
+	created, err := service.IssueAgentToken(ctx, *workspace, *email, auth.TokenRequest{Label: *label, RoleName: *role, Permissions: permissions, LegacyScope: *scope})
+	name := *role
+	if *scope == "admin" {
+		name = "Admin"
+	}
+	if errors.Is(err, domain.ErrRoleNotFound) {
+		return fmt.Errorf("workspace %q has no role %q", *workspace, name)
+	}
+	var exceeds *domain.ExceedsYoursError
+	if errors.As(err, &exceeds) {
+		return fmt.Errorf("%s does not hold %s, so the token cannot have them; a token follows only a role whose permissions its person holds", *email, strings.Join(exceeds.Missing, ", "))
+	}
 	if err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(output, created.Token); err != nil {
 		return err
 	}
-	held := *scope
-	if permissions != nil {
-		held = strings.Join(created.Session.Permissions, ", ")
+	held := strings.Join(created.Session.Permissions, ", ")
+	if grant := created.Session.Token; grant != nil && grant.Role != nil {
+		held = "follows the role " + grant.Role.Name
 	}
 	_, err = fmt.Fprintf(stderr, "Token %q (%s) created for %s. It is shown once above; Colliedesk keeps only its hash.\nRevoke it under Settings → Sessions (session %s).\n",
 		created.Session.Label, held, created.Session.AgentEmail, created.Session.ID)

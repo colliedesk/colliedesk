@@ -40,6 +40,8 @@ type Spec struct {
 	Kind    aiprovider.Kind
 	BaseURL string
 	APIKey  string
+	// Routing is OpenRouter's routing by data policy, the provider's.
+	Routing aiprovider.Routing
 	// Server is the operator's provider: its network is the operator's and is not guarded.
 	Server bool
 }
@@ -51,6 +53,8 @@ type Config struct {
 	// ServerOff is true when the operator switched the server's provider off (features.ai_server): Server
 	// is nil, and the features set to it say so until it is on again.
 	ServerOff bool
+	// ServerOffLabel is the name workspaces knew the server's provider by while it is off.
+	ServerOffLabel string
 	// Keys seal workspace keys (MAILBOX_TOKEN_KEYS); without one no key can be stored.
 	Keys tokenseal.Keys
 	// AllowPrivateBaseURLs lets a workspace provider use a private or loopback address and plain
@@ -110,7 +114,7 @@ func (s *Service) build(spec Spec) (aiprovider.Provider, error) {
 	case aiprovider.KindAnthropic:
 		return aiprovider.NewAnthropic(aiprovider.AnthropicConfig{APIKey: spec.APIKey, BaseURL: spec.BaseURL, HTTPClient: client})
 	case aiprovider.KindOpenAICompatible:
-		return aiprovider.NewOpenAICompatible(aiprovider.OpenAIConfig{APIKey: spec.APIKey, BaseURL: spec.BaseURL, HTTPClient: client})
+		return aiprovider.NewOpenAICompatible(aiprovider.OpenAIConfig{APIKey: spec.APIKey, BaseURL: spec.BaseURL, HTTPClient: client, Routing: spec.Routing})
 	}
 	return nil, fmt.Errorf("unknown AI provider kind %q", spec.Kind)
 }
@@ -238,13 +242,54 @@ type ProviderInput struct {
 	BaseURL string
 	APIKey  string
 	Models  []string
+	// Routing is an OpenRouter provider's; nil routes as OpenRouter does by default.
+	Routing *ProviderRouting
 }
 
 // ProviderChange changes a provider; nil fields stay. The base URL never changes: the stored key and
 // the features' data would go to a new address without anyone entering the key or consenting again.
 type ProviderChange struct {
-	Label  *string
-	Models *[]string
+	Label   *string
+	Models  *[]string
+	Routing *ProviderRouting
+	// MayLoosen is whether the caller may let requests reach providers the routing kept them off;
+	// when false such a change returns ErrLoosenNeedsApproval and changes nothing.
+	MayLoosen bool
+}
+
+// ErrLoosenNeedsApproval means the change sends the provider's requests where its routing kept them
+// off, and the caller may not do that without a person.
+var ErrLoosenNeedsApproval = errors.New("this change lets the provider's requests reach more providers; a person approves it")
+
+// cleanRouting checks routing for a provider at baseURL: only OpenRouter reads it.
+func cleanRouting(kind aiprovider.Kind, baseURL string, routing *ProviderRouting) (ProviderRouting, error) {
+	if routing == nil {
+		return ProviderRouting{DataCollection: "allow"}, nil
+	}
+	if kind != aiprovider.KindOpenAICompatible || !aiprovider.IsOpenRouter(baseURL) {
+		return ProviderRouting{}, invalid("Routing by data policy is OpenRouter's; this provider's server does not read it.")
+	}
+	clean := *routing
+	if clean.DataCollection == "" {
+		clean.DataCollection = "allow"
+	}
+	if clean.DataCollection != "allow" && clean.DataCollection != "deny" {
+		return ProviderRouting{}, invalid("data_collection is allow or deny.")
+	}
+	return clean, nil
+}
+
+// routingJSON is what ai_providers.routing stores: only what differs from OpenRouter's default.
+func routingJSON(routing ProviderRouting) []byte {
+	stored := map[string]any{}
+	if routing.DataCollection == "deny" {
+		stored["data_collection"] = "deny"
+	}
+	if routing.ZDR {
+		stored["zdr"] = true
+	}
+	encoded, _ := json.Marshal(stored)
+	return encoded
 }
 
 // SlotInput sets one feature: where it runs (server, provider or none), the model, effort, on or off.
@@ -252,11 +297,15 @@ type SlotInput struct {
 	Source     string
 	ProviderID string
 	Model      string
-	Effort     string
-	Enabled    bool
-	// Automatic and AutoParts are kept as they are when nil.
-	Automatic *bool
-	AutoParts []string
+	// FallbackModel is intake's fallback model; "" removes it, nil keeps it while the provider stays.
+	FallbackModel *string
+	Effort        string
+	Enabled       bool
+	// DefaultLevel, Automatic (the older switch, mapped onto DefaultLevel) and AutoParts are kept as
+	// they are when nil.
+	DefaultLevel *string
+	Automatic    *bool
+	AutoParts    []string
 	// MonthlyCap is the chat slot's most a calendar month (UTC) may spend, in micro-dollars, kept as it
 	// is unless MonthlyCapSet; nil with MonthlyCapSet removes it.
 	MonthlyCap    *int64
@@ -382,6 +431,10 @@ func (s *Service) AddProvider(ctx context.Context, workspaceID string, actor Act
 		return Provider{}, err
 	}
 	kind, baseURL, key := spec.Kind, spec.BaseURL, spec.APIKey
+	routing, err := cleanRouting(kind, baseURL, input.Routing)
+	if err != nil {
+		return Provider{}, err
+	}
 	if key != "" && !s.config.Keys.Configured() {
 		return Provider{}, ErrKeysMissing
 	}
@@ -391,7 +444,7 @@ func (s *Service) AddProvider(ctx context.Context, workspaceID string, actor Act
 	}
 	id := newID()
 	call := Call{WorkspaceID: workspaceID, BilledTo: BilledToWorkspaceKey, ProviderID: id, Kind: kind, Label: label, Actor: actor}
-	if err := s.check(ctx, call, Spec{Kind: kind, BaseURL: baseURL, APIKey: key}, models[0]); err != nil {
+	if err := s.check(ctx, call, Spec{Kind: kind, BaseURL: baseURL, APIKey: key, Routing: routing.adapter()}, models[0]); err != nil {
 		return Provider{}, err
 	}
 	var sealed []byte
@@ -414,13 +467,16 @@ func (s *Service) AddProvider(ctx context.Context, workspaceID string, actor Act
 			return err
 		}
 		provider, err = scanProvider(tx.QueryRow(ctx, `INSERT INTO ai_providers(id,workspace_id,kind,label,base_url,auth_kind,sealed_key,sealed_key_id,key_hint,models,
-				check_status,checked_at,created_by,created_at,updated_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ok',$11,$12,$11,$11) RETURNING `+providerColumns,
-			id, workspaceID, string(kind), label, nullable(baseURL), authKind, sealed, sealedID, hint, models, now, nullable(actor.AgentID)))
+				check_status,checked_at,created_by,created_at,updated_at,routing)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ok',$11,$12,$11,$11,$13) RETURNING `+providerColumns,
+			id, workspaceID, string(kind), label, nullable(baseURL), authKind, sealed, sealedID, hint, models, now, nullable(actor.AgentID), routingJSON(routing)))
 		if err != nil {
 			return err
 		}
 		detail := map[string]any{"kind": string(kind), "models": models}
+		if provider.Routing != nil {
+			detail["routing"] = provider.Routing
+		}
 		if hint != nil {
 			detail["key_hint"] = hint
 		}
@@ -440,18 +496,38 @@ func uniqueLabel(err error) error {
 	return err
 }
 
-const providerColumns = `id::text,kind,label,base_url,auth_kind,key_hint,models,check_status,check_error_code,checked_at,created_by::text,created_at,updated_at`
+const providerColumns = `id::text,kind,label,base_url,auth_kind,key_hint,models,check_status,check_error_code,checked_at,created_by::text,created_at,updated_at,routing`
 
 func scanProvider(row pgx.Row) (Provider, error) {
 	var p Provider
+	var routing []byte
 	err := row.Scan(&p.ID, &p.Kind, &p.Label, &p.BaseURL, &p.AuthKind, &p.KeyHint, &p.Models, &p.CheckStatus, &p.CheckErrorCode, &p.CheckedAt,
-		&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+		&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt, &routing)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Provider{}, ErrNotFound
 	}
+	if err != nil {
+		return Provider{}, err
+	}
+	return p.finish(routing)
+}
+
+// finish puts a scanned row in the shape the API shows: UTC times, the routing of an OpenRouter
+// provider, no uses yet.
+func (p Provider) finish(routing []byte) (Provider, error) {
 	p.CheckedAt, p.CreatedAt, p.UpdatedAt = p.CheckedAt.UTC(), p.CreatedAt.UTC(), p.UpdatedAt.UTC()
 	p.UsedBy = []string{}
-	return p, err
+	if p.Kind == string(aiprovider.KindOpenAICompatible) && p.BaseURL != nil && aiprovider.IsOpenRouter(*p.BaseURL) {
+		stored := ProviderRouting{}
+		if err := json.Unmarshal(routing, &stored); err != nil {
+			return Provider{}, fmt.Errorf("read the routing of AI provider %s: %w", p.ID, err)
+		}
+		if stored.DataCollection != "deny" {
+			stored.DataCollection = "allow"
+		}
+		p.Routing = &stored
+	}
+	return p, nil
 }
 
 // stored is a provider row with what opens its key.
@@ -471,13 +547,16 @@ func loadProvider(ctx context.Context, tx pgx.Tx, workspaceID, id string, lock b
 	}
 	var row stored
 	var p = &row.Provider
+	var routing []byte
 	err := tx.QueryRow(ctx, query, workspaceID, id).Scan(&p.ID, &p.Kind, &p.Label, &p.BaseURL, &p.AuthKind, &p.KeyHint, &p.Models, &p.CheckStatus,
-		&p.CheckErrorCode, &p.CheckedAt, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt, &row.sealed, &row.sealedID)
+		&p.CheckErrorCode, &p.CheckedAt, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt, &routing, &row.sealed, &row.sealedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return stored{}, ErrNotFound
 	}
-	p.CheckedAt, p.CreatedAt, p.UpdatedAt = p.CheckedAt.UTC(), p.CreatedAt.UTC(), p.UpdatedAt.UTC()
-	p.UsedBy = []string{}
+	if err != nil {
+		return stored{}, err
+	}
+	row.Provider, err = row.Provider.finish(routing)
 	return row, err
 }
 
@@ -518,7 +597,16 @@ func (s *Service) spec(workspaceID string, row stored) (Spec, error) {
 	if row.BaseURL != nil {
 		spec.BaseURL = *row.BaseURL
 	}
+	if row.Routing != nil {
+		spec.Routing = row.Routing.adapter()
+	}
 	return spec, nil
+}
+
+// Provider reads one provider of the workspace, without its key.
+func (s *Service) Provider(ctx context.Context, workspaceID, id string) (Provider, error) {
+	row, err := s.read(ctx, workspaceID, id)
+	return row.Provider, err
 }
 
 func (s *Service) read(ctx context.Context, workspaceID, id string) (stored, error) {
@@ -544,16 +632,33 @@ func (s *Service) UpdateProvider(ctx context.Context, workspaceID string, actor 
 			return Provider{}, err
 		}
 	}
+	var routing ProviderRouting
+	if row.Routing != nil {
+		routing = *row.Routing
+	}
+	if change.Routing != nil {
+		baseURL := ""
+		if row.BaseURL != nil {
+			baseURL = *row.BaseURL
+		}
+		if routing, err = cleanRouting(aiprovider.Kind(row.Kind), baseURL, change.Routing); err != nil {
+			return Provider{}, err
+		}
+	}
 	if change.Models != nil {
 		if models, err = cleanModels(*change.Models); err != nil {
 			return Provider{}, err
 		}
+	}
+	if row.Routing != nil && row.Routing.loosens(routing) && !change.MayLoosen {
+		return Provider{}, ErrLoosenNeedsApproval
 	}
 	if models[0] != row.Models[0] {
 		spec, err := s.spec(workspaceID, row)
 		if err != nil {
 			return Provider{}, err
 		}
+		spec.Routing = routing.adapter()
 		call := Call{WorkspaceID: workspaceID, BilledTo: BilledToWorkspaceKey, ProviderID: id, Kind: spec.Kind, Label: label, Actor: actor}
 		if err := s.check(ctx, call, spec, models[0]); err != nil {
 			return Provider{}, err
@@ -569,7 +674,8 @@ func (s *Service) UpdateProvider(ctx context.Context, workspaceID string, actor 
 		if err := roomForProvider(ctx, tx, workspaceID, label, id); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT slot,model FROM ai_slots WHERE workspace_id=$1 AND provider_id=$2 AND model IS NOT NULL ORDER BY slot`, workspaceID, id)
+		rows, err := tx.Query(ctx, `SELECT slot,model FROM ai_slots WHERE workspace_id=$1 AND provider_id=$2 AND model IS NOT NULL
+			UNION ALL SELECT slot,fallback_model FROM ai_slots WHERE workspace_id=$1 AND provider_id=$2 AND fallback_model IS NOT NULL ORDER BY 1,2`, workspaceID, id)
 		if err != nil {
 			return err
 		}
@@ -586,16 +692,26 @@ func (s *Service) UpdateProvider(ctx context.Context, workspaceID string, actor 
 				return &InUseError{Model: u.model, Slot: u.slot}
 			}
 		}
+		if change.Routing == nil && current.Routing != nil {
+			// What was read before the check may be older than what another change saved since.
+			routing = *current.Routing
+		}
+		if current.Routing != nil && current.Routing.loosens(routing) && !change.MayLoosen {
+			return ErrLoosenNeedsApproval
+		}
 		checked := ""
 		if models[0] != current.Models[0] {
 			checked = `,check_status='ok',check_error_code=NULL,checked_at=$5`
 		}
-		provider, err = scanProvider(tx.QueryRow(ctx, `UPDATE ai_providers SET label=$3,models=$4,updated_at=$5`+checked+`
-			WHERE workspace_id=$1 AND id=$2 RETURNING `+providerColumns, workspaceID, id, label, models, now))
+		provider, err = scanProvider(tx.QueryRow(ctx, `UPDATE ai_providers SET label=$3,models=$4,updated_at=$5,routing=$6`+checked+`
+			WHERE workspace_id=$1 AND id=$2 RETURNING `+providerColumns, workspaceID, id, label, models, now, routingJSON(routing)))
 		if err != nil {
 			return err
 		}
 		detail := map[string]any{}
+		if current.Routing != nil && *current.Routing != routing {
+			detail["routing"] = map[string]any{"from": current.Routing, "to": routing}
+		}
 		if label != current.Label {
 			detail["label"] = map[string]any{"from": current.Label, "to": label}
 		}
@@ -629,6 +745,9 @@ func (s *Service) SetKey(ctx context.Context, workspaceID string, actor Actor, i
 	spec := Spec{Kind: aiprovider.Kind(row.Kind), APIKey: key}
 	if row.BaseURL != nil {
 		spec.BaseURL = *row.BaseURL
+	}
+	if row.Routing != nil {
+		spec.Routing = row.Routing.adapter()
 	}
 	call := Call{WorkspaceID: workspaceID, BilledTo: BilledToWorkspaceKey, ProviderID: id, Kind: spec.Kind, Label: row.Label, Actor: actor}
 	if err := s.check(ctx, call, spec, row.Models[0]); err != nil {
@@ -729,7 +848,7 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE ai_slots SET provider_id=NULL,model=NULL,enabled=false,automatic=false,updated_by=$3,updated_at=$4
+		if _, err := tx.Exec(ctx, `UPDATE ai_slots SET provider_id=NULL,model=NULL,fallback_model=NULL,enabled=false,default_level='off',updated_by=$3,updated_at=$4
 			WHERE workspace_id=$1 AND provider_id=$2`, workspaceID, id, nullable(actor.AgentID), now); err != nil {
 			return err
 		}
@@ -757,6 +876,45 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 		turnedOff = []string{}
 	}
 	return turnedOff, err
+}
+
+// ListServerModels asks a server provider not saved yet which models its key may use, so the operator picks
+// the models of each feature instead of typing their ids, with what each costs when the server lists it
+// (OpenRouter), so their prices are filled in. Nothing is stored and nothing is metered.
+func (s *Service) ListServerModels(ctx context.Context, kind aiprovider.Kind, baseURL, apiKey string) ([]string, map[string]aiprovider.ListedPrice, error) {
+	provider, err := s.build(Spec{Kind: kind, BaseURL: baseURL, APIKey: apiKey, Server: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	lister, ok := provider.(aiprovider.ModelLister)
+	if !ok {
+		return nil, nil, &CheckError{Code: aiprovider.ErrorBadRequest}
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.config.CheckTimeout)
+	defer cancel()
+	models, err := lister.Models(ctx)
+	var providerErr *aiprovider.Error
+	if errors.As(err, &providerErr) {
+		return nil, nil, &CheckError{Code: providerErr.Code}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if models == nil {
+		models = []string{}
+	}
+	// Prices are a help: a server that lists none, or fails to, still lists its models.
+	prices := map[string]aiprovider.ListedPrice{}
+	if pricer, ok := provider.(aiprovider.ModelPricer); ok {
+		if listed, err := pricer.ModelPrices(ctx); err == nil {
+			for _, model := range models {
+				if price, ok := listed[model]; ok {
+					prices[model] = price
+				}
+			}
+		}
+	}
+	return models, prices, nil
 }
 
 // PingServer sends one provider check to a server provider (the operator console's check before a change is

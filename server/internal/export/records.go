@@ -11,6 +11,28 @@ import (
 )
 
 // Agent is a person who signs in. Credentials, sessions and pairing links are never exported.
+// Role is a set of permissions people hold. Permissions is null for the built-in Admin role, which holds
+// every permission (also ones a later release adds); System is admin or agent for the two built-in roles.
+// A deleted role stays, with deleted_at, because tokens and invites of the past name it.
+type Role struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	System      *string    `json:"system"`
+	Permissions []string   `json:"permissions"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at"`
+}
+
+// AgentRole is one role a person holds.
+type AgentRole struct {
+	AgentID          string    `json:"agent_id"`
+	RoleID           string    `json:"role_id"`
+	GrantedByAgentID *string   `json:"granted_by_agent_id"`
+	GrantedAt        time.Time `json:"granted_at"`
+}
+
 type Agent struct {
 	ID               string    `json:"id"`
 	Email            string    `json:"email"`
@@ -18,6 +40,10 @@ type Agent struct {
 	Role             string    `json:"role"`
 	TimezoneOverride *string   `json:"timezone_override"`
 	CreatedAt        time.Time `json:"created_at"`
+	// SLAAlertEmail is whether the agent gets the response-target reminder and overdue emails.
+	SLAAlertEmail bool `json:"sla_alert_email"`
+	// ResultsEmail is whether the agent gets the weekly results email.
+	ResultsEmail bool `json:"results_email"`
 	// DeactivatedAt is null for an active agent. A deactivated agent stays in the archive because
 	// conversations and messages still name it.
 	DeactivatedAt *time.Time `json:"deactivated_at"`
@@ -52,6 +78,229 @@ type Channel struct {
 	DeletedAt       *time.Time      `json:"deleted_at"`
 	// IsDefault marks its type's default channel.
 	IsDefault bool `json:"is_default"`
+	// ProcessingPausedAt is when its processing was paused; null while it runs.
+	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
+	// AutoCloseSince is when auto-close was turned on: only conversations resolved after it close by
+	// themselves. Null while it is off.
+	AutoCloseSince *time.Time `json:"auto_close_since"`
+}
+
+// ChannelAILevel is the level a channel sets for an AI feature on one of its scopes (” is the
+// whole channel), with intake's options there.
+type ChannelAILevel struct {
+	ChannelID string          `json:"channel_id"`
+	Scope     string          `json:"scope"`
+	Slot      string          `json:"slot"`
+	Level     string          `json:"level"`
+	Options   json.RawMessage `json:"options"`
+	UpdatedBy *string         `json:"updated_by"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+// AISourceConsent is an admin's consent that intake may send a kind of context (images,
+// contact_profile, external:<name>) besides the conversation's text.
+type AISourceConsent struct {
+	SourceClass string    `json:"source_class"`
+	ConsentedBy *string   `json:"consented_by"`
+	ConsentedAt time.Time `json:"consented_at"`
+}
+
+// IntakeGathering is what a customer said in one go on a chat scope that collects messages, and how it
+// was decided: by the rules, AI or a person, or waiting in the queue.
+type IntakeGathering struct {
+	ID                string     `json:"id"`
+	ChannelID         string     `json:"channel_id"`
+	Scope             string     `json:"scope"`
+	LaneKey           string     `json:"lane_key"`
+	ThreadID          *string    `json:"thread_id"`
+	ContactID         *string    `json:"contact_id"`
+	State             string     `json:"state"`
+	ReviewReason      *string    `json:"review_reason"`
+	RulesAction       string     `json:"rules_action"`
+	RulesBasis        string     `json:"rules_basis"`
+	RulesRule         string     `json:"rules_rule"`
+	RulesTarget       *string    `json:"rules_target"`
+	ConversationID    *string    `json:"conversation_id"`
+	DecidedBy         *string    `json:"decided_by"`
+	DecidedAt         *time.Time `json:"decided_at"`
+	DecidedByAgentID  *string    `json:"decided_by_agent_id"`
+	DecidedByTokenID  *string    `json:"decided_by_token_id"`
+	Fallback          bool       `json:"fallback"`
+	IgnoreReason      *string    `json:"ignore_reason"`
+	OpenedAt          time.Time  `json:"opened_at"`
+	ClosedAt          time.Time  `json:"closed_at"`
+	DecideBy          *time.Time `json:"decide_by"`
+	RequeuedAt        *time.Time `json:"requeued_at"`
+	RequeuedByAgentID *string    `json:"requeued_by_agent_id"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+// MessageMove is one move of customer messages between conversations, or back to a chat's intake queue,
+// with its undo.
+type MessageMove struct {
+	ID                  string          `json:"id"`
+	MessageIDs          []string        `json:"message_ids"`
+	FromConversationID  string          `json:"from_conversation_id"`
+	ToConversationID    *string         `json:"to_conversation_id"`
+	CreatedConversation bool            `json:"created_conversation"`
+	ClosedSource        bool            `json:"closed_source"`
+	SourceStatusBefore  *string         `json:"source_status_before"`
+	TargetStatusBefore  *string         `json:"target_status_before"`
+	ThreadKeysMoved     json.RawMessage `json:"thread_keys_moved"`
+	GatheringID         *string         `json:"gathering_id"`
+	DecisionID          *string         `json:"decision_id"`
+	MovedByAgentID      *string         `json:"moved_by_agent_id"`
+	MovedByTokenID      *string         `json:"moved_by_token_id"`
+	MovedAt             time.Time       `json:"moved_at"`
+	UndoneAt            *time.Time      `json:"undone_at"`
+	UndoneByAgentID     *string         `json:"undone_by_agent_id"`
+	UndoneByTokenID     *string         `json:"undone_by_token_id"`
+}
+
+// IntakeEvalRun is one recorded offline evaluation of a channel scope's intake.
+type IntakeEvalRun struct {
+	ID            string          `json:"id"`
+	ChannelID     string          `json:"channel_id"`
+	Scope         string          `json:"scope"`
+	Model         string          `json:"model"`
+	PromptVersion string          `json:"prompt_version"`
+	DatasetSHA256 string          `json:"dataset_sha256"`
+	Counts        json.RawMessage `json:"counts"`
+	RunByAgentID  *string         `json:"run_by_agent_id"`
+	RunByTokenID  *string         `json:"run_by_token_id"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
+// IntakeDecision is one time AI or a person decided a gathering, as it was.
+type IntakeDecision struct {
+	ID                     string          `json:"id"`
+	GatheringID            string          `json:"gathering_id"`
+	Decider                string          `json:"decider"`
+	Basis                  string          `json:"basis"`
+	Action                 string          `json:"action"`
+	TargetConversationID   *string         `json:"target_conversation_id"`
+	RunnerUpConversationID *string         `json:"runner_up_conversation_id"`
+	RunnerUpConfidence     *float64        `json:"runner_up_confidence"`
+	Command                *string         `json:"command"`
+	Subject                *string         `json:"subject"`
+	ReplyKind              *string         `json:"reply_kind"`
+	RelatedConversationID  *string         `json:"related_conversation_id"`
+	Confidence             *float64        `json:"confidence"`
+	Reason                 *string         `json:"reason"`
+	Applied                bool            `json:"applied"`
+	IgnoreReason           *string         `json:"ignore_reason"`
+	NotAppliedReason       *string         `json:"not_applied_reason"`
+	ItemsSeen              []string        `json:"items_seen"`
+	Fallback               bool            `json:"fallback"`
+	CorrectsDecisionID     *string         `json:"corrects_decision_id"`
+	FollowsDecisionID      *string         `json:"follows_decision_id"`
+	Manifest               json.RawMessage `json:"manifest"`
+	TaskID                 *string         `json:"task_id"`
+	Model                  *string         `json:"model"`
+	PromptVersion          *string         `json:"prompt_version"`
+	LatencyMS              *int            `json:"latency_ms"`
+	ErrorCode              *string         `json:"error_code"`
+	AgentID                *string         `json:"agent_id"`
+	TokenID                *string         `json:"token_id"`
+	CreatedAt              time.Time       `json:"created_at"`
+}
+
+// ChannelThread is a place of a chat channel: a one-to-one chat or a group.
+type ChannelThread struct {
+	ID                 string     `json:"id"`
+	ChannelID          string     `json:"channel_id"`
+	Kind               string     `json:"kind"`
+	ExternalID         string     `json:"external_id"`
+	Name               *string    `json:"name"`
+	ContactID          *string    `json:"contact_id"`
+	OpensConversations bool       `json:"opens_conversations"`
+	LastItemAt         *time.Time `json:"last_item_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+}
+
+// ChannelThreadItem is one message said in a chat place, a customer's, the team's or the channel's,
+// with what became of it.
+type ChannelThreadItem struct {
+	ID                string     `json:"id"`
+	ChannelID         string     `json:"channel_id"`
+	ThreadID          string     `json:"thread_id"`
+	Direction         string     `json:"direction"`
+	Role              string     `json:"role"`
+	SenderKind        *string    `json:"sender_kind"`
+	SenderValue       *string    `json:"sender_value"`
+	SenderName        *string    `json:"sender_name"`
+	ContactID         *string    `json:"contact_id"`
+	AgentID           *string    `json:"agent_id"`
+	ExternalID        *string    `json:"external_id"`
+	QuoteExternalID   *string    `json:"quote_external_id"`
+	Body              string     `json:"body"`
+	InboundEventID    *string    `json:"inbound_event_id"`
+	MessageID         *string    `json:"message_id"`
+	GatheringID       *string    `json:"gathering_id"`
+	Disposition       string     `json:"disposition"`
+	DispositionReason *string    `json:"disposition_reason"`
+	OccurredAt        time.Time  `json:"occurred_at"`
+	AlertedAt         *time.Time `json:"alerted_at"`
+}
+
+// ChannelSender is someone who wrote in a channel's chat places: where and when they last wrote.
+type ChannelSender struct {
+	ChannelID   string    `json:"channel_id"`
+	SenderKind  string    `json:"sender_kind"`
+	SenderValue string    `json:"sender_value"`
+	Name        *string   `json:"name"`
+	Role        string    `json:"role"`
+	LastAt      time.Time `json:"last_at"`
+	ThreadID    string    `json:"thread_id"`
+}
+
+// ConversationThreadKey is a key that joins a channel's next message to a conversation, such as a chat
+// user's or group's id; MessageID is the message that recorded it. Email reply tokens are never exported.
+type ConversationThreadKey struct {
+	ConversationID string    `json:"conversation_id"`
+	ChannelType    string    `json:"channel_type"`
+	Key            string    `json:"key"`
+	MessageID      *string   `json:"message_id"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// ImportItem is one line of an import's ledger: a record of the old helpdesk (source, entity, source_id)
+// and what the import did with it (target_id, status, error), so a later run and an undo know it.
+type ImportItem struct {
+	Source          string          `json:"source"`
+	Entity          string          `json:"entity"`
+	SourceID        string          `json:"source_id"`
+	ParentSourceID  *string         `json:"parent_source_id"`
+	TargetID        *string         `json:"target_id"`
+	Status          string          `json:"status"`
+	Error           string          `json:"error"`
+	SourceUpdatedAt *time.Time      `json:"source_updated_at"`
+	Meta            json.RawMessage `json:"meta"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// Workspace is the workspace in manifest.json. StatusHistorySince is when its status history became
+// complete: a resolution or reopen before it was never recorded. TimezoneChosenAt is when an admin last
+// chose its timezone, nil while it is the UTC default nobody chose (which the creator's first sign-in
+// replaces with their browser's zone); a workspace recreated from the export keeps it.
+type Workspace struct {
+	domain.Workspace
+	StatusHistorySince time.Time  `json:"status_history_since"`
+	TimezoneChosenAt   *time.Time `json:"timezone_chosen_at"`
+}
+
+// ConversationThreadItem says an item is, or was, part of a conversation, and how it came to it.
+type ConversationThreadItem struct {
+	ID                string     `json:"id"`
+	ConversationID    string     `json:"conversation_id"`
+	ItemID            string     `json:"item_id"`
+	Reason            string     `json:"reason"`
+	DecisionID        *string    `json:"decision_id"`
+	LinkedByAgentID   *string    `json:"linked_by_agent_id"`
+	LinkedAt          time.Time  `json:"linked_at"`
+	UnlinkedAt        *time.Time `json:"unlinked_at"`
+	UnlinkedByAgentID *string    `json:"unlinked_by_agent_id"`
 }
 
 // ChannelEvent is one change to a channel (channel_events).
@@ -71,20 +320,28 @@ type ChannelEvent struct {
 // failed, dropped, or kept without a conversation (a group's chatter). Its raw payload is here, or in
 // the archive at raw_path; its fetched files are in the archive too.
 type ChannelInboundEvent struct {
-	ID              string               `json:"id"`
-	ChannelID       string               `json:"channel_id"`
-	ExternalEventID *string              `json:"external_event_id"`
-	State           string               `json:"state"`
-	Raw             json.RawMessage      `json:"raw"`
-	RawPath         *string              `json:"raw_path"`
-	HoldReason      *string              `json:"hold_reason"`
-	DropReason      *string              `json:"drop_reason"`
-	Error           *string              `json:"error"`
-	ReceivedAt      time.Time            `json:"received_at"`
-	ProcessedAt     *time.Time           `json:"processed_at"`
-	Files           []ChannelInboundFile `json:"files"`
-	RawKey          string               `json:"-"`
-	RawSize         int64                `json:"-"`
+	ID              string          `json:"id"`
+	ChannelID       string          `json:"channel_id"`
+	ExternalEventID *string         `json:"external_event_id"`
+	State           string          `json:"state"`
+	Raw             json.RawMessage `json:"raw"`
+	RawPath         *string         `json:"raw_path"`
+	HoldReason      *string         `json:"hold_reason"`
+	DropReason      *string         `json:"drop_reason"`
+	Error           *string         `json:"error"`
+	// DecisionBasis and DecisionRule are what the channel's rules decided (match, default, person, and
+	// the rule's name); null for what the frame handled before them or what is still being collected.
+	DecisionBasis *string `json:"decision_basis"`
+	DecisionRule  *string `json:"decision_rule"`
+	// Command is the channel command a collected message named.
+	Command *string `json:"command"`
+	// GatheringID is the batch of intake it belongs to.
+	GatheringID *string              `json:"gathering_id"`
+	ReceivedAt  time.Time            `json:"received_at"`
+	ProcessedAt *time.Time           `json:"processed_at"`
+	Files       []ChannelInboundFile `json:"files"`
+	RawKey      string               `json:"-"`
+	RawSize     int64                `json:"-"`
 }
 
 // ChannelInboundFile is a file fetched for an event, or why it could not be.
@@ -175,6 +432,19 @@ type KBCollection struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DeletedAt        *time.Time      `json:"deleted_at"`
 	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	// Translations are its name and description in the help center's other languages; source_meta is
+	// set while a name is as an import wrote it.
+	Translations []KBCollectionTranslation `json:"translations"`
+}
+
+// KBCollectionTranslation is a collection's name and description in one language.
+type KBCollectionTranslation struct {
+	Locale      string          `json:"locale"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	SourceMeta  json.RawMessage `json:"source_meta"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // KBArticle is a knowledge base article in Markdown, also in the trash. SourceHTML is the original HTML
@@ -224,16 +494,56 @@ type KBArticleVersion struct {
 	CreatedAt           time.Time `json:"created_at"`
 }
 
-// KBArticleTranslation is a translation of an article an import brought in.
+// KBArticleTranslation is an article's version in another language, also in the trash. Outdated is
+// set while the article's own words changed since it was last brought up to date.
 type KBArticleTranslation struct {
-	ArticleID  string          `json:"article_id"`
-	Locale     string          `json:"locale"`
-	Title      string          `json:"title"`
-	BodyMD     string          `json:"body_md"`
-	SourceMeta json.RawMessage `json:"source_meta"`
-	SourceHTML *string         `json:"source_html"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
+	ArticleID        string          `json:"article_id"`
+	Locale           string          `json:"locale"`
+	Title            string          `json:"title"`
+	Slug             string          `json:"slug"`
+	BodyMD           string          `json:"body_md"`
+	Status           string          `json:"status"`
+	PublishedAt      *time.Time      `json:"published_at"`
+	SEOTitle         string          `json:"seo_title"`
+	SEODescription   string          `json:"seo_description"`
+	Outdated         bool            `json:"outdated"`
+	OutdatedAt       *time.Time      `json:"outdated_at"`
+	AuthorAgentID    *string         `json:"author_agent_id"`
+	SourceMeta       json.RawMessage `json:"source_meta"`
+	SourceHTML       *string         `json:"source_html"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+}
+
+// KBArticleTranslationVersion is one version of a translation, as KBArticleVersion is of an article.
+type KBArticleTranslationVersion struct {
+	ArticleID           string    `json:"article_id"`
+	Locale              string    `json:"locale"`
+	Version             int       `json:"version"`
+	Kind                string    `json:"kind"`
+	RestoredFromVersion *int      `json:"restored_from_version"`
+	Title               string    `json:"title"`
+	Slug                string    `json:"slug"`
+	BodyMD              string    `json:"body_md"`
+	SEOTitle            string    `json:"seo_title"`
+	SEODescription      string    `json:"seo_description"`
+	Status              string    `json:"status"`
+	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
+	TokenID             *string   `json:"token_id"`
+	TokenLabel          *string   `json:"token_label"`
+	AgentRequestID      *string   `json:"agent_request_id"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// HelpCenterLanguage is a language of the help center besides its primary one.
+type HelpCenterLanguage struct {
+	Locale    string    `json:"locale"`
+	Visible   bool      `json:"visible"`
+	Position  int       `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // KBImage is an image of the knowledge base library; its bytes are the file at Path. Name and Alt are
@@ -308,28 +618,30 @@ type KBMediaReplacement struct {
 // HelpCenter is the public help center's settings, its theme and the knowledge base counters. A null
 // theme field is the default look; the logo and favicon are kb-images.ndjson ids.
 type HelpCenter struct {
-	Enabled           bool      `json:"enabled"`
-	Title             string    `json:"title"`
-	Locale            string    `json:"locale"`
-	ContentVersion    int64     `json:"content_version"`
-	LastArticleNumber int64     `json:"last_article_number"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	LogoMediaID       *string   `json:"logo_media_id"`
-	FaviconMediaID    *string   `json:"favicon_media_id"`
-	LogoAlt           string    `json:"logo_alt"`
-	LinkbackURL       *string   `json:"linkback_url"`
-	ContactURL        *string   `json:"contact_url"`
-	ContactPhone      *string   `json:"contact_phone"`
-	ColorPrimary      *string   `json:"color_primary"`
-	ColorHeader       *string   `json:"color_header"`
-	ColorHeaderText   *string   `json:"color_header_text"`
-	ColorBackground   *string   `json:"color_background"`
-	ColorText         *string   `json:"color_text"`
-	ColorLink         *string   `json:"color_link"`
-	ColorFooter       *string   `json:"color_footer"`
-	BodyFont          *string   `json:"body_font"`
-	HeadingFont       *string   `json:"heading_font"`
-	CustomCSS         string    `json:"custom_css"`
+	Enabled bool   `json:"enabled"`
+	Title   string `json:"title"`
+	// Locale is the primary language; Languages the others, each shown to customers or not.
+	Locale            string               `json:"locale"`
+	Languages         []HelpCenterLanguage `json:"languages"`
+	ContentVersion    int64                `json:"content_version"`
+	LastArticleNumber int64                `json:"last_article_number"`
+	UpdatedAt         time.Time            `json:"updated_at"`
+	LogoMediaID       *string              `json:"logo_media_id"`
+	FaviconMediaID    *string              `json:"favicon_media_id"`
+	LogoAlt           string               `json:"logo_alt"`
+	LinkbackURL       *string              `json:"linkback_url"`
+	ContactURL        *string              `json:"contact_url"`
+	ContactPhone      *string              `json:"contact_phone"`
+	ColorPrimary      *string              `json:"color_primary"`
+	ColorHeader       *string              `json:"color_header"`
+	ColorHeaderText   *string              `json:"color_header_text"`
+	ColorBackground   *string              `json:"color_background"`
+	ColorText         *string              `json:"color_text"`
+	ColorLink         *string              `json:"color_link"`
+	ColorFooter       *string              `json:"color_footer"`
+	BodyFont          *string              `json:"body_font"`
+	HeadingFont       *string              `json:"heading_font"`
+	CustomCSS         string               `json:"custom_css"`
 	// GoogleSiteVerification and BingSiteVerification are the Search Console tokens (null when none).
 	GoogleSiteVerification *string `json:"google_site_verification"`
 	BingSiteVerification   *string `json:"bing_site_verification"`
@@ -372,6 +684,9 @@ type AgentRequest struct {
 	// saw it (with the version a restore applies).
 	SavedReplyID     *string         `json:"saved_reply_id"`
 	SavedReplyBefore json.RawMessage `json:"saved_reply_before"`
+	// Notices are what a status-change request showed it would tell customers, as it was when the
+	// token asked; null for other requests.
+	Notices json.RawMessage `json:"notices"`
 }
 
 // ImportJob is an import from another helpdesk run inside the app, or its undo. It never holds the
@@ -429,22 +744,30 @@ type AIProvider struct {
 	CreatedBy      *string   `json:"created_by"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+	// Routing is OpenRouter's routing by data policy, as stored: {"data_collection":"deny","zdr":true},
+	// {} for OpenRouter's default.
+	Routing json.RawMessage `json:"routing"`
 }
 
 // AISlot is one AI feature's setting: where it runs, the model, on or off, and who consented.
 type AISlot struct {
-	Slot        string     `json:"slot"`
-	UsesServer  bool       `json:"uses_server"`
-	ProviderID  *string    `json:"provider_id"`
-	Model       *string    `json:"model"`
-	Effort      string     `json:"effort"`
-	Enabled     bool       `json:"enabled"`
-	Automatic   bool       `json:"automatic"`
-	AutoParts   []string   `json:"auto_parts"`
-	ConsentedBy *string    `json:"consented_by"`
-	ConsentedAt *time.Time `json:"consented_at"`
-	UpdatedBy   *string    `json:"updated_by"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	Slot       string  `json:"slot"`
+	UsesServer bool    `json:"uses_server"`
+	ProviderID *string `json:"provider_id"`
+	Model      *string `json:"model"`
+	// FallbackModel is intake's: the model it tries when Model fails.
+	FallbackModel *string `json:"fallback_model"`
+	Effort        string  `json:"effort"`
+	Enabled       bool    `json:"enabled"`
+	// DefaultLevel is what the feature does by itself where no channel says otherwise: off, suggest,
+	// auto. Automatic is the older switch it replaced, read from it (triage auto, drafts suggest).
+	DefaultLevel string     `json:"default_level"`
+	Automatic    bool       `json:"automatic"`
+	AutoParts    []string   `json:"auto_parts"`
+	ConsentedBy  *string    `json:"consented_by"`
+	ConsentedAt  *time.Time `json:"consented_at"`
+	UpdatedBy    *string    `json:"updated_by"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 	// MonthlyCapMicroUSD is the AI chat feature's own monthly spending limit; null is none.
 	MonthlyCapMicroUSD *int64 `json:"monthly_cap_micro_usd"`
 }
@@ -545,44 +868,110 @@ type AIUsage struct {
 	CostMicroUSD      *int64          `json:"cost_micro_usd"`
 	// ReservedMicroUSD is the most the call could cost, held against the allowance while it ran.
 	ReservedMicroUSD *int64 `json:"reserved_micro_usd"`
+	// ProviderCost is what the provider said the call cost, in its own unit (OpenRouter: credits).
+	ProviderCost *float64 `json:"provider_cost"`
 }
 
 // AIDraft is one AI reply draft and how it ended. Its text and prompt are empty 90 days after it ended.
 type AIDraft struct {
-	ID                 string          `json:"id"`
-	ConversationID     string          `json:"conversation_id"`
-	TaskID             *string         `json:"task_id"`
-	RequestedByAgentID *string         `json:"requested_by_agent_id"`
-	RequestedByTokenID *string         `json:"requested_by_token_id"`
-	Prompt             string          `json:"prompt"`
-	Status             string          `json:"status"`
-	Text               *string         `json:"text"`
-	MissingInfo        *string         `json:"missing_info"`
-	Sources            json.RawMessage `json:"sources"`
-	Warnings           json.RawMessage `json:"warnings"`
-	Model              *string         `json:"model"`
-	Outcome            *string         `json:"outcome"`
-	Similarity         *float64        `json:"similarity"`
-	SentMessageID      *string         `json:"sent_message_id"`
-	Automatic          bool            `json:"automatic"`
-	AnswersMessageID   *string         `json:"answers_message_id"`
-	ReplyNeeded        *bool           `json:"reply_needed"`
-	CreatedAt          time.Time       `json:"created_at"`
-	ReadyAt            *time.Time      `json:"ready_at"`
-	DecidedAt          *time.Time      `json:"decided_at"`
-	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
-	TextClearedAt      *time.Time      `json:"text_cleared_at"`
+	ID                 string  `json:"id"`
+	ConversationID     string  `json:"conversation_id"`
+	TaskID             *string `json:"task_id"`
+	RequestedByAgentID *string `json:"requested_by_agent_id"`
+	RequestedByTokenID *string `json:"requested_by_token_id"`
+	Prompt             string  `json:"prompt"`
+	Status             string  `json:"status"`
+	// Source is ai for a draft AI generated, written for a reply an agent token wrote for a person to send.
+	Source string `json:"source"`
+	// CC is the list a written draft copies; null when it copies no one.
+	CC               []string        `json:"cc"`
+	Text             *string         `json:"text"`
+	MissingInfo      *string         `json:"missing_info"`
+	Sources          json.RawMessage `json:"sources"`
+	Warnings         json.RawMessage `json:"warnings"`
+	Model            *string         `json:"model"`
+	Outcome          *string         `json:"outcome"`
+	Similarity       *float64        `json:"similarity"`
+	SentMessageID    *string         `json:"sent_message_id"`
+	Automatic        bool            `json:"automatic"`
+	AnswersMessageID *string         `json:"answers_message_id"`
+	ReplyNeeded      *bool           `json:"reply_needed"`
+	CreatedAt        time.Time       `json:"created_at"`
+	ReadyAt          *time.Time      `json:"ready_at"`
+	DecidedAt        *time.Time      `json:"decided_at"`
+	DecidedByAgentID *string         `json:"decided_by_agent_id"`
+	TextClearedAt    *time.Time      `json:"text_cleared_at"`
+	// RestoredAt and RestoredByAgentID say when and by whom an earlier written draft was brought back.
+	RestoredAt        *time.Time `json:"restored_at"`
+	RestoredByAgentID *string    `json:"restored_by_agent_id"`
+	// Files are the files left with a written draft, copied under ai-drafts/<id>/ (Path); empty once it
+	// was sent (the reply's attachments hold the ones sent) or 90 days after it ended.
+	Files []AIDraftFile `json:"files"`
+}
+
+// AIDraftFile is one file of a written draft, its bytes at Path in the archive.
+type AIDraftFile struct {
+	ID          string    `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	Size        int64     `json:"size"`
+	SHA256      string    `json:"sha256"`
+	CreatedAt   time.Time `json:"created_at"`
+	Path        string    `json:"path"`
+	StorageKey  string    `json:"-"`
 }
 
 // ResultsBaseline is the baseline the results page measures against (docs/user/results.md): the import
 // it comes from, when that import's first full run finished, its reconcile status (null for an import
 // made before results existed) and the numbers as stored.
 type ResultsBaseline struct {
-	Source       string          `json:"source"`
-	AnchorAt     time.Time       `json:"anchor_at"`
-	ImportStatus *string         `json:"import_status"`
-	ComputedAt   *time.Time      `json:"computed_at"`
-	Numbers      json.RawMessage `json:"numbers"`
+	Source       string    `json:"source"`
+	AnchorAt     time.Time `json:"anchor_at"`
+	ImportStatus *string   `json:"import_status"`
+	// ImportCause says why the import has that status (archive_refused), or null.
+	ImportCause *string         `json:"import_cause"`
+	ComputedAt  *time.Time      `json:"computed_at"`
+	Numbers     json.RawMessage `json:"numbers"`
+}
+
+// AIAutomaticLimits is how many automatic AI tasks the workspace runs a UTC day and a minute, and how
+// many drafts and intake decisions of them a day; written once someone set them.
+type AIAutomaticLimits struct {
+	PerDay       int       `json:"per_day"`
+	PerMinute    int       `json:"per_minute"`
+	DraftPerDay  int       `json:"draft_per_day"`
+	IntakePerDay int       `json:"intake_per_day"`
+	UpdatedBy    *string   `json:"updated_by"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// ResponseTargets are the workspace's response targets (SLA), written once someone saved them: business
+// hours in a timezone, holidays, targets by priority in business minutes, the warning before a target,
+// the channels they apply to (null: all) and whether reminder emails go out.
+type ResponseTargets struct {
+	Enabled           bool            `json:"enabled"`
+	Timezone          *string         `json:"timezone"`
+	Hours             json.RawMessage `json:"hours"`
+	Holidays          json.RawMessage `json:"holidays"`
+	Targets           json.RawMessage `json:"targets"`
+	WarnBeforeMinutes int             `json:"warn_before_minutes"`
+	ChannelIDs        []string        `json:"channel_ids"`
+	AlertEmail        bool            `json:"alert_email"`
+	// EnabledAt is when they were turned on: conversations opened from then on are measured.
+	EnabledAt *time.Time `json:"enabled_at"`
+	// AlertsSince is when reminder emails were turned on: alerts are sent from then on.
+	AlertsSince      *time.Time `json:"alerts_since"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	UpdatedByAgentID *string    `json:"updated_by_agent_id"`
+}
+
+// MigrationRequest is a request an admin sent Colliedesk to move the workspace's Freshdesk data.
+type MigrationRequest struct {
+	ID               string    `json:"id"`
+	RequestedBy      *string   `json:"requested_by"`
+	FreshdeskAddress string    `json:"freshdesk_address"`
+	Times            string    `json:"times"`
+	RequestedAt      time.Time `json:"requested_at"`
 }
 
 // AutofixInstallation is a GitHub App installation the workspace connected for Autofix.
@@ -754,8 +1143,30 @@ type Message struct {
 	ChannelID   *string         `json:"channel_id"`
 	ExternalID  *string         `json:"external_id"`
 	ChannelMeta json.RawMessage `json:"channel_meta"`
-	CreatedAt   time.Time       `json:"created_at"`
-	Attachments []Attachment    `json:"attachments"`
+	// DecisionBasis and DecisionRule say why a message from a channel is in this conversation: what the
+	// channel's rules decided (match, default, person; new_thread, thread_key…). Null for the others.
+	DecisionBasis *string `json:"decision_basis"`
+	DecisionRule  *string `json:"decision_rule"`
+	// Command is the channel command its collected batch named (a chat's "report a bug").
+	Command *string `json:"command"`
+	// GatheringID is the batch of a chat's intake it came from.
+	GatheringID *string `json:"gathering_id"`
+	// OtherContactID is the contact whose conversation a customer message was moved from; DetachedAt when a
+	// chat message was taken back to the intake queue (it is out of the timeline, not deleted).
+	OtherContactID    *string    `json:"other_contact_id"`
+	DetachedAt        *time.Time `json:"detached_at"`
+	DetachedByAgentID *string    `json:"detached_by_agent_id"`
+	// IntakeReplyKind is what intake said a chat message added to its conversation (acknowledgement:
+	// it kept a resolved conversation resolved).
+	IntakeReplyKind *string `json:"intake_reply_kind"`
+	// NoticeKind marks a reply the channel sent by itself (received, a reopen or help answer, a status
+	// notice), not one of the team.
+	NoticeKind *string `json:"notice_kind"`
+	// AgentTokenID is the API token that wrote it (an AI agent's), with AuthorAgentID its owner; null
+	// for one a person wrote.
+	AgentTokenID *string      `json:"agent_token_id"`
+	CreatedAt    time.Time    `json:"created_at"`
+	Attachments  []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -768,12 +1179,45 @@ type ConversationHead struct {
 	AssigneeID *string `json:"assignee_id"`
 	Channel    string  `json:"channel"`
 	ChannelID  *string `json:"channel_id"`
+	// ChannelScope is the scope of its channel's type the first message came in (a chat's group).
+	ChannelScope *string `json:"channel_scope"`
 	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send.
-	ReplyChannelID *string                    `json:"reply_channel_id"`
-	Origin         *domain.ConversationOrigin `json:"origin"`
-	TagIDs         []string                   `json:"tag_ids"`
-	CreatedAt      time.Time                  `json:"created_at"`
-	UpdatedAt      time.Time                  `json:"updated_at"`
+	ReplyChannelID *string `json:"reply_channel_id"`
+	// MergedIntoID is where its customer messages went when a move closed it as no new request.
+	MergedIntoID *string                    `json:"merged_into_id"`
+	Origin       *domain.ConversationOrigin `json:"origin"`
+	TagIDs       []string                   `json:"tag_ids"`
+	CreatedAt    time.Time                  `json:"created_at"`
+	UpdatedAt    time.Time                  `json:"updated_at"`
+	// AssignedAt and AssignedByAgentID are when and by whom it was last assigned; null when nobody did.
+	AssignedAt        *time.Time `json:"assigned_at"`
+	AssignedByAgentID *string    `json:"assigned_by_agent_id"`
+	// HeldAt is when it was held over the Free plan's monthly quota (hidden until an upgrade or the month
+	// ends); null when it is not held.
+	HeldAt *time.Time `json:"held_at"`
+	// NumberSeries, Number and NumberYear number it; DisplayRef is the code its customer saw.
+	NumberSeries string `json:"number_series"`
+	Number       int64  `json:"number"`
+	NumberYear   int    `json:"number_year"`
+	DisplayRef   string `json:"display_ref"`
+	// NumberFormat is the format its code was made with.
+	NumberFormat string `json:"number_format"`
+	// SLAApplies says response targets apply to it; SLA is its clocks as last counted.
+	SLAApplies bool            `json:"sla_applies"`
+	SLA        json.RawMessage `json:"sla"`
+}
+
+// NumberSeries is a series conversations are numbered in.
+type NumberSeries struct {
+	Series    string `json:"series"`
+	Format    string `json:"format"`
+	Next      int64  `json:"next"`
+	Start     int64  `json:"start"`
+	StartYear *int   `json:"start_year"`
+	// Formats are every format the series has had, which read the codes it gave.
+	Formats   []string  `json:"formats"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // StatusChange is one change of a conversation's status (conversation_status_changes). Source is
@@ -785,6 +1229,12 @@ type StatusChange struct {
 	ChangedAt    time.Time `json:"changed_at"`
 	ActorAgentID *string   `json:"actor_agent_id"`
 	Source       string    `json:"source"`
+	// Cause is who changed it: agent, token, customer, command, auto_close or import. ActorTokenID is
+	// the API token of a token's change (ActorAgentID is then its owner), and Quiet a change made with
+	// notify:false, which told the customer nothing.
+	Cause        string  `json:"cause"`
+	ActorTokenID *string `json:"actor_token_id"`
+	Quiet        bool    `json:"quiet"`
 }
 
 // Conversation is one line of conversations.ndjson with everything that hangs off it.
@@ -796,11 +1246,13 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, ImportItem*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, AIAutomaticLimits*, ResponseTargets*, MigrationRequest*, AutofixInstallation*, AutofixRepo*, AutofixConnector*, Fix*, FixEvent*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, ChannelThread*, ChannelThreadItem*, ChannelSender*, NumberSeries*, ConversationThreadItem*, ConversationThreadKey*, IntakeGathering*, IntakeDecision*, IntakeEvalRun*, MessageMove*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
-	Workspace(domain.Workspace) error
+	Workspace(Workspace) error
 	Agent(Agent) error
+	Role(Role) error
+	AgentRole(AgentRole) error
 	Contact(Contact) error
 	ContactMerge(ContactMerge) error
 	Tag(Tag) error
@@ -811,6 +1263,7 @@ type Sink interface {
 	KBArticle(KBArticle) error
 	KBArticleVersion(KBArticleVersion) error
 	KBArticleTranslation(KBArticleTranslation) error
+	KBArticleTranslationVersion(KBArticleTranslationVersion) error
 	KBImage(KBImage) error
 	KBVideo(KBVideo) error
 	KBMediaReplacement(KBMediaReplacement) error
@@ -818,14 +1271,19 @@ type Sink interface {
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error
 	ImportPerson(ImportPerson) error
+	ImportItem(ImportItem) error
 	AIProvider(AIProvider) error
 	AISlot(AISlot) error
 	AISettingsEvent(AISettingsEvent) error
+	AISourceConsent(AISourceConsent) error
 	AIUsage(AIUsage) error
 	AIDraft(AIDraft) error
 	AITriage(AITriage) error
 	AIChatSession(AIChatSession) error
 	ResultsBaseline(ResultsBaseline) error
+	AIAutomaticLimits(AIAutomaticLimits) error
+	ResponseTargets(ResponseTargets) error
+	MigrationRequest(MigrationRequest) error
 	AutofixInstallation(AutofixInstallation) error
 	AutofixRepo(AutofixRepo) error
 	AutofixConnector(AutofixConnector) error
@@ -833,7 +1291,18 @@ type Sink interface {
 	FixEvent(FixEvent) error
 	Channel(Channel) error
 	ChannelEvent(ChannelEvent) error
+	ChannelAILevel(ChannelAILevel) error
 	ChannelInboundEvent(ChannelInboundEvent) error
+	ChannelThread(ChannelThread) error
+	ChannelThreadItem(ChannelThreadItem) error
+	ChannelSender(ChannelSender) error
+	NumberSeries(NumberSeries) error
+	ConversationThreadItem(ConversationThreadItem) error
+	ConversationThreadKey(ConversationThreadKey) error
+	IntakeGathering(IntakeGathering) error
+	IntakeDecision(IntakeDecision) error
+	IntakeEvalRun(IntakeEvalRun) error
+	MessageMove(MessageMove) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error

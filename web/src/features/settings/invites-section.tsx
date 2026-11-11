@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import type { Invite } from '../../api/schemas';
+import type { Invite, Role } from '../../api/schemas';
+import { RoleCheckboxes } from './role-checkboxes';
+import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
+import './role-pickers.css';
 
 // inviteState makes every way an invite can end visible: used, revoked or expired.
 function inviteState(invite: Invite): keyof typeof settingsMessages.inviteStates {
@@ -20,23 +23,33 @@ interface InvitesSectionProps {
   creatingInvite?: boolean;
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
-  onCreateInvite?: (email: string, role: 'admin' | 'agent') => void;
+  // The roles an invite may give; a role the person may not give is listed, locked.
+  roles?: Role[];
+  onCreateInvite?: (email: string, roleIds: string[]) => void;
   onRevokeInvite?: (id: string) => void;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, createdInvite, creatingInvite = false, inviteError, onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
   const createdInviteUrl = createdInvite?.url;
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'agent'>('agent');
+  // An invite gives the Agent role unless the person picks others.
+  const agent = roles.find((role) => role.system === 'agent');
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const chosen = picked ?? (agent ? [agent.id] : []);
+  const [picking, setPicking] = useState(false);
+  const chosenNames = roles.filter((role) => chosen.includes(role.id)).map((role) => role.name);
   return (
     <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{settingsMessages.invitesDescription}</p></div>
-      <div className="settings-body">
-        {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); onCreateInvite?.(email, role); }}>
+      <div className="settings-body settings-rows">
+        {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (chosen.length > 0) onCreateInvite?.(email, chosen); }}>
           <label className="field"><span>{settingsMessages.inviteEmail}</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label className="field"><span>{settingsMessages.inviteRole}</span><select value={role} onChange={(event) => setRole(event.target.value as 'admin' | 'agent')}>
-            <option value="agent">{messages.roles.agent}</option><option value="admin">{messages.roles.admin}</option>
-          </select></label>
-          <button className="primary-action" type="submit" disabled={creatingInvite}>{settingsMessages.createInvite}</button>
+          <div className="field"><span>{settingsMessages.inviteRole}</span>
+            <button type="button" aria-expanded={picking} aria-controls="invite-roles" onClick={() => setPicking((open) => !open)}>{roleMessages.invitesRoles(chosenNames)}</button></div>
+          <button className="primary-action" type="submit" disabled={creatingInvite || chosen.length === 0}>{settingsMessages.createInvite}</button>
+          {picking && <div id="invite-roles" className="invite-roles" onKeyDown={(event) => { if (event.key === 'Escape') setPicking(false); }}>
+            <RoleCheckboxes idPrefix="invite-role" roles={roles} chosen={chosen} onChange={setPicked} />
+            {chosen.length === 0 && <p className="error-copy" role="alert">{roleMessages.atLeastOne}</p>}
+          </div>}
         </form>}
         {canCreateInvites && inviteError && <p role="alert" className="error-copy">{inviteError}</p>}
         {canCreateInvites && createdInvite && !createdInviteUrl && <p role="status">{settingsMessages.inviteLinkShownOnce}</p>}
@@ -47,7 +60,7 @@ export function InvitesSection({ invites, timezone, canCreateInvites, createdInv
         {invites.length > 0 && <div className="data-list">{invites.map((invite) => {
           const state = inviteState(invite);
           return <article key={invite.id}>
-            <div><strong>{invite.email}</strong><span>{messages.roles[invite.role_ceiling]}</span>
+            <div><strong>{invite.email}</strong><span>{invite.roles.map((role) => role.name).join(', ')}</span>
               <span>{settingsMessages.inviteStates[state]}</span><time>{formatDate(invite.expires_at, timezone)}</time></div>
             {canCreateInvites && state === 'pending' && <button type="button" className="danger-action" onClick={() => onRevokeInvite?.(invite.id)}>{settingsMessages.revoke}</button>}
           </article>;

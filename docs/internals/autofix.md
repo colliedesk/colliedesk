@@ -90,8 +90,7 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 - The key is sealed with `MAILBOX_TOKEN_KEYS` under the context `autofix:cursor:<workspace id>`: a
   sealed key copied into another workspace's row does not open. It is tried (`GET /v1/me`) before it
   is kept, so a wrong key never replaces a working one; nothing of it is shown again, not the last
-  characters. `PUT …/cursor_api/key` is a credential route: a token below admin is refused, never filed,
-  because an agent request keeps its body.
+  characters. `PUT …/cursor_api/key` needs `autofix_settings:manage_credentials`.
 - `server/internal/autofixworker` runs the fixes that wait on Colliedesk. `store.ClaimDueFixes`
   (`PrivilegeAutofixClaim`) leases due fixes in progress by moving `next_check_at` a lease (2 minutes)
   ahead, fixes still to send first; each is then handled in its own workspace with no transaction
@@ -205,8 +204,8 @@ over https, or over http to a loopback host (the stand-in): `redirectHref` in th
 
 The first branch shipped the schema, the rules, the store, the read routes and their MCP tools, the
 export and the whole contract of the first release. Each later branch registers its own routes with
-their `tokenTiers` rows and MCP tools, and adds its own token permissions with them
-(`autofix:update`, `autofix:send`, `autofix_settings:*`): `TestEveryRoutePermissionIsHeldByTheTierTheRouteHad`
+their `routeAccess` rows and MCP tools, and adds its own permissions with them
+(`autofix:update`, `autofix:send`, `autofix_settings:*`): `TestEveryPermissionOpensARoute`
 refuses a permission that opens no route, and that gate is not loosened. The privileged lookups
 (installation → workspace, the worker's claim) come with the code that calls them, with their row in
 the table of `workspace-isolation.md`.

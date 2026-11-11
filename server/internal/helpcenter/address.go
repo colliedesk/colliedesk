@@ -1,12 +1,12 @@
 package helpcenter
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 )
@@ -50,6 +50,12 @@ func ArticleURL(origin, domain, slug, custom string, number int64, articleSlug s
 // ArticlePath is an article's path below its help center's address.
 func ArticlePath(number int64, articleSlug string) string {
 	return "/a/" + strconv.FormatInt(number, 10) + "-" + url.PathEscape(articleSlug)
+}
+
+// TranslationPath is the address of an article's version in another language below its help
+// center's address: the language, then the article's path with the translation's own slug.
+func TranslationPath(locale string, number int64, translationSlug string) string {
+	return "/" + url.PathEscape(locale) + ArticlePath(number, translationSlug)
 }
 
 // CollectionPath is a collection's path below its help center's address: /c/ and the slugs of the
@@ -100,7 +106,7 @@ func DomainClaim(name, domain string) (string, bool) {
 func DomainFromEnv(getenv func(string) string) (string, error) {
 	domain := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(getenv("HELP_CENTER_DOMAIN"))), ".")
 	if domain != "" && (!email.ValidHostname(domain) || !strings.Contains(domain, ".")) {
-		return "", fmt.Errorf("HELP_CENTER_DOMAIN must be a domain name such as example.com, got %q", domain)
+		return "", configerr.Say("help_center_domain_invalid", configerr.Params{"domain": domain})
 	}
 	return domain, nil
 }

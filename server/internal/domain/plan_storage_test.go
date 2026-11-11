@@ -41,7 +41,7 @@ func TestStorageCountsImportsOnEveryPaidPlan(t *testing.T) {
 }
 
 func TestAgentCapPerPlan(t *testing.T) {
-	for plan, want := range map[string]int{domain.PlanSolo: 1, domain.PlanSmall: 3, domain.PlanTrial: 10, domain.PlanTeam: 10, domain.PlanFounding: 10, domain.PlanTeam25: 25, domain.PlanNone: 0} {
+	for plan, want := range map[string]int{domain.PlanSolo: 1, domain.PlanSmall: 3, domain.PlanTrial: 25, domain.PlanTeam: 10, domain.PlanFounding: 10, domain.PlanTeam25: 25, domain.PlanNone: 0} {
 		if got := domain.LimitsFor(plan).Agents; got != want {
 			t.Errorf("LimitsFor(%s).Agents=%d, want %d", plan, got, want)
 		}
@@ -153,6 +153,32 @@ func TestPlanLimitErrorPointsToTheNextTier(t *testing.T) {
 		if got := c.err.Error(); got != c.want {
 			t.Errorf("%+v:\n got %q\nwant %q", c.err, got, c.want)
 		}
+	}
+}
+
+// A team of 11 to 25 agents can try Colliedesk before it buys Team 25, so the trial seats as many
+// agents as Team 25 does, while Founding keeps its 10.
+func TestTrialSeatsTwentyFiveAgentsAndFoundingStaysAtTen(t *testing.T) {
+	if got := domain.LimitsFor(domain.PlanTrial).Agents; got != 25 {
+		t.Fatalf("trial agents=%d, want 25", got)
+	}
+	if got := domain.LimitsFor(domain.PlanFounding).Agents; got != 10 {
+		t.Fatalf("founding agents=%d, want 10", got)
+	}
+	// Founding refuses a workspace that holds an 11th seat, so a trial of 11 to 25 agents buys Team 25.
+	if reason := domain.PlanFitRefusal(domain.PlanFounding, 10, 0, 0); reason != "" {
+		t.Errorf("10 seats on Founding refused: %q", reason)
+	}
+	if reason := domain.PlanFitRefusal(domain.PlanFounding, 11, 0, 0); !strings.Contains(reason, "allows 10 agents") {
+		t.Errorf("11 seats on Founding: %q, want a refusal naming 10 agents", reason)
+	}
+}
+
+func TestTrialLimitErrorNamesTheTwentyFiveAgentCap(t *testing.T) {
+	err := &domain.PlanLimitError{Plan: domain.PlanTrial, Agents: domain.LimitsFor(domain.PlanTrial).Agents}
+	want := "The trial allows 25 agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than 25 agents."
+	if got := err.Error(); got != want {
+		t.Fatalf("\n got %q\nwant %q", got, want)
 	}
 }
 

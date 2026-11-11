@@ -54,3 +54,41 @@ test('visually hidden inputs still cover their whole label', () => {
     expect(rule(components, selector)).toMatch(/width:\s*100%;\s*height:\s*100%/);
   }
 });
+
+// The body of the first at-rule block that starts with head, braces matched.
+function block(css, head) {
+  const at = css.indexOf(head);
+  expect(at, `missing block "${head}"`).toBeGreaterThanOrEqual(0);
+  let depth = 0;
+  for (let i = css.indexOf('{', at); i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    if (css[i] === '}' && --depth === 0) return css.slice(css.indexOf('{', at) + 1, i);
+  }
+  throw new Error(`unclosed block "${head}"`);
+}
+
+test('every select opens the menu recipe where the browser can style its picker and a mouse points', () => {
+  const styled = block(components, '@supports (appearance: base-select)');
+  const pointer = block(styled, '@media (pointer: fine)');
+  expect(pointer).toMatch(/(^|[\s,}])select(:not\([^)]*\))*\s*\{[^}]*appearance:\s*base-select/);
+  const list = rule(styled, '::picker(select)');
+  expect(list).toMatch(/background:\s*var\(--surface-1\)/);
+  expect(list).toMatch(/box-shadow:\s*var\(--shadow-2\)/);
+  expect(list).toMatch(/border-radius:\s*var\(--radius-lg\)/);
+  expect(styled).toMatch(/option::checkmark/);
+});
+
+test('the picker recipe is written once for every select, never per component', () => {
+  expect(components.match(/::picker\(select\)/g)).toHaveLength(1);
+  expect(components).not.toMatch(/\.[\w-]+(\s+select)?::picker\(select\)/);
+});
+
+test('Normal priority keeps a quiet mark, so the mark column has no gap in the menu or on the closed field', () => {
+  const visibleMark = /content:\s*"[^"\s]+"/;
+  const menuRow = rule(components, '.property-row option[value="normal"]::before');
+  expect(menuRow).toMatch(visibleMark);
+  expect(menuRow).toMatch(/color:\s*var\(--text-3\)/);
+  const closed = rule(components, '.property-row:has(option[value="normal"]:checked)::after');
+  expect(closed).toMatch(visibleMark);
+  expect(closed).toMatch(/color:\s*var\(--text-3\)/);
+});

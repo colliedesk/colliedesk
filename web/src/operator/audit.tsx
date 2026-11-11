@@ -32,7 +32,7 @@ export function Audit() {
     {!items ? <div className="skeleton" aria-busy="true" /> : items.length === 0 ? <p className="empty">{m.nothingMatches} <button type="button" className="link-button" onClick={() => { setKey(''); setActor(''); }}>{m.clearFilters}</button></p>
       : <div className="ops-table-wrap" tabIndex={0} role="region" aria-label={m.audit}><table className="ops-table">
         <thead><tr><th scope="col">{m.when}</th><th scope="col">{m.who}</th><th scope="col">{m.action}</th><th scope="col">{m.settings}</th><th scope="col">{m.version}</th><th scope="col">{m.address}</th></tr></thead>
-        <tbody>{items.map((item) => <tr key={item.id}><td data-label={m.when}>{when(item.at)}</td><td data-label={m.who}>{item.actor}</td><td data-label={m.action}><code>{item.action}</code></td>
+        <tbody>{items.map((item) => <tr key={item.id}><td data-label={m.when} className="ops-when">{when(item.at)}</td><td data-label={m.who}>{item.actor}</td><td data-label={m.action}><code>{item.action}</code></td>
           <td data-label={m.settings}>{item.keys.join(', ')}</td><td data-label={m.version}>{item.version_id ? `v${item.version_id}` : ''}</td><td data-label={m.address}>{item.ip ?? ''}</td></tr>)}</tbody></table></div>}
   </div>;
 }

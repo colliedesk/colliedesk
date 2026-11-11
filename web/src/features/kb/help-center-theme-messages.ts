@@ -50,9 +50,8 @@ export const themeMessages = {
   fonts: 'Fonts',
   bodyFont: 'Text font',
   headingFont: 'Heading font',
-  defaultFont: (name: string) => `Default (${name})`,
   fontNames: {
-    'system-sans': 'System sans', 'humanist-sans': 'Humanist sans', 'geometric-sans': 'Geometric sans', 'classic-serif': 'Classic serif',
+    'system-sans': 'Sans', 'humanist-sans': 'Humanist sans', 'geometric-sans': 'Geometric sans', 'classic-serif': 'Serif',
     'transitional-serif': 'Transitional serif', 'rounded-sans': 'Rounded sans', mono: 'Monospace',
   } as Record<string, string>,
   fontsHelp: 'Fonts already on the reader\'s device: nothing is downloaded.',

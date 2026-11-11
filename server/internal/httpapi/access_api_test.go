@@ -2,18 +2,22 @@ package httpapi_test
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
 
 func TestSessionEffectiveRoleRespectsLinkCeiling(t *testing.T) {
+	// An invite adds its roles to what the person holds; it never takes one: an admin who redeems an Agent
+	// invite stays an admin.
 	t.Run("agent invite for existing admin", func(t *testing.T) {
 		api, authService := testAPI(t)
 		adminToken := createSession(t, api, authService, "Ceiling Desk", "admin@ceiling.example.com")
 		created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
-			"email": "admin@ceiling.example.com", "role_ceiling": "agent",
+			"email": "admin@ceiling.example.com", "roles": []string{"Agent"},
 		}, adminToken, nil)
 		var invite struct {
 			URL string `json:"url"`
@@ -22,7 +26,17 @@ func TestSessionEffectiveRoleRespectsLinkCeiling(t *testing.T) {
 		redeemed := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{
 			"token": linkToken(t, invite.URL),
 		}, "", nil)
-		assertAgentSession(t, api, redeemed)
+		var session struct {
+			Token string `json:"token"`
+		}
+		decode(t, redeemed, &session)
+		var me struct {
+			Permissions []string `json:"permissions"`
+		}
+		decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, session.Token, nil), &me)
+		if len(me.Permissions) != len(auth.AllPermissions()) {
+			t.Fatalf("an admin who redeemed an Agent invite may do %d permissions, want every one", len(me.Permissions))
+		}
 	})
 
 	t.Run("admin pairing narrowed to agent", func(t *testing.T) {
@@ -42,19 +56,43 @@ func assertAgentSession(t *testing.T, api http.Handler, redeemedResponse *httpte
 	t.Helper()
 	var redeemed struct {
 		Token string `json:"token"`
-		Agent struct {
-			Role string `json:"role"`
-		} `json:"agent"`
 	}
 	decode(t, redeemedResponse, &redeemed)
-	if redeemed.Agent.Role != "agent" {
-		t.Fatalf("redeemed role=%q, want agent", redeemed.Agent.Role)
+	var me struct {
+		Permissions []string `json:"permissions"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, redeemed.Token, nil), &me)
+	if !slices.Equal(slices.Sorted(slices.Values(me.Permissions)), slices.Sorted(slices.Values(auth.AgentRolePermissions()))) {
+		t.Fatalf("the session may do %v, want exactly the Agent role's", me.Permissions)
 	}
 	forbidden := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
-		"email": "forbidden@example.com", "role_ceiling": "agent",
+		"email": "forbidden@example.com", "roles": []string{"Agent"},
 	}, redeemed.Token, nil)
 	if forbidden.Code != http.StatusForbidden {
 		t.Fatalf("effective agent created invite: status=%d body=%s", forbidden.Code, forbidden.Body.String())
+	}
+}
+
+// Asking to sign in as admin through a link whose person will not hold the Admin role is refused, and
+// the link stays usable.
+func TestRedeemAskingForAdminWithoutTheAdminRoleIsRefused(t *testing.T) {
+	api, authService := testAPI(t)
+	adminToken := createSession(t, api, authService, "Escalate Desk", "admin@escalate.example.com")
+	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "sam@escalate.example.com"}, adminToken, nil)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create invite status=%d body=%s", created.Code, created.Body.String())
+	}
+	var invite struct {
+		URL string `json:"url"`
+	}
+	decode(t, created, &invite)
+	escalate := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, invite.URL), "requested_role": "admin"}, "", nil)
+	if escalate.Code != http.StatusUnauthorized {
+		t.Fatalf("redeem asking for admin status=%d body=%s, want 401", escalate.Code, escalate.Body.String())
+	}
+	joined := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, invite.URL)}, "", nil)
+	if joined.Code != http.StatusOK {
+		t.Fatalf("the refused link must stay usable: status=%d body=%s", joined.Code, joined.Body.String())
 	}
 }
 
@@ -62,7 +100,7 @@ func TestInviteRoleCeilingAndSessionRevocation(t *testing.T) {
 	api, authService := testAPI(t)
 	adminToken := createSession(t, api, authService, "Access Desk", "admin@access.example.com")
 	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
-		"email": "agent@access.example.com", "role_ceiling": "admin",
+		"email": "agent@access.example.com", "roles": []string{"Admin"},
 	}, adminToken, nil)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create invite status=%d body=%s", created.Code, created.Body.String())
@@ -74,7 +112,7 @@ func TestInviteRoleCeilingAndSessionRevocation(t *testing.T) {
 	redeemed := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{
 		"token": linkToken(t, invite.URL), "requested_role": "agent", "label": "Agent laptop",
 	}, "", nil)
-	if redeemed.Code != http.StatusOK || !strings.Contains(redeemed.Body.String(), `"role":"agent"`) {
+	if redeemed.Code != http.StatusOK {
 		t.Fatalf("redeem narrowed invite status=%d body=%s", redeemed.Code, redeemed.Body.String())
 	}
 	var agentSession struct {
@@ -83,7 +121,7 @@ func TestInviteRoleCeilingAndSessionRevocation(t *testing.T) {
 	decode(t, redeemed, &agentSession)
 
 	forbidden := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
-		"email": "other@example.com", "role_ceiling": "agent",
+		"email": "other@example.com", "roles": []string{"Agent"},
 	}, agentSession.Token, nil)
 	if forbidden.Code != http.StatusForbidden {
 		t.Fatalf("agent invite status=%d, want 403", forbidden.Code)
@@ -126,7 +164,7 @@ func TestSessionListMarksTheCallersSession(t *testing.T) {
 	api, authService := testAPI(t)
 	adminToken := createSession(t, api, authService, "Current Desk", "admin@current.example.com")
 	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
-		"email": "agent@current.example.com", "role_ceiling": "agent",
+		"email": "agent@current.example.com", "roles": []string{"Agent"},
 	}, adminToken, nil)
 	var invite struct {
 		URL string `json:"url"`
@@ -176,5 +214,29 @@ func TestSessionListMarksTheCallersSession(t *testing.T) {
 	}
 	if agentView := current(agentSession.Token); !agentView["Agent laptop"] || len(agentView) != 1 {
 		t.Fatalf("agent view marks=%v, want only its own session, marked current", agentView)
+	}
+}
+
+// An invite whose every role was deleted while it was being redeemed never makes a member without a
+// role: the redeem is refused and nothing is created.
+func TestRedeemNeverMakesAMemberWithoutARole(t *testing.T) {
+	api, authService, pool := testAPIWithPool(t)
+	adminToken := createSession(t, api, authService, "Roleless Desk", "admin@roleless.example.com")
+	kbCall(t, api, http.MethodPost, "/api/v1/roles", map[string]any{"name": "Tagger", "permissions": []string{"tags:read"}}, adminToken, http.StatusCreated, nil)
+	var invite struct {
+		URL string `json:"url"`
+	}
+	kbCall(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "new@roleless.example.com", "roles": []string{"Tagger"}}, adminToken, http.StatusCreated, &invite)
+	// The race's outcome: the role is gone by the time the redeem gives it.
+	if _, err := pool.Exec(context.Background(), `UPDATE roles SET deleted_at=now() WHERE name='Tagger'`); err != nil {
+		t.Fatal(err)
+	}
+	redeemed := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, invite.URL)}, "", nil)
+	if redeemed.Code != http.StatusUnauthorized {
+		t.Fatalf("redeem of an invite whose roles are gone: %d %s, want 401", redeemed.Code, redeemed.Body.String())
+	}
+	var members int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM agents WHERE email='new@roleless.example.com'`).Scan(&members); err != nil || members != 0 {
+		t.Fatalf("the refused redeem created %d members (%v)", members, err)
 	}
 }

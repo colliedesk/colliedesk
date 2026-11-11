@@ -38,6 +38,15 @@ type ConversationFilter struct {
 	CreatedBefore *time.Time
 	UpdatedAfter  *time.Time
 	UpdatedBefore *time.Time
+	// Ref keeps the conversations whose code (display_ref) is the one a person typed, read by the
+	// formats of the workspace's series: another case or padding matches, another year does not.
+	Ref string
+	// refIDs are the conversations Ref (or Search) names, found before the list is read.
+	refIDs []string
+	// SLA keeps the conversations a running response target makes "overdue" or "due_soon".
+	SLA []string
+	// slaOn says the workspace's response targets are on (read before the list).
+	slaOn bool
 	// Sort is one of the ConversationSort* values; empty is ConversationSortUpdatedDesc.
 	Sort   string
 	Search string
@@ -58,6 +67,7 @@ const (
 	ConversationSortCreatedAsc     = "created_asc"
 	ConversationSortPriority       = "priority"
 	ConversationSortWaitingLongest = "waiting_longest"
+	ConversationSortDue            = "due"
 )
 
 var conversationOrders = map[string]string{
@@ -68,6 +78,8 @@ var conversationOrders = map[string]string{
 	ConversationSortPriority:    `CASE c.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,c.updated_at DESC,c.id DESC`,
 	// Conversations awaiting the team, the oldest customer message first, then the rest by last update.
 	ConversationSortWaitingLongest: `CASE WHEN c.last_public_kind='incoming' THEN c.last_public_at END ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
+	// The earliest running response target first, then the rest as the inbox shows them.
+	ConversationSortDue: `c.sla_due_at ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
 }
 
 type ConversationPage struct {
@@ -201,7 +213,12 @@ func (s *Store) StartConversation(ctx context.Context, workspaceID string, in Ne
 
 func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
+		item, err := s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
+		if err != nil {
+			return item, err
+		}
+		// Which statuses would tell the customer is read for one conversation, not for a list.
+		return item, s.attachStatusNotices(ctx, tx, workspaceID, &item)
 	})
 }
 
@@ -215,15 +232,29 @@ func (s *Store) withChannelRef(ctx context.Context, tx pgx.Tx, workspaceID strin
 		if err := s.attachChannelRefs(ctx, tx, workspaceID, items); err != nil {
 			return domain.Conversation{}, err
 		}
+		if err := s.attachSLA(ctx, tx, workspaceID, items); err != nil {
+			return domain.Conversation{}, err
+		}
+		if err := attachStatusChanges(ctx, tx, workspaceID, items); err != nil {
+			return domain.Conversation{}, err
+		}
 		return items[0], nil
 	}
 }
 
+// conversationChatChannel is the channel of the chat the conversation c is in: its newest linked item's,
+// as its status notices go (statusNoticeChannel); read in the conversation's own query.
+const conversationChatChannel = `(SELECT i.channel_id::text FROM conversation_thread_items l
+		JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
+		WHERE l.workspace_id=c.workspace_id AND l.conversation_id=c.id AND l.unlinked_at IS NULL ORDER BY l.linked_at DESC,l.id DESC LIMIT 1)`
+
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL)
+	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),
+		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
 		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber)
+		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber,
+			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -242,7 +273,13 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 		if err != nil {
 			return page, err
 		}
-		return page, s.attachChannelRefs(ctx, tx, workspaceID, page.Items)
+		if err := s.attachChannelRefs(ctx, tx, workspaceID, page.Items); err != nil {
+			return page, err
+		}
+		if err := attachStatusChanges(ctx, tx, workspaceID, page.Items); err != nil {
+			return page, err
+		}
+		return page, s.attachSLA(ctx, tx, workspaceID, page.Items)
 	})
 }
 
@@ -250,7 +287,9 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 // fixed SQL text is concatenated.
 type conversationQuery struct {
 	where []string
-	args  []any
+	// searchRef is true for the conversation whose code the search names, which comes first.
+	searchRef string
+	args      []any
 }
 
 func (q *conversationQuery) arg(value any) string {
@@ -300,6 +339,25 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	if filter.ContactID != "" {
 		q.and("c.contact_id=" + q.arg(filter.ContactID) + "::uuid")
 	}
+	if len(filter.SLA) > 0 {
+		// Off, no conversation has targets; a stale row is a round of the worker behind.
+		anyOf := []string{"false"}
+		if filter.slaOn {
+			at := q.arg(now)
+			for _, state := range filter.SLA {
+				switch state {
+				case "overdue":
+					anyOf = append(anyOf, "c.sla_due_at<="+at)
+				case "due_soon":
+					anyOf = append(anyOf, "(c.sla_warn_at<="+at+" AND c.sla_due_at>"+at+")")
+				}
+			}
+		}
+		q.and("c.sla_applies AND (" + strings.Join(anyOf, " OR ") + ")")
+	}
+	if filter.Ref != "" {
+		q.and("c.id=ANY(" + q.arg(filter.refIDs) + "::uuid[])")
+	}
 	if filter.Organization != "" {
 		q.and(`EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND lower(k.organization)=lower(` + q.arg(filter.Organization) + `))`)
 	}
@@ -310,9 +368,9 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 		q.and("c.last_public_kind='outgoing'")
 	}
 	if filter.HasPendingDraft != nil {
-		// Expiry is applied lazily, so a pending row past its expiry no longer waits.
-		draft := `EXISTS(SELECT 1 FROM agent_requests r WHERE r.workspace_id=c.workspace_id AND r.conversation_id=c.id
-			AND r.kind='reply_draft' AND r.status='pending' AND r.expires_at>` + q.arg(now) + `)`
+		// A reply someone (usually an agent token) wrote for a person to send waits above the reply box.
+		draft := `EXISTS(SELECT 1 FROM ai_drafts d WHERE d.workspace_id=c.workspace_id AND d.conversation_id=c.id
+			AND d.source='written' AND d.status='ready' AND d.outcome IS NULL)`
 		q.and(negateUnless(*filter.HasPendingDraft, draft))
 	}
 	if filter.DeliveryFailed != nil {
@@ -347,8 +405,16 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	if filter.Search != "" {
 		pattern := q.arg(escapeLikePattern(filter.Search))
 		like := `ILIKE '%'||` + pattern + `||'%' ESCAPE '\'`
-		q.and(`(c.subject ` + like +
-			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.body ` + like + `)` +
+		// The words may be a conversation's code, read as ?ref= reads it; only then do they change the order.
+		if len(filter.refIDs) > 0 {
+			q.searchRef = "c.id=ANY(" + q.arg(filter.refIDs) + "::uuid[])"
+		}
+		byCode := ""
+		if q.searchRef != "" {
+			byCode = q.searchRef + ` OR `
+		}
+		q.and(`(` + byCode + `c.subject ` + like +
+			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.detached_at IS NULL AND m.body ` + like + `)` +
 			` OR EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND (k.name ` + like + ` OR k.email ` + like + `)))`)
 	}
 	if filter.ResultSnapshotID != "" {
@@ -356,6 +422,29 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 			`::uuid AND rm.metric=` + q.arg(filter.ResultMetric) + ` AND rm.conversation_id=c.id)`)
 	}
 	return q
+}
+
+// conversationsByCode are the conversations whose code is the one a person typed: read by every format
+// a series has had (conversation_ref_read), each matching only the conversations made with that format,
+// so a code given before a format change stays its conversation's. Another case or padding matches;
+// another year or series does not. Words that cannot be a code (no digit, spaces inside, too long) match none.
+func conversationsByCode(ctx context.Context, tx pgx.Tx, workspaceID, code string) ([]string, error) {
+	code = strings.TrimSpace(code)
+	// A code holds its number: words without a digit are none.
+	if code == "" || len(code) > 60 || strings.ContainsAny(code, " \t\r\n") || !strings.ContainsAny(code, "0123456789") {
+		return []string{}, nil
+	}
+	// Each (series, number) the code may be is looked up by the number's index, never by the workspace:
+	// OFFSET 0 keeps the planner from reading the workspace's conversations first and the code for each.
+	rows, err := tx.Query(ctx, `SELECT c.id FROM conversation_number_formats f
+		CROSS JOIN LATERAL conversation_ref_read(f.format, $2) r
+		CROSS JOIN LATERAL (SELECT c.id::text AS id FROM conversations c WHERE c.workspace_id=$1 AND c.number_series=f.series AND c.number=r.n
+			AND c.number_format=f.format AND (r.year IS NULL OR c.number_year=r.year) OFFSET 0) c
+		WHERE f.workspace_id=$1`, workspaceID, code)
+	if err != nil {
+		return nil, fmt.Errorf("find conversations by code: %w", err)
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
 func negateUnless(keep bool, condition string) string {
@@ -379,8 +468,31 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 			return ConversationPage{}, domain.ErrResultsRefreshed
 		}
 	}
+	if len(filter.SLA) > 0 || filter.Sort == ConversationSortDue {
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled FROM response_targets WHERE workspace_id=$1),false)`, workspaceID).Scan(&filter.slaOn); err != nil {
+			return ConversationPage{}, fmt.Errorf("read response targets: %w", err)
+		}
+		if !filter.slaOn && filter.Sort == ConversationSortDue {
+			filter.Sort = ConversationSortUpdatedDesc
+		}
+	}
+	if filter.Ref != "" || filter.Search != "" {
+		code := filter.Ref
+		if code == "" {
+			code = filter.Search
+		}
+		ids, err := conversationsByCode(ctx, tx, workspaceID, code)
+		if err != nil {
+			return ConversationPage{}, err
+		}
+		filter.refIDs = ids
+	}
 	q := conversationConditions(workspaceID, filter, now)
 	limit, offset := q.arg(filter.PageSize), q.arg((filter.Page-1)*filter.PageSize)
+	// A conversation whose code the search names comes first.
+	if q.searchRef != "" {
+		order = q.searchRef + ` DESC,` + order
+	}
 	idRows, err := tx.Query(ctx, `SELECT c.id::text FROM conversations c WHERE `+strings.Join(q.where, " AND ")+
 		` ORDER BY `+order+` LIMIT `+limit+` OFFSET `+offset, q.args...)
 	if err != nil {
@@ -395,8 +507,9 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	}
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,
-		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb)
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,
+		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb),
+		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
@@ -414,8 +527,9 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	for rows.Next() {
 		var item domain.Conversation
 		var tagsJSON []byte
-		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority,
-			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON); err != nil {
+		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority,
+			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON,
+			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {

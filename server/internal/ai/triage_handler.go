@@ -68,7 +68,7 @@ func (s *Service) loadTriageContext(ctx context.Context, run *Run) (triageContex
 		}
 		// The first customer message: what the ticket is about. Never a private note.
 		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT body FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
-			ORDER BY created_at,id LIMIT 1),'')`, ws, run.Task.ConversationID).Scan(&c.message); err != nil {
+			AND detached_at IS NULL ORDER BY created_at,id LIMIT 1),'')`, ws, run.Task.ConversationID).Scan(&c.message); err != nil {
 			return err
 		}
 		c.message = cut(strings.TrimSpace(c.message), triageMessageRunes)
@@ -165,13 +165,13 @@ func (s *Service) loadTriageContext(ctx context.Context, run *Run) (triageContex
 
 func triageUserTurn(c triageContext) (string, map[string]store.AIRetrievedDoc) {
 	var b strings.Builder
-	b.WriteString("<tags>\n" + escapeData(strings.Join(c.tagNames, "\n")) + "\n</tags>\n")
-	b.WriteString("<teammates>\n" + escapeData(strings.Join(c.agentNames, "\n")) + "\n</teammates>\n")
-	b.WriteString("<untrusted_customer_content>\nSubject: " + escapeData(c.subject) + "\n")
+	b.WriteString("<tags>\n" + aiprovider.EscapeData(strings.Join(c.tagNames, "\n")) + "\n</tags>\n")
+	b.WriteString("<teammates>\n" + aiprovider.EscapeData(strings.Join(c.agentNames, "\n")) + "\n</teammates>\n")
+	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(c.subject) + "\n")
 	if c.contactName != "" {
-		b.WriteString("Customer name: " + escapeData(c.contactName) + "\n")
+		b.WriteString("Customer name: " + aiprovider.EscapeData(c.contactName) + "\n")
 	}
-	b.WriteString(escapeData(c.message) + "\n</untrusted_customer_content>\n")
+	b.WriteString(aiprovider.EscapeData(c.message) + "\n</untrusted_customer_content>\n")
 	ids := map[string]store.AIRetrievedDoc{}
 	writeSources(&b, c.sources, ids, func(doc store.AIRetrievedDoc) string { return c.sorted[doc.ConversationID] })
 	return strings.TrimSuffix(b.String(), "\n"), ids

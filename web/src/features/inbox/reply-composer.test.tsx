@@ -8,6 +8,7 @@ import { json, serve, summary } from '../kb/kb.test.fixture';
 import { ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { ReplyComposer, replyPickersPart } from './reply-composer';
+import { PermissionsContext } from '../../lib/permissions-context';
 
 // The lists under the box come from their own chunk, which the composer loads when it mounts. These tests
 // start with it there, as a person finds it a moment after opening a conversation; the moment before is in
@@ -627,7 +628,7 @@ test('the composer says when its reply box holds a reply not sent yet, and when 
 
 const lanReply = {
   id: '99999999-9999-4999-8999-999999999999', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: '44444444-4444-4444-8444-444444444444',
-  author_name: 'Lan', agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'outgoing' as const, body: 'Your refund left today.', body_html: null, origin: null,
+  author_name: 'Lan', agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null, kind: 'outgoing' as const, body: 'Your refund left today.', body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-22T09:00:00Z', delivery: null, email: null, reply_number: 3,
 };
 
@@ -694,6 +695,14 @@ const deferred = () => {
   const promise = new Promise((resolve, reject) => { settle = { resolve, reject }; });
   return { promise, ...settle };
 };
+
+test('Send and resolve on a chat that tells says so in its tooltip', () => {
+  const { unmount } = render(<ReplyComposer onSubmit={vi.fn()} onResolve={vi.fn()} resolveTells="Hảo Đạt OA" />);
+  expect(screen.getByRole('button', { name: 'Send and resolve' })).toHaveAttribute('title', 'Send and resolve (Ctrl+Shift+Enter) · Hảo Đạt OA also tells the customer');
+  unmount();
+  render(<ReplyComposer onSubmit={vi.fn()} onResolve={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Send and resolve' })).toHaveAttribute('title', 'Send and resolve (Ctrl+Shift+Enter)');
+});
 
 test('Send and resolve sends the reply, then resolves only after the send succeeded', async () => {
   const send = deferred();
@@ -1106,4 +1115,18 @@ test('taking over another tab\'s draft keeps the key of the send it has in fligh
   act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: sending, storageArea: window.localStorage })); });
   expect(screen.getByLabelText('Message body')).toHaveValue('From tab A');
   expect(keptDraft('ws-1:agent-1:conv-22')).toMatchObject({ body: 'From tab A', sendKey: 'tab-a-key' });
+});
+
+// A role that may write notes but not to customers, and reads no saved replies or articles, is offered a
+// note and nothing it could not use.
+test('the box offers only what the role holds: a note without Reply, no saved replies, no articles', () => {
+  render(<PermissionsContext.Provider value={['conversations:read', 'messages:read', 'messages:note']}><ReplyComposer /></PermissionsContext.Provider>);
+  expect(screen.queryByRole('button', { name: /^Reply/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Saved replies|Insert saved reply/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Articles/ })).not.toBeInTheDocument();
+  fireEvent.keyDown(document.body, { key: 'r' });
+  expect(screen.getByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
+  fireEvent.keyDown(document.body, { key: '/' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

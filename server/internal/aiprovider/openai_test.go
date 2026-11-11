@@ -72,16 +72,11 @@ func TestOpenAIHostGetsItsOwnParameterNames(t *testing.T) {
 }
 
 func TestOpenRouterKeepsAJSONSchemaOnProvidersThatTakeIt(t *testing.T) {
-	fake := newFakeAPI(t, http.StatusOK, openAIReplyText)
-	transport := &rewriteTransport{target: fake.server.URL, next: fake.server.Client().Transport}
-	provider, err := NewOpenAICompatible(OpenAIConfig{BaseURL: "https://openrouter.ai/api/v1", APIKey: "k", HTTPClient: &http.Client{Transport: transport}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	provider, fake := newOpenRouter(t, openRouterModels, openAIReplyText, http.StatusOK)
 	if _, err := provider.Complete(context.Background(), draftRequest()); err != nil {
 		t.Fatal(err)
 	}
-	body := fake.recorded(t)[0].body
+	body := fake.bodies[0]
 	routing, _ := body["provider"].(map[string]any)
 	if routing["require_parameters"] != true || body["max_tokens"] != float64(1024) || body["reasoning_effort"] != nil {
 		t.Fatalf("body = %v", body)

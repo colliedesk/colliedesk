@@ -31,25 +31,41 @@ function signingKey(): KeyObject {
   return createPrivateKey(readFileSync(path));
 }
 
+// The JWKS server of this worker process. Every file that signs in on the cloud uses the one port of
+// jwksURL, and CI runs files in parallel: a second worker finds the port taken by another's server, which
+// serves the same key (the key is on disk), and uses it. A server stays up until its process ends, so no
+// file's afterAll takes it away from a file another worker is still running.
+let jwksServer: Server | undefined;
+
 export class IdentityProvider {
   private readonly key = signingKey();
   // The key id is the key's thumbprint, so a different key can never reuse a cached id.
   private readonly kid = createHash('sha256').update(String(this.key.export({ format: 'jwk' }).n)).digest('base64url').slice(0, 16);
-  private server?: Server;
 
   async start(): Promise<void> {
+    if (jwksServer) return;
     const publicJWK = { ...this.key.export({ format: 'jwk' }) };
     const jwk = { kty: 'RSA', n: publicJWK.n, e: publicJWK.e, kid: this.kid, alg: 'RS256', use: 'sig' };
-    this.server = createServer((request, response) => {
+    const server = createServer((request, response) => {
       if (request.url !== '/.well-known/jwks.json') { response.writeHead(404).end(); return; }
       response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ keys: [jwk] }));
     });
-    await new Promise<void>((resolve) => this.server?.listen(identity.jwksPort, '127.0.0.1', resolve));
+    const taken = await new Promise<boolean>((resolve, reject) => {
+      server.once('error', (error: NodeJS.ErrnoException) => (error.code === 'EADDRINUSE' ? resolve(true) : reject(error)));
+      server.listen(identity.jwksPort, '127.0.0.1', () => resolve(false));
+    });
+    if (!taken) {
+      server.unref();
+      jwksServer = server;
+      return;
+    }
+    // Another worker's server: it must serve this key, or tokens signed here would not verify.
+    const served = await (await fetch(jwksURL)).json() as { keys: Array<{ kid: string }> };
+    if (!served.keys.some((key) => key.kid === this.kid)) throw new Error(`port ${identity.jwksPort} serves another identity provider`);
   }
 
-  async stop(): Promise<void> {
-    await new Promise((resolve) => this.server?.close(resolve));
-  }
+  // stop keeps the server for the other files of this run (see jwksServer); the process ending closes it.
+  async stop(): Promise<void> {}
 
   token(claims: Record<string, unknown>, options: { key?: KeyObject; kid?: string } = {}): string {
     const now = Math.floor(Date.now() / 1000);

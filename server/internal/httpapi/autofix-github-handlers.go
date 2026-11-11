@@ -176,7 +176,7 @@ func (a *API) finishGitHubInstall(request *http.Request) (outcome, location stri
 	if started.AgentID != who.Agent.ID {
 		return "wrong_person", ""
 	}
-	if !auth.HasPermission(who.Agent.Role, auth.PermissionAccessWrite) || (a.limits && who.Access.Locked) {
+	if !who.Can(auth.PermAutofixSettingsUpdate) || (a.limits && who.Access.Locked) {
 		return "forbidden", ""
 	}
 	if query.Get("setup_action") == "request" {

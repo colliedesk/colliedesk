@@ -1,0 +1,26 @@
+/* Settings → Saved replies (S10-a/b/c). The list's base rules are shared with the inbox picker
+   (styles/components.css); these only restyle the settings list, scoped to its section. */
+.saved-replies .saved-reply-list { border-top: 0; }
+.saved-replies .saved-reply-list > li { align-items: flex-start; padding: var(--space-4) 0; }
+.saved-replies .saved-reply-list > li:first-child { padding-top: 0; }
+.saved-replies .saved-reply-text { gap: 2px; }
+.saved-replies .saved-reply-text strong { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+/* The text shows two lines, then an ellipsis; the whole text stays in the page for a screen reader. */
+.saved-replies .saved-reply-list > li > .saved-reply-text > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  color: var(--text-2); font-size: var(--fs-small); line-height: 20px; white-space: normal; overflow-wrap: anywhere; }
+.saved-replies .saved-reply-text small, .saved-replies .saved-reply-text .saved-reply-meta { font-size: var(--fs-label); line-height: 16px; }
+.saved-replies .saved-reply-actions { gap: var(--space-1); }
+/* History and Trash open under their row or the list, as a quiet card. */
+.saved-replies .saved-reply-panel { gap: var(--space-3); border: 0; border-radius: var(--radius-lg); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-4); }
+.saved-replies .saved-reply-panel-head h3, .saved-replies .saved-reply-panel-head strong { font-size: var(--fs-ui); font-weight: 600; }
+.saved-replies .saved-reply-versions > li { padding-top: var(--space-3); }
+.saved-replies .saved-reply-versions > li:first-child { border-top: 0; padding-top: 0; }
+.saved-replies .saved-reply-form { border-radius: var(--radius-lg); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-4); }
+/* A button on its own line (New saved reply, Trash, Reload) sits in a bar, so a card of rows
+   (settings-v2) makes the bar the row, not the button. */
+.saved-reply-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Inside the settings-v2 card (a padded card): the add form is part of the card, not a card of its own;
+   an edit form or a History/Trash panel is a quiet inset box, never a second raised card. */
+.settings-v2 .saved-replies .settings-body > .saved-reply-form { border-radius: 0; background: none; box-shadow: none; padding: 0; }
+.settings-v2 .saved-replies .saved-reply-list .saved-reply-form,
+.settings-v2 .saved-replies .saved-reply-panel { border-radius: var(--radius); background: var(--surface-0); box-shadow: inset 0 0 0 1px var(--line); padding: var(--space-3); }

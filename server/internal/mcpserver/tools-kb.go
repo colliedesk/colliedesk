@@ -10,36 +10,50 @@ import (
 )
 
 type restKBCollection struct {
-	ID           string      `json:"id"`
-	ParentID     *string     `json:"parent_id"`
-	Name         string      `json:"name"`
-	Slug         string      `json:"slug"`
-	Description  string      `json:"description"`
-	Position     int         `json:"position"`
-	ArticleCount int         `json:"article_count"`
-	UpdatedAt    string      `json:"updated_at"`
-	DeletedAt    string      `json:"deleted_at,omitempty"`
-	DeletedBy    *restPerson `json:"deleted_by"`
-	PurgesAt     string      `json:"purges_at,omitempty"`
+	ID           string             `json:"id"`
+	ParentID     *string            `json:"parent_id"`
+	Name         string             `json:"name"`
+	Slug         string             `json:"slug"`
+	Description  string             `json:"description"`
+	Position     int                `json:"position"`
+	ArticleCount int                `json:"article_count"`
+	UpdatedAt    string             `json:"updated_at"`
+	DeletedAt    string             `json:"deleted_at,omitempty"`
+	DeletedBy    *restPerson        `json:"deleted_by"`
+	PurgesAt     string             `json:"purges_at,omitempty"`
+	Translations []kbCollectionName `json:"translations"`
+}
+
+// kbCollectionName is a collection's name and description in another language.
+type kbCollectionName struct {
+	Locale      string `json:"locale"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Imported    bool   `json:"imported"`
 }
 
 type kbCollectionOut struct {
-	ID           string  `json:"id"`
-	ParentID     *string `json:"parent_id"`
-	Name         string  `json:"name"`
-	Slug         string  `json:"slug"`
-	Description  string  `json:"description"`
-	Position     int     `json:"position"`
-	ArticleCount int     `json:"article_count"`
-	UpdatedAt    string  `json:"updated_at"`
-	DeletedAt    string  `json:"deleted_at,omitempty"`
-	DeletedBy    *string `json:"deleted_by,omitempty"`
-	PurgesAt     string  `json:"purges_at,omitempty"`
+	ID           string             `json:"id"`
+	ParentID     *string            `json:"parent_id"`
+	Name         string             `json:"name"`
+	Slug         string             `json:"slug"`
+	Description  string             `json:"description"`
+	Position     int                `json:"position"`
+	ArticleCount int                `json:"article_count"`
+	UpdatedAt    string             `json:"updated_at"`
+	DeletedAt    string             `json:"deleted_at,omitempty"`
+	DeletedBy    *string            `json:"deleted_by,omitempty"`
+	PurgesAt     string             `json:"purges_at,omitempty"`
+	Translations []kbCollectionName `json:"translations"`
 }
 
 func kbCollectionView(collection restKBCollection) kbCollectionOut {
 	out := kbCollectionOut{ID: collection.ID, ParentID: collection.ParentID, Name: collection.Name, Slug: collection.Slug, Description: collection.Description,
-		Position: collection.Position, ArticleCount: collection.ArticleCount, UpdatedAt: collection.UpdatedAt, DeletedAt: collection.DeletedAt, PurgesAt: collection.PurgesAt}
+		Position: collection.Position, ArticleCount: collection.ArticleCount, UpdatedAt: collection.UpdatedAt, DeletedAt: collection.DeletedAt, PurgesAt: collection.PurgesAt,
+		Translations: collection.Translations}
+	if out.Translations == nil {
+		out.Translations = []kbCollectionName{}
+	}
 	if collection.DeletedBy != nil {
 		out.DeletedBy = &collection.DeletedBy.Name
 	}
@@ -63,13 +77,11 @@ type restKBArticle struct {
 	SEOTitle      string                `json:"seo_title"`
 	SEODesc       string                `json:"seo_description"`
 	HasSourceHTML bool                  `json:"has_source_html"`
-	Translations  []struct {
-		Locale string `json:"locale"`
-	} `json:"translations"`
-	DeletedAt   *string     `json:"deleted_at"`
-	DeletedBy   *restPerson `json:"deleted_by"`
-	PurgesAt    string      `json:"purges_at"`
-	AIExclusion *struct {
+	Translations  []restKBTranslation   `json:"translations"`
+	DeletedAt     *string               `json:"deleted_at"`
+	DeletedBy     *restPerson           `json:"deleted_by"`
+	PurgesAt      string                `json:"purges_at"`
+	AIExclusion   *struct {
 		At string      `json:"at"`
 		By *restPerson `json:"by"`
 	} `json:"ai_exclusion"`
@@ -109,20 +121,20 @@ func kbArticleRow(article restKBArticle) kbArticleRowOut {
 }
 
 type kbArticleOut struct {
-	ID            string               `json:"id"`
-	Number        int64                `json:"number"`
-	CollectionID  string               `json:"collection_id"`
-	Status        string               `json:"status"`
-	Slug          string               `json:"slug"`
-	PublishedAt   *string              `json:"published_at"`
-	UpdatedAt     string               `json:"updated_at"`
-	LastChange    *savedReplyChangeOut `json:"last_change"`
-	URL           string               `json:"url"`
-	TeamText      kbTeamText           `json:"team_text"`
-	InTrash       bool                 `json:"in_trash"`
-	HasSourceHTML bool                 `json:"has_source_html"`
-	AIExclusion   *kbAIExclusionOut    `json:"ai_exclusion"`
-	Translations  []string             `json:"translations"`
+	ID            string                `json:"id"`
+	Number        int64                 `json:"number"`
+	CollectionID  string                `json:"collection_id"`
+	Status        string                `json:"status"`
+	Slug          string                `json:"slug"`
+	PublishedAt   *string               `json:"published_at"`
+	UpdatedAt     string                `json:"updated_at"`
+	LastChange    *savedReplyChangeOut  `json:"last_change"`
+	URL           string                `json:"url"`
+	TeamText      kbTeamText            `json:"team_text"`
+	InTrash       bool                  `json:"in_trash"`
+	HasSourceHTML bool                  `json:"has_source_html"`
+	AIExclusion   *kbAIExclusionOut     `json:"ai_exclusion"`
+	Translations  []kbTranslationRowOut `json:"translations"`
 }
 
 // kbTeamText is what the team wrote of an article: its title, text and search fields.
@@ -142,9 +154,9 @@ type kbAIExclusionOut struct {
 func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
-		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []string{}}
+		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}}
 	for _, translation := range article.Translations {
-		out.Translations = append(out.Translations, translation.Locale)
+		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}
 	if article.AIExclusion != nil {
 		out.AIExclusion = &kbAIExclusionOut{At: article.AIExclusion.At}

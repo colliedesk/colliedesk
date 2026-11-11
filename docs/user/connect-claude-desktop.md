@@ -7,8 +7,9 @@ carries Claude's requests to your Colliedesk; the token is kept by Claude Deskto
 ## Before you start
 
 1. Sign in to Colliedesk and open **Settings → External AI agents**.
-2. Name the token (for example "Claude Desktop on my laptop"), pick a tier (`draft` is a good start: the agent
-   can sort and annotate, and nothing reaches a customer) and choose **Create token**. See [Agent tokens](sessions.md#agent-tokens).
+2. Name the token (for example "Claude Desktop on my laptop"), choose what it may do (follow a role,
+   or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
+   See [Agent tokens](sessions.md#agent-tokens).
 3. Copy the token. It starts with `cdk_agent_` and is shown once.
 
 The steps below use `https://desk.example.com`: put the address you open Colliedesk at in its place.
@@ -99,23 +100,17 @@ recorded as that token's person. Prefer the extension.
 ## Try it
 
 Ask Claude Desktop: "Who am I in Colliedesk?" It calls `colliedesk_whoami`, which answers
-with your name, your workspace, the token's tier and the tools it may use. Then, for example: "Triage the
+with your name, your workspace, your roles, the token's permissions and the tools it may use. Then, for example: "Triage the
 open conversations nobody owns: tag billing questions with `billing` and leave a note with a
 summary."
 
-## What each tier can do
+## What the agent can do
 
-Colliedesk has 200 tools. A token calls the tools of its tier directly; any other call
-becomes an [agent request](agent-requests.md) a person approves in **Requests**.
+Colliedesk has 244 tools. The agent acts as you, with the permissions you gave the token,
+never more than you hold now. A tool it has the permissions for runs at once; any other is refused
+with the permission it lacks. See [Roles and permissions](roles-and-permissions.md).
 
-| Tier | Tools it calls directly |
-|---|---|
-| `read` | 89 of 200 |
-| `draft` | 113 of 200 |
-| `send` | 151 of 200 |
-| `admin` | 200 of 200 |
-
-Every tool and its tier: [Connect an AI agent (MCP)](mcp.md#tools).
+Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 
 ## Remove it
 

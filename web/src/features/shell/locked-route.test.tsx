@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { LockedRoute } from './locked-route';
 
 const api = vi.hoisted(() => ({ billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn(), logout: vi.fn() }));
@@ -9,12 +10,12 @@ const embed = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed.create } }));
 
 const me = {
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'admin' as const, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('admin'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, permissions: [], plan: null, ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false,
+  timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null, ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false,
 };
 const locked = {
-  plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly'],
+  plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, purchased_plan: null, checkout_plans: ['team_monthly', 'team_yearly'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const assign = vi.fn();

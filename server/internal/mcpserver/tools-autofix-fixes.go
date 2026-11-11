@@ -56,22 +56,41 @@ func fixSendBody(args fixSendArguments) map[string]any {
 	return body
 }
 
-func fixSendRequest(c *call, arguments map[string]any) (any, error) {
+// fixSent answers a fix that was sent: the fix as the tools show it, and the GitHub page where the
+// person behind the token confirms an issue connector's send.
+func fixSent(c *call, path string, body map[string]any) (any, error) {
+	var sent struct {
+		Fix          map[string]any `json:"fix"`
+		AuthorizeURL *string        `json:"authorize_url"`
+	}
+	if err := c.send(http.MethodPost, path, body, &sent); err != nil {
+		return nil, err
+	}
+	out := map[string]any{"fix": fixForModel(sent.Fix), "authorize_url": sent.AuthorizeURL}
+	if sent.AuthorizeURL != nil {
+		out["next"] = forThePerson(c, "it opens GitHub, where they confirm within 10 minutes and the issue is created with their GitHub account. Follow the fix with colliedesk_fix_get.")
+	} else {
+		out["next"] = "The coding agent has it; follow the fix with colliedesk_fix_get."
+	}
+	return out, nil
+}
+
+func fixSend(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[fixSendArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = "No conversation " + args.ConversationID + " in this workspace."
-	return ask(c, http.MethodPost, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/fixes", fixSendBody(args))
+	return fixSent(c, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/fixes", fixSendBody(args))
 }
 
-func fixRetryRequest(c *call, arguments map[string]any) (any, error) {
+func fixRetry(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[fixSendArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = fixNotFound
-	return ask(c, http.MethodPost, fixPath(args.FixID, "/retry"), fixSendBody(args))
+	return fixSent(c, fixPath(args.FixID, "/retry"), fixSendBody(args))
 }
 
 // fixChange makes a person's change to a fix and answers it as the tools show a fix.

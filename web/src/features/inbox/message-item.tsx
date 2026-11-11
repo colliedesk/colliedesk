@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import Markdown from 'react-markdown';
+import type { ReactNode } from 'react';
 import type { Attachment, Message, MessageOrigin } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
-import { LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
+import { LockIcon, SparklesIcon } from '../../ui/icons';
+import { AttachmentList } from './attachment-list';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
+import { MarkdownBody } from './markdown-body';
 
 interface MessageItemProps {
   item: Message;
@@ -15,6 +17,15 @@ interface MessageItemProps {
   onRetryDelivery?: (messageId: string) => void;
   // approvedBy names the person who sent a reply an AI agent drafted (the message's author).
   approvedBy?: string;
+  // label says more about where the message came from (why a chat message is here); menu acts on it.
+  label?: ReactNode;
+  menu?: ReactNode;
+  // note is a line about the message under its header, the width of the message (why AI added it).
+  note?: ReactNode;
+  // channelName is the conversation's channel, the author of a notice it sent by itself (named even once removed).
+  channelName?: string;
+  // onOpenMedia opens the conversation's gallery at a picture, video or voice clip of this message.
+  onOpenMedia?: (attachmentId: string) => void;
 }
 
 export function MessageItem(props: MessageItemProps) {
@@ -40,7 +51,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName, onOpenMedia }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -50,31 +61,42 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
   // an image is already on screen, so its row would repeat it; the file stays stored and downloadable, and
   // the row returns in the plain-text view, where nothing else shows the image.
   const files = showHTML ? stored.filter((file) => !file.inline) : stored;
+  // Only mail (and mail imported from another helpdesk) is hard-wrapped by its client; every break of a chat or
+  // a form, the batches of chat messages put together included, is one the customer typed.
+  const typedBreaks = !item.email && !item.origin;
   const sender = approvedBy ?? item.author_name ?? messages.someone;
   // A token or draft line already names the person; the plain name would repeat it.
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
+  const noticeAuthor = item.notice_kind ? channelName : undefined;
   return (
     <article className={`message message-${item.kind}`}>
       <header className="message-meta">
-        <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
+        <Avatar name={item.author_name ?? item.email?.from ?? (item.notice_kind ? noticeAuthor || messages.channelNoticeAuthor : kindLabel(item))} />
         <div className="message-byline">
           {plainAuthor && <span className="message-author">{item.author_name}</span>}
+          {noticeAuthor && <span className="message-author">{noticeAuthor}</span>}
           {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
-          {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
+          {item.agent_token && <span className="message-author">{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
-          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
-          {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
+          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item)}</span>
+          {/* A draft an agent token wrote is named by that token; only a draft the built-in AI wrote carries the AI mark. */}
+          {item.ai_draft_id && item.ai_draft_source === 'written' && item.drafted_by
+            && <span className="message-kind">{messages.draftedByToken(item.drafted_by.label, item.drafted_by.agent_name, item.ai_draft_outcome)}</span>}
+          {item.ai_draft_id && item.ai_draft_source !== 'written' && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
             {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
+          {label}
         </div>
         <time dateTime={item.created_at} title={stampTitle(item.created_at, timezone)}>{formatDate(item.created_at, timezone)}{zoneSuffix(item.created_at, timezone)}</time>
+        {menu}
       </header>
+      {note}
       {item.email && <EmailEnvelope email={item.email} storedFiles={stored.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
       {showHTML && item.body_html
         ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
-        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>}
-      {files.length > 0 && <AttachmentList items={files} />}
+        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.body} />}</div>}
+      {files.length > 0 && <AttachmentList items={files} onOpenMedia={onOpenMedia} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
@@ -87,7 +109,9 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
   );
 }
 
-function kindLabel(kind: Message['kind']) {
+// A notice the channel sent by itself (its received notice) is no reply of the team, and says so.
+function kindLabel({ kind, notice_kind }: Pick<Message, 'kind' | 'notice_kind'>) {
+  if (notice_kind) return messages.channelNotice;
   if (kind === 'note') return messages.noteMode;
   return kind === 'incoming' ? messages.incoming : messages.replyMode;
 }
@@ -120,7 +144,7 @@ function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId
   return (
     <div className="message-envelope">
       <span className={`badge badge-delivery-${off || never ? 'queued' : status}`} title={lastError ?? undefined}>{off ? messages.deliverySavedNotSent : never ? messages.deliveryNotSent : messages.deliveryStatuses[status]}</span>
-      {status === 'failed' && !never && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
+      {status === 'failed' && !never && item.delivery.retryable !== false && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
       {/* A reply waiting because the server's mailbox credentials were refused, or its provider is switched off,
           says so: it may wait long. */}
       {(status === 'sent' || status === 'failed' || code === 'mailbox_server_config' || code === 'mailbox_switched_off' || code === 'mailbox_not_configured') && lastError && <span className="delivery-reason">{lastError}</span>}
@@ -139,15 +163,3 @@ function OriginLine({ origin }: { origin: MessageOrigin }) {
   );
 }
 
-function AttachmentList({ items }: { items: Attachment[] }) {
-  return (
-    <ul className="message-attachments" aria-label={messages.attachments}>
-      {items.map((file) => (
-        <li key={file.id}>
-          <PaperclipIcon /><a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
-          <span className="attachment-size">{formatBytes(file.size)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}

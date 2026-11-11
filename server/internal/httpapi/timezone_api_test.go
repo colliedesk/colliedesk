@@ -22,7 +22,7 @@ func TestWorkspaceAndAgentTimezoneSettings(t *testing.T) {
 	}
 
 	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
-		"email": "agent@timezone.example.com", "role_ceiling": "agent",
+		"email": "agent@timezone.example.com", "roles": []string{"Agent"},
 	}, adminToken, nil)
 	var invite struct {
 		URL string `json:"url"`

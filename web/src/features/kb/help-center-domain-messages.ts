@@ -18,6 +18,9 @@ export const domainMessages = {
   state: (status: Status, hostname: string | null) => status === 'active'
     ? `The help center is served on ${hostname}.`
     : status === 'pending' ? `${hostname} is waiting for its DNS records. It starts serving as soon as a check finds them.` : 'No custom domain is set.',
+  // The line under the state once a check opened the address: "HTTPS works: <link> opens this help center."
+  httpsWorks: 'HTTPS works:',
+  addressOpens: 'opens this help center.',
   recordsHelp: 'Add these records at your DNS provider, then press Check now. One of the two proving records is enough. DNS changes can take a few minutes.',
   recordsKeep: 'Keep these records at your DNS provider; the daily check warns here if they change, and the help center stops serving on the domain after 7 days without them.',
   failing: (since: string, until: string, hostname: string) =>

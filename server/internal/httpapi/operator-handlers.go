@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/qrsvg"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -79,7 +80,7 @@ func (a *API) authorizeOperator(route Route, next http.HandlerFunc) http.Handler
 		} else {
 			raw, viaCookie, ok := operatorCredential(request, a.operatorCookie())
 			if !ok {
-				writeError(response, http.StatusUnauthorized, "unauthorized", "An operator session is required.")
+				writeSaid(response, http.StatusUnauthorized, "unauthorized", configerr.Say("operator_session_required", nil))
 				return
 			}
 			var err error
@@ -88,15 +89,15 @@ func (a *API) authorizeOperator(route Route, next http.HandlerFunc) http.Handler
 				if !errors.Is(err, auth.ErrInvalidCredential) {
 					slog.Error("authenticate operator", "error", err)
 				}
-				writeError(response, http.StatusUnauthorized, "unauthorized", "An operator session is required.")
+				writeSaid(response, http.StatusUnauthorized, "unauthorized", configerr.Say("operator_session_required", nil))
 				return
 			}
 			if viaCookie && writes(request.Method) && request.Header.Get("Origin") != a.operatorOrigin() {
-				writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match the operator console.")
+				writeSaid(response, http.StatusForbidden, "csrf_rejected", configerr.Say("csrf_rejected", nil))
 				return
 			}
 			if who.IsToken() {
-				access := tokenTiers[route.Method+" "+route.Pattern]
+				access := routeAccess[route.Method+" "+route.Pattern]
 				if access.Approval || (access.Permission != "" && !who.Allows(access.Permission)) {
 					a.fileOperatorRequest(response, request, route, who)
 					return
@@ -138,11 +139,11 @@ func secretInBody(body []byte) bool {
 func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Request, route Route, who auth.OperatorPrincipal) {
 	body, err := io.ReadAll(io.LimitReader(request.Body, 256<<10))
 	if err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_body", "The body could not be read.")
+		writeSaid(response, http.StatusBadRequest, "invalid_body", configerr.Say("body_unreadable", nil))
 		return
 	}
 	if secretInBody(body) {
-		writeError(response, http.StatusBadRequest, "secret_in_request", "A token cannot send a secret. Ask for it with null (\"secrets\": {\"smtp.password\": null}); the person who approves types it.")
+		writeSaid(response, http.StatusBadRequest, "secret_in_request", configerr.Say("secret_in_request_example", nil))
 		return
 	}
 	var shape struct {
@@ -154,13 +155,13 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 	var stored json.RawMessage
 	if len(bytes.TrimSpace(body)) > 0 {
 		if !json.Valid(body) {
-			writeError(response, http.StatusBadRequest, "invalid_json", "The body is not valid JSON.")
+			writeSaid(response, http.StatusBadRequest, "invalid_json", configerr.Say("body_not_json", nil))
 			return
 		}
 		_ = json.Unmarshal(body, &shape)
 		for name := range shape.Set {
 			if key, ok := serverconfig.Lookup(name); ok && key.Secret {
-				writeError(response, http.StatusBadRequest, "secret_in_request", "A token cannot send a secret. Ask for it with null in secrets; the person who approves types it.")
+				writeSaid(response, http.StatusBadRequest, "secret_in_request", configerr.Say("secret_in_request", nil))
 				return
 			}
 		}
@@ -174,7 +175,7 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 		Path: request.URL.Path, Body: stored, Summary: operatorRequestSummary(route, request.URL.Path, changedNames(shape.Set, shape.Unset, shape.Secrets)), Note: shape.Note, NeedsSecrets: needs})
 	if err != nil {
 		slog.Error("file operator request", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be stored.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("request_unstored", nil))
 		return
 	}
 	writeJSON(response, http.StatusAccepted, map[string]any{"request_id": filed.ID, "status": filed.Status, "summary": filed.Summary,
@@ -260,16 +261,16 @@ func signInError(response http.ResponseWriter, step auth.SignInStep, left int, e
 		writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "operator_code_wrong",
 			"message": "That code didn't match.", "tries_left": left}})
 	case errors.Is(err, auth.ErrOperatorLinkExpire):
-		writeError(response, http.StatusGone, "operator_link_expired", "This link expired. Print a new one with collie operator pair.")
+		writeSaid(response, http.StatusGone, "operator_link_expired", configerr.Say("link_expired", nil))
 	case errors.Is(err, auth.ErrOperatorLinkUsed):
-		writeError(response, http.StatusConflict, "operator_link_used", "This link was used already. Print a new one with collie operator pair.")
+		writeSaid(response, http.StatusConflict, "operator_link_used", configerr.Say("link_used", nil))
 	case errors.Is(err, auth.ErrOperatorLink):
-		writeError(response, http.StatusNotFound, "operator_link_invalid", "This link is not valid. Print a new one with collie operator pair.")
+		writeSaid(response, http.StatusNotFound, "operator_link_invalid", configerr.Say("link_invalid", nil))
 	case errors.Is(err, auth.ErrOperatorNoRing):
-		writeError(response, http.StatusConflict, "secret_keys_missing", "An authenticator needs MAILBOX_TOKEN_KEYS on the server.")
+		writeSaid(response, http.StatusConflict, "secret_keys_missing", configerr.Say("authenticator_needs_key_ring", configerr.Params{"env": "MAILBOX_TOKEN_KEYS"}))
 	default:
 		slog.Error("operator sign-in", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "Sign-in failed. Try again.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("sign_in_failed", nil))
 	}
 }
 
@@ -283,14 +284,14 @@ func (a *API) tooManySignInTries(response http.ResponseWriter, request *http.Req
 		return false
 	}
 	response.Header().Set("Retry-After", "60")
-	writeError(response, http.StatusTooManyRequests, "too_many_requests", "Too many tries. Wait a minute.")
+	writeSaid(response, http.StatusTooManyRequests, "too_many_requests", configerr.Say("too_many_tries", nil))
 	return true
 }
 
 func (a *API) redeemOperatorLink(response http.ResponseWriter, request *http.Request) {
 	var input redeemOperatorRequest
 	if err := decodeJSON(request, &input); err != nil || strings.TrimSpace(input.Token) == "" {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the token of the link.")
+		writeSaid(response, http.StatusBadRequest, "invalid_request", configerr.Say("send_link_token", nil))
 		return
 	}
 	if a.tooManySignInTries(response, request, input.Token) {
@@ -312,11 +313,11 @@ func (a *API) redeemOperatorLink(response http.ResponseWriter, request *http.Req
 func (a *API) signInOperatorWithCloud(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Cache-Control", "no-store")
 	if a.operatorCloud == nil {
-		writeError(response, http.StatusNotFound, "not_found", "Cloud sign-in is not configured.")
+		writeSaid(response, http.StatusNotFound, "not_found", configerr.Say("cloud_sign_in_not_configured", nil))
 		return
 	}
 	if request.Header.Get("Origin") != a.operatorOrigin() {
-		writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match the operator console.")
+		writeSaid(response, http.StatusForbidden, "csrf_rejected", configerr.Say("csrf_rejected", nil))
 		return
 	}
 	token, _ := bearerToken(request.Header.Get("Authorization"))
@@ -324,7 +325,7 @@ func (a *API) signInOperatorWithCloud(response http.ResponseWriter, request *htt
 		return
 	}
 	refuse := func() {
-		writeError(response, http.StatusUnauthorized, "operator_sign_in_refused", "This account cannot sign in to the operator console.")
+		writeSaid(response, http.StatusUnauthorized, "operator_sign_in_refused", configerr.Say("sign_in_refused", nil))
 	}
 	if token == "" {
 		refuse()
@@ -397,7 +398,7 @@ func (a *API) getOperatorMe(response http.ResponseWriter, request *http.Request)
 func (a *API) operatorLogout(response http.ResponseWriter, request *http.Request) {
 	who := operatorPrincipal(request)
 	if err := a.config.Operators.Logout(request.Context(), who); err != nil {
-		writeError(response, http.StatusInternalServerError, "internal_error", "The session could not be ended.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("session_unended", nil))
 		return
 	}
 	if who.ViaCookie {
@@ -414,16 +415,16 @@ func (a *API) reauthorized(response http.ResponseWriter, request *http.Request, 
 	case err == nil:
 		return true
 	case errors.Is(err, auth.ErrOperatorReauthCLI):
-		writeError(response, http.StatusForbidden, "reauth_needs_new_link", "Confirming needs a fresh sign-in: run collie operator pair and open the link. Nothing was saved.")
+		writeSaid(response, http.StatusForbidden, "reauth_needs_new_link", configerr.Say("reauth_needs_new_link", nil))
 	case errors.Is(err, auth.ErrOperatorCode):
-		writeError(response, http.StatusBadRequest, "reauth_code_invalid", "That code didn't match. Nothing was saved.")
+		writeSaid(response, http.StatusBadRequest, "reauth_code_invalid", configerr.Say("reauth_code_invalid", nil))
 	case errors.Is(err, auth.ErrOperatorLocked):
-		writeError(response, http.StatusLocked, "operator_locked", "Sign-in is locked for 15 minutes after ten wrong codes. Nothing was saved.")
+		writeSaid(response, http.StatusLocked, "operator_locked", configerr.Say("operator_locked", nil))
 	case errors.Is(err, auth.ErrOperatorReauth):
-		writeError(response, http.StatusBadRequest, "reauth_required", "Enter your authenticator code to confirm. Nothing was saved.")
+		writeSaid(response, http.StatusBadRequest, "reauth_required", configerr.Say("reauth_required", nil))
 	default:
 		slog.Error("operator reauthentication", "error", err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The code could not be checked.")
+		writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("code_unchecked", nil))
 	}
 	return false
 }
@@ -454,9 +455,9 @@ func (a *API) operatorOnce(response http.ResponseWriter, request *http.Request, 
 	stored, replayed, err := a.config.Operators.Once(request.Context(), who.Operator.ID, operation, key, []byte(store.RequestFingerprint(input...)), run)
 	switch {
 	case errors.Is(err, auth.ErrOperatorKeyReused):
-		writeError(response, http.StatusUnprocessableEntity, "idempotency_key_reused", "This Idempotency-Key was already used for another request. Send a new key for a new one.")
+		writeSaid(response, http.StatusUnprocessableEntity, "idempotency_key_reused", configerr.Say("idempotency_key_reused", nil))
 	case errors.Is(err, auth.ErrOperatorKeyInFlight):
-		writeError(response, http.StatusConflict, "request_in_progress", "The first request with this Idempotency-Key is still running.")
+		writeSaid(response, http.StatusConflict, "request_in_progress", configerr.Say("request_in_progress", nil))
 	case err != nil:
 		operatorCreateError(response, err)
 	case replayed:
@@ -471,16 +472,16 @@ func (a *API) operatorOnce(response http.ResponseWriter, request *http.Request, 
 func operatorCreateError(response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, serverconfig.ErrConflict):
-		writeError(response, http.StatusConflict, "config_changed", "Someone saved another version since you read this one. Nothing was saved.")
+		writeSaid(response, http.StatusConflict, "config_changed", configerr.Say("config_changed", nil))
 		return
 	case errors.Is(err, serverconfig.ErrTrialPending):
-		writeError(response, http.StatusConflict, "trial_pending", "A trial change runs: confirm or revert it first. Nothing was saved.")
+		writeSaid(response, http.StatusConflict, "trial_pending", configerr.Say("trial_pending_first", nil))
 		return
 	case errors.Is(err, serverconfig.ErrNoTrial):
-		writeError(response, http.StatusBadRequest, "no_trial", "That version is not a trial that still runs.")
+		writeSaid(response, http.StatusBadRequest, "no_trial", configerr.Say("no_trial", nil))
 		return
 	case errors.Is(err, serverconfig.ErrNoChange):
-		writeError(response, http.StatusBadRequest, "nothing_to_save", "That version is what runs already.")
+		writeSaid(response, http.StatusBadRequest, "nothing_to_save", configerr.Say("version_runs_already", nil))
 		return
 	}
 	var invalid *auth.InvalidTokenError
@@ -489,7 +490,7 @@ func operatorCreateError(response http.ResponseWriter, err error) {
 		return
 	}
 	slog.Error("operator change", "error", err)
-	writeError(response, http.StatusInternalServerError, "internal_error", "The change could not be saved.")
+	writeSaid(response, http.StatusInternalServerError, "internal_error", configerr.Say("change_unsaved", nil))
 }
 
 func (a *API) createOperatorToken(response http.ResponseWriter, request *http.Request) {
@@ -500,7 +501,7 @@ func (a *API) createOperatorToken(response http.ResponseWriter, request *http.Re
 		Note        string   `json:"note"`
 	}
 	if err := decodeJSON(request, &input); err != nil || strings.TrimSpace(input.Label) == "" {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A token needs a name.")
+		writeSaid(response, http.StatusBadRequest, "invalid_request", configerr.Say("token_needs_name", nil))
 		return
 	}
 	if !a.reauthorized(response, request, input.ReauthCode) {

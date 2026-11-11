@@ -77,43 +77,37 @@ func TestHelpCenterThemeRefusesAVideoAsLogoOrFavicon(t *testing.T) {
 	}
 }
 
-// A send token's theme change waits as a request; an admin approving it changes the theme.
-func TestApprovedThemeRequestChangesTheTheme(t *testing.T) {
+// A token holding help_center:update (and kb_articles:publish) changes the theme at once; a send token
+// is refused and nothing changes.
+func TestATokenThatMayChangeTheThemeChangesIt(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Theme Approve", "admin@theme-approve.example.com")
+	body := map[string]any{"custom_css": "", "colors": map[string]any{"primary": "#0b5cad"}, "body_font": "mono"}
 	send := issueToken(t, api, admin, "Writer", "send").Token
-	filed := accepted(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "colors": map[string]any{"primary": "#0b5cad"}, "body_font": "mono"}, send)
-	if response := approve(t, api, admin, filed.RequestID, nil); response.Code != http.StatusOK {
-		t.Fatalf("approve status=%d body=%s", response.Code, response.Body.String())
-	}
+	refused(t, api, http.MethodPut, themePath, body, send, "help_center:update")
+	writer := issueToken(t, api, admin, "Designer", "admin").Token
+	kbCall(t, api, http.MethodPut, themePath, body, writer, http.StatusOK, nil)
 	var theme themeView
 	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &theme)
 	if theme.Colors["primary"] == nil || *theme.Colors["primary"] != "#0b5cad" || theme.BodyFont == nil || *theme.BodyFont != "mono" || theme.ContentVersion != 1 {
-		t.Fatalf("theme after approval = %+v", theme)
+		t.Fatalf("theme after the token's change = %+v", theme)
 	}
 }
 
-// A theme request is stored for days and shown to people, so a key hidden in a nested object, a
-// color nobody has, or an object where a value goes, is refused before anything is filed.
-func TestThemeRequestWithAnUnexpectedNestedFieldIsNotFiled(t *testing.T) {
+// A key hidden in a nested object, a color nobody has, or an object where a value goes, is refused.
+func TestThemeChangeWithAnUnexpectedNestedFieldIsRefused(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Theme Filing", "admin@theme-filing.example.com")
-	send := issueToken(t, api, admin, "Writer", "send").Token
+	writer := issueToken(t, api, admin, "Designer", "admin").Token
 	for _, body := range []map[string]any{
 		{"colors": map[string]any{"primary": "#0b5cad", "api_key": "sk-hidden-1"}, "custom_css": ""},
 		{"colors": map[string]any{"primary": map[string]any{"secret": "sk-hidden-2"}}, "custom_css": ""},
 		{"logo_alt": map[string]any{"secret": "sk-hidden-3"}, "custom_css": ""},
 		{"colors": []any{map[string]any{"secret": "sk-hidden-4"}}, "custom_css": ""},
 	} {
-		response := request(t, api, http.MethodPut, themePath, body, send, nil)
-		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "Nothing was filed") {
-			t.Fatalf("%v: status=%d body=%s, want 400 and nothing filed", body, response.Code, response.Body.String())
+		if response := request(t, api, http.MethodPut, themePath, body, writer, nil); response.Code != http.StatusBadRequest && response.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%v: status=%d body=%s, want a refusal", body, response.Code, response.Body.String())
 		}
 	}
-	for _, item := range listRequests(t, api, admin, "") {
-		if strings.Contains(string(item.Body), "sk-hidden") {
-			t.Fatalf("a stored request keeps a nested field the theme does not take: %s", item.Body)
-		}
-	}
-	accepted(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "colors": map[string]any{"primary": "#0b5cad", "footer": nil}}, send)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "colors": map[string]any{"primary": "#0b5cad", "footer": nil}}, writer, http.StatusOK, nil)
 }

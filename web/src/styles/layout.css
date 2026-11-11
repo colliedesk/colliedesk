@@ -1,79 +1,145 @@
-/* App shell: a slim rail on the grey app background; each view sits in white panels with a small gap. */
-.app-shell { height: 100dvh; display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--surface-0); }
-.app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.app-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+/* App shell: a sidebar on the grey app background; the identity bar over one white sheet that holds the view. */
+:root { --sidebar-width: 248px; }   /* things fixed to the viewport (the setup dock) start beside it */
+.app-shell { height: 100dvh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); background: var(--surface-0); }
+.app-sidebar {
+  position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto;
+  padding: var(--space-2) var(--space-2); background: var(--surface-0); box-shadow: inset -1px 0 0 var(--line);
+}
+.app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); overflow: hidden; padding: 0 var(--space-2) var(--space-2) 0; }
+.app-sheet { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+/* Positioned, so an absolute child (an sr-only label, a hidden radio) never sizes the window and adds a second scrollbar. */
+.app-content { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: auto; }
 .app-content > .inbox-shell { height: 100%; }
 .app-content > .redeem-page { min-height: 100%; }
-/* The avatar opens the account menu; on a wide screen it sits at the foot of the rail. */
-.account-menu { position: relative; margin-top: auto; }
-.rail-avatar { width: 40px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; border-radius: 999px; }
+/* Sign-in and an AI app's consent page stand alone, outside the shell: their page is the whole window, no inset. */
+.app-main:has(> .redeem-page) { padding: 0; }
+.app-main:has(> .redeem-page) > .app-sheet, .app-main > .app-sheet:has(> .app-content > .redeem-page) { border-radius: 0; box-shadow: none; }
+/* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
+.identity-bar {
+  flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: 40px;
+  background: var(--surface-0); padding: 0 var(--space-2); font-size: var(--fs-label);
+}
+.identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+.identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
+.app-rail { flex: 1 0 auto; display: flex; flex-direction: column; gap: var(--space-1); background: var(--surface-0); }
+.rail-brand {
+  width: var(--control, 32px); height: var(--control, 32px); display: grid; place-items: center; margin: var(--space-1) 0 var(--space-2);
+  border-radius: var(--radius);
+}
+.rail-brand .logo-mark { width: 24px; height: 24px; }
+.rail-links { display: flex; flex-direction: column; }
+.rail-link {
+  height: var(--control, 32px); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius);
+  color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.rail-link:hover { background: var(--surface-2); color: var(--text-1); }
+.rail-link[aria-current="page"] { background: var(--surface-3); color: var(--text-1); }
+.rail-link svg { flex: none; width: 16px; height: 16px; color: var(--text-3); stroke-width: 1.75; }
+.rail-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The label is on screen, so the rail's tooltips would only repeat it. */
+.rail-link[data-tip]::after { display: none; }
+.app-rail .rail-badge { position: static; flex: none; width: var(--space-6); min-width: 0; padding: 0; border-radius: 0; background: none; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; text-align: right; }
+/* Desktop: the sidebar's width is the person's (sidebar-layout.ts): dragged at its edge, or folded into the icon rail. */
+.rail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.sidebar-toggle { --control: 28px; flex: none; width: 28px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
+.sidebar-toggle:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
+.sidebar-toggle svg { width: 16px; height: 16px; transform: scaleX(-1); }   /* the panel on the left */
+.sidebar-toggle[data-tip]::after { left: auto; right: 0; translate: 0 0; }   /* under the button, inside the sidebar: it never scrolls sideways */
+.sidebar-resizer { position: absolute; z-index: 4; top: 0; right: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; }
+.sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 2px; background: transparent; transition: background-color var(--dur-fast) var(--ease); }
+.sidebar-resizer:hover::after { background: color-mix(in srgb, var(--line-control) 55%, var(--line)); }   /* a light hint, not a bar */
+.sidebar-resizer:is([data-dragging], :focus-visible)::after { background: var(--line-control); }
+.sidebar-resizer:focus-visible { outline: none; }
+html[data-sidebar-resizing], html[data-sidebar-resizing] * { cursor: col-resize; user-select: none; }
+html[data-sidebar-resizing] iframe { pointer-events: none; }
+@media (min-width: 64.01rem) {
+  .app-shell { --sidebar-width: var(--sidebar-user-width, 248px); transition: grid-template-columns var(--dur-fast) var(--ease); }
+  html[data-sidebar-resizing] .app-shell { transition: none; }
+  .app-shell[data-sidebar="collapsed"] { --sidebar-width: 56px; }
+  .app-shell[data-sidebar="collapsed"] .app-sidebar { padding: var(--space-2) 0; overflow: visible; }
+  .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links) { align-items: center; }
+  .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; gap: 0; margin-bottom: var(--space-2); }
+  .app-shell[data-sidebar="collapsed"] .rail-brand { margin-bottom: var(--space-1); }
+  .app-shell[data-sidebar="collapsed"] .sidebar-toggle svg { transform: none; }
+  .app-shell[data-sidebar="collapsed"] .sidebar-toggle[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
+  .app-shell[data-sidebar="collapsed"] .rail-links { gap: var(--space-1); }
+  .app-shell[data-sidebar="collapsed"] .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .rail-link svg { width: 18px; height: 18px; }
+  .app-shell[data-sidebar="collapsed"] .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app-shell[data-sidebar="collapsed"] .rail-link[data-tip]::after { display: block; left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
+  .app-shell[data-sidebar="collapsed"] .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
+  .app-shell[data-sidebar="collapsed"] .account-popover { left: calc(100% + var(--space-2)); right: auto; bottom: 0; width: 16rem; }
+}
+@media (prefers-reduced-motion: reduce) { .app-shell { transition: none; } }
+/* A tablet always has the rail and a phone the top bar: nothing to resize or fold there. */
+@media (max-width: 64rem) {
+  .sidebar-toggle, .sidebar-resizer { display: none; }
+  .rail-head { flex-direction: column; }
+}
+@media (max-width: 44rem) { .rail-head { display: contents; } }
+/* The person at the foot of the sidebar opens the account menu. */
+.account-menu { position: relative; margin-top: auto; padding-top: var(--space-2); box-shadow: inset 0 1px 0 var(--line); }
+.rail-avatar { width: 40px; height: 40px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--radius-full); }
 .rail-avatar:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
 .account-popover {
-  position: absolute; z-index: 20; left: calc(100% + var(--space-2)); bottom: 0; width: 16rem; display: grid; gap: var(--space-3);
+  position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(100% + var(--space-1)); display: grid; gap: var(--space-3);
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
 }
 .account-popover p { display: grid; gap: 2px; margin: 0; min-width: 0; }
 .account-popover strong, .account-popover span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-popover span { color: var(--text-3); font-size: var(--fs-small); }
 .account-popover button { width: 100%; }
-.rail-label { display: none; }
-/* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
-.identity-bar {
-  flex: none; display: flex; align-items: baseline; gap: var(--space-2); min-width: 0;
-  background: var(--surface-0); padding: var(--space-2) var(--space-3) var(--space-1); font-size: var(--fs-label);
-}
-.identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
-.identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
-.app-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-3) 0; background: var(--surface-0); }
-.rail-brand { width: 36px; height: 36px; display: grid; place-items: center; margin-bottom: var(--space-4); border-radius: var(--radius); }
-.rail-links { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
-.rail-link {
-  width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius); color: var(--text-3);
-  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-}
-.rail-link:hover { background: var(--surface-2); color: var(--text-1); }
-.rail-link[aria-current="page"] { background: var(--surface-1); color: var(--accent-text); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
-.rail-link svg { width: 20px; height: 20px; }
-.rail-link[data-tip]::after { left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
 
 /* A panel is the white working surface: list, thread, details, settings. */
-.panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.panel { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 
 /* Inbox: list | thread | details. */
 .inbox-shell {
-  height: 100%; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
-  gap: var(--space-2); padding: 0 var(--space-2) var(--space-2) 0;
+  height: 100%; display: grid; grid-template-columns: 340px minmax(0, 1fr) 256px;
+  gap: 0; background: var(--surface-1); overflow: hidden;
 }
+/* One work surface: list, thread and details share the app sheet, split by hairlines. */
+.inbox-shell > .panel { border-radius: 0; box-shadow: none; }
+.inbox-shell > .panel + .panel { border-left: 1px solid var(--line); }
 .list-pane:focus { outline: none; }
 .list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
-.list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.list-pane > header { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0 var(--space-8); border-bottom: 1px solid var(--line); }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
-.list-title h1 { font: 500 24px/1.1 var(--font-display); letter-spacing: -0.02em; }
-.list-title span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.list-title h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
+.list-title > span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .conversation-center { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; overflow: hidden; }
 .details-panel { min-width: 0; min-height: 0; overflow-y: auto; }
+/* A wide screen gives the details room, so a name or a tag rarely has to wrap. */
+@media (min-width: 100rem) { .inbox-shell { grid-template-columns: 340px minmax(0, 1fr) 296px; } }
 
 /* Settings: one white panel; a section nav on the left, each section a heading column beside its controls. */
-.settings-page { min-height: calc(100% - var(--space-2)); margin: 0 var(--space-2) var(--space-2) 0; padding: var(--space-8) var(--space-10); }
+.settings-page { min-height: 100%; padding: var(--space-8) var(--space-10); }
+/* The sheet is the panel: a page that is a panel itself draws no second card inside it. */
+.app-content > .panel { border-radius: 0; box-shadow: none; }
 .settings-page > header { max-width: 84rem; margin-bottom: var(--space-6); }
-.settings-layout { max-width: 84rem; display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: var(--space-10); align-items: start; }
-.settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-5); }
-.settings-nav ul { display: grid; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.settings-nav a { display: block; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
+.settings-layout { max-width: 84rem; display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); gap: var(--space-10); align-items: start; }
+/* A card puts its heading beside its controls only where both get room; the column it sits in decides, not the window. */
+.settings-sections { container-type: inline-size; }
+.settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-4); }
+.settings-nav ul { display: grid; gap: 0; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.settings-nav a { display: flex; align-items: center; min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .settings-nav a { display: flex; align-items: center; min-height: var(--touch); } }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text-1); }
-.settings-nav a[aria-current="page"] { background: var(--surface-2); color: var(--text-1); font-weight: 600; }
-.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
+.settings-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 500; }
+.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
 .settings-nav .settings-nav-sub { margin: 2px 0 0; padding-left: var(--space-3); }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
 .settings-card h2 { scroll-margin-top: var(--space-6); }
-.settings-page > header h1 { font: 500 28px/1.1 var(--font-display); letter-spacing: -0.02em; }
-.settings-page > header p { margin-top: var(--space-1); color: var(--text-2); }
+.settings-page > header h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.settings-page > header p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--fs-ui); }
 .settings-page > .error-copy { margin-bottom: var(--space-4); }
 .settings-card { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-4) var(--space-10); border-top: 1px solid var(--line); padding: var(--space-6) 0; }
+/* After the card's own columns, so a narrow column wins. */
+@container (max-width: 44rem) { .settings-card { grid-template-columns: minmax(0, 1fr); } }
 .section-heading h2 { font-size: 14px; font-weight: 600; }
 .section-heading p { margin-top: var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
 .settings-body { display: grid; align-content: start; gap: var(--space-4); }
@@ -92,6 +158,7 @@
 .signin-tagline { max-width: 26rem; font: 500 30px/1.12 var(--font-display); letter-spacing: -0.02em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-status { max-width: 26rem; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
+.signin-status a { color: var(--on-brand-panel); text-decoration: underline; text-underline-offset: 2px; }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }
 .signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
 .signin-split .redeem-panel .brand-lockup { display: none; }
@@ -99,19 +166,66 @@
 .redeem-panel h1 { margin: var(--space-5) 0 var(--space-2); font: 500 30px/1.1 var(--font-display); letter-spacing: -0.02em; }
 .signin-split .redeem-panel h1 { margin-top: 0; }
 .redeem-panel > p { color: var(--text-2); }
+/* The Founding offer, in one line under the title: it is what the visitor is about to pay. */
+.redeem-panel > .signin-offer { margin: 0 0 var(--space-3); color: var(--text-1); font-weight: 600; }
 .redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 44px; font-size: var(--fs-ui); }
 .redeem-panel > .error-copy { margin-top: var(--space-4); }
+/* An AI app's consent page: its sentences and its two buttons keep the panel's spacing. */
+.oauth-consent > p { margin: var(--space-3) 0 0; }
+.oauth-consent .consent-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
+.oauth-consent .consent-actions > * { flex: 1 1 8rem; --control: 44px; font-size: var(--fs-ui); }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .cloud-sign-in { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .cloud-sign-in h2 { font-size: 14px; font-weight: 600; }
 .workspace-choices { display: grid; gap: var(--space-2); }
 .workspace-choices button { justify-content: flex-start; --control: 44px; }
 
-@media (max-width: 75rem) {
+/* Below 80 rem (1280 px, the most common laptop width keeps three columns) the sidebar leaves the thread too little room: Details opens as a drawer
+   (inbox-page.tsx asks the same width). */
+@media (max-width: 79.99rem) {
   .inbox-shell { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
   .details-panel { display: none; }
 }
-@media (max-width: 56rem) {
+/* Beside the 248 px sidebar (64–90 rem, laptops up to 1440 px) the list, and Details from 80 rem, are a little narrower,
+   so the thread and its reply box keep their room: the tools and both send buttons stay on one row. */
+@media (min-width: 64.01rem) and (max-width: 79.99rem) {
+  .inbox-shell { grid-template-columns: 288px minmax(0, 1fr); }
+}
+@media (min-width: 80rem) and (max-width: 89.99rem) {
+  .inbox-shell { grid-template-columns: 288px minmax(0, 1fr) 240px; }
+  .details-section { padding-inline: var(--space-4); }
+  .details-panel .property-row { --label: 64px; }
+}
+/* Every status tab stays in sight in the narrower list, on the rows' left edge: smaller words, tabs closer (each keeps
+   4 px of padding on both sides and a 32 px minimum width, so they still read apart and stay easy to hit). */
+@media (min-width: 64.01rem) and (max-width: 89.99rem) {
+  .list-pane .status-tabs { gap: 2px; }
+  .list-pane .status-tabs label { min-width: var(--control, 32px); justify-content: center; font-size: var(--fs-small); }
+}
+/* With the sidebar or rail beside it the thread of a 705–1439 px screen is narrow: the reply box keeps its tools and both send
+   buttons on one row by giving up some padding and spacing. */
+@media (min-width: 44.01rem) and (max-width: 89.99rem) {
+  .inbox-shell .composer { padding-inline: var(--space-4); }
+  .inbox-shell .composer-actions { gap: var(--space-1); padding-inline: var(--space-1); }
+}
+/* A tablet or a small laptop: the sidebar folds into an icon rail (each link keeps its name and a tooltip) and the
+   workspace and address move to a bar over the sheet, so the thread keeps its room. */
+@media (min-width: 44.01rem) and (max-width: 64rem) {
+  :root { --sidebar-width: 56px; }
+  .app-sidebar { padding: var(--space-2) 0; }
+  .app-rail { align-items: center; }
+  .rail-links { align-items: center; gap: var(--space-1); }
+  .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .rail-link svg { width: 20px; height: 20px; }
+  .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rail-link[data-tip]::after { display: block; left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
+  .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
+  .account-menu { padding-top: var(--space-2); }
+  .account-popover { left: calc(100% + var(--space-2)); right: auto; bottom: 0; width: 16rem; }
+  /* The tooltips stand beside the rail: it never clips them. */
+  .app-sidebar { overflow: visible; }
+}
+@media (max-width: 64rem) {
   /* minmax(0, 1fr): the column never grows to fit a wide child, so a phone never scrolls sideways. */
   .redeem-page.signin-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .signin-brand { gap: var(--space-3); padding: var(--space-6); }
@@ -119,7 +233,6 @@
   .signin-tagline { font-size: 16px; }
   .signin-brand .signin-footnote { display: none; }
   .signin-split .redeem-panel { align-self: start; padding: var(--space-8) var(--space-6); }
-  .settings-card { grid-template-columns: 1fr; }
   .settings-page { padding: var(--space-6); }
   .settings-layout { grid-template-columns: 1fr; gap: var(--space-4); }
   /* Narrow: the section nav is one row of links that scrolls sideways. */
@@ -134,16 +247,20 @@
   .settings-nav a { white-space: nowrap; border: 1px solid var(--line); padding: var(--space-1) var(--space-3); }
 }
 @media (max-width: 44rem) {
-  /* The page scrolls; the top bar (its links and buttons are --touch tall) stays, and the identity bar under it. */
-  :root { --top-bar: calc(var(--touch) + 2 * var(--space-2) + 1px); scroll-padding-top: calc(var(--top-bar) + 2.25rem); }
+  /* The page scrolls; the top bar (its links and buttons are --touch tall) stays, and the identity bar under it.
+     The sidebar wrapper dissolves: its rail is the top bar. */
+  :root { --sidebar-width: 0px; --top-bar: calc(var(--touch) + 2 * var(--space-2) + 1px); scroll-padding-top: calc(var(--top-bar) + 2.25rem); }
   .app-shell { height: auto; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-  .app-rail { position: sticky; top: 0; z-index: 3; flex-direction: row; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
-  .rail-brand { margin: 0 var(--space-2) 0 0; }
+  .app-sidebar { display: contents; }
+  .app-rail { position: sticky; top: 0; z-index: 3; flex-direction: row; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .rail-brand { flex: none; margin: 0 var(--space-2) 0 0; }
   /* Labelled links can be wider than a small tablet: scroll, never push the page. */
-  .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
-  .rail-link[data-tip]::after { display: none; }
-  .rail-link { width: auto; height: var(--touch); grid-auto-flow: column; gap: var(--space-2); padding: 0 var(--space-3); }
-  .rail-label { display: inline; font-size: var(--fs-small); font-weight: 500; }
+  .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; gap: var(--space-1); padding-top: 0; overflow-x: auto; scrollbar-width: none; }
+  .rail-links::-webkit-scrollbar { display: none; }
+  .rail-link { position: relative; flex: none; width: auto; height: var(--touch); gap: var(--space-2); padding: 0 var(--space-3); color: var(--text-3); }
+  .rail-link svg { width: 20px; height: 20px; color: currentColor; }
+  .rail-label { flex: none; overflow: visible; font-size: var(--fs-small); font-weight: 500; }
+  .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
 }
 @media (max-width: 34rem) {
   /* Four destinations do not fit labelled on a phone: icons only, each still named (aria-label), the
@@ -163,24 +280,34 @@
   .conversation-center .composer { max-height: 75dvh; overflow-y: auto; }
 }
 @media (max-width: 44rem) {
-  .app-main, .app-content { overflow: visible; }
-  .account-menu { margin: 0 0 0 auto; }
+  .app-main, .app-content, .app-sheet { overflow: visible; }
+  .app-main { gap: 0; padding: 0; }
+  .app-sheet { border-radius: 0; box-shadow: none; }
+  .account-menu { flex: none; margin: 0 0 0 auto; padding: 0; box-shadow: none; }
   .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); }
-  .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); }
+  .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); width: 16rem; }
   .identity-bar { position: sticky; top: var(--top-bar); z-index: 2; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .app-content > .inbox-shell { height: auto; }
-  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; padding: 0; }
-  .panel { border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+  .list-pane > header { padding-inline: var(--space-4); }
+  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; overflow: visible; }
+  .panel { border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+  .inbox-shell > .panel + .panel { border-left: 0; }
   /* The list and an opened conversation take turns: the list scrolls with the page, the conversation fills the
      screen under the bars like on a wide screen, its timeline scrolling between the title and the reply box. */
   .inbox-shell[data-view="list"] > .conversation-center, .inbox-shell[data-view="thread"] > .list-pane { display: none; }
   .app-shell:has(.inbox-shell[data-view="thread"]) { height: 100dvh; min-height: 0; }
-  .app-shell:has(.inbox-shell[data-view="thread"]) .app-main { overflow: hidden; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) :is(.app-main, .app-sheet) { min-height: 0; overflow: hidden; }
   /* Nothing scrolls the page here, and app-main would be the bar's scroll container: it stays in the flow. */
   .app-shell:has(.inbox-shell[data-view="thread"]) .identity-bar { position: static; }
   .app-shell:has(.inbox-shell[data-view="thread"]) .app-content { overflow: auto; }
   .app-content > .inbox-shell[data-view="thread"] { height: 100%; grid-template-rows: minmax(0, 1fr); }
   .inbox-shell[data-view="thread"] .composer { max-height: 60dvh; overflow-y: auto; }
-  .settings-page { margin: 0; padding: var(--space-5) var(--space-4); }
+  .settings-page { padding: var(--space-5) var(--space-4); }
   .settings-card { padding: var(--space-5) 0; }
 }
+
+/* A page's way back is a text link with a full-height hit area (32 px; --touch on a phone through --control). */
+.page-back { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
+
+/* Serif is for page titles; an h2 in a settings header (AI empty state) is sans. */
+.settings-page header > h2 { font-family: var(--font-sans); letter-spacing: 0; }

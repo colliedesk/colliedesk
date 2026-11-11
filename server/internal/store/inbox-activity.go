@@ -100,7 +100,7 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID string, caller Pr
 		// bulk change of many other conversations can never push a customer reply out of the capped list.
 		batch.Queue(`WITH incoming AS (
 				SELECT m.conversation_id,max(m.created_at) AS incoming_at FROM messages m
-				WHERE m.workspace_id=$1 AND m.kind='incoming' AND m.created_at>GREATEST($2::timestamptz,now()-$5::interval)-$4::interval AND m.created_at<=now()
+				WHERE m.workspace_id=$1 AND m.kind='incoming' AND m.detached_at IS NULL AND m.created_at>GREATEST($2::timestamptz,now()-$5::interval)-$4::interval AND m.created_at<=now()
 				GROUP BY m.conversation_id ORDER BY max(m.created_at) DESC LIMIT $3),
 			changed AS (
 				SELECT c.id FROM conversations c

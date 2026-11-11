@@ -5,10 +5,18 @@ import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
-import { usePendingRequests } from './features/requests/use-pending-requests';
+import { can } from './lib/can';
+import { closedScreen, firstOpenArea, railAreasFor } from './lib/areas';
+import { PermissionsContext } from './lib/permissions-context';
+import type { TokenPermission } from './api/schemas';
+import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
+import { OAuthConsent, oauthRequestFrom } from './features/auth/oauth-consent';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
+import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
+import { rememberSignupAttribution } from './lib/signup-attribution';
+import type { PlanIntent } from './features/settings/plan-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
@@ -16,7 +24,7 @@ import { AppShell } from './features/shell/app-shell';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon } from './ui/icons';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
@@ -35,12 +43,15 @@ import { useInAppLinks } from './lib/in-app-links';
 const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
+const numbersRoutePart = lazyPart(() => import('./features/settings/numbers/numbers-route'));
+const rolesRoutePart = lazyPart(() => import('./features/settings/roles/roles-route'));
+const targetsRoutePart = lazyPart(() => import('./features/settings/targets/targets-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
-// Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
-const requestsRoutePart = lazyPart(() => import('./features/requests/requests-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
+// Review (the intake queue of chat channels) is its own chunk; only workspaces with a chat channel open it.
+const reviewRoutePart = lazyPart(() => import('./features/review/review-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
@@ -49,7 +60,8 @@ function AppLayout() {
   // A bare link to a page of the app opens without reloading, wherever it is written.
   useInAppLinks();
   // The public page of a results share link has no session and no rail.
-  const onSignIn = path === '/sign-in' || path === '/r';
+  // The consent page of an AI app's OAuth sign-in has no rail either: it checks its own session.
+  const onSignIn = path === '/sign-in' || path === '/r' || path === '/oauth/authorize';
   // The setup flow fills the screen with one step at a time: no rail, its own header names the workspace. Only
   // its own addresses do: a deeper one is not found, and the router matches it to a step page all the same.
   const inSetup = /^\/setup(\/[^/]+)?\/?$/.test(path);
@@ -67,16 +79,17 @@ function AppLayout() {
   // A locked workspace chooses its plan on the locked screen, so a remembered plan must not fire later.
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
   // An admin's locked screen shows the plans: billing is asked for while its chunk loads, not after.
-  useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: locked && !paused && me.data?.agent.role === 'admin' });
+  useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: locked && !paused && can(me.data, 'billing:read') });
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
-  useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
+  const readsInbox = can(me.data, 'conversations:read');
+  useInboxActivity(!onSignIn && readsInbox && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
   // On a sign-in page the analytics library waits for the sign-in form, so a slow connection loads the form first.
   useProductAnalytics(config.data?.product_analytics, me.data, onSignIn ? signInFormReady : undefined);
-  // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
-  const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // Fixes is in the Autofix chunk, loaded only where the server runs Autofix and this browser turned its preview on.
   const fixes = autofixPreviewOn() && config.data?.autofix?.available === true && Boolean(me.data) && !signedOut && !locked;
+  // Cards of chat channels waiting in Review; the link shows only where a chat channel collects messages.
+  const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -95,31 +108,36 @@ function AppLayout() {
   if (inSetup && !signedOut && !locked && !notFound) return <Outlet />;
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
-  const inRequests = path.startsWith('/requests');
+  const inReview = path.startsWith('/review');
   const inKnowledge = path.startsWith('/knowledge');
   const inResults = path.startsWith('/results');
   const inFixes = path.startsWith('/fixes');
+  // A screen the session's roles may not read says so; the inbox address takes it to the first area it may open.
+  const closed = me.data ? closedScreen(path, me.data) : undefined;
+  if (closed && path === '/') return <Navigate to={firstOpenArea(me.data)} replace />;
+  const shows = (permission: TokenPermission) => !me.data || can(me.data, permission);
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
-      {config.data?.product_analytics.realm === 'cloud' && me.data.agent.role === 'admin' && me.data.plan?.plan === 'trial'
-        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={me.data.agent.role === 'admin'} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
+      {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
+        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
-      <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
-        aria-current={inRequests ? 'page' : undefined} onPointerEnter={requestsRoutePart.preload} onFocus={requestsRoutePart.preload}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
-        {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
+      {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>}
       {fixes && <Part part={autofixPart} render={({ FixesRailLink }) => <FixesRailLink current={inFixes} />} />}
-      <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
-        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
-      <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
-        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>
+      {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
+        aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
+        {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
+      {(shows('kb_articles:read') || shows('kb_media:read')) && <Link to={me.data && !can(me.data, 'kb_articles:read') ? '/knowledge/media' : '/knowledge'} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
+      {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
+        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
         onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
-    <Outlet />
+    {closed && me.data ? <ClosedScreen label={closed.label} permission={closed.permission} me={me.data} />
+      : <PermissionsContext.Provider value={me.data?.permissions}><Outlet /></PermissionsContext.Provider>}
   </AppShell></SettingsNavLinkContext.Provider>;
 }
 
@@ -136,7 +154,7 @@ function settingsRouterLink(item: NavItem) {
 function NotFoundPage() {
   return <main className="settings-page">
     <header><h1>{messages.pageNotFound}</h1><p>{messages.pageNotFoundExplanation}</p></header>
-    <Link to="/">{messages.backToInbox}</Link>
+    <Link to="/" className="link-action page-back">{messages.backToInbox}</Link>
   </main>;
 }
 
@@ -207,6 +225,28 @@ const articleRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute key={articleId} articleId={articleId} />} />;
   },
 });
+// The help center's languages, and the articles missing or outdated in one of them (in the address).
+const languagesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/languages',
+  validateSearch: (search: Record<string, unknown>): { locale?: string; state?: 'missing' | 'outdated' | 'translated' } => ({
+    ...(typeof search.locale === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(search.locale) ? { locale: search.locale } : {}),
+    ...(search.state === 'missing' || search.state === 'outdated' || search.state === 'translated' ? { state: search.state } : {}),
+  }),
+  component: function Languages() {
+    const search = languagesRoute.useSearch();
+    return <Part part={kbPart} failed={kbFailed} render={({ LanguagesRoute }) => <LanguagesRoute search={search} />} />;
+  },
+});
+// One language of an article, beside the original; it also starts a translation.
+const translationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/articles/$articleId/translations/$locale',
+  component: function Translation() {
+    const { articleId, locale } = translationRoute.useParams();
+    return <Part part={kbPart} failed={kbFailed} render={({ TranslationRoute }) => <TranslationRoute key={`${articleId}-${locale}`} articleId={articleId} locale={locale} />} />;
+  },
+});
 // While the chunk loads the page keeps its frame and title, so a slow network shows Settings at once and
 // nothing jumps when the sections arrive. A chunk that cannot load says so, with Reload page: a browser
 // keeps a failed import failed until the page loads again.
@@ -219,10 +259,29 @@ function SettingsPage() {
   </main>;
 }
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
-const requestsRoute = createRoute({
+// Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
+const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
+// The tab and the channel filter of Review are in the address, so a link opens the same list.
+type ReviewSearch = { tab?: 'dismissed' | 'decided'; channel?: string; scope?: string };
+const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/requests',
-  component: () => <Part part={requestsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ RequestsRoute }) => <RequestsRoute />} />,
+  path: '/review',
+  validateSearch: (search: Record<string, unknown>): ReviewSearch => ({
+    ...(search.tab === 'dismissed' || search.tab === 'decided' ? { tab: search.tab } : {}),
+    // A channel alone filters by the channel; its scope narrows it further.
+    ...(typeof search.channel === 'string' && search.channel !== '' ? { channel: search.channel } : {}),
+    ...(typeof search.channel === 'string' && typeof search.scope === 'string' && search.scope !== '' ? { scope: search.scope } : {}),
+  }),
+  component: function Review() {
+    const { tab, channel, scope } = reviewRoute.useSearch();
+    const navigate = useNavigate();
+    return <Part part={reviewRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ReviewRoute }) => <ReviewRoute tab={tab ?? 'waiting'}
+      filter={channel ? `${channel}:${scope ?? ''}` : ''}
+      onChange={(next, filter) => {
+        const [nextChannel, nextScope] = filter.split(':');
+        void navigate({ to: '/review', search: { ...(next === 'waiting' ? {} : { tab: next }), ...(filter ? { channel: nextChannel, ...(nextScope ? { scope: nextScope } : {}) } : {}) }, replace: true });
+      }} />} />;
+  },
 });
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -234,9 +293,11 @@ const billingRoute = createRoute({
   }),
   // Runs before sign-in is known, so the plan is kept through the sign-in and sign-up round trip.
   // `buy` is then removed from the address: Back or a reload after the checkout must not start another.
-  beforeLoad: ({ search }) => {
+  // The ad keys of the link are kept too: the redirect to sign-up carries only the plan.
+  beforeLoad: ({ search, location }) => {
     if (!search.buy) return;
     rememberCheckoutIntent(search.buy);
+    rememberSignupAttribution(location.searchStr);
     throw redirect({ to: '/settings/billing', search: { checkout: search.checkout }, replace: true });
   },
   component: function Billing() {
@@ -244,7 +305,7 @@ const billingRoute = createRoute({
     // Billing is asked for while the page's chunk loads, not after it (billing-route.tsx asks the same).
     const me = useQuery({ queryKey: ['me'], queryFn: api.me });
     const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: me.data?.agent.role === 'admin' && (config.data?.billing.enabled === true || config.data?.billing.switched_off === true) });
+    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: can(me.data, 'billing:read') && (config.data?.billing.enabled === true || config.data?.billing.switched_off === true) });
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
@@ -253,6 +314,37 @@ const importRoute = createRoute({
   path: '/settings/import-freshdesk',
   component: function Import() {
     return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
+  },
+});
+// Settings → Roles: the list, a new role (optionally from another) and one role.
+const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
+const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
+  component: () => <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'list' }} />} /> });
+const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new',
+  validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
+  component: function NewRole() {
+    const { from } = newRoleRoute.useSearch();
+    return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'new', from }} />} />;
+  } });
+const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/$roleId',
+  component: function OneRole() {
+    const { roleId } = roleRoute.useParams();
+    return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
+  } });
+// Settings → Conversation numbers: the workspace's number series.
+const numbersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/numbers',
+  component: function Numbers() {
+    return <Part part={numbersRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ NumbersRoute }) => <NumbersRoute />} />;
+  },
+});
+// Settings → Response targets: business hours and the targets of each priority.
+const targetsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/targets',
+  component: function Targets() {
+    return <Part part={targetsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ TargetsRoute }) => <TargetsRoute />} />;
   },
 });
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
@@ -335,27 +427,54 @@ const signInRoute = createRoute({
   // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
   // website's "Start free trial" link: the page is titled for a new team. `next` is the page a hand-off
   // from APP_ORIGIN opens once its token (in the fragment, `#handoff=…`) signs in on this workspace host.
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial'; next?: string } => ({
+  // Without a hand-off, `next` is an AI app's consent page (/oauth/authorize?…) the sign-in returns to.
+  // `plan=team25` is the plan the website's trial link came for: the trial starts as usual and the plan
+  // picker puts that plan first. Any other plan is dropped here.
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; plan?: PlanIntent; signed_out?: true; intent?: 'trial'; next?: string } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
+    ...(parsePlanIntent(search.plan) ? { plan: 'team25' as const } : {}),
     ...(search.signed_out === true ? { signed_out: true as const } : {}),
     ...(search.intent === 'trial' ? { intent: 'trial' as const } : {}),
     ...(typeof search.next === 'string' ? { next: search.next } : {}),
   }),
-  // `buy` stays in the address through the identity provider's round trip, so the address decides
-  // which plan, if any, this sign-in is for (see signInCheckoutIntent).
-  beforeLoad: ({ search }) => { signInCheckoutIntent(search); },
+  // `buy` and `plan` stay in the address through the identity provider's round trip, so the address decides
+  // which plan, if any, this sign-in is for (see signInCheckoutIntent, signInPlanIntent). The utm_* keys and
+  // ad click IDs of the website's links are kept for the sign-up from the raw address: the parsed search
+  // would turn `utm_content=07` into a number (see rememberSignupAttribution).
+  beforeLoad: ({ search, location }) => { signInCheckoutIntent(search); signInPlanIntent(search); rememberSignupAttribution(location.searchStr); },
   component: function SignIn() {
     const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
     const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });
     if (handoff) return <HandoffSignIn token={handoff} next={next} />;
-    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} />;
+    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} next={next} />;
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+// /oauth/authorize is where an AI app (Claude, ChatGPT, Codex, Cursor) asks to connect with OAuth. Its
+// parameters are read raw from the address: they are the app's, passed back to the server as they came.
+const oauthAuthorizeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/authorize',
+  component: function OAuthAuthorize() {
+    const { search, pathname } = window.location;
+    return <OAuthConsent request={oauthRequestFrom(new URLSearchParams(search))} here={pathname + search} />;
+  },
+});
+
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
+}
+
+// ClosedScreen stands for a page the session's roles may not read: what it needs, who to ask, and where it can go.
+function ClosedScreen({ label, permission, me }: { label: string; permission: TokenPermission; me: NonNullable<Parameters<typeof can>[0]> }) {
+  const open = railAreasFor(me);
+  return <main className="settings-page closed-screen">
+    <header><h1>{label}</h1><p role="status">{messages.closedScreen(label)} {messages.closedScreenAsk(permission)}</p></header>
+    <p className="muted-copy">{messages.closedScreenOpen}</p>
+    <span className="button-row">{open.map((area) => <Link key={area.to} to={area.to} className="button">{area.label}</Link>)}</span>
+  </main>;
 }

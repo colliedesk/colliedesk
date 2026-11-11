@@ -48,6 +48,26 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   From and envelope sender, with `Reply-To: support+r-<token>@<support domain>`; replies thread
   through Reply-To and In-Reply-To. Without `MAIL_FROM_DOMAIN` an unverified workspace cannot send.
   `any` keeps the support address always (self-host, operator owns the relay).
+- **Reply-To before forwarding.** Until mail that passed the support mailbox became a message on the
+  channel, every reply (any From, any transport) carries `Reply-To: reply+<token>@MAIL_FROM_DOMAIN`:
+  the mailbox may still forward to the old help desk, which would keep the customer's answer. The
+  worker reads it per delivery (`store.Delivery.Forwarded`): a journal entry of the channel with a
+  `message_id` (dropped and held mail do not count) whose envelope is not `direct` and names the
+  current support address (`support_address`; entries from before that field count). `direct`
+  (`email.Inbound.Direct`) marks a test message, Gmail's forwarding confirmation (it reaches the new
+  forwarding address before anything is forwarded) and mail that arrived with the server-wide secret
+  outside the hosted domain, which is mail to a platform reply address. A channel without a journal
+  counts a customer message from before it. The channel's shown state is not used: a test message
+  turns it `working`. Without `MAIL_FROM_DOMAIN` or without `MAIL_FROM_INBOUND_SECRET`
+  (`Options.ReceivesPlatformReplies`) the support plus address is used, as before: nothing would
+  receive the answer.
+  Limits: journal entries from before `direct` existed are marked by migration
+  `inbound-mail-outside-the-support-mailbox` only for test messages (fixed subject and opening line,
+  from an agent of the workspace) and Gmail forwarding confirmations. A past answer to a platform reply
+  address and past mail under an earlier support address cannot be told apart and still count, so such
+  a channel keeps the support address until it is changed again. The self-host **Test request** (posted
+  with the channel's own secret from a terminal) counts as forwarded mail: nothing tells it from a
+  forwarder.
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
   verified by Resend. Both steps are needed, in this order:
@@ -420,9 +440,9 @@ stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mail
   (`TestTwoWorkspacesDisconnectingTogetherStillRevoke`).
 - **Access tokens are not cached**: one refresh per send. At the 300/hour limit that is well inside Google's
   token endpoint quota; cache only if a profile says so.
-- **Agents.** Connect and disconnect are approval routes; the approver receives the consent URL as `url`
-  (withheld from the token, like an invite link). The callback is NotForPeople: no token can drive a
-  browser through Google.
+- **Agents.** Connect and disconnect need `channels:manage_credentials`. A token gets the consent URL
+  as `url`, but only the token's person can finish it, in a browser signed in to Colliedesk. The callback
+  is NotForPeople: no token can drive a browser through Google.
 
 ## Sending through Microsoft 365 (issue #95, step 1)
 

@@ -24,6 +24,8 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -181,7 +183,52 @@ func setup(ctx context.Context, baseURL string) error {
 		return err
 	}
 	admin, template = pool, name
+	sweepLeakedClones(ctx, pool, time.Now())
 	return nil
+}
+
+// leakedAfter is longer than any test run lasts: a clone older than this belongs to a run that was
+// killed (timeout, Ctrl-C) before t.Cleanup dropped it.
+const leakedAfter = 6 * time.Hour
+
+// sweepLeakedClones drops the clones that killed runs left behind, so they do not pile up on a
+// shared server. A clone with a connection open is skipped, and DROP without FORCE refuses one that
+// gained a connection since; every failure is ignored, because a sweep must never fail a test.
+func sweepLeakedClones(ctx context.Context, pool *pgxpool.Pool, now time.Time) {
+	rows, err := pool.Query(ctx, `SELECT d.datname FROM pg_database d
+		WHERE d.datname LIKE 'ctest\_%' AND NOT d.datistemplate
+		AND NOT EXISTS (SELECT 1 FROM pg_stat_activity a WHERE a.datname = d.datname)`)
+	if err != nil {
+		return
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			names = append(names, name)
+		}
+	}
+	rows.Close()
+	for _, name := range names {
+		if created, ok := cloneCreated(name); ok && now.Sub(created) > leakedAfter {
+			_, _ = pool.Exec(ctx, "DROP DATABASE IF EXISTS "+name)
+		}
+	}
+}
+
+// cloneCreated reads the creation time uniqueName writes into a clone's name. Names written before
+// it held the full time carry seconds mod 100000, which says nothing about age: not ok, never swept,
+// so a run of an older checkout keeps its clones.
+func cloneCreated(name string) (time.Time, bool) {
+	fields := strings.Split(name, "_")
+	if len(fields) != 5 || fields[0] != "ctest" {
+		return time.Time{}, false
+	}
+	seconds, err := strconv.ParseInt(fields[3], 10, 64)
+	if err != nil || seconds < 1_600_000_000 {
+		return time.Time{}, false
+	}
+	return time.Unix(seconds, 0), true
 }
 
 // templateName hashes every migration file by name and content, the role that owns the objects (the
@@ -269,9 +316,10 @@ func withDatabase(baseURL, name string) (string, error) {
 }
 
 // uniqueName is unique across the processes on one server (pid, counter) and across runs (time,
-// random bits), and stays well under PostgreSQL's 63-byte limit on names.
+// random bits), and stays well under PostgreSQL's 63-byte limit on names. The time is the full Unix
+// second, so sweepLeakedClones can tell a clone a killed run left from one still in use.
 func uniqueName(prefix string) string {
 	random := make([]byte, 3)
 	_, _ = rand.Read(random)
-	return fmt.Sprintf("%s%d_%d_%d_%s", prefix, os.Getpid(), counter.Add(1), time.Now().Unix()%100000, hex.EncodeToString(random))
+	return fmt.Sprintf("%s%d_%d_%d_%s", prefix, os.Getpid(), counter.Add(1), time.Now().Unix(), hex.EncodeToString(random))
 }

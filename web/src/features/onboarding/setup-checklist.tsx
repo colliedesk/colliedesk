@@ -6,7 +6,7 @@ import type { SetupProgress, SetupStepKey } from '../../api/schemas';
 import { preloadSetupStep } from './setup-flow-part';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
-import { ChevronDownIcon } from '../../ui/icons';
+import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { setupMessages } from './setup-messages';
 import { stepIsDone, visibleSteps } from './setup-steps';
 import './setup-checklist.css';
@@ -112,7 +112,7 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
             const primary = step.key === firstTodo;
             return (
               <li key={step.key} className="setup-step" data-state={finished ? 'done' : 'todo'} data-step={step.key}>
-                <span className="setup-mark" aria-hidden="true" />
+                <span className="setup-mark" aria-hidden="true">{finished && <CheckIcon />}</span>
                 <a href={target(step.key)} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
                   onPointerEnter={() => preloadSetupStep(client, step.key)} onFocus={() => preloadSetupStep(client, step.key)}>
                   <span className="setup-title">{setupMessages.title[step.key]}</span>

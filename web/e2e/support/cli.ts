@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { randomInt } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkoutID, ports, scratchDir } from './checkout';
@@ -51,8 +52,9 @@ interface CommandOptions { origin?: string; databaseURL?: string; env?: Record<s
 const binDir = join(scratchDir, 'bin');
 const built = new Set<string>();
 
-// binary builds the real CLI from source once per test worker; tags 'e2e' adds only the
-// fake-Freshdesk network seam (cmd/collie/e2e_freshdesk.go).
+// binary builds the real CLI from source once per test worker; tags 'e2e' adds only the seams of
+// end-to-end builds (cmd/collie/e2e_*.go: the fake-Freshdesk, Google and Microsoft networks, the
+// loopback chat type), each off until its environment turns it on.
 export function binary(tags = ''): string {
   const path = `${binDir}/colliedesk${tags ? `-${tags}` : ''}`;
   if (!built.has(path)) {
@@ -102,7 +104,7 @@ export function mustColliedesk(args: string[], options: CommandOptions = {}): st
 }
 
 export function uniqueSuffix(): string {
-  return `${Date.now()}-${process.pid}-${Math.floor(Math.random() * 1e6)}`;
+  return `${Date.now()}-${process.pid}-${randomInt(1e6)}`;
 }
 
 export function createWorkspace(name: string, adminEmail: string, origin: string = servers.main, database?: string): string {

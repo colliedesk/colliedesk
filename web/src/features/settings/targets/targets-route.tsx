@@ -1,0 +1,339 @@
+import { useId, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
+import { channelsApi } from '../../../api/channels';
+import { responseTargetsApi, responseTargetsSchema, weekdays } from '../../../api/response-targets';
+import type { ResponseTargets, ResponseTargetsChange, Weekday } from '../../../api/response-targets';
+import { messages } from '../../../messages';
+import { useBillingShown } from '../../billing/billing-shown';
+import { saveState, useSaveFeedback } from '../save-feedback';
+import { SettingsNav } from '../settings-nav';
+import type { Shown } from '../settings-nav';
+import { TimezoneSelect } from '../timezone-select';
+import { targetsMessages as m } from './targets-messages';
+import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
+import type { Duration, Unit } from './target-duration';
+import { can } from '../../../lib/can';
+import '../../../ui/controls.css';
+import './targets.css';
+
+// Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
+// the document with the rest as it was read; admins change it, agents read it.
+
+const priorities = ['urgent', 'high', 'normal', 'low'] as const;
+type Priority = (typeof priorities)[number];
+
+function fieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof InvalidRequestError)) return {};
+  const fields = error.detail?.fields;
+  return fields && typeof fields === 'object' ? Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
+}
+
+// What a PUT takes: the document without what only the server writes or what is the reader's own, with the
+// version it was read at (updated_at): a save after someone else's is refused, 409 changed_elsewhere.
+const withoutStamp = ({ enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
+
+// A card's save state: someone else's save in between is said in words of this page.
+const cardState = (save: Parameters<typeof saveState>[0]) => {
+  const state = saveState(save);
+  return save.isError && save.error instanceof ChangedElsewhereError ? { ...state, error: m.changedElsewhere } : state;
+};
+
+function useSave() {
+  const client = useQueryClient();
+  return useMutation({
+    // Refused for someone else's save: the page shows theirs; what is being typed stays (the cards keep an edited form).
+    onError: (error) => {
+      if (!(error instanceof ChangedElsewhereError)) return;
+      const current = responseTargetsSchema.safeParse(error.detail?.current);
+      if (current.success) client.setQueryData<ResponseTargets>(['response-targets'], (old) => ({ ...current.data, my_alert_email: current.data.my_alert_email ?? old?.my_alert_email }));
+      else void client.invalidateQueries({ queryKey: ['response-targets'] });
+    },
+    mutationFn: (value: ResponseTargetsChange) => responseTargetsApi.set(value),
+    // A save answers the workspace's document; the reader's own email choice is not in it, so it is kept.
+    onSuccess: (saved) => {
+      client.setQueryData<ResponseTargets>(['response-targets'], (current) => ({ ...saved, my_alert_email: saved.my_alert_email ?? current?.my_alert_email }));
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
+  return <section className="settings-card" aria-labelledby={id}>
+    <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>
+    <div className="settings-body">{children}</div>
+  </section>;
+}
+
+export function TargetsRoute() {
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const isAdmin = can(me.data, 'workspace:update');
+  const billingShown = useBillingShown(isAdmin);
+  const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: billingShown, importData: isAdmin, ai: true };
+  const doc = useQuery({ queryKey: ['response-targets'], queryFn: responseTargetsApi.get });
+  // Targets per channel need the channel list, which only a role that reads channels may ask for.
+  const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
+  const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
+  const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
+  return <main className="settings-page panel targets-page">
+    <header><h1>{m.heading}</h1><p>{m.description}</p></header>
+    <div className="settings-layout">
+      <SettingsNav page="/settings/targets" shown={shown} />
+      <div className="settings-sections">
+        {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
+        {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
+          : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
+          : <>
+              <OnCard doc={doc.data} canManage={isAdmin} />
+              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} />
+              <HolidaysCard doc={doc.data} canManage={isAdmin} />
+              <TargetsCard doc={doc.data} canManage={isAdmin} />
+              <AlertsCard doc={doc.data} canManage={isAdmin} />
+              {/* One channel: nothing to choose (design rule: only real choices). */}
+              {live.length >= 2 && <AppliesCard doc={doc.data} canManage={isAdmin} channels={live.map((item) => ({ id: item.id, name: item.name }))} />}
+            </>}
+      </div>
+    </div>
+  </main>;
+}
+
+interface CardProps { doc: ResponseTargets; canManage: boolean }
+
+function OnCard({ doc, canManage }: CardProps) {
+  const save = useSave();
+  const feedback = useSaveFeedback(cardState(save));
+  const id = useId();
+  return <Card id={id} title={m.onHeading} lead={m.onLead}>
+    {canManage
+      ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={save.isPending ? Boolean(save.variables?.enabled) : doc.enabled}
+          disabled={save.isPending} onChange={(event) => { feedback.touch(); save.mutate({ ...withoutStamp(doc), enabled: event.target.checked }); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
+      : <p>{doc.enabled ? m.yes : m.no}</p>}
+  </Card>;
+}
+
+function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZone: string }) {
+  // What is typed here lies over the document, field by field: a field nobody touched always shows the
+  // document as it is now (after another card's save, or someone else's), a touched one keeps its words.
+  const [zoneEdit, setZoneEdit] = useState<string>();
+  const [dayEdits, setDayEdits] = useState<Partial<Record<Weekday, Partial<ResponseTargets['hours'][number]>>>>({});
+  const zone = zoneEdit ?? doc.timezone ?? '';
+  const [checked, setChecked] = useState(false);
+  const save = useSave();
+  const feedback = useSaveFeedback(cardState(save));
+  const server = fieldErrors(save.error);
+  const id = useId();
+  const byDay = (day: Weekday) => ({ ...(doc.hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' }), ...dayEdits[day] });
+  const change = (day: Weekday, part: Partial<ResponseTargets['hours'][number]>) => {
+    feedback.touch();
+    setDayEdits((all) => ({ ...all, [day]: { ...all[day], ...part } }));
+  };
+  // A day closing at midnight is 24:00 on the wire; the time field shows and takes 00:00 for it.
+  const bad = (day: Weekday) => { const item = byDay(day); return item.open && item.to !== '24:00' && item.to <= item.from; };
+  if (!canManage) {
+    return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}><dl className="tg-dl">
+      <dt>{m.timezone}</dt><dd>{doc.timezone ?? m.workspaceZone(workspaceZone)}</dd>
+      {weekdays.map((day) => <Row key={day} label={m.days[day]} value={byDay(day).open ? `${byDay(day).from}–${byDay(day).to}` : m.closed} />)}
+    </dl></Card>;
+  }
+  return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}>
+    <form className="stacked-form" noValidate onSubmit={(event) => {
+      event.preventDefault();
+      setChecked(true);
+      if (feedback.pending || weekdays.some(bad)) return;
+      save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) }, { onSuccess: () => { setZoneEdit(undefined); setDayEdits({}); } });
+    }}>
+      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { feedback.touch(); setZoneEdit(next); }} />
+      {server.timezone && <span className="error-copy field-note" role="alert">{server.timezone}</span>}
+      {server.hours && <p className="error-copy" role="alert">{server.hours}</p>}
+      <p className="muted-copy" id={`${id}-midnight`}>{m.midnight}</p>
+      <div className="tg-days">
+        {weekdays.map((day, index) => {
+          const item = byDay(day);
+          const error = (checked && bad(day) ? m.endsBefore : undefined) ?? server[`hours.${index}.to`] ?? server[`hours.${index}.from`];
+          return <div className={`tg-day${error ? ' field-bad' : ''}`} key={day}>
+            <label className="field-inline"><input type="checkbox" checked={item.open} aria-label={m.open(m.days[day])} onChange={(event) => change(day, { open: event.target.checked })} /><span>{m.days[day]}</span></label>
+            {item.open
+              ? <span className="tg-hours">
+                  <input type="time" aria-label={m.from(m.days[day])} value={item.from} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${day}-error` : undefined} onChange={(event) => change(day, { from: event.target.value })} />
+                  <span aria-hidden="true">–</span>
+                  <input type="time" aria-label={m.to(m.days[day])} value={item.to === '24:00' ? '00:00' : item.to} aria-invalid={error ? true : undefined}
+                    aria-describedby={[error ? `${id}-${day}-error` : '', `${id}-midnight`].filter(Boolean).join(' ')} onChange={(event) => change(day, { to: event.target.value === '00:00' ? '24:00' : event.target.value })} />
+                  {error && <span className="error-copy field-note" id={`${id}-${day}-error`}>{error}</span>}
+                </span>
+              : <span className="tg-closed">{m.closed}</span>}
+          </div>;
+        })}
+      </div>
+      <span className="button-row"><button type="button" className="link-action" onClick={() => {
+        const { open, from, to } = byDay('mon');
+        feedback.touch();
+        setDayEdits((all) => ({ ...all, tue: { open, from, to }, wed: { open, from, to }, thu: { open, from, to }, fri: { open, from, to } }));
+      }}>{m.copyMonday}</button></span>
+      <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveHours)}</button>{feedback.status}</span>
+    </form>
+  </Card>;
+}
+
+function HolidaysCard({ doc, canManage }: CardProps) {
+  const [date, setDate] = useState('');
+  const [name, setName] = useState('');
+  const [checked, setChecked] = useState(false);
+  const save = useSave();
+  const feedback = useSaveFeedback(cardState(save));
+  const server = fieldErrors(save.error);
+  const id = useId();
+  const sorted = [...doc.holidays].sort((a, b) => a.date.localeCompare(b.date));
+  const local = !date ? m.dateRequired : doc.holidays.some((item) => item.date === date) ? m.holidayTaken : undefined;
+  const serverError = Object.entries(server).find(([field]) => field.startsWith('holidays'))?.[1];
+  return <Card id={id} title={m.holidaysHeading} lead={m.holidaysLead}>
+    {sorted.length === 0 ? <p className="muted-copy">{m.noHolidays}</p>
+      : <ul className="tg-holidays">{sorted.map((item) => <li key={item.date}><span className="tg-mono">{item.date}</span><span>{item.name}</span>
+          {canManage && <button type="button" aria-label={m.removeHoliday(item.name, item.date)} disabled={save.isPending}
+            onClick={() => { feedback.touch(); save.mutate({ ...withoutStamp(doc), holidays: doc.holidays.filter((other) => other.date !== item.date) }); }}>{m.remove}</button>}</li>)}</ul>}
+    {canManage && <form className="tg-add" noValidate onSubmit={(event) => {
+      event.preventDefault();
+      setChecked(true);
+      if (local || feedback.pending) return;
+      save.mutate({ ...withoutStamp(doc), holidays: [...doc.holidays, { date, name: name.trim() }] }, { onSuccess: () => { setDate(''); setName(''); setChecked(false); } });
+    }}>
+      <label className="field"><span>{m.holidayDate}</span><input type="date" value={date} aria-invalid={checked && local ? true : undefined} aria-describedby={checked && local ? `${id}-date` : undefined}
+        onChange={(event) => { feedback.touch(); setDate(event.target.value); }} /></label>
+      <label className="field"><span>{m.holidayName}</span><input value={name} maxLength={80} onChange={(event) => { feedback.touch(); setName(event.target.value); }} /></label>
+      <button type="submit" disabled={feedback.pending}>{m.addHoliday}</button>
+      {checked && local && <span className="error-copy field-note" id={`${id}-date`}>{local}</span>}
+      {serverError && <span className="error-copy field-note" role="alert">{serverError}</span>}
+      {feedback.status}
+    </form>}
+  </Card>;
+}
+
+// A number and its unit, each with a name of its own (neither name contains the other).
+function DurationField({ id, label, unitLabel, value, errorId, onChange }: { id?: string; label: string; unitLabel: string; value: Duration; errorId?: string; onChange: (next: Duration) => void }) {
+  return <>
+    <input id={id} type="number" min={0} step="any" inputMode="decimal" aria-label={label} value={value.amount}
+      aria-invalid={errorId ? true : undefined} aria-describedby={errorId} onChange={(event) => onChange({ ...value, amount: event.target.value })} />
+    <select aria-label={unitLabel} value={value.unit} onChange={(event) => onChange({ ...value, unit: event.target.value as Unit })}>
+      {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+    </select>
+  </>;
+}
+
+function TargetsCard({ doc, canManage }: CardProps) {
+  // Typed values lie over the document box by box ("urgent.first", "warn"), number and unit together;
+  // an untouched box follows the document.
+  const [edits, setEdits] = useState<Partial<Record<string, Duration>>>({});
+  const fromDoc = (priority: Priority, which: 'first' | 'resolve') => durationOf(doc.targets[priority][which === 'first' ? 'first_response_minutes' : 'resolution_minutes']);
+  const valueOf = (priority: Priority, which: 'first' | 'resolve') => edits[`${priority}.${which}`] ?? fromDoc(priority, which);
+  const warn = edits.warn ?? durationOf(doc.warn_before_minutes);
+  const [checked, setChecked] = useState(false);
+  const save = useSave();
+  const feedback = useSaveFeedback(cardState(save));
+  const server = fieldErrors(save.error);
+  const id = useId();
+  const priorityName = (priority: Priority) => messages.priorities[priority];
+  const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
+  if (!canManage) {
+    const read = (minutes: number | null) => (minutes === null ? m.none : spoken(minutes));
+    return <Card id={id} title={m.targetsHeading} lead={m.targetsReadLead}><dl className="tg-dl">
+      {priorities.map((priority) => <Row key={priority} label={priorityName(priority)}
+        value={`${m.firstReply}: ${read(doc.targets[priority].first_response_minutes)} · ${m.resolve}: ${read(doc.targets[priority].resolution_minutes)}`} />)}
+      <Row label={m.dueSoon} value={doc.warn_before_minutes === 0 ? m.noReminder : `${spoken(doc.warn_before_minutes)} ${m.beforeTarget}`} />
+    </dl><p className="muted-copy">{m.targetsNote}</p></Card>;
+  }
+  // Checked on save; the limit is named in the unit the box shows.
+  const targetError = (value: Duration) => (!checked ? undefined
+    : { rule: m.targetRule, max: m.targetMax(limitIn(maxTargetMinutes, value.unit)), none: undefined }[targetProblem(value) ?? 'none']);
+  const cell = (priority: Priority, which: 'first' | 'resolve', field: string) => {
+    const value = valueOf(priority, which);
+    const error = targetError(value) ?? server[`targets.${priority}.${field}`];
+    const errorId = `${id}-${priority}-${which}`;
+    const what = which === 'first' ? m.firstReply : m.resolve;
+    return <td data-label={what}><span className="tg-cell">
+      <DurationField label={m.targetFor(what, priorityName(priority))} unitLabel={m.unitFor(what, priorityName(priority))} value={value} errorId={error ? errorId : undefined} onChange={edit(`${priority}.${which}`)} /></span>
+      {error && <span className="error-copy field-note" id={errorId}>{error}</span>}</td>;
+  };
+  const warnError = server.warn_before_minutes ?? (!checked ? undefined
+    : { rule: m.warnRule, max: m.warnMax(limitIn(maxWarnMinutes, warn.unit)), none: undefined }[warnProblem(warn) ?? 'none']);
+  return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}>
+    <form className="stacked-form" noValidate onSubmit={(event) => {
+      event.preventDefault();
+      setChecked(true);
+      const bad = priorities.some((priority) => targetProblem(valueOf(priority, 'first')) || targetProblem(valueOf(priority, 'resolve'))) || warnProblem(warn);
+      if (bad || feedback.pending) return;
+      // Checked above: each is whole minutes, or null for an empty target box.
+      const minutes = (value: Duration) => minutesOf(value) ?? null;
+      save.mutate({ ...withoutStamp(doc), warn_before_minutes: minutes(warn) ?? 0,
+        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: minutes(valueOf(priority, 'first')), resolution_minutes: minutes(valueOf(priority, 'resolve')) }])) as ResponseTargets['targets'] },
+        { onSuccess: () => setEdits({}) });
+    }}>
+      <table className="tg-table">
+        <thead><tr><th scope="col">{m.priority}</th><th scope="col">{m.firstReply}</th><th scope="col">{m.resolve}</th></tr></thead>
+        <tbody>{priorities.map((priority) => <tr key={priority}><th scope="row">{priorityName(priority)}</th>{cell(priority, 'first', 'first_response_minutes')}{cell(priority, 'resolve', 'resolution_minutes')}</tr>)}</tbody>
+      </table>
+      <div className={`field${warnError ? ' field-bad' : ''}`}>
+        <span className="tg-cell"><label htmlFor={`${id}-warn`}>{m.dueSoon}</label>
+          <DurationField id={`${id}-warn`} label={m.dueSoonLabel} unitLabel={m.dueSoonUnit} value={warn} errorId={warnError ? `${id}-warn-error` : undefined} onChange={edit('warn')} /><span>{m.beforeTarget}</span></span>
+        {warnError && <span className="error-copy field-note" id={`${id}-warn-error`}>{warnError}</span>}
+      </div>
+      <p className="muted-copy">{m.targetsNote}</p>
+      <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveTargets)}</button>{feedback.status}</span>
+    </form>
+  </Card>;
+}
+
+function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id: string; name: string }[] }) {
+  const every = channels.map((item) => item.id);
+  // The choice follows the document until someone here changes it.
+  const [chosenEdit, setChosenEdit] = useState<string[]>();
+  const chosen = chosenEdit ?? doc.channel_ids ?? every;
+  const [checked, setChecked] = useState(false);
+  const save = useSave();
+  const feedback = useSaveFeedback(cardState(save));
+  const id = useId();
+  if (!canManage) return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}><ul className="muted-copy">{channels.filter((item) => chosen.includes(item.id)).map((item) => <li key={item.id}>{item.name}</li>)}</ul></Card>;
+  return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}>
+    <form className="stacked-form" noValidate onSubmit={(event) => {
+      event.preventDefault();
+      setChecked(true);
+      if (chosen.length === 0 || feedback.pending) return;
+      // Every channel is null: a channel added later is measured too.
+      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
+    }}>
+      <fieldset className="tg-channels"><legend className="sr-only">{m.appliesHeading}</legend>
+        {channels.map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
+          onChange={(event) => { feedback.touch(); setChosenEdit(event.target.checked ? [...chosen, item.id] : chosen.filter((other) => other !== item.id)); }} /><span>{item.name}</span></label>)}
+      </fieldset>
+      {checked && chosen.length === 0 && <p className="error-copy" role="alert">{m.pickOne}</p>}
+      <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveApplies)}</button>{feedback.status}</span>
+    </form>
+  </Card>;
+}
+
+// Alerts: whether reminders and overdue alerts go out by email (the workspace's), and to the reader.
+function AlertsCard({ doc, canManage }: CardProps) {
+  const client = useQueryClient();
+  const save = useSave();
+  const feedback = useSaveFeedback(cardState(save));
+  const mine = useMutation({
+    mutationFn: (email: boolean) => responseTargetsApi.setMyAlerts(email),
+    onSuccess: (result) => client.setQueryData<ResponseTargets>(['response-targets'], (current) => (current ? { ...current, my_alert_email: result.email } : current)),
+  });
+  const mineFeedback = useSaveFeedback(saveState(mine));
+  const id = useId();
+  const workspaceOn = save.isPending ? Boolean(save.variables?.alert_email) : doc.alert_email;
+  const meOn = mine.isPending ? Boolean(mine.variables) : doc.my_alert_email !== false;
+  return <Card id={id} title={m.alertsHeading} lead={m.alertsLead}>
+    {canManage
+      ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={workspaceOn} disabled={save.isPending}
+          onChange={(event) => { feedback.touch(); save.mutate({ ...withoutStamp(doc), alert_email: event.target.checked }); }} /></span><span>{m.alertEmail}</span></label>{feedback.status}</span>
+      : <p>{m.alertEmail}: {doc.alert_email ? m.yes : m.no}</p>}
+    <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={meOn} disabled={mine.isPending || !doc.alert_email}
+      aria-describedby={doc.alert_email ? undefined : `${id}-off`} onChange={(event) => { mineFeedback.touch(); mine.mutate(event.target.checked); }} /></span><span>{m.alertMe}</span></label>{mineFeedback.status}</span>
+    {!doc.alert_email && <p className="muted-copy" id={`${id}-off`}>{m.alertsOff}</p>}
+  </Card>;
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return <><dt>{label}</dt><dd>{value}</dd></>;
+}

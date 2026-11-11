@@ -271,3 +271,35 @@ func TestAnImportStillRunningIsNotTakenAsTheBaseline(t *testing.T) {
 		t.Fatalf("a baseline was measured from a running import: %d snapshots, err %v", baselines, err)
 	}
 }
+
+// A received notice the channel sent by itself is no first reply: the conversation it alone answered is
+// still waiting, and one the team answered later counts the team's reply.
+func TestTheChannelsReceivedNoticeIsNoFirstReply(t *testing.T) {
+	pool := databasetest.Pool(t)
+	if err := database.Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	f := newFixture(t, pool, "acme")
+	notice := func(conversation string, at time.Time) {
+		f.exec(`INSERT INTO messages(workspace_id,conversation_id,kind,body,notice_kind,created_at) VALUES($1,$2,'outgoing','We got it','received',$3)`, f.workspace, conversation, at)
+	}
+	answered := f.conversation("email", ago(2), nil, in(0), out(20*time.Minute))
+	notice(answered, ago(2).Add(time.Second))
+	waiting := f.conversation("email", ago(3), nil, in(0))
+	notice(waiting, ago(3).Add(time.Second))
+	worker := NewWorker(database.New(pool))
+	worker.now = func() time.Time { return measured }
+	if _, err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	current, members := f.snapshot("current")
+	if got := current.Windows["30d"].FirstResponse; got.Answered != 1 || got.Waiting != 1 {
+		t.Fatalf("first response = %+v, want 1 answered and 1 waiting", got)
+	}
+	if got := members["30d."+MetricFirstResponseWaiting]; len(got) != 1 || got[0] != waiting {
+		t.Fatalf("waiting = %v, want %s", got, waiting)
+	}
+	if got := members["30d."+MetricFirstResponse]; len(got) != 1 || got[0] != answered {
+		t.Fatalf("answered = %v, want %s", got, answered)
+	}
+}

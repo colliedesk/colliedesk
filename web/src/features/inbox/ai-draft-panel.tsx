@@ -29,7 +29,8 @@ const longPoll = 20;
 
 // The newest draft of this person that is still being written or waits for a decision.
 function openDraft(drafts: AIDraft[] | undefined, agentId?: string) {
-  return drafts?.find((draft) => draft.requested_by_agent_id === agentId && (writing(draft) || (draft.status === 'ready' && draft.outcome === null)));
+  // A written draft (left by an agent token) has its own card above the reply box.
+  return drafts?.find((draft) => draft.source === 'ai' && draft.requested_by_agent_id === agentId && (writing(draft) || (draft.status === 'ready' && draft.outcome === null)));
 }
 
 // DraftStatus says on the closed panel's button that the person's draft is being written or is ready,
@@ -65,8 +66,8 @@ export function AIDraftPanel({ conversationId, agentId, hasText, canManage = fal
   useEffect(() => {
     if (!current.data) return;
     const changed = current.data;
-    client.setQueryData<{ items: AIDraft[] }>(['ai-drafts', conversationId], (list) =>
-      list && { items: list.items.map((item) => (item.id === changed.id ? changed : item)) });
+    client.setQueryData<{ items: AIDraft[]; next_before: string | null }>(['ai-drafts', conversationId], (list) =>
+      list && { ...list, items: list.items.map((item) => (item.id === changed.id ? changed : item)) });
   }, [client, conversationId, current.data]);
   const busyWriting = writing(draft);
   useEffect(() => { onWriting?.(busyWriting); }, [busyWriting, onWriting]);

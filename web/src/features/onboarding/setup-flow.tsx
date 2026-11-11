@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
+import { can } from '../../lib/can';
 import type { SetupStepKey } from '../../api/schemas';
 import { messages } from '../../messages';
 import { useDismissibleTooltips } from '../shell/app-shell';
@@ -30,7 +31,8 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
   useDismissibleTooltips();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, refetchInterval: pollMs });
-  const admin = me.data?.agent.role === 'admin';
+  // The same test as the inbox's setup guide: the admin steps are the ones a channel manager takes.
+  const admin = can(me.data, 'channels:update');
   const steps = me.data && setup.data ? visibleSteps(setup.data, admin) : undefined;
   const index = steps && step ? steps.findIndex((item) => item.key === step) : -1;
   const known = step === 'done' || index >= 0;

@@ -20,7 +20,7 @@ const customerStarted = `
 		WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind<>'note' AND m.created_at<=$2
 		ORDER BY m.created_at,m.id LIMIT 1) f ON f.kind='incoming'
 	LEFT JOIN LATERAL (SELECT m.created_at FROM messages m
-		WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' AND m.created_at>=f.created_at AND m.created_at<=$2
+		WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' AND m.notice_kind IS NULL AND m.created_at>=f.created_at AND m.created_at<=$2
 		ORDER BY m.created_at LIMIT 1) r ON true`
 
 // LoadLive reads the Colliedesk side measured at m: customer-started conversations not created by an
@@ -74,7 +74,7 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 	}
 	in.Conversations = conversations
 	drafts, err := tx.Query(ctx, `SELECT conversation_id::text,outcome,decided_at FROM ai_drafts
-		WHERE workspace_id=$1 AND outcome IN ('sent_unchanged','sent_edited','discarded') AND decided_at>$2 AND decided_at<=$3`,
+		WHERE workspace_id=$1 AND source='ai' AND outcome IN ('sent_unchanged','sent_edited','discarded') AND decided_at>$2 AND decided_at<=$3`,
 		workspaceID, m.Add(-30*Day), m)
 	if err != nil {
 		return in, fmt.Errorf("read AI drafts: %w", err)

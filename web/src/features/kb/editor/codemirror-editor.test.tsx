@@ -115,6 +115,21 @@ test('a list, checklist or heading put on the line of the cursor leaves the curs
   expect(handle.markdown()).toBe('- [ ] Open Settings\n## Steps');
 });
 
+test('the block select offers Text, Heading 2 and Heading 3; a stored Heading 1 line still shows as one while the cursor is on it', async () => {
+  const { text } = await make('Intro\n\n# Old title');
+  const block = within(screen.getByRole('toolbar', { name: 'Formatting' })).getByRole('combobox', { name: 'Block type' });
+  const options = () => within(block).getAllByRole('option').map((option) => option.textContent);
+  // The article page shows the title as the page's h1; a Heading 1 in the text would be a second one.
+  expect(options()).toEqual(['Text', 'Heading 2', 'Heading 3']);
+  expect(block).toHaveValue('paragraph');
+  const view = EditorView.findFromDOM(text)!;
+  act(() => { view.dispatch({ selection: { anchor: view.state.doc.length } }); });
+  await waitFor(() => expect(block).toHaveValue('h1'));
+  expect(options()).toEqual(['Text', 'Heading 1', 'Heading 2', 'Heading 3']);
+  act(() => { view.dispatch({ selection: { anchor: 0 } }); });
+  await waitFor(() => expect(options()).toEqual(['Text', 'Heading 2', 'Heading 3']));
+});
+
 test('Insert video takes a YouTube or Vimeo link and puts its player in a block of its own; a link it cannot use says why', async () => {
   const { handle, text } = await make('Intro');
   // One Insert menu: the library, an upload, or a video site link, each said what it does.
@@ -343,5 +358,7 @@ test('in a column too narrow for every tool (a tablet held upright), the toolbar
     ['Insert image or video', expect.stringMatching(/^Bold/), expect.stringMatching(/^Italic/), expect.stringMatching(/^Link/), 'More formatting']);
   fireEvent.click(within(toolbar).getByRole('button', { name: 'More formatting' }));
   expect(screen.getByRole('menuitem', { name: 'Find and replace' })).toBeInTheDocument();
+  // The same blocks as the select of a wide toolbar: the title is the page's only Heading 1.
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent).filter((label) => /^(Text|Heading)/.test(label ?? ''))).toEqual(['Text', 'Heading 2', 'Heading 3']);
   vi.unstubAllGlobals();
 });

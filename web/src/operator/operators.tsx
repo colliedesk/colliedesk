@@ -34,7 +34,7 @@ export function Operators({ data }: { data: ConsoleData }) {
         <thead><tr><th scope="col">{m.tokenName}</th><th scope="col">{m.email}</th><th scope="col">{m.lastSeen}</th><th scope="col">{m.expires}</th><th scope="col"><span className="sr-only">{m.revoke}</span></th></tr></thead>
         <tbody>{team.sessions.map((session) => <tr key={session.id}>
           <td data-label={m.tokenName}>{session.id === data.me.session.id ? m.thisBrowser : session.label} <code>{session.kind}</code></td>
-          <td data-label={m.email}>{session.email}</td><td data-label={m.lastSeen}>{when(session.last_seen_at)}</td><td data-label={m.expires}>{when(session.expires_at)}</td>
+          <td data-label={m.email}>{session.email}</td><td data-label={m.lastSeen} className="ops-when">{when(session.last_seen_at)}</td><td data-label={m.expires} className="ops-when">{when(session.expires_at)}</td>
           <td><button type="button" className="danger-action" onClick={() => setDialog({ session })}>{session.id === data.me.session.id ? m.signOut : m.revoke}</button></td></tr>)}</tbody></table></div>
     </section>
     {dialog && <Act data={data} dialog={dialog} onClose={() => setDialog(null)} onShown={(value) => { setDialog(null); setShown(value); load(); }} onDone={() => { setDialog(null); load(); }} />}

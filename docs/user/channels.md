@@ -1,8 +1,8 @@
 # Channels
 
 A channel is one way customers reach your workspace: your [support email](email-channel.md), your
-website's [web form](web-form.md), or the [help chat](help-chat.md) where an AI answers from your
-help articles and a customer can hand the chat to your team. In **Settings**, **Channels** has a
+website's [web form](web-form.md), the [help chat](help-chat.md) where an AI answers from your
+help articles and a customer can hand the chat to your team, or a [Zalo OA](zalo.md). In **Settings**, **Channels** has a
 page per type under it:
 
 - **Email** (`/settings/channels/type/email`): the setup of your support address, then the table of
@@ -10,6 +10,7 @@ page per type under it:
   [Email in Settings](email-channel.md#email-in-settings).
 - **Web form** (`/settings/channels/type/web_form`): your web form, or the form to add one.
 - **Help chat** (`/settings/channels/type/help_chat`): your [help chat](help-chat.md), or the form to add one.
+- **Zalo OA** (`/settings/channels/type/zalo`): your [Zalo OAs](zalo.md), or the form to connect one.
 - **Channels** itself (`/settings/channels`) lists every channel with what each is doing, and lets an
   admin add one, turn it off and on, or remove it, and its **History** tab lists what changed.
 
@@ -33,15 +34,19 @@ and its state:
   inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
   message works without it. Web form: it is on but lists no website origin, so no
   page can post to it. Help chat: the AI chat feature is off in **Settings → Built-in AI**, so the
-  help center shows no chat.
+  help center shows no chat. Zalo OA: a secret or the tokens are not set, or an event's signature did
+  not match the OA secret key; the Connection tab says which ([Zalo OA](zalo.md)).
+- **Processing paused**: a Zalo OA whose processing an admin paused; it keeps what arrives and shows how
+  many messages wait. See [Pause processing](#pause-processing).
 
 ## Add a channel
 
 Select **Add channel** and pick a type (with no channel yet, the page lists the types at once:
-**Connect your support email**, **Add a web form**). Live chat is listed as not available yet. The
-channel exists once you save its first settings: for email, a name and the support address (step 1 of
-the [email setup](email-channel.md#connect-your-support-email), which then goes on with forwarding);
-for the web form, its allowed origins.
+**Connect your support email**, **Add a web form**, **Add help chat**, **Connect Zalo OA**). Live chat is
+listed as not available yet. The channel exists once you save its first settings: for email, a name and
+the support address (step 1 of the [email setup](email-channel.md#connect-your-support-email), which then
+goes on with forwarding); for the web form, its allowed origins; for a Zalo OA, its OA and app ids
+([Connect an OA](zalo.md#connect-an-oa)).
 
 A workspace can have several channels of a type: a mailbox for support and one for billing, a form
 on your shop and one on your careers page. Pick the type again to add another.
@@ -60,7 +65,8 @@ on your shop and one on your careers page. Pick the type again to add another.
   a Gmail account sends for one email channel only. Two web forms may list the same website.
 
 Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
-**Replies**, how replies leave; web form: **Embed**) and **History**; on **Settings → Email** it is
+**Replies**, how replies leave; web form: **Embed**; help chat: **Setup** and **Your site**; Zalo OA:
+**Connection**, **Groups**, **Staff** and **Messages**), **AI** and **History**; on **Settings → Email** it is
 **Manage**. An email address still waiting for its first email also has its setup,
 `/settings/channels/<id>/setup` (**Continue setup**). Old links to the email and web form sections of
 Settings open the type's page; a bookmark to `/settings/channels/<id>` opens the same channel.
@@ -74,8 +80,10 @@ Turning a channel off keeps its settings and its conversations. While it is off:
   been had the channel been on) or discards them (**Discard N messages…**). Through the API they can
   also be added to an existing conversation. Discarding cannot be undone; the history
   keeps how many. Kept messages count toward your storage until they are opened or discarded.
+- **Zalo OA**: what arrives is kept the same way, shown as **N messages arrived while off**, for an
+  admin to open or discard.
 - **Web form**: submissions are refused exactly as if the form did not exist, so the address of your
-  form cannot be probed.
+  form cannot be probed. A **help chat** refuses what arrives the same way.
 - **Replies**: a reply written while its channel is off is saved, and its delivery shows the channel
   was off. After you turn the channel on, select **Retry** on the reply; nothing is sent again by
   itself. The channel shows how many replies wait.
@@ -106,7 +114,7 @@ says so ("Billing was removed; replies send from Support").
 - **Replies** leave from the mailbox the conversation came through. A conversation that came through
   a web form, or was started by the team, keeps the mailbox of its first reply. With two mailboxes the
   composer says which one ("Replies send from Billing").
-- **Filter → Email channels** (shown when a type has two channels) lists the conversations of one
+- **Filter → Email channels** (shown for any type with two channels or more: Web form channels, Zalo OA channels) lists the conversations of one
   channel: those that came through it and those whose replies leave from it. A removed channel still
   filters ("Careers (removed)"), and a saved view keeps the choice.
 
@@ -117,6 +125,210 @@ turned on or off, changed (which settings: the support address, the sender name,
 made the default or removed a channel, replaced one of its secrets (never its value), and how many held messages were
 opened or discarded.
 
+## Chat threads
+
+On a chat channel, every message said in a place (a one-to-one chat, a group) is kept with that place,
+whatever became of it: the customers' messages that opened or joined a conversation, chatter the channel
+kept without one, what waits for review, and what the team and the channel sent. A conversation can show
+the place around its own messages, with other customers of a group marked. Nothing of a place is ever on
+a page a customer sees. Email and web forms have no places. For AI agents and the API:
+`GET /api/v1/conversations/{id}/chat` (`linked=only` keeps the conversation's own), `GET
+/api/v1/channels/{id}/threads`, `GET /api/v1/channels/{id}/threads/{threadId}/items` and `GET
+/api/v1/channel-thread-items` (messages nobody concluded on), and the MCP tools
+`colliedesk_conversation_chat_get`, `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items` and
+`colliedesk_channel_unresolved_items`.
+
+The people who wrote in a channel's places (customers and the team, never the channel itself) are listed
+once each, with the place and time they last wrote and the name the channel last gave them, most recent
+first, at most 200: every member of a group, not only its last writer (to pick a team member, for one).
+`GET /api/v1/channels/{id}/senders`, MCP `colliedesk_channel_senders`; `channels:read` is enough.
+
+## Chat rules
+
+A chat channel's scopes (its one-to-one chats, its groups) can each set how a customer's messages become
+requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change). `GET
+/api/v1/channels/{id}` answers `settings`, what the channel stores over its type's defaults, and
+`effective_settings`, the rules in force; `PATCH /api/v1/channels/{id}` with `settings` replaces the stored
+ones whole, so send them all. On a Zalo OA, the channel's **Messages** tab sets the commands, the
+notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab)).
+- `gather` collects what a customer says close together into one batch: `quiet_seconds` of silence
+  closes it, `max_seconds` after its first message at the latest. With `pre_command_seconds`, what the
+  customer said that long before a command (a screenshot sent just before "report a bug") is part of
+  the command's request; what they say after it inside the quiet window is too. A batch that already
+  named a command never joins the next one: three commands are three requests.
+- `cut_on_command` (on unless set to `false`): a command closes what the customer was collecting and
+  starts its own batch; off, a second command joins the batch being written (a one-to-one chat composing
+  one request).
+- A cancel command (such as "Hủy") cancels only a batch of its sender that named a command; with none
+  being collected it is an ordinary message. With `settings.notices.cancelled` set, the channel says so.
+- A command with `action: help` (such as "help" or "/help", compared like any command) is answered with
+  `settings.notices.help`, your guide to the commands, one-to-one and in groups. It opens nothing, is no
+  part of the request being written (asked while writing one, the guide comes and the request goes on as
+  it was) and does not hold back the next unmatched notice. A chat is answered once in
+  `settings.notices.help_every_seconds` (300 by default; 0 answers each), so a customer or a bot repeating
+  it gets the guide once; every help is still in the chat. A channel that is off keeps it; opened later, it
+  is not answered.
+- `gather.confirm_seconds` asks before a request written over several messages opens (a one-to-one chat):
+  once the customer is quiet for `quiet_seconds`, the channel sends `settings.notices.ask_confirm` ("Is that
+  all? Send OK…") and waits this long. A command with `action: confirm` (such as "OK", best with `match:
+  exact`) opens it at once and is no part of it; more messages join it and the question is asked again once
+  the customer is quiet; silence opens it; a cancel throws it away. A confirm with nothing being written is
+  an ordinary message. 0 (the default) asks nothing.
+  An OK written before the question, or after the customer added to the request since it was asked (the
+  question is then asked again), is part of the request. A journal processed late (a paused channel
+  resumed) keeps the times its messages came: a request whose customer was quiet longer than the question
+  would have waited opens without one. A request of any length opens whole.
+- A conversation a command opens is called by the first line of what follows the command ("report bug: the
+  printer jams" is "the printer jams"); a command with nothing after it keeps the channel's subject.
+- A command with `ask_description` set, sent alone (no words after it, no file), is answered with that text
+  instead and opens nothing until the customer describes it. `gather.expire_seconds` (0, the default, never)
+  throws such a request away that long after the customer's last message: their next message is answered
+  with `settings.notices.expired`, unless it is a new command, which starts a new request.
+- How a command's phrases match (`settings.commands.<name>.match`): `fuzzy` (the default) compares the
+  message's first words without accents or case and forgives one wrong, missing, added or swapped letter
+  in a phrase of five letters or more; `words` compares them the same way but forgives no wrong letter,
+  only a missing or doubled space between the phrase's words ("báolỗi" is "Báo lỗi", "báo lỗix" is not);
+  `exact` is the whole message, accents kept, in any case ("Hủy" matches "hủy", never "huy" or "Hủy đi").
+  A phrase that starts with `#` or `/` keeps it: `/loi` matches "/loi …", not a message starting "lỗi".
+- `unmatched: join_open`, on a scope that opens conversations only on a command (`mode: commands`): a
+  message that names no command joins the customer's open or pending conversation on the channel when
+  they have exactly one. With none or several it is kept, unresolved, in the chat place: it shows in the
+  place and among the messages nobody concluded on, and joins nothing.
+- `unmatched: notice`, on a scope that opens conversations only on a command: a message that names no
+  command opens and joins nothing, is kept in its chat place, and is answered there with the channel's
+  `settings.notices.unmatched` (say which command opens a request). One chat gets it at most once in
+  `settings.notices.unmatched_every_seconds` (300 by default, counted from the last one queued; 0 answers
+  every message), so a customer writing on, or a bot answering the notice, is not answered each time; a
+  second delivery of the same message never is. Only a scope where one customer writes (a one-to-one chat)
+  takes it: a group would answer everyone's chatter. The notice is in the place as the channel's own message,
+  with whether it went out (`delivery_status`: queued, sent or failed). Without that text nothing is sent.
+- A notice's text may only name placeholders the channel fills; any other is refused when the settings are
+  saved. The received notice fills `{ref}`: the code of the conversation it acknowledges (`#12`, or its
+  channel's series' code, see [conversation numbers](inbox.md#conversation-numbers)), which the customer
+  types back. The other notices fill none, but the reopen ones below.
+- A command with `action: reopen` adds the message to the conversation whose code follows it ("not fixed
+  #12 still broken": the first word after the command is the code, the rest the customer's note). It
+  finds a conversation opened in the same place: in a group, one opened in that group; one to one, the
+  customer's own opened in that chat. The code is read as `?ref=` reads it. The customer is told with
+  `settings.notices.reopened` when the conversation was resolved or closed and opens again, or
+  `settings.notices.reopen_noted` when it is still being worked on (both fill `{ref}`).
+  Any other code (mistyped, someone else's, another group's, one this server never gave, or the customer's
+  own written from another place) adds
+  the message to nothing and is answered with `settings.notices.reopen_not_found` (`{ref}`: the code
+  typed), the same words whatever the reason. A code of the system the channel's series was taken over
+  from (below its `start`, in its `start_year` or an earlier year; see
+  [conversation numbers](inbox.md#conversation-numbers)) and no conversation of the channel's series has
+  opens a new conversation tagged `legacy-ref`, answered with `settings.notices.reopen_legacy` (`{old_ref}`,
+  `{ref}`) instead of the received notice; one the workspace has (imported with its old code) is found as
+  any other. A reopen command is answered as it comes, even where messages are collected: it is no part
+  of the request being written, asks nothing and waits for nothing, and two of them are two. Without a code
+  after it, it is an ordinary message.
+- A status the team sets tells the customer in the conversation's chat, when the channel has words for it:
+  `settings.notices.status_pending`, `status_resolved` and `status_closed` (they fill `{ref}` and
+  `{subject}`), and `reopened` when the team opens it again. It is the channel's own message, quoting the
+  customer's first message only one to one (in a group, and for a chat moved into another conversation, it
+  quotes nothing), and changes neither the status nor the response clocks. Empty texts
+  (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
+  MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
+  the team started) or of a channel removed or turned off is told nothing; a chat message moved into a
+  conversation that came by email or the web form is told in its chat, through the chat's channel, never by
+  email; a channel whose processing is paused
+  sends it once it resumes. A change of several conversations at once tells
+  each customer a few seconds after it is saved; a conversation whose status changes again before then is
+  told only that later change. A change that would tell a customer needs `messages:send`, from a person or an AI
+  agent's token alike; without it the change is refused with what each channel would send, and
+  `notify: false` makes it quietly instead. A conversation shows its last status
+  change and who made it (a team member, an AI agent's token, the customer, their reopen command, the
+  channel closing it, an import), and which statuses would tell its customer.
+- `settings.auto_close_hours` (0 to 720, none by default) closes a conversation resolved after it was turned
+  on, that long after its resolve and the customer's last message, and tells the customer with
+  `status_closed`. A conversation resolved before it was turned on never closes by itself (close it by hand),
+  so turning it on never closes a backlog at once; changing the hours keeps when it was turned on, and
+  turning it off and on again starts again. One resolved quietly closes quietly. One imported resolved and
+  untouched here since closes as the system before would have, that long after its resolve there and the
+  customer's last message, whenever auto-close was turned on, and quietly (that system had told them). A customer writing again
+  before then opens it, as always.
+- The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
+  its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
+  the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
+- A team member writing in a group on the chat app itself is part of the place, never a customer's
+  request: it opens and joins nothing, unless they name a command that opens one.
+
+## Intake queue
+
+On a chat channel's scope that collects messages (its groups, on most chat types), what one customer says
+in one go is a **card**: messages close together are collected, each customer apart from the others even
+when they write in turn. With intake off, the channel's rules decide each card as they always did: a command
+opens a conversation, a reply to a message continues its conversation (in a group, only a conversation that
+customer wrote in), and what the rules hold for a person waits in the queue. With intake on
+([AI per channel](ai.md#what-ai-does-by-itself-per-channel)), the rules decide only a command (a cancel too);
+everything else a customer wrote is AI's to decide, whatever conversation the rules would have continued:
+
+- **Suggest**: every card waits in the queue with AI's suggestion, and a person decides it.
+- **Auto**: a card waits up to two minutes for AI, held like any held message. AI applies what it is sure
+  enough of (the scope's threshold, through an open gate); what it is not sure of, or does not answer in
+  time, waits in the queue with its suggestion (**AI was not sure**, **AI did not answer**). Nothing is
+  opened or joined on its own then, and nothing is ever lost.
+
+At **Auto**, when a customer writes again while their card waits for a person, the new messages join that
+card and AI reads all of it again: a picture first and the words that say what it is a few minutes later
+are decided as one, and AI applies it alone when it is now sure enough. Otherwise the card waits again, with
+every message in it. At Suggest, a card behind one of the same customer that waits for a person waits right
+after it, and goes back to be decided once that one is.
+
+AI reads one card of a customer at a time, in the order they were said. It sees what the customer wrote
+with the messages just before it in the same place and the conversations the card may join, with people
+named only "Customer A" or "Team 1", phone numbers, email addresses and account or ID numbers masked, and
+passwords and codes hidden (also a login and its password sent as two messages). It says what it would do
+(open a conversation, add the card to one, or set it aside, how sure it is, and why); its suggestion shows
+on the card until a person decides. When a person decides as AI suggested, the decision says it followed AI; otherwise that it
+corrected it. A person who adds a card to a conversation that was merged into another adds it to the one it
+was merged into.
+
+A card names the chat place it was said in, what the rules would decide and whether they had evidence (a
+command, a reply to a message of a conversation, or the conversation the customer last wrote in from the
+same place: **match**) or decided by default. While it waits, it lists
+the conversations it may join without the reply going to someone else: in a group, the open or pending
+conversations of that group active in the last 72 hours; in a one-to-one chat, that customer's on the same
+channel; then the ones resolved within the reopen window (7 days unless the channel's intake settings say
+otherwise), which reopen when a card joins them. A closed conversation is never offered. On a channel that
+joins only open conversations (Zalo's default), a resolved one is never offered either, and a card added to a
+conversation resolved since opens a new conversation instead: a resolved conversation gets nothing more,
+except through the customer's reopen command.
+
+A person decides a card: **open a conversation** with what it said, as one message (never joining a
+conversation found since; optionally with one of the channel's commands, for its tags and priority, and a
+subject), **add it** to a conversation, or **set it aside** (it stays held and can be put back), saying why
+if they like: not a request, answered in the chat, said already, or another reason. Deciding
+the same way twice changes nothing; once a card is decided, another decision is refused and says how it
+was decided. Messages of a card are decided in the queue, not one by one as held messages; only what was
+set aside can be discarded with the held messages. Email and web forms have no cards: every message is
+decided by the channel's rules, as before. In the web app, people decide cards on [Review](review.md).
+
+For AI agents and the API: `GET /api/v1/intake/gatherings` (`state=review`, `deciding`, `ignored` or
+`decided`, `channel_id`, `scope`, `decided_by` `rules`, `ai` or `agent`), `GET
+/api/v1/intake/gatherings/{id}` (with `candidates` and `commands`), `POST
+/api/v1/intake/gatherings/{id}/decide` (`action` `create`, `attach` with `conversation_id`, or `ignore`
+with an optional `ignore_reason` `chat`, `handled_in_chat`, `duplicate` or `other`; `follows_decision_id`
+names the card's `suggestion` it follows), `POST
+/api/v1/intake/gatherings/{id}/requeue`, `GET /api/v1/intake/summary` (how many cards wait for a person
+and for AI, and the channels and scopes they come from), `GET /api/v1/intake/stats` and `GET
+/api/v1/conversations/{id}/intake` (why each message is in a conversation), and the MCP tools
+`colliedesk_intake_list`, `colliedesk_intake_get`, `colliedesk_intake_decide`, `colliedesk_intake_requeue`,
+`colliedesk_intake_summary`, `colliedesk_intake_stats` and `colliedesk_conversation_intake_get`. Reading
+cards needs `messages:read`, the summary and counts `conversations:read`;
+opening a conversation from one needs `messages:send` (the channel may tell the customer it was received),
+the other decisions and requeue `conversations:update`; without it, the decision is refused and names
+the permission. Through the API, send the same `Idempotency-Key` header on every retry of one
+decision or requeue: a repeat answers what the first one got and decides nothing more.
+
+## AI on a channel
+
+Each channel's **AI** tab sets what each AI feature does by itself on it (triage and drafts; intake
+comes on chat channels), apart from the workspace's default; see [AI per channel](ai.md#what-ai-does-by-itself-per-channel).
+Everyone with `ai_settings:read` sees the tab; changing it needs `ai_settings:update`.
+A change shows in the channel's history as "changed what AI triage does by itself".
+
 ## For AI agents and the API
 
 Everything above is available through `GET/POST /api/v1/channels` (`include_removed=true` lists
@@ -125,6 +337,18 @@ removed channels too; each type says its `default_channel_id`), `GET/PATCH/DELET
 has is a 409 with `conflict` naming that channel), `/api/v1/channels/{id}/held/replay` and `/held/discard`, and
 `/api/v1/channels/events`, and through the MCP tools `colliedesk_channels_*` ([MCP](mcp.md)). A channel's
 rules (`settings`: how messages join conversations, default tags and priority, rate limits) can be
-changed there only, not in Settings yet. Removing a channel and discarding held messages are, for an
-agent token, requests a person approves. Storing a channel's secret needs an admin token; a lower
-token is refused, so a secret never waits in a request.
+changed there only, not in Settings yet. Changing a channel and discarding held messages need `channels:update`; storing
+a channel's secret and removing a channel need `channels:manage_credentials`. An AI agent's token with
+the permission does it at once; a token created before roles cannot, and needs a new token. A channel's AI levels are `GET /api/v1/channels/{id}/ai` and
+`PUT /api/v1/channels/{id}/ai/{slot}` (`colliedesk_channel_ai_get`, `colliedesk_channel_ai_set`).
+
+## Pause processing
+
+Moving a channel over from another system, you can pause its processing: **Pause processing** at the top
+of a Zalo OA's page (admins; it asks first), and **Resume processing** in its place while paused. With the
+API: `PATCH /api/v1/channels/{id}` with `{"processing_paused": true}` (Zalo channels only, whose messages
+wait in a journal). While it is paused, every message that arrives is kept as it came and nothing is decided, opened, answered or sent;
+replies you write wait too. Resume it (`{"processing_paused": false}`) and what arrived is processed in
+order by the channel's rules, as if it had just come, and the waiting replies go out. The channel's
+history shows who paused and resumed it; `processing_paused_at` on the channel says it is paused and
+`paused_count` how many messages wait.

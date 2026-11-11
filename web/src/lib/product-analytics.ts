@@ -12,7 +12,7 @@ import { recordProductEvent } from './diagnostics';
 
 export type ProductAnalyticsSettings = { enabled: boolean; key: string | null; host: string | null; realm: string | null };
 type Identity = {
-  agent: { id: string; role: string; email: string; display_name: string };
+  agent: { id: string; roles: { system: 'admin' | 'agent' | null }[]; email: string; display_name: string };
   workspace: { id: string; name: string; slug: string };
   plan: { plan: string } | null;
 };
@@ -92,7 +92,7 @@ function options(host: string): Partial<PostHogConfig> {
 // never a contact, a message, an id or anything a person typed. The one exception is the answer to
 // the trial survey, which the admin sends by pressing Send.
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
-export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'agents' | 'sessions' | 'channels' | 'email_channel'
+export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'agents' | 'connected_apps' | 'sessions' | 'channels' | 'email_channel'
   | 'web_form' | 'saved_replies' | 'help_center' | 'export' | 'billing' | 'ai';
 export type SurveyId = 'switch_blocker_v1';
 export type InboxFilterKind = 'status' | 'priority' | 'assignee' | 'tag' | 'contact' | 'organization' | 'awaiting' | 'draft' | 'delivery'
@@ -107,7 +107,7 @@ export interface EventProperties {
   conversation_status_changed: { to: ConversationStatus };
   conversation_assigned: { to_self: boolean };
   bulk_action_applied: { action: 'status' | 'assign' | 'add_tag' | 'remove_tag'; count: number };
-  agent_request_decided: { decision: 'approved' | 'rejected' };
+  reply_draft_decided: { decision: 'sent' | 'discarded' };
   settings_section_opened: { section: SettingsSection };
   workspace_export_requested: undefined;
   problem_reported: undefined;
@@ -169,18 +169,24 @@ export async function startProductAnalytics(settings: ProductAnalyticsSettings |
   const posthog = await client;
   if (me && settings.realm === 'cloud') {
     // Our own customers: who they are is what the team needs to help them.
-    posthog.identify(me.agent.id, { role: me.agent.role, email: me.agent.email, name: me.agent.display_name || undefined });
+    posthog.identify(me.agent.id, { role: mainRole(me), email: me.agent.email, name: me.agent.display_name || undefined });
     posthog.register({ realm: settings.realm, workspace_id: me.workspace.id, workspace_name: me.workspace.name,
       workspace_slug: me.workspace.slug, plan: me.plan?.plan ?? null });
   } else if (me) {
     // A self-hosted install's agents are someone else's staff: only random ids leave it.
-    posthog.identify(me.agent.id, { role: me.agent.role });
+    posthog.identify(me.agent.id, { role: mainRole(me) });
     posthog.register({ realm: settings.realm, workspace_id: me.workspace.id, plan: me.plan?.plan ?? null });
   }
   return posthog;
 }
 
 // after, when set, holds the download of the library until it settles (see startProductAnalytics).
+// mainRole names a person for the numbers by their built-in role (custom roles are the workspace's own words).
+function mainRole(me: Identity): 'admin' | 'agent' | 'other' {
+  const systems = me.agent.roles.map((role) => role.system);
+  return systems.includes('admin') ? 'admin' : systems.includes('agent') ? 'agent' : 'other';
+}
+
 export function useProductAnalytics(settings: ProductAnalyticsSettings | undefined, me: Identity | undefined, after?: () => Promise<unknown>) {
   const enabled = settings?.enabled === true;
   const agentId = me?.agent.id;

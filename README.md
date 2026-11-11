@@ -1,5 +1,7 @@
 # Colliedesk
 
+[![mcptry](https://mcptry.com/badge/io.github.colliedesk/colliedesk)](https://mcptry.com/servers/io.github.colliedesk/colliedesk)
+
 **The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams.
 Leave Freshdesk with all your data. AI that actually answers tickets is included, not an add-on.
 Flat price, no per-agent fees.
@@ -7,9 +9,9 @@ Flat price, no per-agent fees.
 Think of Colliedesk as the sheepdog for your support queue: the AI herds every ticket home,
 your team stays in charge.
 
-**Status:** alpha (0.0.x). The interface and database schema may change in any release; every
-release ships the migrations to upgrade, and export always works. See the [roadmap](ROADMAP.md)
-and [versioning](#versioning).
+**Status:** generally available (1.x). Upgrades keep your data, export always works, and
+[what general availability guarantees](docs/general-availability.md) covers backups, uptime and
+self-hosted installs. See the [roadmap](ROADMAP.md) and [versioning](#versioning).
 
 ## "Wait, what are you selling me?"
 
@@ -59,16 +61,18 @@ or a coding agent.
 
 ## Versioning
 
-Colliedesk uses [Semantic Versioning](https://semver.org). While it is alpha, releases are
-`0.0.x`: any release may change the interface or the database schema. Beta starts at `0.1.0`,
-when HC Labs announces it. Merging to `main` does not make a release: HC Labs cuts one by hand,
+Colliedesk uses [Semantic Versioning](https://semver.org) from `1.0.0`: a breaking change to the
+API, the CLI or the export format needs a new major version; new features raise the minor version,
+fixes the patch version. Every schema change ships as a migration that upgrades your data in
+place. The `0.0.x` releases before `1.0.0` were early releases. Merging to `main` does not make a release: HC Labs cuts one by hand,
 from the build that already runs on Colliedesk Cloud. Changes per release are on the
 [releases page](https://github.com/colliedesk/colliedesk/releases).
 
 Container image tags:
 
 - `latest`: the newest release. The installer uses it by default.
-- `0.0.x`: one exact release, if you want to pin.
+- `1.2.3`: one exact release, if you want to pin.
+- `1.2`: the newest patch release of that minor version.
 - `edge`: the newest `main` commit that passed CI. Newer, less tested.
 
 ## License

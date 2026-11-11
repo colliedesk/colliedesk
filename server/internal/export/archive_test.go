@@ -50,7 +50,7 @@ func conversationWith(attachments ...export.Attachment) export.Conversation {
 func newWriter(t *testing.T, buf *bytes.Buffer, storage memoryStorage) *export.Writer {
 	t.Helper()
 	writer := export.NewWriter(buf, storage, workspaceID, time.Date(2026, 10, 15, 6, 0, 0, 0, time.UTC))
-	if err := writer.Workspace(domain.Workspace{ID: workspaceID, Slug: "acme", Name: "Acme", Timezone: "UTC"}); err != nil {
+	if err := writer.Workspace(export.Workspace{Workspace: domain.Workspace{ID: workspaceID, Slug: "acme", Name: "Acme", Timezone: "UTC"}}); err != nil {
 		t.Fatal(err)
 	}
 	return writer

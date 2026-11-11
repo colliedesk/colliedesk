@@ -1,19 +1,20 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
+import { builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 import { sessionSchema } from '../../api/schemas';
 
 test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC"
-    canCreateInvites
+    canCreateInvites inviteRoles={builtInRoles}
     createdInvite={{ url: "https://desk.example.com/sign-in?token=once" }}
     onCreateInvite={onCreateInvite} />);
 
   fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'agent@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
 
-  expect(onCreateInvite).toHaveBeenCalledWith('agent@example.com', 'agent');
+  expect(onCreateInvite).toHaveBeenCalledWith('agent@example.com', [builtInRoles[1].id]);
   expect(screen.getByRole('textbox', { name: /one-time invite link/i })).toHaveValue('https://desk.example.com/sign-in?token=once');
 });
 
@@ -28,7 +29,7 @@ test('surfaces a failed revoke operation', () => {
 });
 
 test('shows the state of every invite and offers revoke only while it is pending', () => {
-  const base = { role_ceiling: 'agent' as const, created_by_email: 'admin@example.com', created_at: '2026-10-14T00:00:00Z', used_at: null, revoked_at: null };
+  const base = { roles: rolesOf('agent'), created_by_email: 'admin@example.com', created_at: '2026-10-14T00:00:00Z', used_at: null, revoked_at: null };
   const future = new Date(Date.now() + 600_000).toISOString();
   const past = new Date(Date.now() - 600_000).toISOString();
   render(<SettingsPage sessions={[]} timezone="UTC" canCreateInvites invites={[
@@ -47,16 +48,17 @@ test('shows the state of every invite and offers revoke only while it is pending
   expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
 });
 
-test('a custom token shows how many permissions it holds and lists them by name', () => {
+test('a fixed token shows how many permissions it holds and lists them by name', () => {
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[{ id: '77777777-7777-4777-8777-777777777777', agent_id: '55555555-5555-4555-8555-555555555555',
-    agent_email: 'sam@example.com', label: 'KB writer', scope: 'custom', permissions: ['kb_articles:read', 'kb_articles:update'], current: false,
+    agent_email: 'sam@example.com', agent_name: 'Sam', label: 'KB writer', role: null, permissions: ['kb_articles:read', 'kb_articles:update'], current: false,
+    token: { kind: 'custom', role: null, role_held: true, permissions: ['kb_articles:read', 'kb_articles:update'], legacy_tier: null },
     created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null }]} />);
-  expect(screen.getByText('custom · 2 permissions')).toBeInTheDocument();
+  expect(screen.getByText('Fixed · 2 permissions')).toBeInTheDocument();
   expect(screen.getByText('Knowledge base articles: Edit')).toBeInTheDocument();
 });
 
 test('a revoked or expired session is shown as such and cannot be revoked again', () => {
-  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', scope: null, permissions: [], current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Chrome', token: null, role: null, permissions: [], current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[
     { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Active device', expires_at: future, revoked_at: null },
@@ -77,33 +79,32 @@ test('shows why an invite was refused next to the invite form', () => {
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
 
-test('an agent token shows its tier and when it ends; a browser session shows neither', () => {
-  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+test('an agent token shows what it was given and when it ends; a browser session shows neither', () => {
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', role: null, current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+  const editor = { id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null };
+  const grant = (kind: 'role' | 'custom' | 'legacy', extra = {}) => ({ kind, role: null, role_held: true, permissions: ['tags:read' as const], legacy_tier: null, ...extra });
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[
-    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', scope: 'draft', permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
-    { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Reader bot', scope: 'read', permissions: [], expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
-    { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Sender bot', scope: 'send', permissions: [], expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
-    { ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', permissions: [], expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
-    { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Old bot', scope: 'draft', permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
-    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', scope: null, permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', token: grant('role', { role: editor }), permissions: ['tags:read'], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+    { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Stopped bot', token: grant('role', { role: editor, role_held: false }), permissions: ['tags:read'], expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
+    { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Old bot', token: grant('legacy', { legacy_tier: 'send' }), permissions: ['tags:read'], expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
+    { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Revoked bot', token: grant('custom'), permissions: ['tags:read'], expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
+    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', token: null, permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
   ]} />);
   const sessions = screen.getByRole('region', { name: 'Sessions' });
   const row = (label: string) => within(sessions).getByText(label).closest('article') as HTMLElement;
-
-  expect(within(row('Claude Code')).getByText('draft')).toBeInTheDocument();
+  expect(row('Claude Code')).toHaveTextContent('Follows role Editor');
   expect(row('Claude Code')).toHaveTextContent(/Expires Oct 14, 2037/);
-  expect(within(row('Reader bot')).getByText('read')).toBeInTheDocument();
-  expect(row('Reader bot')).toHaveTextContent(/Expires Nov 2, 2037/);
-  expect(within(row('Sender bot')).getByText('send')).toBeInTheDocument();
-  expect(row('Sender bot')).toHaveTextContent(/Expires Dec 24, 2037/);
-  expect(within(row('Ops bot')).getByText('admin')).toHaveAttribute('title', 'Agent token tier');
-  expect(sessionSchema.parse({ ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', permissions: [], expires_at: '2037-12-24T06:15:00Z', revoked_at: null }).scope).toBe('admin');
-
-  // A revoked token keeps its tier but no longer has an end date to look forward to.
-  expect(within(row('Old bot')).getByText('draft')).toBeInTheDocument();
-  expect(row('Old bot')).not.toHaveTextContent(/Expires/);
-  // A browser session has no tier, and it slides forward, so a date would mislead.
-  expect(row('Chrome')).not.toHaveTextContent(/Expires|read|draft|send/);
+  expect(row('Stopped bot')).toHaveTextContent('Stopped: Sam no longer holds all of Editor');
+  expect(row('Stopped bot')).toHaveTextContent('Giving them the role starts it again.');
+  // A stopped token is not called Active next to the line that says it stopped.
+  expect(row('Stopped bot')).not.toHaveTextContent('Active');
+  expect(within(row('Stopped bot')).getByRole('button', { name: /Revoke|Sign out/ })).toBeInTheDocument();
+  expect(row('Stopped bot')).toHaveTextContent(/Expires Nov 2, 2037/);
+  expect(row('Claude Code')).toHaveTextContent('Active');
+  expect(row('Old bot')).toHaveTextContent('Created before roles · was send');
+  expect(row('Revoked bot')).not.toHaveTextContent(/Expires/);
+  expect(row('Chrome')).not.toHaveTextContent(/Expires|Follows|Fixed/);
+  expect(sessionSchema.parse({ ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', token: grant('custom'), permissions: ['tags:read'], expires_at: '2037-12-24T06:15:00Z', revoked_at: null }).token?.kind).toBe('custom');
 });
 
 test('shows the loading status while settings data is pending, without the forms', () => {
@@ -112,7 +113,7 @@ test('shows the loading status while settings data is pending, without the forms
   expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
 });
 
-const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', scope: null, permissions: [], created_at: '2026-10-14T00:00:00Z',
+const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', token: null, role: null, permissions: [], created_at: '2026-10-14T00:00:00Z',
   last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null, current: false };
 
 test('settings is split into your account and the workspace, with a link to every section', () => {
@@ -125,8 +126,8 @@ test('settings is split into your account and the workspace, with a link to ever
   expect(links).toEqual([
     ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
     ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'],
-    ['Built-in AI', '/settings/ai'], ['Autofix', '/settings/autofix'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Channels', '/settings/channels'],
-    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
+    ['Built-in AI', '/settings/ai'], ['Response targets', '/settings/targets'], ['Autofix', '/settings/autofix'], ['Connected AI apps', '#connected-apps-heading'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Channels', '/settings/channels'],
+    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'], ['Zalo OA', '/settings/channels/type/zalo'], ['Conversation numbers', '/settings/numbers'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
   // Built-in AI, Channels (with Email, Web form and Help chat) and the import have their own pages; every other link is a section of this one.
   for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();
@@ -243,9 +244,21 @@ test('a session is named by its browser and system, and this device is marked wi
   expect(within(sessions).getByText('Cloud sign-in')).toBeInTheDocument();
 });
 
-test('an invite asks for a role, not a ceiling', () => {
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites />);
-  expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('agent');
+test('an invite gives the Agent role unless other roles are picked, and needs at least one', () => {
+  const onCreateInvite = vi.fn();
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites inviteRoles={builtInRoles} onCreateInvite={onCreateInvite} />);
+  const picker = screen.getByRole('button', { name: 'Roles: Agent' });
+  fireEvent.click(picker);
+  fireEvent.click(screen.getByRole('checkbox', { name: /Admin/ }));
+  fireEvent.click(screen.getByRole('checkbox', { name: /Agent/ }));
+  expect(screen.getByRole('button', { name: 'Roles: Admin' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: /Admin/ }));
+  expect(screen.getByRole('alert')).toHaveTextContent('Everyone needs at least one role.');
+  expect(screen.getByRole('button', { name: /create invite/i })).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: /Agent/ }));
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'b@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
+  expect(onCreateInvite).toHaveBeenCalledWith('b@example.com', [builtInRoles[1].id]);
 });
 
 test('browsing the timezone list with arrow keys saves only where it stops, once, and keeps focus', () => {

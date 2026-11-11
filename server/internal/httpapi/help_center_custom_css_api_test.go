@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -141,8 +140,8 @@ func TestHelpCenterCustomCSSTokenTiers(t *testing.T) {
 	body := map[string]any{"custom_css": ".masthead{border-bottom:2px solid #0b5cad}"}
 
 	// A send token may only ask a person to approve it; a read token may check it.
-	if response := request(t, api, http.MethodPut, themePath, body, send, nil); response.Code != http.StatusAccepted {
-		t.Fatalf("send token put status=%d body=%s, want 202", response.Code, response.Body.String())
+	if response := request(t, api, http.MethodPut, themePath, body, send, nil); response.Code != http.StatusForbidden {
+		t.Fatalf("send token put status=%d body=%s, want 403", response.Code, response.Body.String())
 	}
 	kbCall(t, api, http.MethodPost, themePath+"/check", body, read, http.StatusOK, nil)
 	var theme themeView
@@ -156,9 +155,9 @@ func TestHelpCenterCustomCSSTokenTiers(t *testing.T) {
 // existed, a request an agent filed before it) would remove the custom CSS without anyone choosing to.
 // The field is required: null or "" clears it, leaving it out is refused and changes nothing.
 func TestHelpCenterThemeSaveWithoutCustomCSSIsRefusedAndKeepsIt(t *testing.T) {
-	api, service, pool := testAPIWithPool(t)
+	api, service := testAPI(t)
 	admin := createSession(t, api, service, "CSS Required", "admin@css-required.example.com")
-	send := issueToken(t, api, admin, "Writer", "send").Token
+	send := issueToken(t, api, admin, "Writer", "admin").Token
 	kept := ".masthead{border-bottom:2px solid #0b5cad}"
 	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": kept}, admin, http.StatusOK, nil)
 
@@ -176,25 +175,14 @@ func TestHelpCenterThemeSaveWithoutCustomCSSIsRefusedAndKeepsIt(t *testing.T) {
 		t.Fatalf("theme after a save without custom_css = %+v", after)
 	}
 
-	// An agent's request without it is not filed.
-	unfiled := request(t, api, http.MethodPut, themePath, map[string]any{"body_font": "mono"}, send, nil)
-	if unfiled.Code != http.StatusBadRequest || !strings.Contains(unfiled.Body.String(), "custom_css") || !strings.Contains(unfiled.Body.String(), "Nothing was filed") {
-		t.Fatalf("request without custom_css status=%d body=%s, want 400 and nothing filed", unfiled.Code, unfiled.Body.String())
-	}
-	// One stored before the field existed fails on approval with the same 422 and changes nothing.
-	stale := accepted(t, api, http.MethodPut, themePath, map[string]any{"body_font": "mono", "custom_css": kept}, send)
-	if _, err := pool.Exec(context.Background(), `UPDATE agent_requests SET body = body - 'custom_css' WHERE id = $1`, stale.RequestID); err != nil {
-		t.Fatalf("make the request stale: %v", err)
-	}
-	var outcome approvedView
-	decode(t, approve(t, api, admin, stale.RequestID, nil), &outcome)
-	if outcome.Request.Status != "failed" || outcome.Request.ResultStatus == nil || *outcome.Request.ResultStatus != http.StatusUnprocessableEntity ||
-		!strings.Contains(string(outcome.Result), "custom_css") {
-		t.Fatalf("approving a request without custom_css = %+v result %s, want failed with 422", outcome.Request, outcome.Result)
+	// A token's save without it is refused the same way and changes nothing.
+	unsaved := request(t, api, http.MethodPut, themePath, map[string]any{"body_font": "mono"}, send, nil)
+	if unsaved.Code < 400 || !strings.Contains(unsaved.Body.String(), "custom_css") {
+		t.Fatalf("a token's save without custom_css status=%d body=%s, want a refusal naming custom_css", unsaved.Code, unsaved.Body.String())
 	}
 	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &after)
 	if after.CustomCSS != kept || after.BodyFont != nil || after.ContentVersion != 1 {
-		t.Fatalf("theme after the stale approval = %+v", after)
+		t.Fatalf("theme after a refused token save = %+v", after)
 	}
 
 	// null clears it, as "" does.
@@ -212,8 +200,8 @@ func TestHelpCenterCustomCSSNeedsPublishPermission(t *testing.T) {
 	publisher := issueCustomToken(t, api, admin, "Publisher", auth.PermHelpCenterRead, auth.PermHelpCenterUpdate, auth.PermKBArticlesPublish).Token
 	body := map[string]any{"custom_css": ".masthead{color:#0b5cad}"}
 	response := request(t, api, http.MethodPut, themePath, body, writer, nil)
-	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
-		t.Fatalf("without publish: status=%d body=%s, want 202 with an agent request", response.Code, response.Body.String())
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "permission_missing") {
+		t.Fatalf("without publish: status=%d body=%s, want 403 permission_missing", response.Code, response.Body.String())
 	}
 	var before themeView
 	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &before)

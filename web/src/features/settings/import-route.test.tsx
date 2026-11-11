@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { ImportRoute } from './import-route';
 
 const { api, InvalidRequestError } = vi.hoisted(() => ({
@@ -22,7 +23,7 @@ const previewed = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api.me.mockResolvedValue({ agent: { id: 'a', email: 'sam@example.com', display_name: '', role: 'admin', timezone_override: null }, workspace: { id: 'w', slug: 's', name: 'S', timezone: 'UTC' }, timezone: 'UTC' });
+  api.me.mockResolvedValue({ agent: { id: 'a', email: 'sam@example.com', display_name: '', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: 'w', slug: 's', name: 'S', timezone: 'UTC' }, timezone: 'UTC' });
   api.config.mockResolvedValue({ billing: { enabled: false } });
   imports.people.mockResolvedValue({ items: [] });
   api.agents.mockResolvedValue({ items: [] });
@@ -78,7 +79,7 @@ test('a later people action clears what an earlier one said', async () => {
   imports.people.mockResolvedValue({ items: [
     { external_id: '102', name: 'Bob', email: 'bob@old.example', active: false, linked_agent_id: null, linked_by_email: false, pending: false, updated_at: '2026-10-22T08:00:00Z' }] });
   imports.link.mockResolvedValue({});
-  const sam = { id: '33333333-3333-4333-8333-333333333333', email: 'sam@acme.example', display_name: 'Sam', role: 'admin', timezone_override: null,
+  const sam = { id: '33333333-3333-4333-8333-333333333333', email: 'sam@acme.example', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null,
     deactivated_at: null, last_active_at: null, open_conversations: 0 };
   api.agents.mockResolvedValue({ items: [sam] });
   api.invites.mockResolvedValue({ items: [] });

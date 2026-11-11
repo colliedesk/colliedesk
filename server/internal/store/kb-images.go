@@ -231,6 +231,14 @@ func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, enabled b
 		title = cleaned
 	}
 	center, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenter, error) {
+		// The primary language is the articles' own: it cannot also be one of the other languages.
+		var listed bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND lower(locale)=lower($2))`, workspaceID, locale).Scan(&listed); err != nil {
+			return domain.HelpCenter{}, err
+		}
+		if listed {
+			return domain.HelpCenter{}, &domain.InvalidKBError{Message: locale + " is one of the help center's other languages. Remove it there first (Knowledge base, Languages), then make it the primary language."}
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,enabled,title,locale,content_version,updated_at) VALUES($1,$2,$3,$4,1,clock_timestamp())
 			ON CONFLICT (workspace_id) DO UPDATE SET enabled=$2, title=$3, locale=$4, content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
 			workspaceID, enabled, title, locale); err != nil {
@@ -247,6 +255,8 @@ func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, enabled b
 // KBPurge counts what PurgeKBTrash deleted.
 type KBPurge struct {
 	Articles, Collections, Images int64
+	// Translations are those deleted on their own (an article's go with it).
+	Translations int64
 }
 
 // kbMediaPurgeable is the purge rule for library items, on rows aliased m: in the trash for longer than
@@ -287,6 +297,11 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 			return fmt.Errorf("purge knowledge base articles: %w", err)
 		}
 		purged.Articles = tag.RowsAffected()
+		tag, err = tx.Exec(ctx, `DELETE FROM kb_article_translations WHERE deleted_at IS NOT NULL AND deleted_at<$1`, cutoff)
+		if err != nil {
+			return fmt.Errorf("purge knowledge base translations: %w", err)
+		}
+		purged.Translations = tag.RowsAffected()
 		// A trashed parent goes once its trashed children went, so repeat once per level.
 		for range domain.MaxKBDepth {
 			tag, err := tx.Exec(ctx, `DELETE FROM kb_collections c WHERE c.deleted_at IS NOT NULL AND c.deleted_at<$1

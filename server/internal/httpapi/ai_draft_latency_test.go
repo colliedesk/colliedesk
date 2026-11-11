@@ -89,7 +89,7 @@ func TestAIDraftReadLatencyBudget(t *testing.T) {
 	})
 	measure("get", func() error { _, err := service.GetDraft(ctx, workspaceA, target, draft); return err })
 	measure("list", func() error {
-		drafts, err := service.ListDrafts(ctx, workspaceA, target)
+		drafts, _, err := service.ListDrafts(ctx, workspaceA, target, "", 20)
 		if err == nil && len(drafts) != 20 {
 			t.Fatalf("listed %d drafts", len(drafts))
 		}

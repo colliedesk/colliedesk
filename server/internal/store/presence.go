@@ -179,7 +179,7 @@ func scanViewers(rows pgx.Rows) ([]domain.ConversationViewer, []string, error) {
 			viewer.WritingSince, viewer.EditedAt = &since, &edited
 		}
 		if tokenID != nil {
-			viewer.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *label, Scope: *scope, AgentName: viewer.Name}
+			viewer.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *label, AgentName: viewer.Name}
 		}
 		viewers = append(viewers, viewer)
 		conversations = append(conversations, conversationID)

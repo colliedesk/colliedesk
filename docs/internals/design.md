@@ -18,20 +18,27 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    colliedesk.com the price (the promise). It is never a button, link, chip, badge or warning, so it stays
    rare enough to remember; the primary action stays ink, which reads calm and trustworthy.
    `web/scripts/brand-rules.test.mjs` fails when any app file other than the tokens and the mark names it.
-   Status (open blue, pending amber, resolved green, urgent red) and the high priority chip (dark neutral
-   with an up arrow; the warning orange sat 8° of hue from the brand and made a High ticket look like the
-   logo), focus (amber) and private notes (amber) keep their colours; nothing else is coloured. Amber means focus,
+   Status (open blue, pending amber, resolved green, urgent red), Urgent priority (red arrow and word), focus
+   (amber) and private notes (amber) keep their colours; nothing else is coloured. High is an arrow and grey
+   text, never the warning orange (it sat 8° of hue from the brand and made a High ticket look like the logo).
+   **Nothing is filled at rest** (owner 30/10/2026): priority, tags and status are marks and words; a fill means
+   hover, selection, a menu or a private note. Amber means focus,
    private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
-   neutral card with a `--warn` icon), never the note colours. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
+   neutral card with a `--warn` icon), never the note colours; a plain notice is a neutral card. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
    logo tile keeps `#c2410c` (the mark never changes), while the price text on the site lightens to
    `#fb8a4a` so it reads on near-black (8.3:1).
 3. **Serif for titles only.** IBM Plex Serif 500 (`--font-display`) sets page titles (Inbox, Settings,
-   Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
-   body line stays IBM Plex Sans. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
+   Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Empty-state and section headings
+   in the app are sans (`brand-rules.test.mjs` fails on a serif h2 or h3). Every control, label and
+   body line stays IBM Plex Sans. Weight 600 is for the conversation title, sender names and the active tab;
+   row subjects, labels and buttons are 500, values and body 400. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
    replaced Instrument Serif, whose narrow high-contrast cut spoke in a different voice from the
    Plex Sans wordmark.
 4. **Rings, not borders.** Cards, the composer and our replies sit on a 1px shadow ring (`--shadow-1`,
-   `--shadow-2`), so the eye reads layers by surface and ring, not by outlines. Never a border on top of a ring.
+   `--shadow-2`), so the eye reads layers by surface and ring, not by outlines. Never a border on top of a ring
+   (`brand-rules.test.mjs` checks `.panel`). In dark the ring is the hairline token, so cards keep their edge.
+   The inbox is one work surface: list, thread and details share one white sheet split by hairlines, on the grey
+   chrome of the rail and the 40 px identity band.
 5. **Links are ink and underlined** inside running text (`a:not([class])`); colour alone never marks a link.
 6. **One product, one look.** Product pictures on colliedesk.com are screenshots of this app; when the app
    changes, the site's screenshots are retaken.
@@ -51,6 +58,11 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   is ticked, that row becomes the action bar (`role="group"`, named "Bulk actions"), as in Gmail and
   Gorgias: count on the left, then icon controls with a tooltip and an accessible name: **Resolve**
   (the most common bulk change, one press), **Set status**, **Assign to**, **Tags**, **Clear selection**.
+  With a chat conversation in the selection, a **Tell customers** checkbox stands between the count and
+  the icons (DOM order = reading order), ticked for each new selection; unticked, Resolve and Set status
+  are named "… quietly" and send `notify: false`. The list column has no room for all three, so the icons
+  then take a second line, right-aligned. A closed menu's choices and a hidden tip take no room (`display:
+  none`), so neither the bar nor the thread header is wider than its box.
   The title and filters stay visible. **Tags** is one menu, as in Linear: a check mark when every selected
   row has the tag, a dash when some do (`aria-pressed` true/mixed); a checked tag comes off, any other goes
   on. Each choice is a button in a `<details>` menu, never a `<select>`: a select fires on every arrow key
@@ -58,26 +70,42 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   second Escape clears the selection. Success clears the selection and writes `role="status"`; failure
   writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
   to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
-- Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`). The time is
+- Rows: subject (500) and time, then one meta line (status dot and word, priority arrow, `#tags`); the status
+  (dot and word) is left out under a status tab that already names it, and Normal priority is not shown. With a mouse,
+  rows start on the column edge and the checkbox appears over the row's padding on hover or focus; its column
+  opens once a row is ticked. **Select all on this page** stays, since focus returns to it after a bulk change.
+  Touch keeps the column. The time is
   the time alone for today and the date otherwise; without hover (no tooltip) an earlier row shows date and
   time, a row from today still only its time. The full stamp is the tooltip and the accessible name.
 - List keys, as in Gmail and Help Scout: **J** / **K** anywhere outside a text field, **Down** / **Up** while
   a row has the focus; each opens the next or previous conversation and moves the focus to its row (the
   inset amber ring). Modifier keys and dialogs keep their own meaning (`use-list-keys.ts`).
-- Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
-  `--shadow-1`), private notes amber.
+- Thread: every message on white with a 1px ring (`--surface-1`, `--shadow-1`); a private note adds a light
+  amber fill and an amber ring, so the customer's words stay the loudest. "Sent" is grey text; a failure is red.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
   **Ctrl/Cmd + Enter** to send. A reply also offers **Send and resolve** (secondary button beside the
   primary **Send reply**; **Ctrl/Cmd + Shift + Enter**), as Freshdesk's "Send and set as" and Help Scout's
   status-on-send do: the status changes only after the reply was accepted. A note has none. The keycap hint sits
-  in the composer head, so the button row stays one line on desktop; below 75 rem the hint hides and the
-  row wraps instead of clipping.
+  in the composer head; below 75 rem the hint hides. The footer is one row: Attach, Saved replies, Articles and
+  Draft with AI on the left, Cc and the send buttons on the right. The tools are icons at every width (name in the
+  tooltip); Draft with AI keeps its words, and its Off state (admins only) from a 36rem box. Chosen files sit on a
+  line above that row. Send and resolve and Send reply never split across lines, as in Plain, Intercom and Front
+  (`web/e2e/reply-toolbar.spec.ts`).
 - Knowledge base pages show their title (IBM Plex Serif, like the inbox title) at the start of the
   Articles | Media row.
 - Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
   resolving never needs the details drawer.
-- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
-  is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
+  When the change would tell the customer in their chat (`status_notices` of the conversation), the
+  visible words say so (**Resolve and tell**, named "… the customer on {channel}") and the button becomes a
+  split one: an arrow menu (`ActionMenu`) with the quiet way only, hung from `.timeline-actions` so it
+  never leaves a 390 px screen. No arrow when nothing would be told: only real choices are offered.
+- Details · Status is an `ActionMenu` on every conversation, never a select: arrow keys on a closed select
+  fire `change` per step in some browsers, each a change of the conversation (and on a chat a message to
+  the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
+  Every Priority value has a mark before its word, on the field and in its menu: red ↑ Urgent, grey ↑ High,
+  a quiet dash for Normal, ↓ Low. The mark column has no gap (Linear marks every priority); list rows still hide Normal.
+- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one line of links: what general
+  availability guarantees and, on Colliedesk Cloud, the status page) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the white collie head on the orange tile (see Logo).
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
@@ -174,6 +202,8 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 
 - Controls are 32 px with a mouse and 44 px on touch (`--control` switches on `pointer: coarse`;
   rail links, status tabs and list rows also grow to 44 px below 44 rem).
+- A reference is an id: mono, `--text-3` in the list (`--text-2` in the header), never a fill (`.conv-ref`).
+- A response target is a clock mark and words: `--warn` due soon, `--danger` overdue, never a fill (`.sla-mark`).
 - Three button shapes only: primary (`--accent`, ink), secondary (white with a light outline and a small
   shadow), danger (red text).
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
@@ -186,12 +216,33 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   indeterminate states are ink in both themes; their labels keep readable text when disabled.
   Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
-- Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
+- A control offers only real choices. A select appears only with two or more of them (a placeholder is not
+  one; with a single value there is nothing to ask, so the value is shown or used as it is), and no control
+  lists "Default (X)" beside X: the default is X, listed once. A filter set in the address stays on screen so
+  it can be cleared. `web/e2e/choice-hygiene.spec.ts` checks the main pages on a wide and a phone screen.
+- Status is a dot plus its word. Priority is an arrow and a word: Urgent red, High grey; Normal and Low are
+  not marked in a row. Menus and Properties lead each option with the same marks (Low a down arrow).
+- Menus: one recipe for Filter, Views, bulk menus and every select picker: radius 10, 4 px inside, 30 px rows,
+  a leading mark, a trailing check, groups split by space, `--shadow-2`. Native selects keep their element and
+  take the recipe through `appearance: base-select`, written once for every `select` in `components.css` and opened
+  below the field when it fits. Only with a fine pointer: touch screens keep the phone's own picker, and so do
+  browsers without `base-select`, list boxes and forced-colour mode. The operator console keeps the native picker (its
+  CSS budget). A styled select is as wide as its chosen option, so a long list whose options vary (timezone) sets a
+  fixed width. `web/scripts/form-controls.test.mjs` fails when the recipe is scoped to a class again.
+- Properties: label (84 px, `--text-3`) and value on one edge after a 16 px mark; no select chrome until hover.
+- A disabled primary keeps its shape at 30 % opacity.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
   (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
-  only what the API returns: there are no SLA timers or ticket numbers because the backend has none.
+  only what the API returns. A conversation numbered in a series of its own (a channel's, such as
+  `CHD-2026-0142`) shows its code first in the row's meta and in the header with a copy button; the default
+  series' `#12` stays off both, so an inbox of email and web forms reads as before, and its code still finds
+  it (`?ref=`, search). A response target shows on a row only when it is due soon or late, after the
+  priority, as a clock mark and an absolute time ("Due 1:15 PM", "Overdue"; never a countdown, nothing on a
+  row ticks); its accessible name and tooltip say which clock and that it counts business hours. A row with
+  a mark counts its tags ("2 tags") so the meta stays one line; the code and the mark are never cut. The
+  header says the clock in full ("Reply overdue"); the details list both clocks under Targets.
 - Below 75 rem the details pane becomes a drawer opened by **Show details**; below 44 rem the
   rail becomes a top bar and the list and the conversation take turns (`data-view` on `.inbox-shell`):
   the list scrolls with the page, and a conversation opened by its address fills the screen under the
@@ -218,6 +269,8 @@ They are a gap finder, not a spec: where a list conflicts with a rule above, the
 | Conversation list and filters | Empty State, Filtering items, Search Results, Data Table |
 | Timeline and composer | Comments, Submitting a form, Showing input error |
 | Settings and email channel | Settings, Integrations, Saving changes |
+| Conversation numbers, a channel's References | Settings, Saving changes |
+| Response targets | Settings, Saving changes |
 | Sign-in, invites, sessions | Login, User Management |
 | Every screen | Accessibility, Loading, Toast, Drawer |
 

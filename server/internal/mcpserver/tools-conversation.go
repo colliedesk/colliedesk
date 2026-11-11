@@ -19,9 +19,10 @@ type untrustedMessage struct {
 }
 
 // tokenOut names the agent token that wrote a message. The label is what an admin typed when creating it.
+// tokenOut is the agent token that wrote a message, and the team member it acts as.
 type tokenOut struct {
-	Label string `json:"label"`
-	Scope string `json:"scope"`
+	Label  string `json:"label"`
+	ActsAs string `json:"acts_as"`
 }
 
 type messageOut struct {
@@ -33,6 +34,8 @@ type messageOut struct {
 	Author              string    `json:"author,omitempty"`
 	WrittenByAgentToken *tokenOut `json:"written_by_agent_token,omitempty"`
 	Delivery            string    `json:"delivery,omitempty"`
+	// NoticeKind names a message the channel sent by itself, not a reply of the team.
+	NoticeKind string `json:"notice_kind,omitempty"`
 	// Body is text the team wrote in Colliedesk. Any other text is in UntrustedCustomerContent.
 	Body                     string            `json:"body,omitempty"`
 	Truncated                bool              `json:"truncated"`
@@ -160,7 +163,7 @@ func tokenOf(message restMessage) *tokenOut {
 	if message.AgentToken == nil {
 		return nil
 	}
-	return &tokenOut{Label: message.AgentToken.Label, Scope: message.AgentToken.Scope}
+	return &tokenOut{Label: message.AgentToken.Label, ActsAs: message.AgentToken.AgentName}
 }
 
 // messageView renders one message; text from outside the team goes under untrusted_customer_content only.
@@ -170,6 +173,9 @@ func messageView(message restMessage, agents map[string]restAgent, full bool) (m
 		body, wasCut = cut(body, conciseBodyRunes, `Ask colliedesk_conversation_get for detail=full to read all of it`)
 	}
 	view := messageOut{ID: message.ID, Kind: message.Kind, CreatedAt: utc(message.CreatedAt), Truncated: wasCut}
+	if message.NoticeKind != nil {
+		view.NoticeKind = *message.NoticeKind
+	}
 	if message.Delivery != nil {
 		view.Delivery = message.Delivery.Status
 	}

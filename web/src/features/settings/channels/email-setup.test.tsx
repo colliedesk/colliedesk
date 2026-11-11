@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { ChannelsRoute } from './channels-route';
+import { permissionsOf, rolesOf } from '../../../test-roles';
 import type { ChannelsSearch } from './channels-route';
 
 // Settings → Email: the status table of the workspace's support addresses and the four-step setup.
@@ -22,7 +23,7 @@ const MAIN = '44444444-4444-4444-8444-444444444444';
 const BILLING = '66666666-6666-4666-8666-666666666666';
 const CONVERSATION = '77777777-7777-4777-8777-777777777777';
 const me = (role: 'admin' | 'agent' = 'admin') => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'acme', name: 'Acme', timezone: 'UTC' }, timezone: 'UTC', plan: null,
 });
 const waiting = { state: 'waiting', reason_code: 'no_message_yet', message: null };
@@ -149,12 +150,29 @@ test('the rarely used settings are folded under the table; the workspace address
   show('type/email');
   await screen.findByRole('table', { name: 'Support addresses' });
   const folded = Array.from(document.querySelectorAll('details.email-home-fold > summary')).map((summary) => summary.textContent);
-  expect(folded).toEqual(['Sender name', 'Your domain · acme.com not verified', 'Send a test message', 'Change forwarding address or disconnect']);
-  const change = screen.getByText('Change forwarding address or disconnect').closest('details') as HTMLElement;
+  expect(folded).toEqual(['Sender name', 'Your domain · acme.com not verified', 'Send a test message', 'Change forwarding address']);
+  const change = screen.getByText('Change forwarding address', { selector: 'summary' }).closest('details') as HTMLElement;
   expect(within(change).getByRole('textbox', { name: 'Workspace address name' })).toHaveValue('acme');
-  expect(within(change).getByRole('link', { name: 'Manage support@acme.com' })).toHaveAttribute('href', `/settings/channels/${MAIN}`);
+  expect(within(change).queryByRole('link')).not.toBeInTheDocument();
   const sender = screen.getByText('Sender name', { selector: 'summary' }).closest('details') as HTMLElement;
   expect(within(sender).getByRole('textbox', { name: 'Sender name' })).toHaveValue('Acme Support');
+});
+
+test('how to disconnect an address is one sentence that points at the Manage button on its row, not folded and with no second Manage link', async () => {
+  const main = { ...channel(MAIN, 'support@acme.com'), config: emailConfig('support@acme.com') };
+  channelsApi.list.mockResolvedValue({ items: [main], types: types(1) });
+  channelsApi.get.mockResolvedValue(main);
+  // Self-hosted: no forwarding address of the workspace's own, so there is no fold for it.
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  show('type/email');
+  const table = await screen.findByRole('table', { name: 'Support addresses' });
+  const help = screen.getByText('To disconnect an address, select Manage on its row, then Disconnect email. Its conversations stay.');
+  expect(help.closest('details')).toBeNull();
+  // One Manage link per address: the row's.
+  const manage = screen.getAllByRole('link', { name: 'Manage support@acme.com' });
+  expect(manage).toHaveLength(1);
+  expect(table).toContainElement(manage[0]);
+  expect(screen.queryByText(/^Change forwarding address/)).not.toBeInTheDocument();
 });
 
 test('the channel list no longer carries the workspace address name', async () => {

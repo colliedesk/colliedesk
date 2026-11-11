@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // AI settings (docs/user/ai.md). The handlers read and change the workspace's providers and features;
@@ -42,16 +44,23 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 		BaseURL string   `json:"base_url"`
 		APIKey  string   `json:"api_key"`
 		Models  []string `json:"models"`
+		// Routing is OpenRouter's routing by data policy.
+		Routing *ai.ProviderRouting `json:"routing"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url and, on OpenRouter, routing.")
 		return
 	}
 	// The provider's key never enters the fingerprint (it is a secret, and a fingerprint is a plain hash): a
-	// label is unique in the workspace, so the label, kind, address and models already name one provider.
-	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...), func(ctx context.Context) (any, error) {
+	// label is unique in the workspace, so the label, kind, address, models and routing already name one provider.
+	fingerprint := append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...)
+	if input.Routing != nil {
+		routing, _ := json.Marshal(input.Routing)
+		fingerprint = append(fingerprint, "routing:"+string(routing))
+	}
+	a.createOnce(response, request, addAIProviderOperation, fingerprint, func(ctx context.Context) (any, error) {
 		provider, err := a.ai.AddProvider(ctx, principal(request).Workspace.ID, aiActor(request),
-			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
+			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models, Routing: input.Routing})
 		if err != nil {
 			writeAIError(response, err)
 			return nil, errAnswered
@@ -102,16 +111,22 @@ func aiModelsMessage(check *ai.CheckError) string {
 }
 
 func (a *API) updateAIProvider(response http.ResponseWriter, request *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(request.Body, domain.MaxAgentRequestBody+1))
 	var input struct {
-		Label  *string   `json:"label"`
-		Models *[]string `json:"models"`
+		Label   *string             `json:"label"`
+		Models  *[]string           `json:"models"`
+		Routing *ai.ProviderRouting `json:"routing"`
 	}
-	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send label or models. A provider's base URL never changes: add the new address as another provider, with its key.")
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err != nil || len(body) > domain.MaxAgentRequestBody || decoder.Decode(&input) != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send label, models or, on OpenRouter, routing. A provider's base URL never changes: add the new address as another provider, with its key.")
 		return
 	}
-	provider, err := a.ai.UpdateProvider(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"),
-		ai.ProviderChange{Label: input.Label, Models: input.Models})
+	who := principal(request)
+	provider, err := a.ai.UpdateProvider(request.Context(), who.Workspace.ID, aiActor(request), request.PathValue("id"),
+		// The route needs ai_settings:update, which is also what letting data reach looser providers takes.
+		ai.ProviderChange{Label: input.Label, Models: input.Models, Routing: input.Routing, MayLoosen: true})
 	if err != nil {
 		writeAIError(response, err)
 		return
@@ -158,19 +173,22 @@ func (a *API) setAISlot(response http.ResponseWriter, request *http.Request) {
 		Source     string `json:"source"`
 		ProviderID string `json:"provider_id"`
 		Model      string `json:"model"`
-		Effort     string `json:"effort"`
-		Enabled    *bool  `json:"enabled"`
-		// Absent: kept as they are.
-		Automatic  *bool           `json:"automatic"`
-		AutoParts  *[]string       `json:"auto_parts"`
-		MonthlyCap json.RawMessage `json:"monthly_cap_micro_usd"`
+		// FallbackModel is intake's; "" removes it, absent keeps it.
+		FallbackModel *string `json:"fallback_model"`
+		Effort        string  `json:"effort"`
+		Enabled       *bool   `json:"enabled"`
+		// Absent: kept as they are. automatic is the older switch, mapped onto default_level.
+		DefaultLevel *string         `json:"default_level"`
+		Automatic    *bool           `json:"automatic"`
+		AutoParts    *[]string       `json:"auto_parts"`
+		MonthlyCap   json.RawMessage `json:"monthly_cap_micro_usd"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send source (server, provider or none), enabled, and optional provider_id, model and effort.")
 		return
 	}
-	slotInput := ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled,
-		Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)}
+	slotInput := ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, FallbackModel: input.FallbackModel, Effort: input.Effort, Enabled: *input.Enabled,
+		DefaultLevel: input.DefaultLevel, Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)}
 	// Absent: kept; null: removed.
 	if len(input.MonthlyCap) > 0 {
 		slotInput.MonthlyCapSet = true
@@ -216,6 +234,9 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_model_in_use", inUse.Error()+".")
 	case errors.Is(err, ai.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI provider or feature with that name in this workspace.")
+	case errors.Is(err, ai.ErrLevelNotAllowed):
+		writeError(response, http.StatusUnprocessableEntity, "ai_level_not_allowed",
+			"Drafts are never sent by AI, so they go up to suggest; intake runs by itself only on a channel's scope, never as the workspace's default.")
 	case errors.Is(err, ai.ErrKeysMissing):
 		logMissingSettings("ai_provider_keys", "MAILBOX_TOKEN_KEYS")
 		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: its key that encrypts them is not set up, so ask whoever runs it. Nothing was saved.")
@@ -244,6 +265,9 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_triage_nothing", "This suggestion names nothing to apply: the conversation already has it, or a person set it first.")
 	case errors.Is(err, ai.ErrTriageDecided):
 		writeError(response, http.StatusConflict, "ai_triage_decided", "This suggestion is not ready, or was already accepted, dismissed or replaced.")
+	case errors.Is(err, ai.ErrDraftNotRestorable):
+		writeError(response, http.StatusConflict, "ai_draft_not_restorable", "Only an earlier written draft can be brought back: this one was sent, "+
+			"was written by the built-in AI (ask for a new one), or its text was erased 90 days after it ended.")
 	case errors.Is(err, ai.ErrDraftDecided):
 		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
@@ -295,15 +319,16 @@ func (a *API) getAIUsage(response http.ResponseWriter, request *http.Request) {
 
 func (a *API) setAIAutomaticLimits(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		PerDay      *int `json:"per_day"`
-		PerMinute   *int `json:"per_minute"`
-		DraftPerDay *int `json:"draft_per_day"`
+		PerDay       *int `json:"per_day"`
+		PerMinute    *int `json:"per_minute"`
+		DraftPerDay  *int `json:"draft_per_day"`
+		IntakePerDay *int `json:"intake_per_day"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.PerDay == nil || input.PerMinute == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000), and draft_per_day (0 to 10000) to change it.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000), and draft_per_day or intake_per_day (0 to 10000) to change them.")
 		return
 	}
-	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute, input.DraftPerDay)
+	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute, input.DraftPerDay, input.IntakePerDay)
 	if err != nil {
 		writeAIError(response, err)
 		return
@@ -330,12 +355,30 @@ func (a *API) createAIDraft(response http.ResponseWriter, request *http.Request)
 }
 
 func (a *API) listAIDrafts(response http.ResponseWriter, request *http.Request) {
-	drafts, err := a.ai.ListDrafts(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	query := request.URL.Query()
+	limit := ai.DefaultDraftPage
+	if value := query.Get("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > ai.MaxDraftPage {
+			writeError(response, http.StatusBadRequest, "invalid_request", "limit is 1 to "+strconv.Itoa(ai.MaxDraftPage)+" drafts.")
+			return
+		}
+		limit = parsed
+	}
+	drafts, next, err := a.ai.ListDrafts(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), query.Get("before"), limit)
+	if errors.Is(err, ai.ErrDraftCursor) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "before is the next_before of the page you read: the id of a draft of this conversation.")
+		return
+	}
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"items": drafts})
+	var nextBefore *string
+	if next != "" {
+		nextBefore = &next
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": drafts, "next_before": nextBefore})
 }
 
 func (a *API) getAIDraft(response http.ResponseWriter, request *http.Request) {
@@ -388,13 +431,13 @@ func (a *API) createAITriage(response http.ResponseWriter, request *http.Request
 // Accepting or undoing a suggestion changes the conversation's tags, priority and assignee, as
 // PATCH /api/v1/conversations/{id} does: a token also needs conversations:update for it.
 var (
-	aiTriageAcceptRoute = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionConversationsWrite}
-	aiTriageUndoRoute   = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite}
+	aiTriageAcceptRoute = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionSession}
+	aiTriageUndoRoute   = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionSession}
 )
 
 func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
-	if a.askUnlessHeld(response, request, aiTriageAcceptRoute, identity, auth.PermConversationsUpdate, nil, nil) {
+	if a.refuseUnlessHeld(response, request, identity, auth.PermConversationsUpdate, nil) {
 		return
 	}
 	var want ai.TriageSet
@@ -417,7 +460,7 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 // undoAITriage takes back what AI applied of a suggestion by itself: the parts named (tags, priority,
 // assignee), or all of it without a body.
 func (a *API) undoAITriage(response http.ResponseWriter, request *http.Request) {
-	if a.askUnlessHeld(response, request, aiTriageUndoRoute, principal(request), auth.PermConversationsUpdate, nil, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermConversationsUpdate, nil) {
 		return
 	}
 	var input struct {

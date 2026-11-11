@@ -6,31 +6,39 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
 // author_name is resolved on read: the stored name (imported messages) wins, then the authoring team
-// member's display name or email, then the conversation's contact name when the contact sent the email.
+// member's display name or email, then the conversation's contact name when the contact sent the email,
+// then for a chat message the name the chat gave its sender (a group conversation holds several customers).
 // A copied colleague who answers the thread is not the contact, so that message keeps no name.
 const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,
 	COALESCE(m.author_name,NULLIF(aa.display_name,''),aa.email,
-		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
+		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END,
+		CASE WHEN m.kind='incoming' AND m.channel_id IS NOT NULL THEN (SELECT NULLIF(i.sender_name,'') FROM channel_thread_items i
+			WHERE i.workspace_id=m.workspace_id AND i.message_id=m.id AND i.role='customer' ORDER BY i.occurred_at,i.id LIMIT 1) END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
-	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code
+	m.ai_draft_id::text,ad.outcome,ad.source,dt.id::text,dt.label,COALESCE(NULLIF(da.display_name,''),da.email),m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code,m.other_contact_id::text,m.intake_reply_kind,m.notice_kind,
+	COALESCE(o.final,false)
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 	LEFT JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
 	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id
-	LEFT JOIN ai_drafts ad ON ad.workspace_id=m.workspace_id AND ad.id=m.ai_draft_id`
+	LEFT JOIN ai_drafts ad ON ad.workspace_id=m.workspace_id AND ad.id=m.ai_draft_id
+	LEFT JOIN sessions dt ON dt.workspace_id=ad.workspace_id AND dt.id=ad.requested_by_token_id AND ad.source='written'
+	LEFT JOIN agents da ON da.workspace_id=dt.workspace_id AND da.id=dt.agent_id`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -40,18 +48,23 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var message domain.Message
 	var meta []byte
 	var status, lastError, tokenID, tokenLabel, tokenScope, tokenAgent, reasonCode *string
+	var drafterID, drafterLabel, drafterAgent *string
 	var channelMeta []byte
 	var attempts *int32
 	var sentAt *time.Time
+	var final bool
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
-		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome,
-		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode); err != nil {
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome, &message.AIDraftSource, &drafterID, &drafterLabel, &drafterAgent,
+		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode, &message.OtherContactID, &message.IntakeReplyKind, &message.NoticeKind, &final); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
+	if drafterID != nil && drafterLabel != nil && drafterAgent != nil {
+		message.DraftedBy = &domain.MessageToken{ID: *drafterID, Label: *drafterLabel, AgentName: *drafterAgent}
+	}
 	if tokenID != nil && tokenLabel != nil && tokenScope != nil && tokenAgent != nil {
-		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, Scope: *tokenScope, AgentName: *tokenAgent}
+		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, AgentName: *tokenAgent}
 	}
 	if channelMeta != nil {
 		message.ChannelMeta = channelMeta
@@ -62,6 +75,12 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	}
 	if status != nil && attempts != nil {
 		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, ReasonCode: reasonCode, SentAt: domain.UTCOptional(sentAt)}
+		// A reply with no channel or no address to go to, or one that fails the same way each time, is no retry.
+		code := ""
+		if reasonCode != nil {
+			code = *reasonCode
+		}
+		message.Delivery.Retryable = *status == "failed" && !final && code != "channel_removed" && code != "no_recipient"
 	}
 	if meta != nil {
 		var envelope domain.IncomingEmail
@@ -83,7 +102,8 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 }
 
 func listMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Message, error) {
-	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 ORDER BY m.created_at,m.id`, workspaceID, conversationID)
+	// A chat message taken back to the intake queue is out of the timeline until it is decided again.
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.detached_at IS NULL ORDER BY m.created_at,m.id`, workspaceID, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
@@ -128,6 +148,14 @@ type Actor struct {
 	RequestID string
 	// AIDraftID is the AI draft a reply was written from; empty otherwise.
 	AIDraftID string
+	// AIDraftFileIDs are the files of that draft the reply carries; nil carries every one of them.
+	AIDraftFileIDs *[]string
+	// NoticeKind marks a reply the channel sends by itself (its received notice): no reply of the team.
+	NoticeKind string
+	// Via sends a notice through this chat channel, to the place the conversation's newest item of it is
+	// in, whatever channel carries the conversation's replies (a chat message moved into a conversation
+	// that came by email is told in its chat, never by email).
+	Via *channels.Channel
 }
 
 // CreateMessage stores a reply or note with files already written to attachment storage (only
@@ -190,17 +218,57 @@ func (s *Store) CreateReplyOnce(ctx context.Context, workspaceID, conversationID
 			return domain.Message{}, false, err
 		}
 	}
-	message, err = s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, files)
+	// The files of the draft the reply is sent from go with it, as attachments on the same bytes; the
+	// draft's own rows go in this transaction, so no file is counted twice.
+	var draftFiles []NewAttachment
+	var leftBehind []string
+	if kind == "outgoing" {
+		if draftFiles, leftBehind, err = draftFilesForReply(ctx, tx, workspaceID, conversationID, actor.AIDraftID, actor.AIDraftFileIDs, files); err != nil {
+			return domain.Message{}, false, err
+		}
+	} else if actor.AIDraftFileIDs != nil && len(*actor.AIDraftFileIDs) > 0 {
+		return domain.Message{}, false, ErrDraftFileUnknown
+	}
+	// The draft's rows go before the reply's attachment rows come: the storage cap then counts the kept
+	// files once. Their keys stay locked (VerifyObjects) until the commit, so no cleanup takes the bytes.
+	if kind == "outgoing" && actor.AIDraftID != "" && (len(draftFiles) > 0 || len(leftBehind) > 0) {
+		keys := slices.Clone(leftBehind)
+		for _, file := range draftFiles {
+			keys = append(keys, file.Object.Key)
+		}
+		if err := lockObjects(ctx, tx, keys); err != nil {
+			return domain.Message{}, false, err
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM ai_draft_files WHERE workspace_id=$1 AND draft_id::text=$2`, workspaceID, actor.AIDraftID); err != nil {
+			return domain.Message{}, false, fmt.Errorf("hand the draft's files to the reply: %w", err)
+		}
+	}
+	message, err = s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, append(slices.Clone(files), draftFiles...))
 	if err != nil {
 		return domain.Message{}, false, err
 	}
 	if key != "" {
-		if _, err := tx.Exec(ctx, `INSERT INTO message_idempotency_keys(workspace_id,key,message_id) VALUES($1,$2,$3)`, workspaceID, key, message.ID); err != nil {
+		var selection *draftSelection
+		if actor.AIDraftID != "" {
+			selection = &draftSelection{Draft: actor.AIDraftID, Pick: sortedPick(actor.AIDraftFileIDs), Files: []selectedFile{}}
+			for _, file := range draftFiles {
+				selection.Files = append(selection.Files, selectedFile{Name: file.Filename, Size: file.Object.Size, SHA256: file.Object.SHA256})
+			}
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO message_idempotency_keys(workspace_id,key,message_id,draft_selection) VALUES($1,$2,$3,$4)`,
+			workspaceID, key, message.ID, selection); err != nil {
 			return domain.Message{}, false, fmt.Errorf("remember message key: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Message{}, false, fmt.Errorf("commit message creation: %w", err)
+	}
+	// The draft's files the person left out go, unless another row still uses the same bytes. A failure
+	// keeps them: a stray file costs space, never data.
+	for _, key := range slices.Compact(slices.Sorted(slices.Values(leftBehind))) {
+		if err := s.DiscardObject(context.WithoutCancel(ctx), workspaceID, key); err != nil {
+			slog.Error("discard a draft file left out of the reply", "error", err)
+		}
 	}
 	return message, false, nil
 }
@@ -212,9 +280,10 @@ func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, 
 		return domain.Message{}, false, fmt.Errorf("lock message key: %w", err)
 	}
 	var messageID, existingConversation, existingKind, existingBody, author string
-	err := tx.QueryRow(ctx, `SELECT m.id::text,m.conversation_id::text,m.kind,m.body,COALESCE(m.author_agent_id::text,'')
+	var selection *draftSelection
+	err := tx.QueryRow(ctx, `SELECT m.id::text,m.conversation_id::text,m.kind,m.body,COALESCE(m.author_agent_id::text,''),k.draft_selection
 		FROM message_idempotency_keys k JOIN messages m ON m.workspace_id=k.workspace_id AND m.id=k.message_id
-		WHERE k.workspace_id=$1 AND k.key=$2`, workspaceID, key).Scan(&messageID, &existingConversation, &existingKind, &existingBody, &author)
+		WHERE k.workspace_id=$1 AND k.key=$2`, workspaceID, key).Scan(&messageID, &existingConversation, &existingKind, &existingBody, &author, &selection)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Message{}, false, nil
 	}
@@ -241,10 +310,56 @@ func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, 
 	for _, file := range message.Attachments {
 		stored = append(stored, fileIdentity{name: file.Filename, size: file.Size, sha256: file.SHA256})
 	}
+	// A reply sent from a draft also carries the draft's files, which a repeat no longer finds on the
+	// draft: the key remembers the draft, the files asked for and the ones that went, so a repeat must
+	// name the same draft and files, and upload the same files besides.
+	if selection != nil || actor.AIDraftID != "" {
+		if selection == nil || selection.Draft != actor.AIDraftID || !samePick(selection.Pick, actor.AIDraftFileIDs) {
+			return domain.Message{}, false, ErrIdempotencyKeyReused
+		}
+		for _, file := range selection.Files {
+			if index := slices.Index(stored, fileIdentity{name: file.Name, size: file.Size, sha256: file.SHA256}); index >= 0 {
+				stored = slices.Delete(stored, index, index+1)
+			}
+		}
+	}
 	if messageInputFingerprint(cc, sent) != messageInputFingerprint(message.CC, stored) {
 		return domain.Message{}, false, ErrIdempotencyKeyReused
 	}
 	return message, true, nil
+}
+
+// draftSelection is what a reply sent from a draft took from it, kept with its Idempotency-Key: the
+// draft, the files asked for (ai_draft_file_ids, sorted; nil for all of them) and the files that went.
+type draftSelection struct {
+	Draft string         `json:"draft"`
+	Pick  *[]string      `json:"pick"`
+	Files []selectedFile `json:"files"`
+}
+
+type selectedFile struct {
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
+func sortedPick(pick *[]string) *[]string {
+	if pick == nil {
+		return nil
+	}
+	sorted := slices.Sorted(slices.Values(*pick))
+	if sorted == nil {
+		sorted = []string{}
+	}
+	return &sorted
+}
+
+func samePick(stored, asked *[]string) bool {
+	asked = sortedPick(asked)
+	if stored == nil || asked == nil {
+		return stored == nil && asked == nil
+	}
+	return slices.Equal(*stored, *asked)
 }
 
 // fileIdentity is what makes two files of a message the same one: name, size and bytes.
@@ -285,9 +400,9 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if err != nil {
 		return domain.Message{}, err
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc,ai_draft_id)
-		SELECT $1,c.id,NULLIF($3::text,'')::uuid,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
-		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID, actor.AIDraftID).Scan(&messageID)
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc,ai_draft_id,notice_kind)
+		SELECT $1,c.id,NULLIF($3::text,'')::uuid,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid,NULLIF($10,'') FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID, actor.AIDraftID, actor.NoticeKind).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)
 	}
@@ -302,7 +417,11 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if err := s.insertMessageFiles(ctx, tx, workspaceID, messageID, files); err != nil {
 		return domain.Message{}, err
 	}
-	if kind == "outgoing" {
+	if kind == "outgoing" && actor.Via != nil {
+		if err := s.enqueueNotice(ctx, tx, workspaceID, conversationID, messageID, *actor.Via); err != nil {
+			return domain.Message{}, err
+		}
+	} else if kind == "outgoing" {
 		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
 			return domain.Message{}, err
 		}
@@ -383,7 +502,7 @@ func checkReplySeen(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 	if seen == nil || latest <= *seen {
 		return nil
 	}
-	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='outgoing' AND m.reply_number>$3
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='outgoing' AND m.notice_kind IS NULL AND m.reply_number>$3
 		ORDER BY m.created_at,m.id`, workspaceID, conversationID, *seen)
 	if err != nil {
 		return fmt.Errorf("list newer replies: %w", err)
@@ -399,6 +518,10 @@ func checkReplySeen(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("list newer replies: %w", err)
+	}
+	// Only the channel's own notices came since: nobody of the team replied.
+	if len(newer) == 0 {
+		return nil
 	}
 	return &domain.ReplyConflictError{Latest: latest, Newer: newer}
 }

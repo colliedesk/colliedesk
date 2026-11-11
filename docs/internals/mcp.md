@@ -5,19 +5,25 @@
 
 ## Shape
 
-- **One catalog.** `Catalog()` in `catalog*.go` holds every tool: name, title, description, tier,
-  annotations, input and output JSON schema, the REST routes it calls and the handler. The server
-  registers from it, and `TestCatalogToolsMapOntoRealRoutesAndStateTheirTier` checks every mapped
-  route exists in `httpapi.Routes()`. A guide or reference generated from the catalog reads this
+- **One catalog.** `Catalog()` in `catalog*.go` holds every tool: name, title, description,
+  annotations, input and output JSON schema, the REST routes it calls and the handler. `Needs` (the
+  permissions it needs) is worked out by `Catalog` from the routes' `routeAccess` rows
+  (`httpapi.RouteAccessTable`) plus `BodyNeeds`, never written by hand
+  (`TestEveryToolNeedsWhatItsRoutesNeed`). The server registers from it, and
+  `TestCatalogToolsMapOntoRealRoutesAndStateWhatTheyNeed` checks every mapped route exists in
+  `httpapi.Routes()`. A guide or reference generated from the catalog reads this
   list and nothing else.
 - **In-process dispatch.** A tool builds an `http.Request` with the caller's own bearer and serves it
-  through the `httpapi` handler (`dispatch.go`). Authentication, the token tier (`tokenTiers`),
+  through the `httpapi` handler (`dispatch.go`). Authentication, the permission check (`routeAccess`),
   workspace isolation (RLS), the locked-workspace refusal and validation therefore run exactly as
   for a REST client. Do not copy any of them into a tool. Each REST call authenticates again
   (about 3 ms); that is the price of one code path.
 - **Gate.** `requireBearer` runs before the SDK reads any message. No `Authorization: Bearer`
-  header gives 401 with `WWW-Authenticate: Bearer`; cookies are never read. A person's own session
-  as a bearer is also 401: it has no tier, no one-year cap and no attribution, so an AI client holding
+  header gives 401 with `WWW-Authenticate: Bearer resource_metadata="<scheme>://<host>/.well-known/oauth-protected-resource/mcp"`
+  (the host the app asked), from which an OAuth client starts its sign-in, and a body that says how to
+  connect again in each app (`TestMCPNamesItsProtectedResourceMetadataAndTakesAnOAuthAccessToken`).
+  An agent token and an OAuth access token (`docs/internals/auth.md`, "OAuth grants") pass; cookies are never read. A person's own session
+  as a bearer is also 401: it has no permissions of its own, no one-year cap and no attribution, so an AI client holding
   one would act with that person's full rights and leave no trace of the agent
   (`TestMCPRequiresABearerTokenAndNeverACookie`). Every refusal of a
   credential (unknown, revoked, expired, an agent token past its one-year limit) wraps
@@ -70,24 +76,20 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
 - **Locked workspace is 402, not 423.** REST answers `402 workspace_locked` for every route except
   the allowlist in `httpapi/locked.go`; the tools word it ("only export works"). `whoami` still
   answers because `GET /auth/me` is allowed, and reports `workspace_locked`.
-- **A new tool needs its route open in `tokenTiers`** (and the hand-written copy in
-  `agent_token_scope_api_test.go`), or every token gets `scope_insufficient`;
+- **A new tool needs its route in `routeAccess`**, or every call gets 403;
   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on a tool that lists a closed
-  route. When a tool starts calling a route in `mcpToolPending`, remove it there. The tool's tier in
-  the catalog is only used to word the error and to list `tools_you_can_use`; REST decides.
-- **An agent request is a result, not an error.** A REST call answered 202 with a `request_id`
-  comes back from `restClient.do` as `*agentRequested`; `execute` turns it into
-  `{agent_request, next}` with `isError` false. `next` says nothing changed yet, how to follow the
-  request, and that the rest of a multi-step call did not run (`conversation_update` files only its
-  first write). Every writing tool's advertised output schema is widened by `outputSchema` to accept
-  that shape (`anyOf` of the usual `required` list and `agent_request`), so a client that validates
-  structured output accepts it. The answer of an approved call is never shown to the model by
-  `colliedesk_request_get`: it can hold customer text; `result_status` says whether it worked.
-- **Approval tools.** Each route that needs approval for every tier has a tool that only files the
-  request (`colliedesk_token_create_request`, `..._workspace_export_request`, `..._billing_request`,
-  `..._email_channel_disconnect_request`, `..._email_secret_rotate_request`,
-  `..._workspace_slug_change_request`); `colliedesk_reply_draft` sends `draft: true` so even a `send`
-  token only drafts. No tool approves or rejects: those routes are `PersonOnly`.
+  route. When a tool starts calling a route in `mcpToolPending`, remove it there. The tool's `Needs`
+  is only used to list `tools_you_can_use` and the docs; REST decides, and a refused call returns
+  REST's `permission_missing` message, `missing_permissions` and `missing_from` in the tool error.
+- **No tool files or decides a request.** Agent requests are gone (`docs/internals/auth.md`): the
+  `_request` tools were renamed without the suffix and act at once (no alias). A tool whose route
+  needs a person in a browser (Gmail, Microsoft, GitHub consent, a fix's GitHub confirmation, billing
+  checkout and portal) returns an address only the token's person can finish. `colliedesk_reply_draft`
+  writes a draft card (`POST /conversations/{id}/reply-drafts`, `ai_assist:create`) for a person to
+  send, with files when it gets `files` (multipart, the same fields-then-files reader as a message).
+  `colliedesk_reply_draft_restore` brings an earlier written one back; a draft's file is read through
+  `colliedesk_attachment_get` with `draft_id` rather than a tool of its own. No tool creates a token:
+  `POST /auth/tokens` is `PersonOnly`.
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
   tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every
   other check runs first (assignee, unknown `remove_tags`, a tag in both lists, the conversation
@@ -127,14 +129,16 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   (`http.DetectContentType`), never the name or stored type, so an SVG (scriptable text) is never an
   image. Text in an image cannot be put under `untrusted_customer_content`: it is one more injection
   channel, so the description says so and `image: false` leaves the picture out. Anything else (PDF,
-  archive, larger image) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the
-  server. The file name is customer text even on a team note, because a team member often forwards a
+  archive) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the server. A larger
+  image comes back as its thumbnail (`GET /attachments/{id}/thumbnail`, at most 320 px, the one the
+  web app shows), with a hint that it is a preview; a picture the server cannot read keeps the old
+  hint and no image. The file name is customer text even on a team note, because a team member often forwards a
   customer's file. `conversation_get` lists attachment ids and sizes.
 - **Files go in as base64, at most 5 MiB a call.** MCP here is remote HTTP only, so a file reaches a
   tool as base64 in the arguments. `note_add`, `reply_send` and `conversation_start` decode `files`,
   check the 5 MiB total and build the same multipart body the web app sends (fields first, so a
-  refusal comes before a byte is stored). Below the tier REST answers 403 `files_need_approval`;
-  the tool never files a request with files.
+  refusal comes before a byte is stored). Without the permission REST answers 403
+  `permission_missing` before a file is stored.
 - **The SDK refuses a request body over 4 MiB by default.** go-sdk's `DefaultMaxRequestBodyBytes` is
   4 MiB, which silently broke every 5 MiB base64 tool (`kb_image_upload`, `kb_video_upload_part`)
   with a 413 the model sees as a protocol error. `maxRequestBody` in `server.go` must stay above
@@ -152,13 +156,10 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   route has none.
 - **`token_revoke` is `POST /auth/logout`** with the token as bearer: it revokes that session row only.
   The tool's result is the last thing the token can read; `tools/list` after it is 401.
-- **Settings tools** (`catalog-settings.go`, `tools-settings.go`) read at `read` and change at
-  `admin`; below `admin` the REST gate files the change as a request and the tool returns it like any
-  other. They copy only named fields out of the REST answers (`emailChannelView`, `inviteView`,
+- **Settings tools** (`catalog-settings.go`, `tools-settings.go`) read with the `:read`
+  permissions and change with `:update` or `:manage_credentials`, as REST decides. They copy only named fields out of the REST answers (`emailChannelView`, `inviteView`,
   `sessionsList`), so a field added to REST later does not reach a model by accident; the REST
-  answers to tokens already carry no link, token or inbound secret. `billing_get` is `admin` and
-  read only, so its output schema lists the request shape itself (`outputSchema` skips read-only
-  tools). On a self-hosted server the billing route is not mounted and the tool says so.
+  answers to tokens already carry no link, token or inbound secret. `billing_get` needs `billing:read`. On a self-hosted server the billing route is not mounted and the tool says so.
 - **Size.** One in-process call buffers at most 16 MiB of REST answer; beyond that the tool says the
   answer is too large (`TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`) instead of
   reporting an internal problem. `detail=full` of a very long thread is the usual cause.
@@ -170,19 +171,19 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   `From`, attachment names of incoming mail, contact name, email, organization) sits only under a
   field named `untrusted_customer_content`; `TestCustomerWrittenTextAppearsOnlyUnderUntrustedCustomerContent`
   walks every string of the result. A new output field must be classified the same way.
-  The marker lowers prompt-injection risk; it does not remove it, so tiers stay the control.
+  The marker lowers prompt-injection risk; it does not remove it, so permissions stay the control.
 - **Provenance decides trust, not `kind`.** `nativeTeamMessage` (`tools-conversation.go`) trusts a
   message only when it is not `incoming`, has `author_agent_id`, and has no `origin` or an `origin.kind`
   of `reply` or `private_note`. The Freshdesk importer stores a public note or a forward as `kind=note`,
   and the contact can have written it; a matched agent's public note stays untrusted on purpose. An
   imported reply whose author matched no Colliedesk agent has only `author_name`, so it is untrusted
   too, name included. Do not widen the rule without a source that proves the author.
-- **Token-written text is model output.** `written_by_agent_token {label, scope}` appears on a
+- **Token-written text is model output.** `written_by_agent_token {label, acts_as}` appears on a
   trusted message when `agent_token` is set, and `note_add` returns it for the note it wrote. The
   instructions and the tool descriptions say to read it as model output. A person's name is shown
   as author even when a token typed the text, so the token field is the only tell.
 - **Small REST additions** exist for this server and are in the OpenAPI contract:
-  `GET /auth/me` returns `scope` (the token tier); `GET /contacts?ids=` fetches contacts by id; and
+  `GET /auth/me` returns `token` (how it was made) and `permissions` (what the call may do); `GET /contacts?ids=` fetches contacts by id; and
   `GET /contacts?limit=` stops the list and sets `has_more` (the store asks for one row more, so no
   count is made). Without `ids`, naming the customers of a page of 50 conversations meant
   `GET /contacts/{id}` per customer, which loads every conversation of that customer (a shared sender
@@ -196,7 +197,7 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
 - **Generated tool table.** The table under "Tools" in `docs/user/mcp.md` sits between
   `<!-- generated:tools -->` and `<!-- /generated -->` and comes from the catalog (package
   `mcpserver/docgen`): the sentence from `toolDocs` (`Spec.Doc`, written for people; `Description`
-  is written for the model), the tier from `Tier`, and "Cannot be undone" from `Destructive`. Run
+  is written for the model), the **Needs** column from `Needs`, and "Cannot be undone" from `Destructive`. Run
   `make docs-mcp` after changing a tool; `TestGeneratedDocsMatchTheCatalog` fails on a stale table,
   `TestEveryToolHasADocSentence` on a tool without a sentence, and `TestUserGuidesNameOnlyRealTools`
   on a guide naming a tool that does not exist. `docs_search` skips the marker lines.

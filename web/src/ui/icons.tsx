@@ -3,7 +3,7 @@ import type { ReactNode, SVGProps } from 'react';
 // Decorative 16px stroke icons; the control that holds one carries the accessible name.
 export function Icon({ children, ...props }: SVGProps<SVGSVGElement> & { children: ReactNode }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...props}>{children}</svg>
   );
 }
@@ -14,6 +14,7 @@ export const CreditCardIcon = () => <Icon><rect x="2" y="5" width="20" height="1
 export const BellIcon = () => <Icon><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Icon>;
 export const SearchIcon = () => <Icon><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Icon>;
 export const ChevronLeftIcon = () => <Icon><path d="m15 18-6-6 6-6" /></Icon>;
+export const PanelRightIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M15 3v18" /></Icon>;
 export const ChevronRightIcon = () => <Icon><path d="m9 18 6-6-6-6" /></Icon>;
 export const PaperclipIcon = () => <Icon><path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></Icon>;
 export const LockIcon = () => <Icon><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Icon>;
@@ -38,4 +39,20 @@ export const SparklesIcon = () => <Icon><path d="M12 3v4M12 17v4M3 12h4M17 12h4M
 export const PlusIcon = () => <Icon><path d="M12 5v14M5 12h14" /></Icon>;
 export const MailIcon = () => <Icon><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></Icon>;
 export const FormIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></Icon>;
+export const CopyIcon = () => <Icon><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></Icon>;
 export const ChatIcon = () => <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Icon>;
+export const ExternalLinkIcon = () => <Icon><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></Icon>;
+export const DownloadIcon = () => <Icon><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></Icon>;
+export const PlayIcon = () => <Icon><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" fill="currentColor" /></Icon>;
+export const PauseIcon = () => <Icon><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" /><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" /></Icon>;
+export const VolumeIcon = () => <Icon><path d="M11 5 6 9H2v6h4l5 4Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></Icon>;
+export const VolumeOffIcon = () => <Icon><path d="M11 5 6 9H2v6h4l5 4Z" /><path d="m22 9-6 6M16 9l6 6" /></Icon>;
+export const MaximizeIcon = () => <Icon><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" /></Icon>;
+export const MinimizeIcon = () => <Icon><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" /></Icon>;
+export const ExpandIcon = () => <Icon><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></Icon>;
+export const ImageIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" /></Icon>;
+export const ImageOffIcon = () => <Icon><path d="M2 2l20 20" /><path d="M10.4 3H19a2 2 0 0 1 2 2v8.6" /><path d="M21 21H5a2 2 0 0 1-2-2V5" /><path d="m3 17 4-4 3 3" /></Icon>;
+export const AudioIcon = () => <Icon><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Icon>;
+// Alert marks: the colour (icon-warn, icon-danger) carries the level; the words beside them stay ink.
+export const TriangleAlertIcon = ({ tone = 'warn' }: { tone?: 'warn' | 'danger' }) => <Icon className={`icon icon-${tone}`}><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></Icon>;
+export const CircleAlertIcon = ({ tone = 'danger' }: { tone?: 'warn' | 'danger' }) => <Icon className={`icon icon-${tone}`}><circle cx="12" cy="12" r="9" /><path d="M12 8v4" /><path d="M12 16h.01" /></Icon>;

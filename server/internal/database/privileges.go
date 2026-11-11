@@ -16,6 +16,9 @@ const (
 	// PrivilegeAgentRequestPrune clears the call and answer of agent requests decided more than 90
 	// days ago, in every workspace; the audit rows stay.
 	PrivilegeAgentRequestPrune Privilege = "agent-request-prune"
+	// PrivilegeIntakeReasonPrune erases, in every workspace, the reason AI gave for an intake decision
+	// more than 90 days ago; the decision stays.
+	PrivilegeIntakeReasonPrune Privilege = "intake-reason-prune"
 	// PrivilegeSavedReplyPurge deletes, in every workspace, the saved replies that have been in the
 	// trash for more than 30 days, with their history.
 	PrivilegeSavedReplyPurge Privilege = "saved-reply-purge"
@@ -51,12 +54,26 @@ const (
 	// PrivilegeChannelRoute resolves the live channel that is an account outside (a chat account), from
 	// an event a channel's webhook received, or that a public address names by its random id (a web
 	// form's own address). Accounts are unique on the server; only the workspace and channel ids leave
-	// the transaction.
+	// the transaction. It also answers whether a live Zalo channel holds a site verification code, for
+	// the public file Zalo fetches (the code is public); only the yes or no leaves.
 	PrivilegeChannelRoute Privilege = "channel-route"
 	// PrivilegeChannelInboundClaim leases due events of the channel journal of every workspace (received,
 	// failed, or collected until their flush time) for the inbound worker; each is then processed in its
 	// own workspace.
 	PrivilegeChannelInboundClaim Privilege = "channel-inbound-claim"
+	// PrivilegeSLAClaim lists the conversations of every workspace whose response clocks are stale, or due
+	// a reminder, for the response clock worker; each is then counted or sent in its own workspace.
+	PrivilegeSLAClaim Privilege = "sla-claim"
+	// PrivilegeAutoCloseClaim lists the resolved conversations of every workspace whose chat channel closes
+	// them by itself and whose time came, for the auto-close worker; each is then closed in its own
+	// workspace.
+	PrivilegeAutoCloseClaim Privilege = "auto-close-claim"
+	// PrivilegeStatusNoticeClaim lists the conversations of every workspace a bulk status change marked to
+	// tell their customers, for the status notice worker; each is then told in its own workspace.
+	PrivilegeStatusNoticeClaim Privilege = "status-notice-claim"
+	// PrivilegeIntakeDueClaim lists the gatherings of chat intake of every workspace past their time to
+	// be decided, for the rules' decision to apply; each is then applied in its own workspace.
+	PrivilegeIntakeDueClaim Privilege = "intake-due-claim"
 	// PrivilegeImportJobClaim leases due in-app import jobs of every workspace for the import worker,
 	// and discards previews nobody started within the hour.
 	PrivilegeImportJobClaim Privilege = "import-job-claim"
@@ -78,6 +95,10 @@ const (
 	// the least recently served while the cache is over its byte cap. Only keys and sizes leave the
 	// transaction; the stored bytes go through the scoped DiscardObject.
 	PrivilegeMailImageSweep Privilege = "mail-image-sweep"
+	// PrivilegeDraftFileSweep removes, in every workspace, the files of reply drafts that were sent,
+	// stopped, or whose text was erased. Only keys leave the transaction; the stored bytes go through the
+	// scoped DiscardObject.
+	PrivilegeDraftFileSweep Privilege = "draft-file-sweep"
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"
@@ -117,6 +138,10 @@ const (
 	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
 	// computed and stored in its own scope.
 	PrivilegeResultsClaim Privilege = "results-claim"
+	// PrivilegeTrialReminder lists the workspaces whose trial ends within three days, for the trial-ending
+	// emails to their admins. Only workspace ids leave the transaction; each workspace's access is read, its
+	// admins found, their reminders claimed and settled in its own scope.
+	PrivilegeTrialReminder Privilege = "trial-reminder"
 	// PrivilegeAutofixClaim leases the Autofix fixes in progress of every workspace whose next check is
 	// due (a Cursor run to start or to read), for the Autofix worker. Only workspace ids, fix ids and
 	// connectors leave the transaction; each fix is then read, sent and moved in its own workspace.
@@ -146,7 +171,13 @@ const (
 	PrivilegeOperator Privilege = "operator"
 	// PrivilegeOperatorPreview counts, for the operator console's previews, what a change would do across
 	// workspaces: how many lock when billing turns on, whether a workspace slug exists, and how many channels
-	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI). Only a count or
+	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI), and how many of
+	// the server's AI calls its provider refused for want of credit. Only a count, a time or
 	// a yes or no leaves the transaction; no row is returned.
 	PrivilegeOperatorPreview Privilege = "operator-preview"
+	// PrivilegeMetaConversionClaim gives up the Meta Conversions API events of every workspace that are too
+	// old for Meta, clears sign-up addresses and browsers no event needs any more, and leases the due events.
+	// Only workspace ids and event names leave the transaction; each event is then read, sent and settled in
+	// its own workspace.
+	PrivilegeMetaConversionClaim Privilege = "meta-conversion-claim"
 )

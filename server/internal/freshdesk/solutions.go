@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -74,6 +75,13 @@ const (
 	entityKBFolder      = "kb_folder"
 	entityKBArticle     = "kb_article"
 	entityKBTranslation = "kb_translation"
+	// entityKBCollectionName is a category's or folder's name in one language, source id "c<id>:<language>" or "f<id>:<language>".
+	entityKBCollectionName = "kb_collection_name"
+	// entityKBLanguage is a help center language the import added, source id the language.
+	entityKBLanguage = "kb_language"
+	// entityKBPrimaryLanguage is the primary language the import gave the help center, source id that
+	// language, meta.previous the one it replaced.
+	entityKBPrimaryLanguage = "kb_primary_language"
 	// entityKBImage is an image of an article's HTML that Freshdesk hosts, stored as a kb_media row;
 	// its source id is <article id>:<image key> (or <article id>:<language>:<image key>).
 	entityKBImage = "kb_image"
@@ -111,6 +119,13 @@ type kbTranslation struct {
 	language string
 }
 
+// kbCollectionName is a category's or folder's name and description in one language.
+type kbCollectionName struct {
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // knowledgeBase is what the listing found. The listing writes nothing and runs before any write, so
 // the limits and the storage cap can be checked for the whole import first.
 type knowledgeBase struct {
@@ -123,6 +138,8 @@ type knowledgeBase struct {
 	order        []int64
 	articles     []kbArticle
 	translations []kbTranslation
+	// names holds the categories' ("c<id>") and folders' ("f<id>") names by language.
+	names        map[string]map[string]kbCollectionName
 	settings     *fdHelpdeskSettings
 	languages    []string
 	products     *int
@@ -291,6 +308,9 @@ func (r *run) listTranslations(ctx context.Context, kb *knowledgeBase) error {
 		}
 	}
 	for _, language := range kb.languages {
+		if err := r.listCollectionNames(ctx, kb, language); err != nil {
+			return err
+		}
 		for _, folderID := range kb.order {
 			id := strconv.FormatInt(folderID, 10)
 			err := listAll(ctx, r.client, r.solutionsPath("folders", id, "articles", language), func(article fdSolutionArticle) error {
@@ -307,6 +327,42 @@ func (r *run) listTranslations(ctx context.Context, kb *knowledgeBase) error {
 		}
 	}
 	return r.countProducts(ctx, kb)
+}
+
+// listCollectionNames reads the name of every category and folder in language: one call each, as
+// Freshdesk has no list of them. A 404 means it is not translated.
+func (r *run) listCollectionNames(ctx context.Context, kb *knowledgeBase, language string) error {
+	if kb.names == nil {
+		kb.names = map[string]map[string]kbCollectionName{}
+	}
+	read := func(key, kind string, id int64) error {
+		var name kbCollectionName
+		_, err := r.client.getJSON(ctx, r.endpoint("/api/v2/solutions/"+kind+"/"+strconv.FormatInt(id, 10)+"/"+url.PathEscape(language), nil), &name)
+		switch {
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case errors.Is(err, errNotFound):
+		case err != nil:
+			kb.unverified = append(kb.unverified, fmt.Sprintf("The %s name of %s %d could not be read: %s", language, strings.TrimSuffix(kind, "s"), id, err.Error()))
+		case strings.TrimSpace(name.Name) != "":
+			if kb.names[key] == nil {
+				kb.names[key] = map[string]kbCollectionName{}
+			}
+			kb.names[key][language] = name
+		}
+		return nil
+	}
+	for _, category := range kb.categories {
+		if err := read("c"+strconv.FormatInt(category.ID, 10), "categories", category.ID); err != nil {
+			return err
+		}
+	}
+	for _, folderID := range kb.order {
+		if err := read("f"+strconv.FormatInt(folderID, 10), "folders", folderID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // countProducts reads the products, which is where Freshdesk gives a product its own portal. It only

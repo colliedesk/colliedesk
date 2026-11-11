@@ -13,7 +13,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024
     await page.setViewportSize(viewport);
     await page.goto(`${baseURL}/sign-in?intent=trial`);
     await expect(page.getByRole('heading', { level: 1, name: 'Start your free trial' })).toBeVisible();
-    await expect(page.getByText('Colliedesk is alpha: any release may still change the interface.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'What general availability guarantees' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Service status' })).toHaveAttribute('href', 'https://status.colliedesk.com');
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     expect(await sidewaysScroll(page)).toBe(0);
   });

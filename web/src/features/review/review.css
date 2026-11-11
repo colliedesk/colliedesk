@@ -1,0 +1,83 @@
+/* Review: the intake queue of chat channels. Loaded with its chunk; scrollbars follow base.css. */
+/* Paper "17 Review" (R1-a…d): a 720px column of cards with the shared 1px ring. */
+.review-page > header { max-width: 720px; margin-bottom: var(--space-6); }
+.review-page > header h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.review-page > header p { color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+
+.review-stats { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); max-width: 720px; margin: 0 0 var(--space-4); color: var(--text-3); font-size: var(--fs-small); line-height: 20px; font-variant-numeric: tabular-nums; }
+.review-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); max-width: 720px; margin-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
+.intake-list { display: grid; gap: var(--space-3); max-width: 720px; }
+/* The empty lines (no chat channel, or nothing in a tab) start at the title's left edge: no card, no indent. */
+.review-page > .empty-copy { margin: 0; padding: var(--space-4) 0; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.intake-list > .empty-copy { margin: 0; padding: var(--space-4) 0; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.intake-list > .muted-copy { margin: 0 0 var(--space-1); font-size: var(--fs-small); }
+.review-more { justify-self: start; }
+
+.intake-card { display: grid; gap: var(--space-2); min-width: 0; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
+
+/* A long reason wraps under the name instead of squeezing it. */
+.intake-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+.intake-card > * { margin: 0; }
+.intake-head > div { flex: 1 1 12rem; min-width: 0; }
+.intake-head h3 { font-size: var(--fs-ui); font-weight: 600; line-height: 20px; overflow-wrap: anywhere; }
+.intake-head p { margin: 0; color: var(--text-3); font-size: var(--fs-small); line-height: 20px; overflow-wrap: anywhere; }
+.intake-head .badge { flex: 0 1 auto; max-width: 100%; min-height: 20px; border-radius: var(--radius-sm); padding: 0 var(--space-2); font-size: var(--fs-label); line-height: 16px; overflow-wrap: anywhere; }
+.badge-intake { border: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font-weight: 500; }
+.badge-intake[data-reason="credential"] { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.badge-intake-done { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font-weight: 500; }
+.intake-preview { margin: 0; color: var(--text-1); font-size: var(--fs-ui); line-height: 20px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.intake-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); margin: 0; color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
+.intake-meta .intake-toggle { margin-left: auto; }
+.intake-decided { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin: 0; border-top: 1px solid var(--line); padding-top: var(--space-3); color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
+.intake-decided dt { color: var(--text-3); }
+.intake-decided dd { margin: 0; }
+.intake-decided dt + dd > span:first-child { color: var(--text-1); font-weight: 600; }
+/* Why AI decided the card alone: a line of its own under who decided. */
+.intake-decided .intake-decided-why { flex-basis: 100%; min-width: 0; }
+/* The conversation a decided card opened or joined, with the code people know it by. */
+.intake-conversation { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; }
+.intake-conversation-ref { color: var(--text-2); font-family: var(--font-mono); font-size: var(--fs-small); }
+
+.intake-items { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.intake-item { display: grid; gap: var(--space-1); border-left: 2px solid var(--line); padding: 0 0 0 var(--space-3); min-width: 0; }
+.intake-item[data-role="staff"], .intake-item[data-role="bot"] { border-left-color: var(--accent); }
+.intake-item-head { margin: 0; font-size: var(--fs-small); color: var(--text-3); }
+.intake-item-head strong { color: var(--text-1); font-weight: 600; }
+.intake-item-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-ui); line-height: 20px; }
+/* What the customer sent, as a conversation shows its attachments (the tiles are components.css's); a file the
+   channel could not fetch is a quiet line that says why. */
+.intake-files { display: grid; gap: var(--space-2); min-width: 0; }
+.intake-files .message-attachments { margin: 0; }
+.intake-files-missing { margin: 0; padding: 0; list-style: none; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; overflow-wrap: anywhere; }
+
+.intake-form { display: grid; gap: var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.intake-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-3); }
+.intake-fields .field { display: grid; gap: var(--space-1); min-width: 0; }
+.intake-fields input, .intake-fields select { width: 100%; }
+
+@media (max-width: 40rem) {
+  .intake-card { padding: var(--space-3); }
+  .intake-fields { grid-template-columns: minmax(0, 1fr); }
+  .review-bar { align-items: stretch; flex-direction: column; }
+  .intake-form .primary-action { width: 100%; }
+}
+.review-filter select { max-width: 100%; }
+.review-notice:empty { display: none; }
+.review-notice { margin: 0 0 var(--space-3); border-left: 3px solid var(--accent); padding-left: var(--space-3); font-size: var(--fs-small); }
+.review-notice a { margin-left: var(--space-2); }
+
+/* What AI suggested for a card a person decides. */
+.intake-suggestion { display: grid; gap: var(--space-1); border: 0; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3); }
+.intake-suggestion p { margin: 0; color: var(--text-3); font-size: var(--fs-small); line-height: 20px; overflow-wrap: anywhere; }
+.intake-suggestion .intake-suggestion-head { color: var(--text-1); font-size: var(--fs-ui); }
+.intake-suggestion .request-actions { padding-top: var(--space-2); }
+.intake-suggestion-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.intake-ai-chip { display: inline-flex; align-items: center; gap: var(--space-1); height: 20px; border-radius: var(--radius-sm); background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-1); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
+.intake-ai-chip svg { width: 12px; height: 12px; }
+.intake-suggestion .intake-suggestion-reason { color: var(--text-2); }
+
+/* Tap targets: the underline tabs are 36px in ui/controls.css, which a phone needs at 44px; the link to the
+   conversation a decided card opened is a 32px (44px on a phone) target without moving its line. */
+@media (pointer: coarse), (max-width: 37.5rem) { .review-bar .seg-tabs-underline button { min-height: var(--touch); } }
+.intake-conversation > a { display: inline-flex; align-items: center; min-height: 32px; }
+@media (pointer: coarse), (max-width: 30rem) { .intake-conversation > a { min-height: var(--touch); } }

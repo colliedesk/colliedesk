@@ -25,7 +25,7 @@ func (s *Store) WithChannels(registry *channels.Registry) *Store {
 // Channels is the registry the store routes through; nil when none was given.
 func (s *Store) Channels() *channels.Registry { return s.channels }
 
-const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default`
+const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default,processing_paused_at`
 
 // scanChannelRow reads a channel and resolves its settings over its type's defaults. A type this
 // server does not run keeps empty defaults.
@@ -34,12 +34,12 @@ func (s *Store) scanChannelRow(row rowScanner) (channels.Channel, error) {
 	var kind string
 	var settings []byte
 	if err := row.Scan(&channel.ID, &channel.WorkspaceID, &kind, &channel.Name, &channel.Enabled, &settings, &channel.ExternalAccount,
-		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault); err != nil {
+		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault, &channel.ProcessingPausedAt); err != nil {
 		return channels.Channel{}, err
 	}
 	channel.Type = channels.Type(kind)
 	channel.CreatedAt, channel.UpdatedAt = channel.CreatedAt.UTC(), channel.UpdatedAt.UTC()
-	for _, at := range []*time.Time{channel.DisabledAt, channel.DeletedAt} {
+	for _, at := range []*time.Time{channel.DisabledAt, channel.DeletedAt, channel.ProcessingPausedAt} {
 		if at != nil {
 			*at = at.UTC()
 		}
@@ -135,6 +135,21 @@ func (s *Store) ChannelByPublicID(ctx context.Context, kind channels.Type, id st
 	return channel, err == nil, err
 }
 
+// ZaloSiteVerificationHeld says whether a live Zalo channel of any workspace holds a site verification
+// code, for the public file Zalo fetches to verify the URL prefix of the app's webhook. The code is public
+// (Zalo's checker reads it in that file); only the yes or no leaves the transaction.
+func (s *Store) ZaloSiteVerificationHeld(ctx context.Context, code string) (bool, error) {
+	var held bool
+	err := s.db.Privileged(ctx, database.PrivilegeChannelRoute, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM zalo_channels z JOIN channels c ON c.workspace_id=z.workspace_id AND c.id=z.channel_id
+			WHERE z.site_verification=$1 AND c.deleted_at IS NULL)`, code).Scan(&held)
+	})
+	if err != nil {
+		return false, fmt.Errorf("zalo site verification: %w", err)
+	}
+	return held, nil
+}
+
 // lockChannelType serializes the changes that add, remove or move the default of a workspace's
 // channels of one type: the first channel of a type has no row yet to lock.
 func lockChannelType(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type) error {
@@ -148,6 +163,9 @@ func lockChannelType(ctx context.Context, tx pgx.Tx, workspaceID string, kind ch
 type ChannelActor struct {
 	AgentID, TokenID string
 }
+
+// asActor is the same person and token as the actor of a message.
+func (a ChannelActor) asActor() Actor { return Actor{AgentID: a.AgentID, TokenID: a.TokenID} }
 
 // insertChannelEvent records a change in the channel's history.
 func insertChannelEvent(ctx context.Context, tx pgx.Tx, channel channels.Channel, kind string, actor ChannelActor, detail map[string]any) error {

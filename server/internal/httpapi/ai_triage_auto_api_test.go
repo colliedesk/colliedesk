@@ -72,7 +72,7 @@ func TestAutomaticTriageIsOffUntilAnAdminTurnsItOnAndGoesOffWithTheFeature(t *te
 	}
 	agent := joinAsAgent(t, d.api, d.adminA, "sam@draft-a.example.com")
 	wantResponse(t, request(t, d.api, http.MethodPut, "/api/v1/ai/slots/triage", map[string]any{"source": "provider", "provider_id": settings.Providers[0].ID, "enabled": true, "automatic": true}, agent, nil),
-		http.StatusForbidden, "forbidden")
+		http.StatusForbidden, "permission_missing")
 	wantResponse(t, request(t, d.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": settings.Providers[0].ID, "enabled": true, "auto_parts": []string{"tags"}}, d.adminA, nil),
 		http.StatusBadRequest, "invalid_request")
 
@@ -113,7 +113,7 @@ func TestAutomaticTriageIsOffUntilAnAdminTurnsItOnAndGoesOffWithTheFeature(t *te
 		t.Fatalf("history does not say automatic apply was turned on and off: %+v", settings.Events)
 	}
 	// The other workspace never was.
-	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_slots WHERE workspace_id=$1 AND automatic`, d.workspaceB); got != "0" {
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_slots WHERE workspace_id=$1 AND default_level='auto'`, d.workspaceB); got != "0" {
 		t.Fatalf("workspace B automatic slots = %s", got)
 	}
 }

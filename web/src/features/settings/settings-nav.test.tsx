@@ -26,7 +26,7 @@ test('Channels lists Email, Web form and Help chat under it, each opening its ty
   expect(channels).toHaveAttribute('href', '/settings/channels');
   const group = screen.getByRole('list', { name: 'Channels' });
   expect(within(group).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'],
+    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Help chat', '/settings/channels/type/help_chat'], ['Zalo OA', '/settings/channels/type/zalo'],
   ]);
   expect(within(group).getByRole('link', { name: 'Email' })).toHaveAttribute('aria-current', 'page');
   expect(channels).not.toHaveAttribute('aria-current');
@@ -36,4 +36,10 @@ test('the channel list itself stays the current page at /settings/channels', () 
   render(<SettingsNav page="/settings/channels" shown={{ general: false, team: false, channels: true, savedReplies: true, exportData: false, billing: false }} />);
   expect(screen.getByRole('link', { name: 'Channels' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: 'Email' })).not.toHaveAttribute('aria-current');
+});
+
+// Connected AI apps is found from the nav, next to the agent tokens, by everyone (it lists their own apps).
+test('Connected AI apps has its own link in the nav', () => {
+  render(<SettingsNav page="/settings" shown={{ general: false, team: false, channels: false, savedReplies: false, exportData: false, billing: false, agents: false }} />);
+  expect(screen.getByRole('link', { name: 'Connected AI apps' })).toHaveAttribute('href', '#connected-apps-heading');
 });

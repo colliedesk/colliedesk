@@ -1,12 +1,15 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
+import { forgetPermissions } from './api/client';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
+import { readPlanIntent, rememberPlanIntent } from './features/settings/plan-intent';
 import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 import { presenceViewPart } from './features/inbox/presence-part';
+import { permissionsOf, rolesOf } from './test-roles';
 import { autofixPart } from './features/autofix/autofix-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
@@ -28,9 +31,9 @@ afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); clerk.si
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const locked = { error: { code: 'workspace_locked', message: 'This workspace is locked because its trial or subscription ended.' } };
 const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, plan,
+  timezone: 'UTC', token: null, permissions: permissionsOf(role), plan,
 });
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
@@ -38,7 +41,7 @@ const selfHostedConfig = { ...config, cloud_sign_in: { enabled: false, publishab
 // Founding is full in these fixtures, so the server sells the plan ladder.
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly'],
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, purchased_plan: null, migration_requested_at: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly'],
   limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
@@ -73,15 +76,36 @@ test('a locked workspace sees the locked screen with the identity bar and an adm
     '/api/v1/conversations': () => json(402, locked),
   });
   open();
-  expect(await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
   expect(screen.getByRole('button', { name: /team, \$69 per month/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();
 });
 
+test('a locked admin can still take the workspace out: Export all data asks for its download link while the workspace is locked', async () => {
+  const assign = vi.fn();
+  const original = window.location;
+  Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign, search: '' } });
+  try {
+    serve({
+      '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
+      '/api/v1/config': () => json(200, config),
+      '/api/v1/billing': () => json(200, billing),
+      '/api/v1/conversations': () => json(402, locked),
+      '/api/v1/export/link': () => json(200, { url: '/api/v1/export/download?token=once', expires_in_seconds: 60 }),
+    });
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Export all data' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/api/v1/export/download?token=once'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/export/link', expect.objectContaining({ method: 'POST' }));
+  } finally {
+    Object.defineProperty(window, 'location', { configurable: true, value: original });
+  }
+});
+
 test('a 402 workspace_locked from the inbox replaces the inbox with the locked screen', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, admins: ['Maya Reyes', 'Daniel Kim'] })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/conversations': () => json(402, locked),
     '/api/v1/agents': () => json(402, locked),
@@ -90,7 +114,7 @@ test('a 402 workspace_locked from the inbox replaces the inbox with the locked s
   });
   open();
   expect(await screen.findByRole('heading', { level: 1, name: 'This workspace is locked' })).toBeInTheDocument();
-  expect(screen.getByText(/ask a workspace admin to choose a plan/i)).toBeInTheDocument();
+  expect(screen.getByText('Nothing is deleted. Ask an admin to choose a plan: Maya Reyes, Daniel Kim.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Signed in as' })).toBeInTheDocument();
 });
@@ -112,7 +136,7 @@ test('a locked workspace does not poll for inbox activity', async () => {
     '/api/v1/billing': () => json(200, billing),
   });
   open();
-  await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' });
+  await screen.findByRole('heading', { level: 1, name: 'Your trial has ended' });
   expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
 });
 
@@ -145,6 +169,34 @@ test('after a Founding visit, the plain sign-in page in the same tab is a sign-i
   await router.navigate({ to: '/sign-in' });
   expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
   expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('the Team 25 trial link keeps its plan through the sign-in page until a plain sign-in forgets it', async () => {
+  serve({ '/api/v1/config': () => json(200, config) });
+  const router = open('/sign-in?intent=trial&plan=team25');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Start your free trial' })).toBeInTheDocument();
+  expect(readPlanIntent()).toBe('team25');
+  await router.navigate({ to: '/sign-in' });
+  expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+  expect(readPlanIntent()).toBeUndefined();
+});
+
+test('in a trial workspace that came for Team 25, Buy Team 25 opens the billing page with Team 25 first and marked, and buys nothing', async () => {
+  rememberPlanIntent('team25');
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, trialBilling),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  const router = open('/');
+  fireEvent.click(await screen.findByRole('button', { name: 'Buy Team 25' }));
+  await screen.findByRole('heading', { name: 'Plan and billing' });
+  const cards = await screen.findAllByRole('article');
+  expect(cards.map((card) => card.getAttribute('aria-label'))).toEqual(['Team 25', 'Founding']);
+  expect(within(cards[0]).getByText('Your pick')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/settings/billing');
+  expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/billing/checkout')).toBe(false);
 });
 
 test('the website trial link titles the sign-in page for a new team', async () => {
@@ -218,7 +270,7 @@ test('a locked workspace drops the remembered plan and shows its own plan choice
     '/api/v1/billing': () => json(200, billing),
   });
   open('/settings/billing?buy=founding');
-  await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' });
+  await screen.findByRole('heading', { level: 1, name: 'Your trial has ended' });
   await waitFor(() => expect(readCheckoutIntent()).toBeUndefined());
   expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/billing/checkout')).toBe(false);
 });
@@ -243,7 +295,7 @@ test('going back to the billing page after the checkout was started does not sta
   expect(checkouts()).toBe(1);
 });
 
-test('billing lives in Settings: the rail keeps Settings current, the settings nav marks Plan and billing, the banner does not offer the page it is on', async () => {
+test('billing lives in Settings: the rail keeps Settings current, the settings nav marks Plan and billing, and the trial strip is not repeated on the page that says the same', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
     '/api/v1/config': () => json(200, config),
@@ -258,8 +310,8 @@ test('billing lives in Settings: the rail keeps Settings current, the settings n
   const sections = screen.getByRole('navigation', { name: 'Settings sections' });
   expect(within(sections).getByRole('link', { name: 'Plan and billing' })).toHaveAttribute('aria-current', 'page');
   expect(within(sections).getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/settings#team-heading');
-  expect(screen.getByRole('region', { name: /plan notices/i })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Choose a plan' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /plan notices/i })).not.toBeInTheDocument();
+  expect(screen.getByText(/ends oct 1, 2026/i)).toBeInTheDocument();
 });
 
 test('signing out forgets the agent for analytics only after the server ended the session', async () => {
@@ -405,8 +457,11 @@ test('on the cloud, sign out from the locked screen ends the identity provider s
   serveUntilSignedOut(() => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })), config,
     { '/api/v1/billing': () => json(200, billing) });
   const router = open();
-  expect(await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeInTheDocument();
-  fireEvent.click(screen.getAllByRole('button', { name: 'Sign out' })[0]);
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeInTheDocument();
+  // An admin's locked screen has no Sign out of its own: the way out is the one in the account menu.
+  expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
   expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
   expect(router.state.location.pathname).toBe('/sign-in');
@@ -493,4 +548,87 @@ test('with the browser\'s key on, Autofix shows: the Fixes link with its badge',
   } finally {
     localStorage.removeItem('colliedesk.autofix');
   }
+});
+
+
+test('Review is on the rail only where a chat channel collects messages, with the cards that wait', async () => {
+  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false });
+  serve({
+    '/api/v1/auth/me': () => json(200, trial),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/intake/summary': () => json(200, { available: true, waiting: 4, deciding: 0, scopes: [] }),
+  });
+  open('/settings');
+  expect(await screen.findByRole('link', { name: 'Review, 4 waiting' })).toHaveAttribute('href', '/review');
+  cleanup();
+  serve({
+    '/api/v1/auth/me': () => json(200, trial),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/intake/summary': () => json(200, { available: false, waiting: 0, deciding: 0, scopes: [] }),
+  });
+  open('/settings');
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/intake/summary')).toBe(true));
+  // The answer is in: nothing left to render from it.
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /^Review/ })).not.toBeInTheDocument();
+});
+
+test('Review opened with a channel and no scope lists that channel\'s cards only', async () => {
+  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false });
+  const channel = '44444444-4444-4444-8444-444444444444';
+  serve({
+    '/api/v1/auth/me': () => json(200, trial),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/intake/summary': () => json(200, { available: true, waiting: 0, deciding: 0, scopes: [] }),
+    '/api/v1/intake/gatherings': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/intake/stats': () => json(200, { days: 7, gatherings: 0, by_state: {}, decided_by: {}, fallback: 0, ai_decisions: 0, ai_corrected: 0 }),
+    '/api/v1/agents': () => json(200, { items: [] }),
+  });
+  open(`/review?channel=${channel}`);
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/intake/gatherings?'))).toBe(true));
+  const list = fetchMock.mock.calls.map(([url]) => String(url)).find((url) => url.startsWith('/api/v1/intake/gatherings?'));
+  expect(list).toContain(`channel_id=${channel}`);
+  expect(list).not.toContain('scope=');
+});
+
+const openTrial = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
+const narrow = (permissions: string[]) => ({ ...meBody('agent', openTrial), permissions });
+
+// A role that reads only the knowledge base sees only what it opens: the rail offers Knowledge and Settings,
+// the inbox address opens Knowledge, and no page asks the server for what the role may not read.
+test('a role that reads only the knowledge base lands in Knowledge and is offered nothing else to read', async () => {
+  // As in the browser, no session is known until /auth/me answers.
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['kb_articles:read', 'kb_media:read', 'help_center:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/collections': () => json(200, { items: [] }),
+    '/api/v1/kb/articles': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/help-center': () => json(200, { enabled: false }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge'));
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
+  expect(within(rail).queryByRole('link', { name: 'Results' })).not.toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+  await act(async () => { await router.navigate({ to: '/results' }); });
+  expect(await screen.findByText(/Your roles do not let you open Results/)).toBeInTheDocument();
+  const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
+  for (const path of ['/api/v1/conversations', '/api/v1/inbox/activity', '/api/v1/intake/summary', '/api/v1/results', '/api/v1/tags', '/api/v1/agents']) expect(asked, path).not.toContain(path);
+});
+
+test('a role that reads only media lands in the media library, and the rail takes it there', async () => {
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['kb_media:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/kb/media': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/kb/media-uploads': () => json(200, { items: [] }),
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/media'));
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/media');
 });

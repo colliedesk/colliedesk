@@ -5,4 +5,3 @@ export { AutofixConversation, AutofixStrip } from './autofix-conversation';
 export { FixesRoute, FixesScreen } from './fixes-route';
 export { FixesRailLink } from './fixes-rail-link';
 export { AutofixSettingsRoute } from './autofix-settings';
-export { AutofixRequestDetail } from './autofix-request';

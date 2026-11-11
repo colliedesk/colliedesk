@@ -81,6 +81,31 @@ host gets `max_tokens` and no reasoning field, which the copies of the API read 
 that sends no `usage` gives `Usage.Reported = false`: unknown, never zero. Bodies are read through a
 size limit.
 
+OpenRouter (`openrouter.ai`) is the exception, and three traps live there:
+
+1. **Effort.** OpenRouter reads `reasoning: {effort}`, but a JSON-schema request also carries
+   `provider.require_parameters: true` (so the answer is JSON), and with it a model whose providers do
+   not take `reasoning` has no provider left: the call would fail. So the adapter sends the effort only
+   to a model `GET /models` lists with `reasoning` in `supported_parameters` and the effort in
+   `reasoning.supported_efforts` (absent: every effort). The list is public and free; it is kept per
+   endpoint for an hour (five minutes after a failed read, asked with a five-second bound), and a list
+   that cannot be read means no effort, which is how every call went before.
+2. **Routing.** `ai_providers.routing` (`{"data_collection":"deny","zdr":true}`, only what differs from
+   OpenRouter's default) goes in `provider` beside `require_parameters`. Loosening it is a widening of
+   who receives customers' data, so `UpdateProvider` refuses it without `MayLoosen`; the route passes
+   `MayLoosen` for any caller with `ai_settings:update`, person or token alike. The provider check runs with the routing,
+   so a model no allowed provider serves fails before it is saved.
+3. **Cost.** `usage.cost` comes with every answer and is in OpenRouter's **credits**
+   (https://openrouter.ai/docs/use-cases/usage-accounting), not dollars: it is stored as
+   `ai_usage.provider_cost`, never converted and never mixed with `cost_micro_usd`, which only the
+   server's provider has.
+
+## Images
+
+`Message.Images` (at most 4, 5 MB each, PNG, JPEG, GIF or WebP) go to the OpenAI-compatible adapter as
+`image_url` parts with a data URL after the text, and to Anthropic as `image` blocks. The metered
+estimate counts each image at 1,600 tokens, the most a picture costs Claude at its largest size.
+
 ## Network
 
 Adapters take an `*http.Client`. `NewHTTPClient` has no response-header timeout, because a
@@ -117,10 +142,10 @@ it only makes a repeated prefix cheaper. Colliedesk keeps no AI answers in memor
    operator removed it (or the model) reads as on but not active, with `off_reason`.
 4. `ai_settings_events`: the history, with labels copied so it outlives the provider; `seq` orders the
    events of one transaction, which share `created_at`.
-5. Routes: reading is the `read` tier; provider changes are `admin`, and the two routes that carry a key
-   are `credentialRoutes` (a lower tier is refused, never filed, because an agent request keeps its
-   body). `PUT /api/v1/ai/slots/{slot}` is Approval for every token: it decides whether ticket data
-   leaves for a third party, the reason Approval exists.
+5. Routes: reading needs `ai_settings:read`; provider and slot changes `ai_settings:update`, and the
+   two routes that carry a key `ai_settings:manage_credentials`. `PUT /api/v1/ai/slots/{slot}` decides
+   whether ticket data leaves for a third party: a token with `ai_settings:update` does it at once (a
+   token made before roles lost that permission, `legacyNeverDirect`).
 6. Checks are synchronous (the admin waits, bounded at 20 s, well under proxy and MCP client limits) and
    capped at 10 a minute per workspace, since each is a billed call.
 
@@ -177,7 +202,19 @@ Handlers register per kind (`Worker.Handle`); a task without one fails (`no_hand
 
 Automatic tasks count against `ai_automatic_limits` (default 300 a UTC day, 30 a minute) when they
 first start; tasks count, not calls, so retries use no more. An advisory lock per workspace serializes
-the admission, so two workers cannot both take the last place.
+the admission, so two workers cannot both take the last place. Inside the day, drafts stop at
+`draft_per_day` (100) and intake decisions at `intake_per_day` (300, `intake_limit`).
+
+## Intake's fallback model
+
+`ai_slots.fallback_model` (intake only, a CHECK says so) is another model of the slot's provider.
+`Run.Metered` sends a request on the slot's model with 35 seconds of the attempt's 75, and once more on
+the fallback model after a timeout, rate limit, overload, server error, `model_not_found`,
+`invalid_response`, or a schema answer that is not JSON. Errors another model would get too (a key,
+credit, a request too large) are not tried again. Each call is its own usage row and passes the budget
+on its own. The provider cannot drop the fallback model (`ai_model_in_use`); moving intake to another
+provider drops it. A new one, like another model, keeps intake's channel levels: the gate counts labels of
+any model (decided 2026-11-08; `model_changed` stays only in older histories).
 
 `ai_usage.cost_micro_usd` is computed when a call of the server's provider finishes, per hop at the
 served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,
@@ -226,6 +263,28 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    the id: losing the metric is better than refusing a reply. `DraftOutcomes` counts them for #100.
 6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
    average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
+7. **Written drafts keep their history and files.** A written draft (`source='written'`) supersedes the
+   earlier one of the same agent and token, which stays. `RestoreDraft` reopens that same row
+   (`outcome` back to null, `ready_at` and `restored_at` now, `restored_by_agent_id`) and supersedes the
+   one that waited: a copy would change the id an agent holds and count the files twice. Superseded,
+   expired and discarded written drafts come back (discard is not a one-way door, the resolve trigger
+   included); sent ones, AI ones (their outcome feeds `DraftOutcomes` and Results) and erased ones do
+   not (`ai_draft_not_restorable`). Writing and restoring take one advisory lock per author
+   (workspace, conversation, agent, token) before they supersede, so racing calls leave exactly one
+   draft waiting; a partial unique index was not used because older data may break it.
+8. **A draft's files.** `ai_draft_files` rows reference attachment objects, so `DiscardObject` keeps
+   their bytes, and a trigger counts their size toward the workspace's storage while the row exists.
+   The send that names `ai_draft_id` copies the kept files (`ai_draft_file_ids`, nil = all) into
+   attachment rows on the same keys and deletes the draft's rows in the same transaction, so nothing
+   is counted twice; the left-out keys go through `DiscardObject` after the commit. Rows of a sent,
+   cancelled or erased draft go in the daily `SweepDraftFiles`; the Freshdesk undo adds the keys of
+   undone conversations' drafts to its orphans. The file ids must be the draft's own (400 otherwise),
+   and the draft's files plus the reply's uploads stay within one message (10 files, 10 MiB).
+   The draft's rows are gone after the send, so the Idempotency-Key row keeps `draft_selection` (the
+   draft, the files asked for, the files that went); a repeat that differs is `idempotency_key_reused`.
+9. **The list is paged.** `GET …/ai-drafts` takes `before` (the `next_before` of the page read, a
+   draft id) and `limit` (20, at most 50), ordered by `(created_at, id)` descending, so every earlier
+   draft that still holds files can be reached.
 
 ## Triage suggestions
 
@@ -266,12 +325,8 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 
 ## Triage applied by itself
 
-1. **Two levels of consent.** Turning triage on lets ticket data go to its provider; `ai_slots.automatic`
-   lets suggestions change tickets. `SetSlot` keeps `automatic` when a request does not name it (an
-   older client does not turn it off), turns it off with the feature and when the feature moves to
-   another provider (unless the same request turns it on), and refuses it for drafts until they have an
-   automatic mode. CHECK `NOT automatic OR enabled`; deleting a provider turns both off. Restore
-   (`restore-workspace.sh`) sets it false: a restore never changes tickets by itself.
+1. **Two levels of consent.** Turning triage on lets ticket data go to its provider; level `auto`
+   (below, "Levels per channel") lets suggestions change tickets.
 2. **Applied in the transaction that records the answer.** `runTriage` locks the suggestion, then the
    conversation (the order accept and undo take them), drops what the conversation has and what a person
    changed since (`stale`), and `autoApply` fills only what nobody set: tags added, the priority only
@@ -293,8 +348,8 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 
 1. **Queued by a trigger.** `ai_draft_on_customer_message` (AFTER INSERT ON messages) queues an
    automatic draft task and a pending `ai_drafts` row (`automatic`, `answers_message_id`) for each
-   customer message without `origin` and not failing its sender check, while the draft slot is on with
-   `automatic`. One task waits per conversation (unique partial index); a message before it runs moves
+   customer message without `origin` and not failing its sender check, while drafts are at level
+   `suggest` on the conversation's channel (`ai_level`). One task waits per conversation (unique partial index); a message before it runs moves
    it a minute later (five at most from the first) and makes it answer the newest message. An
    outgoing reply cancels the waiting one (`answered`). Everything is SQL in the transaction that
    writes the message.
@@ -312,6 +367,53 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 3. **People first.** `CreateDraft` cancels the waiting automatic draft and supersedes a ready one;
    automatic drafts never touch a person's. The model also says `reply_needed`, kept for automatic
    drafts only.
+
+## Levels per channel
+
+Migration `20261029120000-ai-channel-levels`. A workspace still decides whether a feature may send
+data anywhere (`ai_slots.enabled`, its consent, provider, model); a level decides only what the
+feature does by itself: `off`, `suggest`, `auto`.
+
+1. **One function answers it.** `ai_level(workspace, channel, scope, slot)`: `off` while the slot is
+   not enabled, else the scope's row of `channel_ai_levels`, the channel's row (scope `''`), then
+   `ai_slots.default_level`. Both triggers and the two Go checks (`autoApply`, `automaticDraftWanted`)
+   call it with the conversation's `channel_id` and `channel_scope`; a conversation of no channel passes
+   NULLs and gets the default. Its parameters are `p_*`: in a SQL function a parameter named like a
+   column (`scope`) is read as the column, and the scope test would always be true.
+2. **The old switches mapped one to one.** Triage `enabled` was already "suggest" (the trigger wrote a
+   suggestion for every new conversation); draft `enabled` was "on demand". So triage enabled →
+   `suggest`, triage automatic → `auto`, draft enabled → `off`, draft automatic → `suggest`.
+   `automatic` is gone from the table; the API still returns it, read from the level, and still takes
+   it (`nextLevel`), so an older client keeps what it meant. `TestAIChannelLevelsMigrationKeepsWhatEachWorkspaceRanByItself`
+   checks that the same customer message queues the same tasks before and after.
+3. **What never runs by itself.** CHECKs refuse `auto` for drafts (AI never sends) and for intake as
+   a workspace default: intake's gate is a channel's, so a chat channel added later never starts at
+   `auto`. Intake rows exist only on a scope its type declares (`Definition.IntakeScopes`, which the
+   registry refuses unless the scope collects with a `Gather`); the database does not know the types,
+   so `SetChannelLevel` checks and answers 422 `intake_not_supported`.
+4. **A raise needs `ai_settings:update`.** `PUT /channels/{id}/ai/{slot}` is classified `byHandler`:
+   the handler first refuses a call that could never run (`CheckChannelLevel`), then answers
+   `permission_missing` without `ai_settings:update`, then calls `SetChannelLevel(mayRaise=true)`. The
+   store keeps `mayRaise=false` for other callers, which refuses, under the slot rows' lock, a change that raises the configured level of any scope it
+   reaches (removing a scope's row raises it when what it follows is higher) or loosens intake's
+   options (a lower threshold, a source turned on, other instructions).
+   The level lives here, not in `channels.settings`, because `PATCH /channels/{id}` needs only
+   `channels:update`.
+5. **A new consent takes back what ran by itself.** When `SetSlot` records consent again (another
+   provider or model, or the feature turned on again), the workspace's level starts over (triage
+   `suggest`, others `off`) and `lowerChannelLevels` lowers every channel row a step (auto → suggest,
+   drafts suggest → off) in the same transaction, with `reason: recipient_changed` in both histories.
+   Another model of the same provider changes no consent and nothing else, intake included: its gate
+   counts labels of any model (decided 2026-11-08; before, it lowered intake's `auto` with
+   `model_changed`, which older histories still show). A call that could never run (a scope the channel lacks, intake
+   on email) is refused before a token's request is filed (`CheckChannelLevel`).
+   Deleting a provider sets the slot off; channel rows stay and read `workspace_off`. A restore lowers
+   both the same way.
+6. **Two histories.** A change writes `ai_settings_events(channel_level_changed)` and
+   `channel_events(ai_changed)`; the channel's history shows only which feature.
+7. **Source consents.** `ai_source_consents` holds an admin's consent per class of extra context
+   (`images`, `contact_profile`, `external:<name>`); giving and taking one back both need
+   `ai_settings:update`.
 
 ## Testing
 

@@ -957,3 +957,123 @@ func TestTheChatBoundOnAnswersAtOnceHoldsAcrossConfigurations(t *testing.T) {
 	}
 	wantResponse(t, busy, http.StatusTooManyRequests, "rate_limited")
 }
+
+// A reader of the French pages asks in French: the chat answers from the published French translation
+// and links its French page; a language the help center hides is the primary one.
+func TestAChatOnAFrenchPageAnswersFromTheFrenchTranslation(t *testing.T) {
+	d := newChatDesk(t, "Chat Français", nil)
+	number := d.article.Number
+	kbCall(t, d.api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": []map[string]any{{"locale": "fr", "visible": true}, {"locale": "de", "visible": false}}},
+		d.admin, http.StatusOK, nil)
+	kbCall(t, d.api, http.MethodPost, "/api/v1/kb/articles/"+d.article.ID+"/translations", map[string]any{"locale": "fr", "title": "Délais de livraison", "status": "published",
+		"body_md": "Les commandes partent en 2 jours."}, d.admin, http.StatusCreated, nil)
+	// The French pages name the chat in French; the primary pages keep the channel's own words.
+	wantPage(t, visit(d.site, "/help/"+d.slug+"/fr", "198.51.100.96"), http.StatusOK, []string{"Demander à l’IA"}, []string{"Ask AI"})
+	wantPage(t, visit(d.site, "/help/"+d.slug, "198.51.100.96"), http.StatusOK, []string{"Ask AI"}, []string{"Demander"})
+	d.fake.Script(chatReply("Elles partent en 2 jours [#"+num(number)+"]."), chatReply("Sie gehen in 2 Tagen [#"+num(number)+"]."))
+	events := chatEvents(t, d.call(t, http.MethodPost, "/chat/turns?lang=fr", map[string]any{"question": "Quand ma commande part-elle ?"}))
+	var source string
+	for _, event := range events {
+		if event.Type == "sources" && len(event.Sources) == 1 {
+			source = event.Sources[0].URL
+		}
+	}
+	if source != testOrigin+"/help/"+d.slug+"/fr/a/"+num(number) {
+		t.Fatalf("source = %q, events = %+v", source, events)
+	}
+	requests := d.fake.Requests()
+	if system := requestSystem(requests[len(requests)-1]); !strings.Contains(system, "Les commandes partent en 2 jours.") || strings.Contains(system, "Orders ship in 2 days") {
+		t.Fatalf("French prompt = %.500q", system)
+	}
+	events = chatEvents(t, d.call(t, http.MethodPost, "/chat/turns?lang=de", map[string]any{"question": "Wann?"}))
+	for _, event := range events {
+		if event.Type == "sources" && len(event.Sources) == 1 && event.Sources[0].URL != testOrigin+"/help/"+d.slug+"/a/"+num(number) {
+			t.Fatalf("hidden language source = %q", event.Sources[0].URL)
+		}
+	}
+	requests = d.fake.Requests()
+	if system := requestSystem(requests[len(requests)-1]); strings.Contains(system, "Les commandes") || !strings.Contains(system, "Orders ship in 2 days") {
+		t.Fatalf("hidden language prompt = %.500q", system)
+	}
+}
+
+func requestSystem(request aiprovider.Request) string {
+	var b strings.Builder
+	for _, part := range request.SystemParts {
+		b.WriteString(part.Text)
+	}
+	return b.String()
+}
+
+// The chat speaks the language of the page around it: the chat page (?lang), the article box on a
+// language's pages and the widget on a company's site (data-lang) use a language the help center shows,
+// and the primary one otherwise, whatever it is.
+func TestTheChatSpeaksTheLanguageOfThePage(t *testing.T) {
+	d := newChatDesk(t, "Chat Lingo", nil)
+	kbCall(t, d.api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": []map[string]any{{"locale": "fr", "visible": true}, {"locale": "de", "visible": false}}},
+		d.admin, http.StatusOK, nil)
+	kbCall(t, d.api, http.MethodPost, "/api/v1/kb/articles/"+d.article.ID+"/translations", map[string]any{"locale": "fr", "title": "Délais de livraison", "status": "published",
+		"body_md": "Les commandes partent en 2 jours."}, d.admin, http.StatusCreated, nil)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.channel, map[string]any{"config": map[string]any{"widget_origins": []string{"https://shop.lingo.example"}}}, d.admin, http.StatusOK, nil)
+
+	wantPage(t, d.call(t, http.MethodGet, "/chat?lang=fr", nil), http.StatusOK, []string{`<html lang="fr">`, "Aller à la conversation", "Nouvelle conversation", "Demander à Chat Lingo"},
+		[]string{"Skip to the chat", "New chat"})
+	for _, path := range []string{"/chat", "/chat?lang=de", "/chat?lang=xx"} {
+		wantPage(t, d.call(t, http.MethodGet, path, nil), http.StatusOK, []string{`<html lang="en">`, "Skip to the chat", "New chat"}, []string{"Nouvelle conversation"})
+	}
+
+	article := func(path string) *httptest.ResponseRecorder {
+		response := visit(d.site, path, "198.51.100.97")
+		for hops := 0; hops < 3 && response.Code/100 == 3; hops++ {
+			response = visit(d.site, response.Header().Get("Location"), "198.51.100.97")
+		}
+		return response
+	}
+	wantPage(t, article(d.base+"/fr/a/"+num(d.article.Number)), http.StatusOK, []string{`id="chatbox"`, "data-text=", "Nouvelle conversation"}, []string{"New chat"})
+	wantPage(t, article(d.base+"/a/"+num(d.article.Number)), http.StatusOK, []string{`id="chatbox"`, "data-text=", "New chat"}, []string{"Nouvelle conversation"})
+
+	var widget struct {
+		Lang       string `json:"lang"`
+		Label      string `json:"label"`
+		CloseLabel string `json:"close_label"`
+	}
+	ask := func(lang string) {
+		req := httptest.NewRequest(http.MethodGet, d.base+"/chat/widget-config?lang="+lang, nil)
+		req.Host = testOriginHost
+		req.Header.Set("Origin", "https://shop.lingo.example")
+		widget.Lang, widget.Label, widget.CloseLabel = "", "", ""
+		decode(t, serve(d.site, req), &widget)
+	}
+	ask("FR")
+	if widget.Lang != "fr" || widget.Label != "Chat IA : demander à Chat Lingo" || widget.CloseLabel != "Fermer la conversation" {
+		t.Fatalf("data-lang fr: %+v", widget)
+	}
+	for _, lang := range []string{"", "de", "xx"} {
+		ask(lang)
+		if widget.Lang != "en" || widget.Label != "AI chat: ask Chat Lingo" || widget.CloseLabel != "Close chat" {
+			t.Fatalf("data-lang %q: %+v", lang, widget)
+		}
+	}
+
+	// Open full chat from a French widget opens the French chat page, through the one-time code too.
+	var moved struct {
+		URL string `json:"url"`
+	}
+	decode(t, d.call(t, http.MethodPost, "/chat/transfer?lang=fr&surface=widget", map[string]any{}), &moved)
+	if !strings.Contains(moved.URL, "lang=fr") {
+		t.Fatalf("transfer url = %q", moved.URL)
+	}
+	redirect := d.call(t, http.MethodGet, "/chat?channel="+d.channel+"&t=bogus&lang=fr", nil)
+	if redirect.Code != http.StatusSeeOther || !strings.Contains(redirect.Header().Get("Location"), "lang=fr") {
+		t.Fatalf("redeem: %d %q", redirect.Code, redirect.Header().Get("Location"))
+	}
+	wantPage(t, d.call(t, http.MethodGet, "/chat?embed=1&lang=fr", nil), http.StatusOK, []string{"lang=fr&#34;"}, nil)
+
+	// A help center whose primary language is Spanish speaks Spanish without ?lang.
+	kbCall(t, d.api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": true, "title": "Chat Lingo help", "locale": "es"}, d.admin, http.StatusOK, nil)
+	wantPage(t, d.call(t, http.MethodGet, "/chat", nil), http.StatusOK, []string{`<html lang="es">`, "Nueva conversación"}, []string{"New chat"})
+	ask("")
+	if widget.Lang != "es" || widget.Label != "Chat con IA: pregunta a Chat Lingo" {
+		t.Fatalf("primary es: %+v", widget)
+	}
+}

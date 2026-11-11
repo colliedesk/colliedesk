@@ -8,6 +8,7 @@ import { messages } from '../../messages';
 import { savedReplyMessages } from '../settings/saved-reply-messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
+import { ArticleTranslationsBox } from './article-translations';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
@@ -460,6 +461,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
+      {base && <ArticleTranslationsBox article={base} headingId={`${id}-translations`} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
         <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>
         <span>{kbMessages.imagesWithoutAltHelp}</span>

@@ -73,6 +73,15 @@ the API.
   paid, so cancelling or revoking the spare never drops the plan while the other still charges.
   `GET /api/v1/billing` returns `active_subscriptions`, and the page tells the admin to cancel the
   extra one when it is above 1.
+- **The product is kept, the price is read from it.** `workspace_billing.polar_product_id` holds the
+  Polar product the subscription runs on (a plan switch in the portal sends the new product, so it follows).
+  `GET /api/v1/billing` turns it into `purchased_plan`, a checkout plan name such as `team25_yearly`
+  (`polar.Products.CheckoutPlanOf`, the inverse of checkout's name-to-product table), and the web app
+  reads the price of the Plan row from `plan-options.ts` with it. It is null for a complimentary plan,
+  for a product no longer on sale (it may have sold at another price) and for a row stored before the
+  column existed; the page then shows the plan name and the charge date without a price. A second
+  period of one plan (a yearly Founding) needs only its product, its checkout name and its price.
+  The next subscription event or `collie billing reconcile` fills a row that has no product.
 - **Unknown means 200, and a warning.** An unknown workspace, a non-UUID or missing external id, a
   product we do not sell and a non-subscription event all return 200 `ignored` and store nothing.
   Polar stops retrying, and the endpoint reveals nothing about which workspaces exist. A
@@ -165,6 +174,17 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
   belongs to no workspace; the sign-in page then shows the workspace-name form and posts to
   `/auth/cloud/signup` with a token fetched at that moment (Clerk tokens live about a minute).
+- Plan picker (`plan-options.ts`, `plan-picker.tsx`): while `checkout_plans` holds `founding` the cards are Founding
+  (greyed with the server's reason when the workspace does not fit) and Team 25 (only when the server sells it);
+  Solo, Small and Team wait, as on colliedesk.com. The Monthly or Yearly choice above them is Team 25's. If the
+  workspace can buy neither card (Founding refused, no Team 25 products) the whole ladder is shown, so the buyer
+  is never left with nothing. Once Founding closes the ladder is back on its own.
+- Plan intent: the website's Team 25 link is `/sign-in?intent=trial&plan=team25`. `plan` is not `buy`: it starts no
+  checkout. The sign-in route remembers it in `sessionStorage` (`plan-intent.ts`, one day), `RedeemRoute` sends
+  `next=/?plan=team25` so it crosses to the workspace host (`continue_url` carries `next`; that host's storage is
+  not APP_ORIGIN's), and `HandoffSignIn` remembers it there and removes it from the address. The billing page and
+  the locked screen put that plan's card first with "Your pick". Only `team25` is accepted; a Founding `buy` wins
+  over it. A plain sign-in forgets it, like `buy`.
 - Export: `POST /api/v1/export/link` (admin, on the locked allowlist) runs the 409 and 429 checks and returns
   `/api/v1/export/download/<token>`; the web app navigates the browser to it, so the ZIP streams to disk. The
   token is random, kept as a SHA-256 in process memory, valid 60 s, single use, bound to the workspace, and a
@@ -182,7 +202,8 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 
 ### Agent seats
 
-- Cap: 1 on Solo, 3 on Small, 10 on trial, Team and Founding, 25 on Team 25. A refusal names the next plan
+- Cap: 1 on Solo, 3 on Small, 10 on Team and Founding, 25 on the trial and Team 25 (a team of 11 to 25 agents tries
+  Colliedesk with everyone before it buys Team 25; Founding stays at 10). A refusal names the next plan
   up that the server sells (`domain.UpgradeFor`); Founding and Team 25 say "contact us". A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
   A deactivated agent holds no seat. Pending invites count by distinct address: re-sending an invite to the
   same address, or inviting someone who is already an active agent (a role change), takes no new seat.
@@ -373,6 +394,25 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary
 instead of sleeping. The webhook signature check keeps the real clock.
 
+## Trial-ending emails
+
+`internal/trialreminder` (started by `serve` when billing and outgoing mail are both configured) mails the
+active admins of a trial workspace twice: from three days before `trial_ends_at`, and from midnight of the
+day it ends in the workspace's timezone (`workspaces.timezone`). A pass runs every 5 minutes. It lists the
+workspaces whose trial ends within three days (`PrivilegeTrialReminder`, ids only) and does the rest in each
+workspace's scope: the plan is read with `store.WorkspaceAccess`, so a workspace that pays or is locked gets
+nothing; a workspace first seen on its last day gets only the second email.
+
+Idempotence is a row in `workspace_trial_reminders`, one per admin, kind and trial end. The row is inserted
+(`claimed`) and committed before the mail is sent, so two servers or a restart cannot send one twice; the
+send then settles it `sent`, or `rejected` when the relay refuses the address for good. A failure that may
+pass deletes the claim, so the next pass retries. A crash between the claim and the send loses that one
+email, never duplicates it. The trial end is part of the key on purpose: an operator or an import that moves
+it makes the old email untrue, and the new end gets its own two. The emails go from the platform address with
+`Reply-To` set to the support address; they carry no unsubscribe link, because they are about the admin's own
+workspace. There is no other mail opt-out in the server to respect: `agents.results_email` is the weekly results
+email's own switch and does not apply. Tests: `trialreminder/trialreminder_test.go` (real PostgreSQL, a fixed clock).
+
 ## Retention of locked workspaces
 
 A workspace that stays locked (no entitled subscription or comp grant, trial over) for 12 months is
@@ -506,8 +546,9 @@ same `POLAR_*` variables as `serve` (and `BILLING_ALERT_EMAIL`, `SMTP_*`, `MAIL_
 - Write path: `store.ApplySubscription`, the webhook's own path. The same rule orders both: a row is
   replaced only by a subscription whose `modified_at` is not older, so a late reconcile cannot undo a
   newer webhook and a late webhook cannot undo a newer reconcile. The webhook id recorded is
-  `reconcile:<subscription>:<modified_at>`, so running twice applies once.
-- Applied: Polar's `modified_at` is newer than the stored `source_modified_at`, or the subscription
+  `reconcile:<subscription>:<modified_at>:<product>`, so running twice applies once.
+- Applied: Polar's `modified_at` is newer than the stored `source_modified_at`, the same but the stored
+  row has no product yet (a row from before `polar_product_id`), or the subscription
   is paid at Polar and was never stored. A subscription that was never stored and grants nothing
   (ended, unpaid) is skipped.
 - Reported, never written: an `active` or `past_due` subscription with no workspace (no external id,

@@ -30,12 +30,12 @@ func TestPasswordlessRedeemIsSingleUseAndCreatesSession(t *testing.T) {
 	var session struct {
 		Token string `json:"token"`
 		Agent struct {
-			Email string `json:"email"`
-			Role  string `json:"role"`
+			Email string   `json:"email"`
+			Role  roleList `json:"roles"`
 		} `json:"agent"`
 	}
 	decode(t, first, &session)
-	if session.Token != "" || session.Agent.Email != "admin@example.com" || session.Agent.Role != "admin" {
+	if session.Token != "" || session.Agent.Email != "admin@example.com" || session.Agent.Role.main() != "admin" {
 		t.Fatalf("unexpected session: %+v", session)
 	}
 	if cookie := first.Result().Cookies(); len(cookie) != 1 || !cookie[0].HttpOnly || !cookie[0].Secure || cookie[0].SameSite != http.SameSiteLaxMode {

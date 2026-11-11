@@ -1,12 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { AppShell } from './app-shell';
 
 const me = {
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'agent' as const, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('agent'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC',
-  scope: null, permissions: [],
+  token: null, permissions: permissionsOf('agent'),
   plan: null,
   ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false,
 };
@@ -57,10 +58,22 @@ test('the avatar opens an account menu with who is signed in and Sign out', () =
   fireEvent.click(button);
   expect(button).toHaveAttribute('aria-expanded', 'true');
   const menu = screen.getByRole('group', { name: 'Account' });
+  // Without a display name the person is their address.
   expect(menu).toHaveTextContent('sam@example.com');
-  expect(menu).toHaveTextContent('Beta Desk');
+  expect(menu).toHaveTextContent('Agent');
   fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
   expect(signOut).toHaveBeenCalledTimes(1);
+});
+
+test('the account menu names the person and their role, and leaves the workspace and address to the bar above', () => {
+  render(<AppShell me={{ ...me, agent: { ...me.agent, display_name: 'Sam Lee', roles: rolesOf('admin') } }} onSignOut={() => {}}><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  const menu = screen.getByRole('group', { name: 'Account' });
+  expect(menu).toHaveTextContent('Sam Lee');
+  expect(menu).toHaveTextContent('Admin');
+  expect(menu).not.toHaveTextContent('sam@example.com');
+  expect(menu).not.toHaveTextContent('Beta Desk');
+  expect(screen.getAllByRole('button').filter((button) => menu.contains(button)).map((button) => button.textContent)).toEqual(['Report a problem', 'Sign out']);
 });
 
 test('Escape closes the account menu and returns focus to the avatar', () => {
@@ -103,4 +116,33 @@ test('Report a problem in the account menu opens the dialog, and closing it retu
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(avatar).toHaveFocus();
+});
+
+test('the sidebar starts as its rail, opens and folds again, and the browser keeps the choice', () => {
+  localStorage.removeItem('colliedesk.sidebar');
+  const { container, unmount } = render(<AppShell me={me}><p>inbox</p></AppShell>);
+  const shell = container.querySelector('.app-shell')!;
+  expect(shell).toHaveAttribute('data-sidebar', 'collapsed');
+  fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+  expect(shell).toHaveAttribute('data-sidebar', 'expanded');
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
+  unmount();
+  render(<AppShell me={me}><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: true });
+});
+
+test('the sidebar edge resizes with the keyboard within its limits and remembers the width', () => {
+  localStorage.setItem('colliedesk.sidebar', JSON.stringify({ width: 9999, collapsed: false }));
+  const { container } = render(<AppShell me={me}><p>inbox</p></AppShell>);
+  const edge = screen.getByRole('separator', { name: 'Resize sidebar' });
+  expect(edge).toHaveAttribute('aria-valuenow', '360');
+  fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+  expect(edge).toHaveAttribute('aria-valuenow', '344');
+  expect((container.querySelector('.app-shell') as HTMLElement).style.getPropertyValue('--sidebar-user-width')).toBe('344px');
+  fireEvent.keyDown(edge, { key: 'Home' });
+  expect(edge).toHaveAttribute('aria-valuenow', '56');
+  fireEvent.doubleClick(edge);
+  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
+  localStorage.removeItem('colliedesk.sidebar');
 });

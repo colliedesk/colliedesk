@@ -40,9 +40,7 @@ func TestKnowledgeBaseOrderToolSetsTheOrderAndStaysInItsWorkspace(t *testing.T) 
 	}
 
 	read := e.connect(alpha.read, "")
-	if proposed := e.ok(read, "colliedesk_kb_order_set", map[string]any{"parent_id": collectionID, "article_ids": []string{first, second}}); proposed["agent_request"] == nil {
-		t.Fatalf("read token order = %v, want an agent request", proposed)
-	}
+	e.refused(read, "colliedesk_kb_order_set", map[string]any{"parent_id": collectionID, "article_ids": []string{first, second}})
 
 	other := e.connect(beta.send, "")
 	if message := e.fails(other, "colliedesk_kb_order_set", map[string]any{"parent_id": collectionID, "article_ids": []string{first, second}}); !strings.Contains(message, "No knowledge base collection") {

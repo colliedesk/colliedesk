@@ -1,6 +1,9 @@
 package mcpserver
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // The shapes below are the parts of the REST answers (contracts/openapi.yaml) that tools read.
 
@@ -12,20 +15,38 @@ type restMe struct {
 		Name     string `json:"name"`
 		Timezone string `json:"timezone"`
 	} `json:"workspace"`
-	Scope       *string  `json:"scope"`
+	// Permissions are what this call may do: a token's given permissions limited to its person's.
 	Permissions []string `json:"permissions"`
-	Plan        *struct {
+	// Token is nil for a person's own sign-in.
+	Token *restTokenGrant `json:"token"`
+	Plan  *struct {
 		Locked bool `json:"locked"`
 	} `json:"plan"`
 }
 
 type restAgent struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role"`
+	ID          string        `json:"id"`
+	Email       string        `json:"email"`
+	DisplayName string        `json:"display_name"`
+	Roles       []restRoleRef `json:"roles"`
 	// TimezoneOverride is set only in the answer of /auth/me.
 	TimezoneOverride *string `json:"timezone_override"`
+}
+
+type restRoleRef struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	System *string `json:"system"`
+}
+
+// restTokenGrant is how an agent token got its permissions: from a role it follows, a list picked
+// when it was made, or (legacy) a tier from before roles.
+type restTokenGrant struct {
+	Kind        string       `json:"kind"`
+	Role        *restRoleRef `json:"role"`
+	RoleHeld    *bool        `json:"role_held"`
+	Permissions []string     `json:"permissions"`
+	LegacyTier  *string      `json:"legacy_tier"`
 }
 
 type restTag struct {
@@ -55,6 +76,14 @@ type restConversation struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 	// LatestReplyNumber is the number of the newest reply, for seen_reply_number.
 	LatestReplyNumber int `json:"latest_reply_number"`
+	// DisplayRef is the code customers see and type back.
+	DisplayRef string `json:"display_ref"`
+	// SLA is its response clocks, as the API shows them.
+	SLA json.RawMessage `json:"sla"`
+	// LastStatusChange is the newest change of its status and who made it, as the API shows it.
+	LastStatusChange json.RawMessage `json:"last_status_change"`
+	// MayTellCustomer says a status set now may tell its customer in their chat.
+	MayTellCustomer bool `json:"may_tell_customer"`
 }
 
 type restDelivery struct {
@@ -69,9 +98,11 @@ type restMessage struct {
 	AuthorName    *string   `json:"author_name"`
 	CreatedAt     time.Time `json:"created_at"`
 	ReplyNumber   *int      `json:"reply_number"`
-	AgentToken    *struct {
-		Label string `json:"label"`
-		Scope string `json:"scope"`
+	// NoticeKind names a message the channel sent by itself (a received or status notice).
+	NoticeKind *string `json:"notice_kind"`
+	AgentToken *struct {
+		Label     string `json:"label"`
+		AgentName string `json:"agent_name"`
 	} `json:"agent_token"`
 	// Origin is set on a message imported from another helpdesk; Kind is how that system classified it.
 	Origin *struct {

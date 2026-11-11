@@ -1,11 +1,12 @@
 package httpapi
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // ParseTrustedProxies reads the TRUSTED_PROXIES list: comma-separated CIDRs or single addresses of the
@@ -27,7 +28,7 @@ func parsePrefixes(name, value string) ([]netip.Prefix, error) {
 		if err != nil {
 			address, addressErr := netip.ParseAddr(entry)
 			if addressErr != nil {
-				return nil, fmt.Errorf("%s entry %q is not a CIDR or an IP address", name, entry)
+				return nil, configerr.Say("network_entry_invalid", configerr.Params{"name": name, "entry": entry})
 			}
 			prefix = netip.PrefixFrom(address, address.BitLen())
 		}

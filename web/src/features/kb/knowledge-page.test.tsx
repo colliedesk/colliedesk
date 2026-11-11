@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { KnowledgeRoute } from './knowledge-page';
+import { PermissionsContext } from '../../lib/permissions-context';
 import type { KnowledgeSearch } from './knowledge-page';
 import { collection, collections, ids, json, me, refusal, serve, summary } from './kb.test.fixture';
 
@@ -66,6 +67,21 @@ test('a workspace without collections is asked for one first, and the new one op
   fireEvent.click(within(form).getByRole('button', { name: 'Create collection' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge', search: { collection: ids.billing }, replace: false }));
   expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ name: 'Billing', parent_id: null });
+});
+
+test('a new collection is asked where it goes only once there is a collection to put it in', async () => {
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [] }) });
+  open();
+  const first = await screen.findByRole('form', { name: 'New collection' });
+  expect(within(first).queryByRole('combobox', { name: 'Inside' })).not.toBeInTheDocument();
+});
+
+test('a new collection in a workspace with collections can go inside one of them', async () => {
+  serve(base);
+  open();
+  fireEvent.click((await screen.findAllByRole('button', { name: 'New collection' }))[0]);
+  const form = screen.getByRole('form', { name: 'New collection' });
+  expect(within(within(form).getByRole('combobox', { name: 'Inside' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Top level', 'Guides', '\u2003Setup', 'Billing']);
 });
 
 test('changing a collection\'s address name warns that its old help center addresses stop working', async () => {
@@ -217,4 +233,17 @@ test('the Knowledge page shows its title, not only to screen readers', async () 
   const title = await screen.findByRole('heading', { level: 1, name: 'Knowledge base' });
   expect(title).not.toHaveClass('sr-only');
   expect(title).toHaveClass('kb-page-title');
+});
+
+// A role that may read articles and nothing else is offered no way to make one, no Media tab, and the page
+// does not ask about the help center it may not read.
+test('a role that only reads articles sees them, with nothing to create and no Media tab', async () => {
+  const calls = serve(base);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><PermissionsContext.Provider value={['kb_articles:read']}><KnowledgeRoute search={{}} /></PermissionsContext.Provider></QueryClientProvider>);
+  await screen.findByRole('navigation', { name: 'Collections' });
+  expect(screen.queryByRole('link', { name: /New article/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New collection' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Media' })).not.toBeInTheDocument();
+  expect(calls.map((call) => call.path)).not.toContain('/api/v1/help-center');
 });

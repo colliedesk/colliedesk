@@ -90,8 +90,8 @@ func (a *API) enableFixConnector(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send consent_version, the version of the consent text you agree to.")
 		return
 	}
-	// No consent, no coding agent: an approved agent request without one is refused too, so the person
-	// approving always agreed to a stated text (the consent is recorded in their name).
+	// No consent, no coding agent: whoever turns it on agrees to a stated text, recorded in their name (the
+	// person, or the person whose agent token made the call).
 	if strings.TrimSpace(input.ConsentVersion) == "" {
 		writeError(response, http.StatusUnprocessableEntity, "consent_required",
 			"consent_version is required: the version of the consent text agreed to (consent_version in GET /api/v1/autofix/settings).")

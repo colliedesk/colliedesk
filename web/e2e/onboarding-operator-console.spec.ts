@@ -52,14 +52,13 @@ test('operator console: the installer\'s operator link signs in, the operator se
   const test = await waitForMail(email, 30_000, 'This is a test from the operator console');
   expect(test.subject).toBe('Colliedesk test email');
 
-  await page.getByRole('button', { name: 'Review and save' }).click();
-  const review = page.getByRole('dialog', { name: 'Review 3 changes' });
-  await expect(review.getByText('Will be saved as v')).toBeVisible();
-  await review.getByRole('button', { name: 'Save and apply' }).click();
-  await expect(page.getByRole('status').filter({ hasText: /Saved v\d+\. Every server applies it within a few seconds\./ })).toBeVisible();
-  // The running server picks the version up by itself: the band says every process runs it.
-  await expect(page.getByRole('banner').getByRole('status')).toHaveText(/Running v(\d+) · 1 of 1 processes/, { timeout: 15_000 });
-  const saved = Number((await page.getByRole('banner').getByRole('status').textContent())?.match(/v(\d+)/)?.[1]);
+  // Save checks the change and, as it asks for nothing more here (no authenticator, no stored password), saves it at once.
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const savedStatus = page.getByRole('status').filter({ hasText: /Saved v\d+\. Every server applies it within a few seconds\./ });
+  await expect(savedStatus).toBeVisible();
+  const saved = Number((await savedStatus.textContent())?.match(/Saved v(\d+)/)?.[1]);
+  // The running server picks the version up by itself: the band says every process runs it (until then it names the previous one).
+  await expect(page.getByRole('banner').getByRole('status')).toHaveText(new RegExp(`Running v${saved} · 1 of 1 processes`), { timeout: 15_000 });
 
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: new RegExp(`^v${saved - 1}`) }).click();

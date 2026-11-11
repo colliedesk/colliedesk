@@ -23,12 +23,12 @@ func agentSession(t *testing.T, api http.Handler, adminToken, email string) stri
 	var session struct {
 		Token string `json:"token"`
 		Agent struct {
-			Role string `json:"role"`
+			Role roleList `json:"roles"`
 		} `json:"agent"`
 	}
 	decode(t, redeemed, &session)
-	if session.Agent.Role != "agent" {
-		t.Fatalf("redeemed role=%q, want agent", session.Agent.Role)
+	if session.Agent.Role.main() != "agent" {
+		t.Fatalf("redeemed role=%q, want agent", session.Agent.Role.main())
 	}
 	return session.Token
 }

@@ -28,7 +28,7 @@ func TestCreatingATokenWithACookieSessionNeedsTheInstanceOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookie := cookieSession(t, api, pairingURL)
-	body := map[string]any{"label": "Planted", "scope": "send"}
+	body := map[string]any{"label": "Planted", "permissions": []string{"messages:read", "messages:note", "conversations:read", "conversations:update", "messages:send"}}
 	tokens := func() int {
 		t.Helper()
 		var count int

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ConsoleData } from './app';
 import type { Setting } from './api';
-import { Review } from './config-page';
+import Review from './review';
 
 afterEach(() => vi.restoreAllMocks());
 

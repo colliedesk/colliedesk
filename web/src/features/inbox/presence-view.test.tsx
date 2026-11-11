@@ -6,7 +6,7 @@ import { ConversationViewers } from './presence-view';
 const person = (name: string, extra: Partial<ConversationViewer> = {}): ConversationViewer => ({
   agent_id: `44444444-4444-4444-8444-${name.padEnd(12, '0').slice(0, 12).replace(/[^0-9a-f]/gi, '0')}`, name, writing: false, writing_since: null, edited_at: null, agent_token: null, ...extra,
 });
-const token = (of: ConversationViewer, label: string, id: string): ConversationViewer => ({ ...of, agent_token: { id, label, scope: 'read', agent_name: of.name } });
+const token = (of: ConversationViewer, label: string, id: string): ConversationViewer => ({ ...of, agent_token: { id, label, agent_name: of.name } });
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-22T09:10:00Z')); });
 afterEach(() => vi.useRealTimers());

@@ -14,7 +14,7 @@ export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHi
   return (
     <section className="settings-card" aria-labelledby="preferences-heading">
       <div className="section-heading"><h2 id="preferences-heading">{messages.preferences}</h2><p>{settingsMessages.preferencesDescription}</p></div>
-      <div className="settings-body">
+      <div className="settings-body settings-rows">
         <div className="field"><span className="field-label" id="theme-label">{settingsMessages.theme}</span>
           <fieldset className="segmented" aria-labelledby="theme-label">
             {(['light', 'dark'] as const).map((value) => (

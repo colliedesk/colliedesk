@@ -89,8 +89,9 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 // added time, so it ranks where it did, not as the newest.
 func AgentSeatRank(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (int, error) {
 	var rank int
-	err := tx.QueryRow(ctx, `SELECT r FROM (SELECT id, row_number() OVER (ORDER BY role='admin' DESC, created_at, id) AS r
-		FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL) ranked WHERE id=$2`, workspaceID, agentID).Scan(&rank)
+	// Members with the Admin role keep their seats first, so a workspace always keeps someone who can act.
+	err := tx.QueryRow(ctx, `SELECT r FROM (SELECT a.id, row_number() OVER (ORDER BY `+HoldsAdminRole+` DESC, a.created_at, a.id) AS r
+		FROM agents a WHERE a.workspace_id=$1 AND a.deactivated_at IS NULL) ranked WHERE id=$2`, workspaceID, agentID).Scan(&rank)
 	return rank, err
 }
 

@@ -17,7 +17,10 @@ Both must be on. Off, the chat pages answer `404`, as a help center that is off.
 ## What the AI reads and says
 
 1. **Your published articles**, the ones the help center shows, except those marked **Keep away from
-   AI**. Drafts, articles in the trash and translations are never read. With no published article the
+   AI**. On a page of another [language you show](knowledge-base.md#in-other-languages), each article
+   published in that language is read in it (and its sources link that language's pages); the others
+   in their own language. Drafts, articles and translations in the trash, and languages you hide are
+   never read. With no published article the
    chat says it cannot find an answer and offers **Talk to a person**.
 2. It answers in the language of the question, cites the articles it used, and says so when the
    articles do not answer the question. It never makes up a price, an address or a link: an email
@@ -57,7 +60,7 @@ without an AI provider of its own has no prices at all: on your own key, your pr
 (the chat page, an article, your site), its state (open, handed off, ended) and whether an answer was
 rated not helpful. Open one to read it with the articles each answer cited. Every member of the team
 reads them there (the tab shows only the chats to someone who is not an admin), and from a conversation
-a hand-off opened (**Open chat transcript**); only an admin deletes one, for good (the conversation
+a hand-off opened (**Open chat transcript**); only someone with `ai_settings:update` (an admin) deletes one, for good (the conversation
 keeps its own copy).
 
 A chat's texts are kept 90 days after its last question, then erased; its numbers stay a year. They

@@ -1,12 +1,12 @@
 package ai
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
@@ -54,18 +54,18 @@ func parsePrices(value string) (map[string]Price, error) {
 		model = strings.TrimSpace(model)
 		parts := strings.Split(list, ":")
 		if !ok || model == "" || len(parts) < 2 || len(parts) > 4 {
-			return nil, fmt.Errorf("AI_SERVER_PRICES must be written model=input:output[:cache_read[:cache_write]] in US dollars per million tokens, separated by commas")
+			return nil, configerr.Say("ai_server_prices_format", nil)
 		}
 		var numbers [4]float64
 		for index, part := range parts {
 			number, err := strconv.ParseFloat(strings.TrimSpace(part), 64)
 			if err != nil || number < 0 || math.IsNaN(number) || math.IsInf(number, 0) {
-				return nil, fmt.Errorf("AI_SERVER_PRICES has a price for %s that is not a number of dollars", model)
+				return nil, configerr.Say("ai_server_prices_not_number", configerr.Params{"model": model})
 			}
 			numbers[index] = number
 		}
 		if _, seen := prices[model]; seen {
-			return nil, fmt.Errorf("AI_SERVER_PRICES lists %s twice", model)
+			return nil, configerr.Say("ai_server_prices_twice", configerr.Params{"model": model})
 		}
 		// A cache price left out is the providers' usual share of the input price (a read a tenth, a
 		// write of five minutes a quarter more), never free: a limit in dollars must count it.
@@ -88,7 +88,7 @@ func parseAllowance(value string) (*Allowance, error) {
 	allowance := &Allowance{}
 	if amount, err := strconv.ParseFloat(value, 64); err == nil {
 		if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE must be a number of dollars")
+			return nil, configerr.Say("ai_server_allowance_not_number", nil)
 		}
 		allowance.PerWorkspace = amount
 		return allowance, nil
@@ -97,7 +97,7 @@ func parseAllowance(value string) (*Allowance, error) {
 		key, number, ok := strings.Cut(strings.TrimSpace(entry), "=")
 		amount, err := strconv.ParseFloat(strings.TrimSpace(number), 64)
 		if !ok || err != nil || amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE must be dollars per workspace (10) or per agent with a trial amount (agent=3,trial=2)")
+			return nil, configerr.Say("ai_server_allowance_format", nil)
 		}
 		switch strings.TrimSpace(key) {
 		case "agent":
@@ -107,7 +107,7 @@ func parseAllowance(value string) (*Allowance, error) {
 		case "workspace":
 			allowance.PerWorkspace = amount
 		default:
-			return nil, fmt.Errorf("AI_SERVER_MONTHLY_ALLOWANCE knows workspace, agent and trial, not %q", key)
+			return nil, configerr.Say("ai_server_allowance_unknown", configerr.Params{"key": key})
 		}
 	}
 	return allowance, nil

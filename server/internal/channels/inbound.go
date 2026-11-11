@@ -117,6 +117,12 @@ type Inbound struct {
 	// RateKey is what the rate limits count the message by, when not its sender's identity: a public
 	// form whose sender types any address counts the place it came from instead.
 	RateKey string
+	// Place is where on a chat channel it was said (a one-to-one chat, a group); the store keeps every
+	// message of a place as an item of its thread, whether or not it opens a conversation. Empty for a
+	// type that has no places (email, a web form).
+	Place *Place
+	// Role is who wrote it: RoleCustomer (the default) or RoleStaff (a team member on the channel's app).
+	Role string
 }
 
 // SenderKey is the key the journal and the rate limits record the message by.
@@ -125,6 +131,31 @@ func (in Inbound) SenderKey() string {
 		return in.RateKey
 	}
 	return in.Sender.Identity.Key()
+}
+
+// Roles of a message's writer.
+const (
+	RoleCustomer = "customer"
+	RoleStaff    = "staff"
+	RoleBot      = "bot"
+)
+
+// Place kinds.
+const (
+	PlaceDirect = "direct"
+	PlaceGroup  = "group"
+)
+
+// Place is a place on a chat channel where messages are said.
+type Place struct {
+	// Kind is PlaceDirect or PlaceGroup.
+	Kind string
+	// ExternalID names it on the channel, stable across messages ("user:<id>", "group:<id>").
+	ExternalID string
+	// Name is a group's name, when the type knows it.
+	Name string
+	// OpensConversations says a message here may open a conversation.
+	OpensConversations bool
 }
 
 // Thread says which conversation a message continues.
@@ -229,12 +260,23 @@ const (
 	DropChannelRemoved = "channel_removed"
 	DropEcho           = "echo"
 	DropCancelled      = "cancelled"
+	// DropHelp: a help command, answered with the channel's guide.
+	DropHelp = "help"
+	// DropConfirmed: a confirm command sent the request being written; it is no part of it.
+	DropConfirmed = "confirmed"
+	// DropExpired: a request left without its description past Gather.ExpireSeconds, and the message
+	// that found it expired.
+	DropExpired = "expired"
+	// DropRefNotFound: a reopen command whose code names no conversation of the customer's.
+	DropRefNotFound = "ref_not_found"
 )
 
 // Hold reasons.
 const (
 	HoldChannelOff = "channel_off"
 	HoldReview     = "review"
+	// HoldIntake keeps a chat's batch the rules decided only by default for intake to decide.
+	HoldIntake = "intake"
 )
 
 // InboundPart is the type's input: raw events in, normalized messages out.

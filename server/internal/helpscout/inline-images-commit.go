@@ -41,11 +41,15 @@ func (r *run) commitInlineImages(ctx context.Context, conversationKey, messageID
 		return err
 	}
 	embeds := map[string]string{}
+	var staleThumbs []string
 	for _, image := range images {
 		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + importkit.ImageExtension(image.contentType), ContentType: image.contentType, Object: image.object, Inline: image.dataURI != ""}
-		targetID, err := r.saveAttachment(ctx, tx, image.entry, image.found, input)
+		targetID, staleThumb, err := r.saveAttachment(ctx, tx, image.entry, image.found, input)
 		if err != nil {
 			return err
+		}
+		if staleThumb != "" {
+			staleThumbs = append(staleThumbs, staleThumb)
 		}
 		if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityInlineImage, sourceID: image.id, parentID: conversationKey, targetID: &targetID, status: ledgerDone}); err != nil {
 			return err
@@ -59,6 +63,12 @@ func (r *run) commitInlineImages(ctx context.Context, conversationKey, messageID
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit inline image import: %w", err)
+	}
+	// Thumbnails of the bytes reused rows held before go, unless another row still shows them.
+	for _, key := range staleThumbs {
+		if err := store.DiscardObject(ctx, r.db, r.opts.Storage, r.workspaceID, key); err != nil {
+			return err
+		}
 	}
 	return nil
 }

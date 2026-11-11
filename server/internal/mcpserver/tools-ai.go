@@ -99,7 +99,7 @@ func aiProviderRemove(c *call, arguments map[string]any) (any, error) {
 	return removed, nil
 }
 
-func aiSlotSetRequest(c *call, arguments map[string]any) (any, error) {
+func aiSlotSet(c *call, arguments map[string]any) (any, error) {
 	slot, _ := arguments["slot"].(string)
 	body := map[string]any{}
 	for key, value := range arguments {
@@ -107,7 +107,7 @@ func aiSlotSetRequest(c *call, arguments map[string]any) (any, error) {
 			body[key] = value
 		}
 	}
-	return ask(c, http.MethodPut, "/api/v1/ai/slots/"+url.PathEscape(slot), body)
+	return passOn(c, http.MethodPut, "/api/v1/ai/slots/"+url.PathEscape(slot), body)
 }
 
 func aiUsageGet(c *call, arguments map[string]any) (any, error) {
@@ -137,6 +137,8 @@ type aiDraftArguments struct {
 	DraftID        string `json:"draft_id"`
 	Prompt         string `json:"prompt"`
 	Wait           int    `json:"wait"`
+	Before         string `json:"before"`
+	Limit          int    `json:"limit"`
 }
 
 func aiDraftsPath(conversationID, rest string) string {
@@ -178,15 +180,23 @@ func aiDraftsList(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	var list struct {
-		Items []json.RawMessage `json:"items"`
+		Items      []json.RawMessage `json:"items"`
+		NextBefore *string           `json:"next_before"`
 	}
-	if err := c.get(aiDraftsPath(args.ConversationID, ""), nil, &list); err != nil {
+	query := url.Values{}
+	if args.Before != "" {
+		query.Set("before", args.Before)
+	}
+	if args.Limit > 0 {
+		query.Set("limit", strconv.Itoa(args.Limit))
+	}
+	if err := c.get(aiDraftsPath(args.ConversationID, ""), query, &list); err != nil {
 		return nil, err
 	}
 	if list.Items == nil {
 		list.Items = []json.RawMessage{}
 	}
-	return map[string]any{"drafts": list.Items}, nil
+	return map[string]any{"drafts": list.Items, "next_before": list.NextBefore}, nil
 }
 
 func aiDraftDiscard(c *call, arguments map[string]any) (any, error) {
@@ -359,13 +369,16 @@ func aiChatSessionGet(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"chat": chat}, nil
 }
 
-func aiChatSessionDeleteRequest(c *call, arguments map[string]any) (any, error) {
+func aiChatSessionDelete(c *call, arguments map[string]any) (any, error) {
 	path, err := aiChatPath(arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = aiChatNotFound
-	return ask(c, http.MethodDelete, path, nil)
+	if _, err := passOn(c, http.MethodDelete, path, nil); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": true}, nil
 }
 
 func aiChatPreview(c *call, arguments map[string]any) (any, error) {
@@ -374,4 +387,84 @@ func aiChatPreview(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	return answer, nil
+}
+
+const channelNotFound = "No channel of this workspace has that id. List them with colliedesk_channels_list."
+
+func channelAIGet(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	c.notFound = channelNotFound
+	var levels json.RawMessage
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/ai", nil, &levels); err != nil {
+		return nil, err
+	}
+	return map[string]any{"channel_ai": levels}, nil
+}
+
+func channelAIIntakeReadiness(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	scope, _ := arguments["scope"].(string)
+	c.notFound = channelNotFound
+	var readiness json.RawMessage
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/readiness", url.Values{"scope": {scope}}, &readiness); err != nil {
+		return nil, err
+	}
+	return map[string]any{"readiness": readiness}, nil
+}
+
+func channelAIIntakeEvaluationsList(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	query := url.Values{}
+	if scope, _ := arguments["scope"].(string); scope != "" {
+		query.Set("scope", scope)
+	}
+	c.notFound = channelNotFound
+	var page json.RawMessage
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/evaluations", query, &page); err != nil {
+		return nil, err
+	}
+	return page, nil
+}
+
+func channelAIIntakeEvaluationRecord(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	body := map[string]any{}
+	for key, value := range arguments {
+		if key != "channel_id" {
+			body[key] = value
+		}
+	}
+	c.notFound = channelNotFound
+	return passOn(c, http.MethodPost, "/api/v1/channels/"+url.PathEscape(id)+"/ai/intake/evaluations", body)
+}
+
+func channelAISet(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	slot, _ := arguments["slot"].(string)
+	body := map[string]any{}
+	for key, value := range arguments {
+		if key != "channel_id" && key != "slot" {
+			body[key] = value
+		}
+	}
+	c.notFound = channelNotFound
+	var levels json.RawMessage
+	if err := c.send(http.MethodPut, "/api/v1/channels/"+url.PathEscape(id)+"/ai/"+url.PathEscape(slot), body, &levels); err != nil {
+		return nil, err
+	}
+	return map[string]any{"channel_ai": levels}, nil
+}
+
+func aiSourceConsentSet(c *call, arguments map[string]any) (any, error) {
+	class, _ := arguments["source_class"].(string)
+	return passOn(c, http.MethodPut, "/api/v1/ai/source-consents/"+url.PathEscape(class), nil)
+}
+
+func aiSourceConsentRemove(c *call, arguments map[string]any) (any, error) {
+	class, _ := arguments["source_class"].(string)
+	var removed json.RawMessage
+	if err := c.send(http.MethodDelete, "/api/v1/ai/source-consents/"+url.PathEscape(class), nil, &removed); err != nil {
+		return nil, err
+	}
+	return removed, nil
 }

@@ -1,9 +1,9 @@
 package mcpserver
 
 // AI settings (docs/user/ai.md): the server's provider, the providers a workspace adds with its own
-// key, and which provider each feature uses. Reading needs a read token and never shows a key. The
-// provider tools need an admin token; the two that take a key refuse a lower tier outright. Turning a
-// feature on sends ticket data to a provider, so it always waits for a person.
+// key, and which provider each feature uses. Reading never shows a key. Each tool says the permissions
+// it needs; turning a feature on sends ticket data to a provider, so its description asks the model to
+// say so to its person first.
 
 const (
 	aiProviderIDProperty = `"provider_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_settings_get."}`
@@ -14,11 +14,21 @@ const (
 		`"models":{"type":"array","items":{"type":"string"},"description":"The first is the one a check uses."},` +
 		`"check_status":{"type":"string","enum":["ok","failing"]},"check_error_code":{"type":["string","null"]},"checked_at":{"type":"string"},` +
 		`"created_by":{"type":["string","null"]},"created_at":{"type":"string"},"updated_at":{"type":"string"},` +
-		`"used_by":{"type":"array","items":{"type":"string","enum":["triage","draft","chat"]}}}}`
+		`"used_by":{"type":"array","items":` + aiSlotName + `},` +
+		`"routing":{"anyOf":[` + aiRoutingSchema + `,{"type":"null"}],"description":"OpenRouter's routing by data policy; null on another server."}}}`
 
-	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","active"],"properties":{"slot":{"type":"string","enum":["triage","draft","chat"]},` +
+	aiRoutingSchema = `{"type":"object","additionalProperties":false,"required":["data_collection","zdr"],"properties":{` +
+		`"data_collection":{"type":"string","enum":["allow","deny"],"description":"deny: only providers that do not store or train on what they are sent."},` +
+		`"zdr":{"type":"boolean","description":"true: only providers with zero data retention."}}}`
+
+	aiSlotName  = `{"type":"string","enum":["triage","draft","chat","intake"]}`
+	aiLevelName = `{"type":"string","enum":["off","suggest","auto"]}`
+
+	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","default_level","active"],"properties":{"slot":` + aiSlotName + `,` +
 		`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":["string","null"]},"model":{"type":["string","null"]},` +
+		`"fallback_model":{"type":["string","null"],"description":"Intake only: the same provider's model it tries when model fails or answers what cannot be read."},` +
 		`"effort":{"type":"string","enum":["low","medium","high"]},"enabled":{"type":"boolean"},` +
+		`"default_level":` + aiLevelName + `,"automatic":{"type":"boolean","description":"Deprecated: default_level auto (triage) or suggest (drafts)."},` +
 		`"active":{"type":"boolean","description":"On, and its provider and model are still there: the feature runs."},` +
 		`"off_reason":{"type":["string","null"],"description":"Why a feature that is on cannot run: server_provider_missing, model_not_offered."},` +
 		`"consented_by":{"type":["string","null"]},"consented_at":{"type":["string","null"]},"updated_by":{"type":["string","null"]},"updated_at":{"type":["string","null"]},` +
@@ -35,14 +45,14 @@ func aiSettingsGetSpec() Spec {
 		Name:  "colliedesk_ai_settings_get",
 		Title: "Show the AI settings",
 		Description: `Show the workspace's AI settings: the server's provider (null when the server has none), the providers the workspace added ` +
-			`(never a key, only its last four characters), each feature (triage suggestions, reply drafts) with its provider, model and whether it is on ` +
-			`and can run, and the newest 50 changes with who made them. Every feature starts off.` +
-			"\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:  []string{"GET /api/v1/ai"},
-		Input: noArguments,
+			`(never a key, only its last four characters), each feature (triage suggestions, reply drafts, intake of chat messages) with its provider, model, ` +
+			`whether it is on and can run, and what it does by itself where no channel says otherwise (default_level), the levels channels set apart from it (channels), ` +
+			`the kinds of extra context intake may send (source_consents), and the newest 50 changes with who made them. Every feature starts off.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/ai"},
+		Input:    noArguments,
 		Output: `{"type":"object","required":["settings"],"properties":{"settings":{"type":"object","required":["server","providers","slots","events"],"properties":{` +
-			`"server":{"type":["object","null"]},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
+			`"server":{"type":["object","null"]},"server_off":{"type":["object","null"],"description":"Set (with the provider's label) while the operator switched the server's provider off: no feature can pick source server then."},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
 			`"events":{"type":"array","items":{"type":"object"}},"provider_limit":{"type":"integer"},"can_store_keys":{"type":"boolean"},"allow_private_base_urls":{"type":"boolean"}}}}}`,
 		run: aiSettingsGet,
 	}
@@ -54,10 +64,9 @@ func aiModelsListSpec() Spec {
 		Title: "List a provider's models",
 		Description: `List the models a key may use before adding the provider, to pick the models for colliedesk_ai_provider_add: anthropic (the Claude models, newest first) ` +
 			`or openai_compatible (GET {base_url}/models, sorted). Nothing is saved or billed. A provider that cannot list fails with ai_check_failed and check_error_code ` +
-			`(model_not_found when the server keeps no list: name the models yourself). The key passes through this conversation, so use a key you can revoke at the provider.` +
-			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
-		Tier: "admin", ReadOnly: true,
-		REST: []string{"POST /api/v1/ai/models"},
+			`(model_not_found when the server keeps no list: name the models yourself). The key passes through this conversation, so use a key you can revoke at the provider.`,
+		ReadOnly: true,
+		REST:     []string{"POST /api/v1/ai/models"},
 		Input: `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` +
 			`"kind":{"type":"string","enum":["anthropic","openai_compatible"]},"base_url":{"type":"string","maxLength":500},"api_key":{"type":"string","maxLength":500}}}`,
 		Output: `{"type":"object","required":["models"],"properties":{"models":{"type":"array","items":{"type":"string"}}}}`,
@@ -71,14 +80,14 @@ func aiProviderAddSpec() Spec {
 		Title: "Add an AI provider",
 		Description: `Add a provider with the workspace's own key: anthropic (the Claude API, no base_url) or openai_compatible (OpenAI, OpenRouter, vLLM, Ollama; ` +
 			`base_url with its version path, for example https://openrouter.ai/api/v1, public https unless the server operator allows private addresses). ` +
-			aiKeyNotice + ` A failed check saves nothing and says why (ai_check_failed with check_error_code). At most 5 providers; adding one turns no feature on.` +
-			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
-		Tier: "admin",
+			`On OpenRouter, routing keeps the requests on providers that do not store or train on data (data_collection deny) or keep nothing (zdr). ` +
+			aiKeyNotice + ` A failed check saves nothing and says why (ai_check_failed with check_error_code). At most 5 providers; adding one turns no feature on.`,
+
 		REST: []string{"POST /api/v1/ai/providers"},
 		Input: `{"type":"object","additionalProperties":false,"required":["kind","label","models"],"properties":{` +
 			`"kind":{"type":"string","enum":["anthropic","openai_compatible"]},"label":{"type":"string","minLength":1,"maxLength":80},` +
 			`"base_url":{"type":"string","maxLength":500},"api_key":{"type":"string","maxLength":500},` +
-			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}}}}`,
+			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}},"routing":` + aiRoutingSchema + `}}`,
 		Output: aiProviderOutput,
 		run:    aiProviderAdd,
 	}
@@ -88,27 +97,26 @@ func aiProviderUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_provider_update",
 		Title: "Change an AI provider",
-		Description: `Rename a provider or change its models. A new first model is checked (one billed request) before it is saved. ` +
+		Description: `Rename a provider, change its models, or change an OpenRouter provider's routing by data policy. A new first model is checked (one billed request) before it is saved. ` +
 			`The base URL never changes: a new address is another provider, added with its key, so its features need turning on again. ` +
-			`A model a feature uses cannot be removed (ai_model_in_use).` +
-			"\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST: []string{"PATCH /api/v1/ai/providers/{id}"},
+			`A model a feature uses, or intake's fallback model, cannot be removed (ai_model_in_use). Loosening routing ` +
+			`(data_collection deny to allow, zdr true to false) lets customers' data reach more providers: say so to the person you work for first.`,
+		Idempotent: true,
+		REST:       []string{"PATCH /api/v1/ai/providers/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `,` +
 			`"label":{"type":"string","minLength":1,"maxLength":80},` +
-			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}}}}`,
-		Output: aiProviderOutput,
+			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}},"routing":` + aiRoutingSchema + `}}`,
+		Output: `{"type":"object","required":["provider"],"properties":{"provider":` + aiProviderSchema + `}}`,
 		run:    aiProviderUpdate,
 	}
 }
 
 func aiProviderKeySetSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_ai_provider_key_set",
-		Title: "Replace an AI provider's key",
-		Description: `Replace a provider's key. ` + aiKeyNotice + ` When the check fails nothing changes and the old key keeps working.` +
-			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
-		Tier: "admin",
+		Name:        "colliedesk_ai_provider_key_set",
+		Title:       "Replace an AI provider's key",
+		Description: `Replace a provider's key. ` + aiKeyNotice + ` When the check fails nothing changes and the old key keeps working.`,
+
 		REST: []string{"PUT /api/v1/ai/providers/{id}/key"},
 		Input: `{"type":"object","additionalProperties":false,"required":["provider_id","api_key"],"properties":{` + aiProviderIDProperty + `,` +
 			`"api_key":{"type":"string","minLength":1,"maxLength":500}}}`,
@@ -122,9 +130,8 @@ func aiProviderCheckSpec() Spec {
 		Name:  "colliedesk_ai_provider_check",
 		Title: "Check an AI provider",
 		Description: `Send one small request to a provider's first model and record the result (check_status ok, or failing with check_error_code). ` +
-			`The provider bills it; it is counted as a check. At most 10 checks a minute in a workspace.` +
-			"\n\nTier: admin.",
-		Tier:   "admin",
+			`The provider bills it; it is counted as a check. At most 10 checks a minute in a workspace.`,
+
 		REST:   []string{"POST /api/v1/ai/providers/{id}/check"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
 		Output: aiProviderOutput,
@@ -136,29 +143,37 @@ func aiProviderRemoveSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_provider_remove",
 		Title: "Delete an AI provider",
-		Description: `Delete a provider and erase its key now. The features that used it turn off and stay off until an admin picks another provider ` +
-			`(turned_off lists them). It cannot be undone: there is no trash, so to bring it back add the provider again with its key.` +
-			"\n\nTier: admin.",
-		Tier: "admin", Destructive: true,
-		REST:   []string{"DELETE /api/v1/ai/providers/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
-		Output: `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":{"type":"string","enum":["triage","draft","chat"]}}}}`,
-		run:    aiProviderRemove,
+		Description: `Delete a provider and erase its key now. The features that used it turn off and stay off until someone picks another provider ` +
+			`(turned_off lists them). It cannot be undone: there is no trash, so to bring it back add the provider again with its key.`,
+		Destructive: true,
+		REST:        []string{"DELETE /api/v1/ai/providers/{id}"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
+		Output:      `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":` + aiSlotName + `}}}`,
+		run:         aiProviderRemove,
 	}
 }
 
-func aiSlotSetRequestSpec() Spec {
-	return approvalSpec("colliedesk_ai_slot_set_request", "Ask to set an AI feature",
-		`Ask to set one AI feature (triage suggestions, reply drafts, or AI chat on the help center): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
-			`automatic lets the feature run by itself: triage suggestions apply the auto_parts (tags, priority, assignee), filling only what nobody set; drafts are written for every customer message, never sent. Left out, it stays as it is. `+
-			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets, so a person always decides.`,
-		[]string{"PUT /api/v1/ai/slots/{slot}"},
-		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":{"type":"string","enum":["triage","draft","chat"]},`+
-			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
-			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},`+
-			`"automatic":{"type":"boolean","description":"The feature runs by itself. Off with the feature and when it moves to another provider."},`+
-			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."},`+
-			`"monthly_cap_micro_usd":{"type":["integer","null"],"minimum":1,"description":"AI chat only: the most it may spend a UTC month in millionths of a US dollar on the workspace's own provider. Left out: kept; null removes it."}}}`, aiSlotSetRequest)
+func aiSlotSetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_slot_set",
+		Title: "Set an AI feature",
+		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model (a workspace provider's; the server's provider runs the model its operator picks), effort, and on or off. ` +
+			`default_level is what it does by itself where no channel says otherwise: off (only when someone asks), suggest (triage suggests for every new conversation; drafts are written when a customer writes, never sent; intake suggests in Review) ` +
+			`or auto (triage only: suggestions apply the auto_parts, filling only what nobody set). Left out, it stays as it is; turned on, or moved to another provider, the feature starts at suggest (triage) or off. ` +
+			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets: say so to the person you work for before you turn one on.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/ai/slots/{slot}"},
+		Input: `{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":` + aiSlotName + `,` +
+			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200,"description":"One of the provider's models; left out, its first. On the server's provider (source server) it is ignored: its operator picks the model."},` +
+			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept. On the server's provider it is ignored: its operator picks it."},` +
+			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},` +
+			`"default_level":` + aiLevelName + `,` +
+			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},` +
+			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."},` +
+			`"monthly_cap_micro_usd":{"type":["integer","null"],"minimum":1,"description":"AI chat only: the most it may spend a UTC month in millionths of a US dollar on the workspace's own provider. Left out: kept; null removes it."}}}`,
+		Output: aiSlotSchema,
+		run:    aiSlotSet,
+	}
 }
 
 func aiUsageGetSpec() Spec {
@@ -166,11 +181,11 @@ func aiUsageGetSpec() Spec {
 		Name:  "colliedesk_ai_usage_get",
 		Title: "Show AI usage",
 		Description: `Show one UTC month of the workspace's AI calls per feature and provider: calls, failed and automatic calls, tokens in and out, ` +
-			`and what the server's provider spent in micro-dollars, with this month's allowance when the server sets one. No prompt or answer is ever stored.` +
-			"\n\nTier: admin.",
-		Tier: "admin", ReadOnly: true,
-		REST:  []string{"GET /api/v1/ai/usage"},
-		Input: `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
+			`what the server's provider spent in micro-dollars, and provider_cost: what the provider itself reported, in its own unit (OpenRouter: credits, not dollars), ` +
+			`with this month's allowance when the server sets one. No prompt or answer is ever stored.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/ai/usage"},
+		Input:    `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
 		Output: `{"type":"object","required":["usage"],"properties":{"usage":{"type":"object","required":["month","rows"],"properties":{"month":{"type":"string"},` +
 			`"allowance":{"type":["object","null"]},"rows":{"type":"array","items":{"type":"object"}}}}}}`,
 		run: aiUsageGet,
@@ -182,30 +197,41 @@ func aiAutomaticLimitsSetSpec() Spec {
 		Name:  "colliedesk_ai_automatic_limits_set",
 		Title: "Set the automatic AI limits",
 		Description: `Set how many automatic AI tasks (a triage suggestion for each new ticket) the workspace runs a UTC day and a minute; ` +
-			`the defaults are 300 and 30. Past the daily limit automatic tasks wait for the next day; what a person asks for is never limited this way.` +
-			"\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST: []string{"PUT /api/v1/ai/automatic-limits"},
+			`the defaults are 300 and 30, with at most draft_per_day automatic drafts (100) and intake_per_day intake decisions (300) inside them. Past the daily limit automatic tasks wait for the next day; what a person asks for is never limited this way.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/ai/automatic-limits"},
 		Input: `{"type":"object","additionalProperties":false,"required":["per_day","per_minute"],"properties":{` +
 			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000},` +
-			`"draft_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Automatic drafts a day, inside per_day; kept when left out."}}}`,
+			`"draft_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Automatic drafts a day, inside per_day; kept when left out."},` +
+			`"intake_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Intake decisions a day, inside per_day; kept when left out."}}}`,
 		Output: `{"type":"object","required":["automatic"],"properties":{"automatic":{"type":"object","required":["per_day","per_minute","used_today"],"properties":{` +
 			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]},` +
-			`"draft_per_day":{"type":"integer"},"drafts_today":{"type":"integer"},"drafts_paused_until":{"type":["string","null"]},"drafts_reserved_until":{"type":["string","null"]}}}}}`,
+			`"draft_per_day":{"type":"integer"},"drafts_today":{"type":"integer"},"drafts_paused_until":{"type":["string","null"]},"drafts_reserved_until":{"type":["string","null"]},` +
+			`"intake_per_day":{"type":"integer"},"intake_today":{"type":"integer"},"intake_paused_until":{"type":["string","null"]}}}}}`,
 		run: aiAutomaticLimitsSet,
 	}
 }
 
 const (
 	aiDraftConversationProperty = `"conversation_id":{"type":"string",` + uuid + `}`
-	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create or colliedesk_ai_drafts_list."}`
+	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create, colliedesk_reply_draft or colliedesk_ai_drafts_list."}`
+
+	// draftFilesSchema lists the files left with a written draft.
+	draftFilesSchema = `{"type":"array","description":"Files left with the draft; only the team sees them until a person sends it. Read one with colliedesk_attachment_get (attachment_id, conversation_id, draft_id).",` +
+		`"items":{"type":"object","required":["id","filename","size"],"properties":{"id":{"type":"string"},"filename":{"type":"string"},"content_type":{"type":"string"},"size":{"type":"integer","description":"Bytes."}}}}`
 
 	aiDraftSchema = `{"type":"object","required":["id","conversation_id","status"],"properties":{"id":{"type":"string"},"conversation_id":{"type":"string"},` +
 		`"status":{"type":"string","enum":["queued","running","ready","failed","cancelled"]},"error_code":{"type":["string","null"]},` +
 		`"prompt":{"type":"string"},"text":{"type":["string","null"],"description":"The draft, plain text, once ready. Generated text, not something a customer wrote."},` +
 		`"missing_info":{"type":["string","null"]},"sources":{"type":"array","items":{"type":"object"}},` +
 		`"warnings":{"type":"array","items":{"type":"object"},"description":"An address, a number or another customer's name in the draft that the conversation does not hold."},` +
-		`"outcome":{"type":["string","null"]},"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]}}}`
+		`"outcome":{"type":["string","null"],"description":"Null while it waits for a person; superseded, expired and discarded written drafts can come back with colliedesk_reply_draft_restore."},` +
+		`"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]},` +
+		`"source":{"type":"string","enum":["ai","written"],"description":"ai: written by the built-in AI; written: left by a token or a person (colliedesk_reply_draft)."},` +
+		`"cc":{"type":["array","null"],"items":{"type":"string"}},` +
+		`"written_by":{"type":["object","null"],"description":"Who left a written draft.","properties":{"token_label":{"type":["string","null"]},"agent_name":{"type":"string"}}},` +
+		`"files":` + draftFilesSchema + `,` +
+		`"decided_by_name":{"type":["string","null"],"description":"Who sent, discarded or replaced it."},"restored_at":{"type":["string","null"]}}}`
 
 	aiDraftOutput = `{"type":"object","required":["draft"],"properties":{"draft":` + aiDraftSchema + `}}`
 )
@@ -217,9 +243,8 @@ func aiDraftCreateSpec() Spec {
 		Description: `Ask the workspace's AI provider for a draft of a reply to a conversation, with an optional prompt (what the reply should say). ` +
 			`It is written in the background from the conversation (never its private notes), matching knowledge base articles and similar solved tickets; ` +
 			`poll colliedesk_ai_draft_get with wait. The draft is never sent: a person (or colliedesk_reply_send with ai_draft_id) sends a reply. ` +
-			`Fails with ai_feature_off when reply drafts are off, ai_allowance_reached when the included AI is used up.` +
-			"\n\nTier: draft.",
-		Tier: "draft",
+			`Fails with ai_feature_off when reply drafts are off, ai_allowance_reached when the included AI is used up.`,
+
 		REST: []string{"POST /api/v1/conversations/{id}/ai-drafts"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `,` +
 			`"prompt":{"type":"string","maxLength":2000}}}`,
@@ -233,10 +258,9 @@ func aiDraftGetSpec() Spec {
 		Name:  "colliedesk_ai_draft_get",
 		Title: "Show an AI reply draft",
 		Description: `Show one AI draft of a conversation: its status (queued, running, ready, failed, cancelled), the text once ready, its sources and warnings. ` +
-			`wait (up to 20 seconds) waits while it is being written.` +
-			"\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/conversations/{id}/ai-drafts/{draftId}"},
+			`wait (up to 20 seconds) waits while it is being written.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/conversations/{id}/ai-drafts/{draftId}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `,` +
 			`"wait":{"type":"integer","minimum":0,"maximum":20,"default":0}}}`,
 		Output: aiDraftOutput,
@@ -246,28 +270,32 @@ func aiDraftGetSpec() Spec {
 
 func aiDraftsListSpec() Spec {
 	return Spec{
-		Name:        "colliedesk_ai_drafts_list",
-		Title:       "List a conversation's AI drafts",
-		Description: `List a conversation's newest AI drafts (at most 20), newest first, with how each ended.` + "\n\nTier: read.",
-		Tier:        "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/conversations/{id}/ai-drafts"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
-		Output: `{"type":"object","required":["drafts"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `}}}`,
-		run:    aiDraftsList,
+		Name:  "colliedesk_ai_drafts_list",
+		Title: "List a conversation's AI drafts",
+		Description: `List a conversation's drafts, newest first, with how each ended: the built-in AI's and the written ones (colliedesk_reply_draft), ` +
+			`with their files. A written draft with outcome superseded, expired or discarded is an earlier draft: colliedesk_reply_draft_restore brings it back. ` +
+			`limit drafts come per call (20 unless set, at most 50); when next_before is not null, call again with it as before for the older ones.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/conversations/{id}/ai-drafts"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `,` +
+			`"before":{"type":"string",` + uuid + `,"description":"next_before of the page you read: lists the drafts older than it."},` +
+			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20}}}`,
+		Output: `{"type":"object","required":["drafts","next_before"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `},` +
+			`"next_before":{"type":["string","null"],"description":"Pass it as before for the next page; null on the last page."}}}`,
+		run: aiDraftsList,
 	}
 }
 
 func aiDraftDiscardSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_ai_draft_discard",
-		Title: "Discard an AI reply draft",
-		Description: `Stop an AI draft still being written, or discard a ready one. Nothing reaches the customer either way; a new draft can be asked for.` +
-			"\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST:   []string{"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `}}`,
-		Output: aiDraftOutput,
-		run:    aiDraftDiscard,
+		Name:        "colliedesk_ai_draft_discard",
+		Title:       "Discard an AI reply draft",
+		Description: `Stop an AI draft still being written, or discard a ready one. Nothing reaches the customer either way; a new draft can be asked for.`,
+		Idempotent:  true,
+		REST:        []string{"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `}}`,
+		Output:      aiDraftOutput,
+		run:         aiDraftDiscard,
 	}
 }
 
@@ -293,11 +321,10 @@ func aiTriageGetSpec() Spec {
 		Name:  "colliedesk_ai_triage_get",
 		Title: "Show a conversation's AI triage suggestion",
 		Description: `Show the newest AI triage suggestion of a conversation (tags, priority, assignee, a one-sentence reason), or null. ` +
-			`A new ticket gets one by itself when triage is on. Nothing is applied until someone accepts it.` +
-			"\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:  []string{"GET /api/v1/conversations/{id}/ai-triage"},
-		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
+			`A new ticket gets one by itself when triage is on. Nothing is applied until someone accepts it.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/conversations/{id}/ai-triage"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
 		Output: `{"type":"object","required":["suggestion"],"properties":{"suggestion":{"oneOf":[{"type":"null"},` + aiTriageSchema + `]},` +
 			`"auto_applied":{"description":"The newest suggestion AI applied by itself, which a later one asked for by hand does not hide.","oneOf":[{"type":"null"},` + aiTriageSchema + `]}}}`,
 		run: aiTriageGet,
@@ -309,9 +336,8 @@ func aiTriageCreateSpec() Spec {
 		Name:  "colliedesk_ai_triage_create",
 		Title: "Ask Colliedesk AI for a triage suggestion",
 		Description: `Ask the workspace's AI provider again for tags, a priority and an assignee for a conversation; it replaces the open suggestion ` +
-			`and is written in the background (poll colliedesk_ai_triage_get). Fails with ai_feature_off when triage is off.` +
-			"\n\nTier: draft.",
-		Tier:   "draft",
+			`and is written in the background (poll colliedesk_ai_triage_get). Fails with ai_feature_off when triage is off.`,
+
 		REST:   []string{"POST /api/v1/conversations/{id}/ai-triage"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
 		Output: aiTriageOutput,
@@ -324,10 +350,9 @@ func aiTriageAcceptSpec() Spec {
 		Name:  "colliedesk_ai_triage_accept",
 		Title: "Accept an AI triage suggestion",
 		Description: `Apply an open triage suggestion to its conversation: the rest of it, or only the tag_ids, priority or assignee_agent_id you pass (each from the suggestion). ` +
-			`A part applied leaves the rest open until it is all applied or dismissed. Tags are added, never removed; undo with colliedesk_conversation_update.` +
-			"\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST: []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept"},
+			`A part applied leaves the rest open until it is all applied or dismissed. Tags are added, never removed; undo with colliedesk_conversation_update.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `,` +
 			`"tag_ids":{"type":"array","items":{"type":"string",` + uuid + `}},"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee_agent_id":{"type":"string",` + uuid + `}}}`,
 		Output: aiTriageOutput,
@@ -341,10 +366,9 @@ func aiTriageUndoSpec() Spec {
 		Title: "Undo what AI applied of a triage suggestion",
 		Description: `Take back what AI applied of a triage suggestion by itself: the parts named (tags, priority, assignee), or all of it. ` +
 			`A part goes back only while it is still what AI set; a part a person changed since is kept, and the suggestion lists it under kept. ` +
-			`Undoing again changes nothing; colliedesk_ai_triage_accept applies it again.` +
-			"\n\nTier: draft.",
-		Tier: "draft", Idempotent: true,
-		REST: []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo"},
+			`Undoing again changes nothing; colliedesk_ai_triage_accept applies it again.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `,` +
 			`"parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]}}}}`,
 		Output: aiTriageOutput,
@@ -356,11 +380,151 @@ func aiTriageDismissSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_ai_triage_dismiss",
 		Title:       "Dismiss an AI triage suggestion",
-		Description: `Dismiss the rest of a triage suggestion, or stop one being written. Nothing changes on the conversation.` + "\n\nTier: draft.",
-		Tier:        "draft", Idempotent: true,
-		REST:   []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `}}`,
-		Output: aiTriageOutput,
-		run:    aiTriageDismiss,
+		Description: `Dismiss the rest of a triage suggestion, or stop one being written. Nothing changes on the conversation.`,
+		Idempotent:  true,
+		REST:        []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `}}`,
+		Output:      aiTriageOutput,
+		run:         aiTriageDismiss,
+	}
+}
+
+const (
+	channelAIScopeInput = `"scope":{"type":"string","pattern":"^[a-z_]{0,40}$","description":"'' for the whole channel, or one of its type's scopes (a chat's direct, group): colliedesk_channel_ai_get lists them."}`
+	intakeOptionsInput  = `"options":{"type":"object","additionalProperties":false,"description":"Intake only; a field left out keeps its default.","properties":{` +
+		`"create_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.85."},"attach_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.90."},` +
+		`"ignore_threshold":{"type":"number","minimum":0.5,"maximum":0.99,"description":"Default 0.95."},` +
+		`"attach_requires_single_candidate":{"type":"boolean","description":"Never attach by itself while the customer has two or more unresolved conversations among the candidates, however sure AI is (not_applied_reason several_candidates). Default false: AI sure enough attaches to the conversation it names."},` +
+		`"auto_max_age_seconds":{"type":"integer","minimum":60,"maximum":86400,"description":"Older batches are only suggested. Default 7200."},` +
+		`"reopen_window_days":{"type":"integer","minimum":0,"maximum":90,"description":"How long a resolved conversation stays a candidate. Default 7."},` +
+		`"sources":{"type":"object","additionalProperties":{"type":"boolean"},"description":"Context sources on or off: incoming, thread_window, open_conversations, corrections (off by default), contact, kb, images."},` +
+		`"instructions":{"type":"string","maxLength":4000,"description":"The channel's own words added to the prompt."},` +
+		`"redact_keywords":{"type":"array","maxItems":100,"items":{"type":"string","minLength":1,"maxLength":80},"description":"Words that mark a secret in the channel's language."},` +
+		`"contact_labels":{"type":"object","additionalProperties":false,"description":"Words of the channel's language that name a bank account (account) or an identity document (id) before its number, which is masked.",` +
+		`"properties":{"account":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}},"id":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}}}},` +
+		`"redact_patterns":{"type":"array","maxItems":20,"description":"The channel's own shapes of an identifier no word names, in RE2 syntax, each masked as its kind.",` +
+		`"items":{"type":"object","additionalProperties":false,"required":["pattern","mask"],"properties":{"pattern":{"type":"string","minLength":1,"maxLength":200},` +
+		`"mask":{"type":"string","enum":["phone","id_number","account_number","hidden"]}}}},` +
+		`"gate_override":{"type":"array","maxItems":3,"items":{"type":"string","enum":["create","attach","ignore"]},"description":"Actions AI may take on its own before readiness shows it is ready; needs gate_override_reason."},` +
+		`"gate_override_reason":{"type":"string","maxLength":500,"description":"Why the gates were opened by hand."}}}`
+	channelAISchema = `{"type":"object","required":["channel_id","scopes"],"properties":{"channel_id":{"type":"string"},"scopes":{"type":"array","items":{"type":"object","required":["scope","slots"],` +
+		`"properties":{"scope":{"type":"string"},"slots":{"type":"array","items":{"type":"object","required":["slot","level","effective_level","source","off_reason"],"properties":{` +
+		`"slot":` + aiSlotName + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}],"description":"This scope's own level; null follows the channel, then the workspace."},` +
+		`"effective_level":` + aiLevelName + `,"source":{"type":"string","enum":["scope","channel","workspace"]},` +
+		`"off_reason":{"type":["string","null"],"description":"workspace_off: the workspace has not turned the feature on, so nothing runs."},"options":{"type":["object","null"]}}}}}}}}}`
+)
+
+func channelAIGetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_channel_ai_get",
+		Title: "Show a channel's AI levels",
+		Description: `Show what each AI feature does by itself on a channel and on each scope of its type (a chat's one-to-one messages and groups): ` +
+			`its own level (null: it follows the channel, then the workspace's default), the level that runs, and why it is off (workspace_off when the workspace has not turned the feature on). ` +
+			`Triage and drafts are on every channel; intake only on a chat channel's scopes, never on email or a web form.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/{id}/ai"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output:   `{"type":"object","required":["channel_ai"],"properties":{"channel_ai":` + channelAISchema + `}}`,
+		run:      channelAIGet,
+	}
+}
+
+const intakeReadinessSchema = `{"type":"object","required":["channel_id","scope","model","prompt_version","actions","applied","estimate"],"properties":{` +
+	`"channel_id":{"type":"string"},"scope":{"type":"string"},"model":{"type":"string"},"prompt_version":{"type":"string"},` +
+	`"actions":{"type":"array","items":{"type":"object","required":["action","gate","labels","correct","missing"],"properties":{"action":{"type":"string","enum":["create","attach","ignore"]},` +
+	`"gate":{"type":"string","enum":["open","closed","overridden"]},"labels":{"type":"integer"},"correct":{"type":"integer"},"wrong":{"type":"integer"},"severe":{"type":"integer"},` +
+	`"needed":{"type":"integer"},"accuracy_needed":{"type":"number"},"missing":{"type":"array","items":{"type":"string"}},"live":{"type":"object"},"evaluation":{"type":["object","null"]}}}},` +
+	`"applied":{"type":"object"},"estimate":{"type":"object"}}}`
+
+const intakeCountsInput = `{"type":"object","additionalProperties":false,"required":["labels","correct","severe","light"],"properties":{"labels":{"type":"integer","minimum":0},` +
+	`"correct":{"type":"integer","minimum":0},"severe":{"type":"integer","minimum":0},"light":{"type":"integer","minimum":0}}}`
+
+func channelAIIntakeReadinessSpec() Spec {
+	return Spec{
+		Name: "colliedesk_channel_ai_intake_readiness_get", Title: "Show whether intake's AI may act on its own",
+		Description: `Show, for a chat channel's scope, whether intake's AI may take each action (create, attach, ignore) on its own at auto: its gate (open, closed, overridden by an admin), ` +
+			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the prompt it runs, on any model), what keeps it closed (labels, accuracy, severe, junk), ` +
+			`how much of what AI did on its own people corrected, and what a month costs. A closed action stays a suggestion.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/readiness"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id","scope"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
+		Output:   `{"type":"object","required":["readiness"],"properties":{"readiness":` + intakeReadinessSchema + `}}`,
+		run:      channelAIIntakeReadiness,
+	}
+}
+
+func channelAIIntakeEvaluationsListSpec() Spec {
+	return Spec{
+		Name: "colliedesk_channel_ai_intake_evaluations_list", Title: "List intake's offline evaluations",
+		Description: `List the offline evaluations recorded for a chat channel's intake, newest first: the model and prompt version each ran, the dataset's SHA-256 and the counts per action. ` +
+			`Only a run of the prompt version intake runs now counts towards readiness, whichever model it ran.`,
+		ReadOnly: true,
+		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/evaluations"},
+		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
+		Output:   `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object"}}}}`,
+		run:      channelAIIntakeEvaluationsList,
+	}
+}
+
+func channelAIIntakeEvaluationRecordSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_channel_ai_intake_evaluation_record",
+		Title: "Record an intake evaluation",
+		Description: `Record the counts of an offline evaluation of a chat channel's scope (run with collie intake-eval): model, prompt_version, dataset_sha256 and, per action, ` +
+			`labels, correct, severe and light. It counts towards readiness while intake runs that prompt version, on any model, and can open a gate, so record only counts you ran yourself.`,
+		REST: []string{"POST /api/v1/channels/{id}/ai/intake/evaluations"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","scope","model","prompt_version","dataset_sha256","counts"],"properties":{` + channelIDInput + `,` +
+			`"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"model":{"type":"string","minLength":1,"maxLength":200},"prompt_version":{"type":"string","minLength":1,"maxLength":80},` +
+			`"dataset_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"counts":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{` +
+			`"create":` + intakeCountsInput + `,"attach":` + intakeCountsInput + `,"ignore":` + intakeCountsInput + `}}}}`,
+		Output: `{"type":"object","description":"The recorded evaluation."}`,
+		run:    channelAIIntakeEvaluationRecord,
+	}
+}
+
+func channelAISetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_channel_ai_set",
+		Title: "Set a channel's AI level",
+		Description: `Set what one AI feature (triage, draft, intake) does by itself on a channel or one of its scopes: off, suggest, auto, or null to follow the channel and the workspace. ` +
+			`Drafts go up to suggest (AI never sends); intake exists only on a chat channel's scopes (intake_not_supported otherwise) and takes options. ` +
+			`A level only decides the AI's own work; people can still ask by hand while the workspace has the feature on. ` +
+			`A change that lets AI do more by itself (a higher level, a lower threshold, a source turned on, other instructions) ` +
+			`acts on customers without a person: say so to the person you work for first.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/channels/{id}/ai/{slot}"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","slot","scope","level"],"properties":{` + channelIDInput + `,"slot":` + aiSlotName + `,` +
+			channelAIScopeInput + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}]},` + intakeOptionsInput + `}}`,
+		Output: `{"type":"object","required":["channel_ai"],"properties":{"channel_ai":` + channelAISchema + `}}`,
+		run:    channelAISet,
+	}
+}
+
+func aiSourceConsentSetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_source_consent_set",
+		Title: "Let intake send more data",
+		Description: `Consent that AI intake may send one more kind of context to its provider besides the conversation's text: images (pictures customers sent), ` +
+			`contact_profile (the customer's name, company and open conversations), or external:<name> (an integration's data). Without it intake leaves that source out. ` +
+			`The consent is recorded in the name of the person this token acts as; take it back with colliedesk_ai_source_consent_remove.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/ai/source-consents/{class}"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["source_class"],"properties":{"source_class":{"type":"string","pattern":"^(images|contact_profile|external:[a-z0-9_]{1,40})$"}}}`,
+		Output:     `{"type":"object","required":["source_class","consented_at"],"properties":{"source_class":{"type":"string"},"consented_by":{"type":["string","null"]},"consented_at":{"type":"string"}}}`,
+		run:        aiSourceConsentSet,
+	}
+}
+
+func aiSourceConsentRemoveSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_source_consent_remove",
+		Title: "Stop intake sending some data",
+		Description: `Take back the consent that AI intake may send a kind of context (images, contact_profile, external:<name>); intake leaves it out from its next decision. ` +
+			`removed is false when there was no consent. Giving it again needs colliedesk_ai_source_consent_set.`,
+		Idempotent: true,
+		REST:       []string{"DELETE /api/v1/ai/source-consents/{class}"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["source_class"],"properties":{"source_class":{"type":"string","pattern":"^(images|contact_profile|external:[a-z0-9_]{1,40})$"}}}`,
+		Output:     `{"type":"object","required":["removed"],"properties":{"removed":{"type":"boolean"}}}`,
+		run:        aiSourceConsentRemove,
 	}
 }

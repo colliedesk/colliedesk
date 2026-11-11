@@ -158,6 +158,37 @@ func TestCheckoutOfFoundingIsRefusedOnceClosedAndOtherPlansStillWork(t *testing.
 	}
 }
 
+// A team of 11 to 25 agents buys Team 25 while Founding still has slots: the web app offers both
+// side by side, so the server must sell both, each with its own product.
+func TestTeam25CheckoutIsSoldWhileFoundingIsOpen(t *testing.T) {
+	for plan, product := range map[string]string{"team25_monthly": productTeam25Monthly, "team25_yearly": productTeam25Yearly} {
+		t.Run(plan, func(t *testing.T) {
+			f := newBillingFixture(t)
+			f.fake.setHolders(productFounding, 3)
+			if err := f.refreshFounding(); err != nil {
+				t.Fatal(err)
+			}
+			if !f.offersFounding(t) {
+				t.Fatal("Founding is not offered with 3 of 10 slots taken")
+			}
+			if offered := "," + strings.Join(getBilling(t, f.api, f.adminA).CheckoutPlans, ",") + ","; !strings.Contains(offered, ","+plan+",") {
+				t.Fatalf("checkout_plans=%s does not list %s while Founding is open", offered, plan)
+			}
+			response := f.checkout(t, plan)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s, want 200", response.Code, response.Body.String())
+			}
+			checkouts := f.fake.callsTo("/v1/checkouts/")
+			if len(checkouts) != 1 {
+				t.Fatalf("checkout calls=%v, want one", checkouts)
+			}
+			if products, _ := checkouts[0].Body["products"].([]any); len(products) != 1 || products[0] != product {
+				t.Fatalf("polar products=%v, want only %s", products, product)
+			}
+		})
+	}
+}
+
 func TestNinthSlotLeavesFoundingOpen(t *testing.T) {
 	f := newBillingFixture(t)
 	f.fake.setHolders(productFounding, 9)

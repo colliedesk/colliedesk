@@ -37,6 +37,8 @@ interface FixesPageProps {
   // The counts of the whole workspace (the rail's), shown when nothing is filtered.
   counts?: { needs_person: number; running: number };
   repos: Repo[];
+  // agents are the coding agents the workspace has turned on.
+  agents: FixConnector[];
   repoId?: string;
   connector?: FixConnector;
   onFilter: (repoId: string | undefined, connector: FixConnector | undefined) => void;
@@ -75,7 +77,7 @@ function Rows({ items, timezone, now, conversationLink }: { items: Fix[]; timezo
 }
 
 // FixesPage lists every fix of the workspace in three groups: those that need a person, running, done.
-export function FixesPage({ groups, counts, repos, repoId, connector, onFilter, timezone, now, onRetry, conversationLink, settingsLink, inboxLink }: FixesPageProps) {
+export function FixesPage({ groups, counts, repos, agents, repoId, connector, onFilter, timezone, now, onRetry, conversationLink, settingsLink, inboxLink }: FixesPageProps) {
   const t = m.fixes;
   const filtered = Boolean(repoId || connector);
   const all = order.map((group) => groups[group]);
@@ -83,14 +85,18 @@ export function FixesPage({ groups, counts, repos, repoId, connector, onFilter, 
   const loading = all.some((rows) => rows.load === 'loading');
   const empty = !failed && !loading && all.every((rows) => rows.items.length === 0);
   const repoName = repos.find((repo) => repo.id === repoId)?.full_name;
+  // A filter is offered only with two values to choose between; one set in the address stays on screen so it can be cleared.
+  const agentChoices = connectors.filter((kind) => kind === connector || agents.includes(kind));
+  const showRepos = repos.length > 1 || Boolean(repoId);
+  const showAgents = agentChoices.length > 1 || Boolean(connector);
   return (
     <main className="settings-page af-fixes" aria-busy={loading}>
       <header className="af-page-head"><div><h1>{t.heading}</h1><p>{t.description}</p></div>{settingsLink(m.settings)}</header>
-      {(!empty || filtered) && <div className="af-bar-row">
-        <label><span className="sr-only">{m.repository}</span><select value={repoId ?? ''} onChange={(event) => onFilter(event.target.value || undefined, connector)}>
-          <option value="">{t.allRepos}</option>{repos.map((repo) => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}</select></label>
-        <label><span className="sr-only">{m.agent}</span><select value={connector ?? ''} onChange={(event) => onFilter(repoId, (event.target.value || undefined) as FixConnector | undefined)}>
-          <option value="">{t.allAgents}</option>{connectors.map((kind) => <option key={kind} value={kind}>{m.vendor(kind)}</option>)}</select></label>
+      {(!empty || filtered) && (showRepos || showAgents) && <div className="af-bar-row">
+        {showRepos && <label><span className="sr-only">{m.repository}</span><select value={repoId ?? ''} onChange={(event) => onFilter(event.target.value || undefined, connector)}>
+          <option value="">{t.allRepos}</option>{repos.map((repo) => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}</select></label>}
+        {showAgents && <label><span className="sr-only">{m.agent}</span><select value={connector ?? ''} onChange={(event) => onFilter(repoId, (event.target.value || undefined) as FixConnector | undefined)}>
+          <option value="">{t.allAgents}</option>{agentChoices.map((kind) => <option key={kind} value={kind}>{m.vendor(kind)}</option>)}</select></label>}
       </div>}
       {failed && <div className="af-empty panel" role="alert"><p className="error-copy">{t.failed}</p><button type="button" onClick={onRetry}>{m.tryAgain}</button></div>}
       {empty && !filtered && <div className="af-empty panel"><b>{t.emptyTitle}</b><span>{t.emptyHelp}</span>{inboxLink(t.openInbox)}</div>}

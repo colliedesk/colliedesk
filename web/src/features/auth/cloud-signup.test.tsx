@@ -106,3 +106,42 @@ test('records Claude as the single selected acquisition source', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
   await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Claude Team', { goal: 'leave_helpdesk', role: 'founder', source: 'ai_claude' }));
 });
+
+// A visitor who came to buy, or for a plan, has decided: the workspace name is the only required answer.
+test('a buyer is asked for the workspace name only, and the three questions wait collapsed under an optional heading', async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignup buying optionalQuestions onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  const section = screen.getByText('Tell us about your team (optional)').closest('details');
+  expect(section).not.toHaveAttribute('open');
+  for (const question of ['What do you want Colliedesk to do for you first?', 'What is your role?', 'Where did you hear about Colliedesk?']) {
+    expect(within(section as HTMLElement).getByText(question)).toBeInTheDocument();
+  }
+  fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: ' Acme Support ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create workspace and continue to payment' }));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', {}));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('a buyer who answers some of the optional questions sends those answers and no others', async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignup buying optionalQuestions onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  chooseSignupAnswer('Where did you hear about Colliedesk?', 'TikTok');
+  fireEvent.click(screen.getByRole('button', { name: 'Create workspace and continue to payment' }));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', { source: 'tiktok' }));
+});
+
+test('a visitor who came for a plan keeps the trial wording and gets the same optional questions', async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignup optionalQuestions onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  expect(screen.getByText('Tell us about your team (optional)')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', {}));
+});
+
+test('a trial sign-up without an intent keeps the questions required and outside any optional section', () => {
+  render(<CloudSignup onCreate={vi.fn()} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  expect(screen.queryByText(/\(optional\)/i)).not.toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'What do you want Colliedesk to do for you first?' }).closest('details')).toBeNull();
+});

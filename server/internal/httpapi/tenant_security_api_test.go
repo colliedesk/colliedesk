@@ -15,10 +15,8 @@ func TestAgentCannotRevokeAnotherAgentsSession(t *testing.T) {
 	second := redeemLabelled(t, api, secondURL, "Second agent")
 	secondID := findSessionID(t, api, admin, "Second agent")
 
-	denied := request(t, api, http.MethodDelete, "/api/v1/auth/sessions/"+secondID, nil, first, nil)
-	if denied.Code != http.StatusNotFound {
-		t.Fatalf("foreign session revoke status=%d, want 404", denied.Code)
-	}
+	// Signing someone else out takes team:revoke, which the Agent role does not hold.
+	refused(t, api, http.MethodDelete, "/api/v1/auth/sessions/"+secondID, nil, first, "team:revoke")
 	if me := request(t, api, http.MethodGet, "/api/v1/auth/me", nil, second, nil); me.Code != http.StatusOK {
 		t.Fatalf("other agent session was revoked: status=%d", me.Code)
 	}

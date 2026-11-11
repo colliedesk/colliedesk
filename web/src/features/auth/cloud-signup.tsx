@@ -7,12 +7,15 @@ import { signupMessages } from './signup-messages';
 
 interface CloudSignupProps {
   // onCreate rejects with a SignupError that says why the server refused.
-  onCreate: (workspaceName: string, answers: SignupAnswers) => Promise<void>;
+  onCreate: (workspaceName: string, answers: Partial<SignupAnswers>) => Promise<void>;
   // onSignIn leaves sign-up for the sign-in of an existing workspace.
   onSignIn: () => void;
   onUseAnotherAccount: () => void;
   // buying is true when the visitor came to buy a plan: payment follows, not a free trial.
   buying?: boolean;
+  // optionalQuestions is true for a visitor who came with a plan in mind (to buy it, or to try it): the
+  // workspace name is then the only answer asked for, and the three questions wait, collapsed, to be answered or not.
+  optionalQuestions?: boolean;
 }
 
 const nameLength = { min: 2, max: 60 };
@@ -29,7 +32,7 @@ function complete(answers: Partial<SignupAnswers>): answers is SignupAnswers {
 }
 
 // CloudSignup is shown when the identity provider vouched for an email that has no workspace yet.
-export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = false }: CloudSignupProps) {
+export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = false, optionalQuestions = false }: CloudSignupProps) {
   const [name, setName] = useState('');
   const [answers, setAnswers] = useState<Partial<SignupAnswers>>({});
   const [pending, setPending] = useState(false);
@@ -41,22 +44,25 @@ export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = 
     event.preventDefault();
     const trimmed = name.trim();
     if (trimmed.length < nameLength.min || trimmed.length > nameLength.max) { setProblem('invalid'); return; }
-    if (!complete(answers)) { setProblem('unanswered'); return; }
+    if (!optionalQuestions && !complete(answers)) { setProblem('unanswered'); return; }
     setPending(true);
     setProblem(undefined);
     onCreate(trimmed, answers).catch((error: unknown) => setProblem(error instanceof SignupError ? error.reason : 'unavailable')).finally(() => setPending(false));
   };
+  const questionFields = <>
+    <QuestionField question="goal" value={answers.goal} onChange={answer('goal')} />
+    <div className="signup-pickers">
+      <PickerField question="role" value={answers.role} onChange={answer('role')} />
+      <PickerField question="source" value={answers.source} onChange={answer('source')} />
+    </div>
+  </>;
   return (
     <form className="cloud-signup" onSubmit={submit} noValidate>
       <h2>{signupMessages.signupHeading}</h2>
       <p className="muted-copy">{buying ? signupMessages.signupBuyingExplanation : signupMessages.signupExplanation}</p>
       <label className="field"><span>{messages.workspaceName}</span>
         <input value={name} autoComplete="organization" maxLength={nameLength.max * 2} onChange={(event) => setName(event.target.value)} /></label>
-      <QuestionField question="goal" value={answers.goal} onChange={answer('goal')} />
-      <div className="signup-pickers">
-        <PickerField question="role" value={answers.role} onChange={answer('role')} />
-        <PickerField question="source" value={answers.source} onChange={answer('source')} />
-      </div>
+      {optionalQuestions ? <details className="signup-optional"><summary>{signupMessages.signupOptional}</summary>{questionFields}</details> : questionFields}
       {problem && <p role="alert" className="error-copy">{problem === 'unanswered' ? signupMessages.signupAnswerEach : signupMessages.signupErrors[problem]}</p>}
       {problem === 'trial_already_used' && <button type="button" onClick={onSignIn}>{signupMessages.signInToWorkspace}</button>}
       <button type="submit" className="primary-action" disabled={pending}>{pending ? signupMessages.creatingWorkspace : buying ? signupMessages.createWorkspaceAndPay : signupMessages.startTrial}</button>

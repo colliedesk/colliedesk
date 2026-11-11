@@ -118,7 +118,7 @@ func (a *API) adminConsentReturn(request *http.Request, state string) (string, b
 		return "", false
 	}
 	who, err := a.auth.Authenticate(request.Context(), cookie.Value, true)
-	if err != nil || who.IsToken() || !auth.HasPermission(who.Agent.Role, auth.PermissionAccessRead) {
+	if err != nil || who.IsToken() || !who.Can(auth.PermChannelsRead) {
 		return "", false
 	}
 	page := "/settings/channels/type/email"

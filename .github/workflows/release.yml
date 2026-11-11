@@ -3,16 +3,25 @@ name: Release
 # A release is cut by hand, never on a schedule:
 # - Run this workflow (Actions > Release > Run workflow). It releases the commit Colliedesk Cloud
 #   runs (GET /api/v1/config version), so a release is always a build HC Labs already uses every
-#   day, as the next v0.0.N. The tag is created here once the image boots.
-# - Or push a v0.0.N tag on a main commit whose CI run passed.
+#   day, as the next Semantic Versioning release: the part input says which number goes up
+#   (minor by default; patch for a release of fixes only; major for a breaking change). The first
+#   release after the alpha ones (v0.0.N) is v1.0.0. The tag is created here once the image boots.
+# - Or push a vX.Y.Z tag on a main commit whose CI run passed.
 # The image is rebuilt with the tag stamped as its version, booted, then published as X.Y.Z, X.Y
 # and (for the highest release) latest. Release notes come from the merged pull request titles.
 # The release also carries the client collie, the Claude Desktop extension and SHA256SUMS, with
-# build provenance (.github/scripts/client-assets.txt).
+# build provenance (.github/scripts/client-assets.txt). Last, the release is listed in the official
+# MCP Registry from server.json (.github/scripts/mcp-registry-publish.sh).
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      part:
+        description: 'Which number goes up: minor (new features, the default), patch (fixes only) or major (a breaking change)'
+        type: choice
+        options: [minor, patch, major]
+        default: minor
 
 permissions:
   contents: read
@@ -40,6 +49,7 @@ jobs:
         env:
           CLOUD_CONFIG_URL: https://app.colliedesk.com/api/v1/config
           GH_TOKEN: ${{ github.token }}
+          PART: ${{ inputs.part }}
         run: |
           if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
             echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
@@ -55,7 +65,8 @@ jobs:
             echo "::error::Cloud runs $version, which is not a commit of this repository."; exit 1; }
           git merge-base --is-ancestor "$sha" origin/main || {
             echo "::error::Cloud runs $sha, which is not on main."; exit 1; }
-          last=$(git tag -l 'v0.0.*' --sort=-v:refname | head -n 1)
+          # shellcheck disable=SC2046 # one word per tag
+          last=$(sh .github/scripts/release-next.sh last-tag $(git tag -l 'v*'))
           # A run that tagged this commit but failed before the GitHub release finishes it.
           if [ -n "$last" ] && [ "$(git rev-parse "$last^{commit}")" = "$sha" ] &&
             ! gh release view "$last" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -69,11 +80,11 @@ jobs:
             exit 1
           fi
           # shellcheck disable=SC2046 # one word per tag
-          tag=$(sh .github/scripts/release-next.sh next-tag $(git tag -l 'v*'))
+          tag=$(sh .github/scripts/release-next.sh next-tag "${PART:-minor}" $(git tag -l 'v*'))
           echo "Releasing $sha (Cloud runs $version) as $tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      # Alpha: only v0.0.N. Beta starts when the owner announces it (see the script).
+      # Semantic Versioning from v1.0.0; no other 0.x tag and no pre-release (see the script).
       - name: Require an allowed release tag
         env:
           TAG: ${{ steps.target.outputs.tag }}
@@ -206,7 +217,7 @@ jobs:
             echo "$TAG already exists at $SHA"; exit 0
           fi
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            tag -a "$TAG" -m "Colliedesk $TAG (alpha)" "$SHA"
+            tag -a "$TAG" -m "Colliedesk $TAG" "$SHA"
           git push origin "refs/tags/$TAG"
       - name: Create GitHub release
         env:
@@ -225,3 +236,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.target.outputs.tag }}
         run: gh release upload "$TAG" "$RUNNER_TEMP"/client/* --clobber
+      # The MCP Registry lists each release from server.json; GitHub OIDC (id-token: write above)
+      # proves the io.github.colliedesk namespace. A run that finishes an earlier one skips it.
+      - name: List the release in the MCP Registry
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: sh .github/scripts/mcp-registry-publish.sh "$TAG"

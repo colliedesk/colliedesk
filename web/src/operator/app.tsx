@@ -11,6 +11,7 @@ import { m } from './messages';
 import { href, navigate, usePath } from './router';
 import { SignIn } from './sign-in';
 import { setTheme, storedTheme } from './theme';
+import { switchLang } from './lang';
 import { Overview } from './overview';
 import { ConfigPage } from './config-page';
 import type { Draft } from './guards';
@@ -152,6 +153,7 @@ function Shell({ data, ended, path, reload, children }: { data: { me: Me; status
           {menu && <div id="ops-account-menu" className="ops-account-menu" onKeyDown={(event) => { if (event.key === 'Escape') { setMenu(false); menuButton.current?.focus(); } }}>
             <p>{m.account}<span>{data.me.operator.email}</span></p>
             <button type="button" onClick={() => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); setThemeState(next); }}>{theme === 'dark' ? m.lightTheme : m.darkTheme}</button>
+            <button type="button" onClick={switchLang}>{m.otherLanguage}</button>
             <button type="button" onClick={signOut}>{m.signOut}</button>
           </div>}
         </div>}

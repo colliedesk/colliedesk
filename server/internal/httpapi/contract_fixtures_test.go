@@ -29,8 +29,10 @@ type contractFixture struct {
 	// operatorRequestID is a request the operator token filed; operatorCancelID one it withdraws.
 	operatorRequestID, operatorCancelID string
 	// github is the Autofix GitHub App's stand-in and what the fixture connected through it.
-	github                    contractGitHub
-	api                       http.Handler
+	github contractGitHub
+	api    http.Handler
+	// oauthClientID is an AI app registered with this server (dynamic client registration).
+	oauthClientID             string
 	adminToken, agentToken    string
 	agentID                   string
 	contactID, conversationID string
@@ -54,7 +56,9 @@ type contractFixture struct {
 	failedReplyID                 string
 	deleteChannelToken            string
 	portalToken, webhookBody      string
-	// requestToken filed three pending agent requests, one for each decision.
+	// requestToken is a read token that has the conversation open.
+	// roleID is a role the cases read, change and give; spareRoleID one they delete; deletedRoleID one they restore.
+	roleID, spareRoleID, deletedRoleID                 string
 	requestToken                                       string
 	approveRequestID, rejectRequestID, cancelRequestID string
 	kb                                                 contractKB
@@ -76,6 +80,8 @@ type contractFixture struct {
 	secondEmailChannelID string
 	// aiChatID is a handed-off chat with an answer, its sources and feedback: read, then deleted.
 	aiChatID string
+	// intakeCardID is a card of the intake queue, set aside and put back by the intake cases.
+	intakeCardID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -95,6 +101,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.Billing = fakePolar.config()
 		hostedConfig(config)
 		config.Email.ResendWebhookSecret = resendWebhookSecret
+		config.Email.MailFromDomain = "mail.contract.example"
+		config.AlertMailer = &recordingMailer{}
 		config.ProblemReportWorkspace = "contract-support"
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Keys: keys, Base: "http://127.0.0.1:1"}
@@ -221,18 +229,15 @@ func newContractFixture(t *testing.T) contractFixture {
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
-	fileRequest := func() string {
-		response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversationID, map[string]any{"priority": "high"}, requestToken, nil)
-		var accepted struct {
-			RequestID string `json:"request_id"`
-		}
-		decode(t, response, &accepted)
-		if accepted.RequestID == "" {
-			t.Fatalf("file agent request status=%d body=%s", response.Code, response.Body.String())
-		}
-		return accepted.RequestID
+	// Agent requests are gone; the two decision routes answer 410 to a workspace session.
+	approveRequestID, rejectRequestID, cancelRequestID := "00000000-0000-4000-8000-0000000000a1", "00000000-0000-4000-8000-0000000000a2", ""
+	// Roles: one to read, change and give, one nothing uses (deleted by the cases), one deleted (restored).
+	roleID := create(t, api, adminToken, "/api/v1/roles", map[string]any{"name": "Contract editors", "description": "Edits articles", "permissions": []string{"kb_articles:read", "kb_articles:update"}})
+	spareRoleID := create(t, api, adminToken, "/api/v1/roles", map[string]any{"name": "Contract spare", "permissions": []string{}})
+	deletedRoleID := create(t, api, adminToken, "/api/v1/roles", map[string]any{"name": "Contract old", "permissions": []string{"tags:read"}})
+	if response := request(t, api, http.MethodDelete, "/api/v1/roles/"+deletedRoleID, nil, adminToken, nil); response.Code != http.StatusNoContent {
+		t.Fatalf("delete a role: %d %s", response.Code, response.Body.String())
 	}
-	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
 	// A teammate writing and an agent token have the conversation open, so the presence answers and the
 	// activity poll carry viewers of both kinds.
 	for _, viewer := range []string{agentSession.Token, requestToken} {
@@ -283,7 +288,14 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	var intakeCardID string
+	if err := pool.QueryRow(context.Background(), `INSERT INTO intake_gatherings(workspace_id,channel_id,scope,lane_key,state,review_reason,rules_action,rules_rule,opened_at,closed_at)
+		SELECT workspace_id,id,'group','thread:contract','review','no_command','review','review_hold',now(),now() FROM channels WHERE id=$1 RETURNING id::text`,
+		channelIDs["web_form"]).Scan(&intakeCardID); err != nil {
+		t.Fatal(err)
+	}
+	oauthClientID := registerContractOAuthClient(t, api)
+	return contractFixture{oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -308,7 +320,8 @@ func seedMailImage(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin, co
 
 func createContractInvite(t *testing.T, api http.Handler, token, email, role string) (string, string) {
 	t.Helper()
-	response := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": email, "role_ceiling": role}, token, nil)
+	name := map[string]string{"agent": "Agent", "admin": "Admin"}[role]
+	response := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": email, "roles": []string{name}}, token, nil)
 	var created struct {
 		Invite struct {
 			ID string `json:"id"`
@@ -425,4 +438,15 @@ func contractOperatorRequest(t *testing.T, api http.Handler, token string) strin
 	}
 	decode(t, request(t, api, http.MethodPatch, "/api/v1/operator/config", map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@contract.example"}}, token, nil), &filed)
 	return filed.RequestID
+}
+
+// registerContractOAuthClient registers an AI app whose redirect is on this computer, for the consent routes.
+func registerContractOAuthClient(t *testing.T, api http.Handler) string {
+	t.Helper()
+	response := request(t, api, http.MethodPost, "/oauth/register", map[string]any{"client_name": "Contract app", "redirect_uris": []string{"http://127.0.0.1/callback"}}, "", nil)
+	var body struct {
+		ClientID string `json:"client_id"`
+	}
+	decode(t, response, &body)
+	return body.ClientID
 }

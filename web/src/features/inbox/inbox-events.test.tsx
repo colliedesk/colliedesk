@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
 
 // The two boundaries: the API and the analytics service.
@@ -36,7 +37,7 @@ const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conver
 beforeEach(() => {
   testRouter.reset();
   vi.clearAllMocks();
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: meId, email: 'a@example.com', display_name: 'Ada', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: meId, email: 'a@example.com', display_name: 'Ada', roles: rolesOf('agent') } });
   api.conversations.mockResolvedValue({ items: [alpha, gamma], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -68,7 +69,7 @@ test('changing the status reports the new status only after the server accepted 
   api.updateConversation.mockResolvedValue({ ...alpha, status: 'resolved' });
   await open();
   fireEvent.click(screen.getByRole('button', { name: /alpha conversation/i }));
-  fireEvent.change(await screen.findByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(await screen.findByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('conversation_status_changed', { to: 'resolved' }));
 });
 
@@ -76,7 +77,7 @@ test('a refused status change reports nothing', async () => {
   api.updateConversation.mockRejectedValue(new Error('refused'));
   await open();
   fireEvent.click(screen.getByRole('button', { name: /alpha conversation/i }));
-  fireEvent.change(await screen.findByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(await screen.findByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(api.updateConversation).toHaveBeenCalled());
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(analytics.track).not.toHaveBeenCalledWith('conversation_status_changed', expect.anything());
@@ -87,7 +88,7 @@ test('a bulk status change reports the action and how many conversations, not wh
   await open();
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   fireEvent.click(screen.getByRole('checkbox', { name: /gamma conversation/i }));
-  fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('bulk_action_applied', { action: 'status', count: 2 }));
   expect(JSON.stringify(analytics.track.mock.calls)).not.toContain(alpha.id);
 });
@@ -96,7 +97,7 @@ test('a refused bulk change reports nothing', async () => {
   api.bulkUpdateConversations.mockRejectedValue(new Error('refused'));
   await open();
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
-  fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalled());
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(analytics.track).not.toHaveBeenCalledWith('bulk_action_applied', expect.anything());

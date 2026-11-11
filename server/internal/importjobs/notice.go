@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"strings"
 	"time"
 
@@ -46,8 +47,8 @@ func (r *jobRun) notifyAdmins(ctx context.Context, state, status, code string, r
 		if err := tx.QueryRow(ctx, `SELECT name FROM workspaces WHERE id=$1`, r.item.workspaceID).Scan(&name); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT DISTINCT lower(email) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL
-			AND (role='admin' OR id=(SELECT created_by FROM import_jobs WHERE workspace_id=$1 AND id=$2)) ORDER BY 1`, r.item.workspaceID, r.item.id)
+		rows, err := tx.Query(ctx, `SELECT DISTINCT lower(a.email) FROM agents a WHERE a.workspace_id=$1 AND a.deactivated_at IS NULL
+			AND (`+store.HoldsPermission("$3")+` OR a.id=(SELECT created_by FROM import_jobs WHERE workspace_id=$1 AND id=$2)) ORDER BY 1`, r.item.workspaceID, r.item.id, "imports:read")
 		if err != nil {
 			return err
 		}

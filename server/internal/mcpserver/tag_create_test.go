@@ -65,8 +65,8 @@ func TestConversationUpdateCreatesNoTagWhenTheCallIsRefusedOrInvalid(t *testing.
 		{"blank name", f.w.draft, map[string]any{"conversation_id": f.c3, "add_tags": []string{"   "}}, "empty"},
 		{"unknown conversation", f.w.draft, map[string]any{"conversation_id": "00000000-0000-4000-8000-000000000000", "add_tags": []string{"brand-new"}}, "No conversation"},
 	}
-	// Below the tier the first change is filed as an agent request; no tag is created until a person approves.
-	requestedForTier(t, e, f.w.read, "colliedesk_conversation_update", map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new"}})
+	// Without conversations:update the change is refused and no tag is created.
+	refusedWithoutPermission(t, e, f.w.read, "colliedesk_conversation_update", map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new"}})
 	for _, c := range cases {
 		if message := e.fails(e.connect(c.token, ""), "colliedesk_conversation_update", c.args); !strings.Contains(message, c.want) {
 			t.Errorf("%s: message %q lacks %q", c.name, message, c.want)

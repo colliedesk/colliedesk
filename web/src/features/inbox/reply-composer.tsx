@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
+import { useHolds } from '../../lib/permissions-context';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
@@ -14,7 +15,7 @@ import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
 import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
-import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
+import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
@@ -54,12 +55,14 @@ interface ReplyComposerProps {
   aiDraftsFor?: string;
   // The id of the customer's newest message: when it changes, the automatic draft is read again.
   latestCustomerMessage?: string;
-  // Reply drafts are off: the box says so, with the way to turn them on (canManage) or whom to ask.
+  // Reply drafts are off: an admin (canManage) sees the tool as Off, with the way to turn them on.
   aiDraftsOff?: boolean;
   agentId?: string;
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
   // calls it only after the reply was accepted. A private note never resolves.
   onResolve?: () => Promise<unknown>;
+  // The chat channel that tells the customer when it is resolved, said in Send and resolve's tooltip.
+  resolveTells?: string;
   // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
   draftKey?: string;
 }
@@ -90,10 +93,17 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, findSent }: ReplyComposerProps) {
-  // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent }: ReplyComposerProps) {
+  // What the role holds: a reply needs messages:send, the lists under the box their own read.
+  const holds = useHolds();
+  const mayReply = holds('messages:send');
+  const maySavedReplies = holds('saved_replies:read');
+  const mayArticles = holds('kb_articles:read');
+  // With no channel to carry replies, or a role that may not write to customers, the box opens on a private
+  // note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
-  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
+  const [kind, setKindAsked] = useState<Kind>(noReplies || !mayReply ? 'note' : stored?.kind ?? 'outgoing');
+  const setKind = useCallback((next: Kind) => setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next), [mayReply]);
   const [body, setBody] = useState(stored?.body ?? '');
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
@@ -193,7 +203,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [assist, setAssist] = useState(false);
   // A draft is being written in the open panel: the button says so and keeps the panel (and its Stop) open.
   const [drafting, setDrafting] = useState(false);
-  const [offNote, setOffNote] = useState(false);
   // The AI draft the reply was written from, until it is sent or the box is emptied.
   const [aiDraft, setAIDraft] = useState<string>();
   // What the draft put in the box that the conversation does not hold: shown until it is sent or the box is emptied.
@@ -255,6 +264,20 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     caret.current = next.length;
     setBody(next);
   };
+  // A phone gives the conversation the screen: the box is one line with Send reply until the agent goes into
+  // it, and stays open while it holds anything (text, files, copies, a list, a notice). It opens when the text
+  // box takes the focus (not a button: Chrome focuses one on mousedown, and the compact buttons would go before
+  // their click), never on the press itself: a touch's pointerdown comes before its focus, and a box that grew
+  // then would move away from the finger. It closes on a press outside (Safari focuses no button, so a blur
+  // alone would close it under the finger) or when the keyboard leaves it. components.css styles data-compact
+  // below 44 rem only.
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const onPress = (event: PointerEvent) => { if (!card.current?.contains(event.target as Node)) setActive(false); };
+    document.addEventListener('pointerdown', onPress);
+    return () => document.removeEventListener('pointerdown', onPress);
+  }, [active]);
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -334,7 +357,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     if (disabled) return;
     const onKey = (event: KeyboardEvent) => {
       if (composing(event) || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
-      if (event.key === '/') { event.preventDefault(); setPicking('replies'); return; }
+      if (event.key === '/' && maySavedReplies) { event.preventDefault(); setPicking('replies'); return; }
       const next = shortcuts[event.key.toLowerCase()];
       if (!next) return;
       event.preventDefault();
@@ -343,22 +366,28 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [disabled]);
+  }, [disabled, setKind, maySavedReplies]);
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(event.nativeEvent)) return;
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(event.shiftKey); }
-    if (event.key === '/' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPicking('replies'); }
+    if (event.key === '/' && (event.metaKey || event.ctrlKey) && maySavedReplies) { event.preventDefault(); setPicking('replies'); }
+  };
+  const held = Boolean(body.trim()) || files.length > 0 || picking !== null || assist || ccOpen || ccEdited !== undefined || Boolean(conflict || problem || otherDraft)
+    || otherTab || aiWarnings.length > 0;
+  const compact = !active && !held;
+  const leave = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget && !card.current?.contains(event.relatedTarget as Node)) setActive(false);
   };
   return (
     <div className="composer">
       {aiDraftsFor && !disabled && assistPart.status === 'ready' && <assistPart.module.AutoDraftCard conversationId={aiDraftsFor} customerName={customerName}
         timezone={timezone} hasText={Boolean(body.trim())} canManage={canManage} latestCustomerMessage={latestCustomerMessage} onUse={applyDraft}
         onTryAgain={() => setAssist(true)} />}
-      <div className="composer-card" data-kind={kind} ref={card}>
+      <div className="composer-card" data-kind={kind} data-compact={compact} data-writing={active} ref={card} onFocus={(event) => { if (event.target === (field.current as EventTarget | null)) setActive(true); }} onBlur={leave}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>
-            <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
-              <ReplyIcon />{messages.replyMode}<kbd aria-hidden="true">R</kbd></button>
+            {mayReply && <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
+              <ReplyIcon />{messages.replyMode}<kbd aria-hidden="true">R</kbd></button>}
             <button type="button" aria-pressed={kind === 'note'} onClick={() => setKind('note')}>
               <LockIcon />{messages.noteMode}<kbd aria-hidden="true">N</kbd></button>
           </div>
@@ -392,39 +421,41 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
             onSendAnyway={() => { mark.current = conflict.latest; submit(resolveAfter.current); }}
             onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
-        {offNote && !aiDraftsFor && <p role="status" className="composer-notice">{messages.aiDraftsOffAgent}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
-        <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
+          {/* Attach is the first tool; the chosen files and their notes take a line above the row (components.css). */}
+          <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
+          {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
-            <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'}
+            <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>}
+          {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.articles}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
-            <BookIcon /><span className="tool-label">{messages.articles}</span></button>
+            <BookIcon /><span className="tool-label">{messages.articles}</span></button>}
           {aiDraftsFor && (
             <button type="button" className="saved-reply-button ai-tool" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
               onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>
               <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
           )}
-          {!aiDraftsFor && aiDraftsOff && (canManage
+          {/* Only an admin can turn drafts on, so only an admin sees the tool while they are off. */}
+          {!aiDraftsFor && aiDraftsOff && canManage && (
             // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
             // drafts on is its description.
-            ? <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
-                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>
-            : <button type="button" className="saved-reply-button" aria-disabled="true" title={messages.aiDraftsOffAgent} onClick={() => setOffNote((shown) => !shown)}>
-                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></button>)}
+            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
+              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
           )}
           {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
-            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)`} onClick={() => submit(true)}>
+            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
             {messages.sendAndResolve}</button>}
+          {/* The one-line box on a phone keeps a private note one press away, as its tab is when the box is open. */}
+          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote}
+            onClick={() => { setKind('note'); field.current?.focus(); }}><LockIcon /></button>}
           <button className="primary-action" type="button" disabled={disabled || cannotSend} onClick={() => submit()}>
-            {kind === 'note' ? messages.privateNote : messages.reply}
+            <span className="send-label">{kind === 'note' ? messages.privateNote : messages.reply}</span><span className="send-icon"><ArrowUpIcon /></span>
           </button>
         </div>
       </div>

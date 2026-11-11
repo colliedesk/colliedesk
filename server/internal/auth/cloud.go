@@ -23,7 +23,6 @@ type cloudAgent struct {
 	WorkspaceName string
 	AgentID       string
 	Email         string
-	Role          string
 }
 
 func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label string) (Redeemed, []WorkspaceChoice, error) {
@@ -57,7 +56,7 @@ func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label
 	var link createdLink
 	err = s.db.InWorkspace(ctx, selected.WorkspaceID, func(tx pgx.Tx) error {
 		var err error
-		link, err = s.createLinkTx(ctx, tx, selected.WorkspaceID, selected.AgentID, selected.Email, "pairing", selected.Role, nil)
+		link, err = s.createLinkTx(ctx, tx, selected.WorkspaceID, selected.AgentID, selected.Email, "pairing", "admin", nil)
 		return err
 	})
 	if err != nil {
@@ -80,7 +79,7 @@ func (s *Service) cloudAgents(ctx context.Context, email string) ([]cloudAgent, 
 }
 
 func listCloudAgents(ctx context.Context, tx pgx.Tx, email string) ([]cloudAgent, error) {
-	rows, err := tx.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email,a.role
+	rows, err := tx.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email
 		FROM agents a JOIN workspaces w ON w.id=a.workspace_id
 		WHERE lower(a.email)=lower($1) AND a.deactivated_at IS NULL ORDER BY w.slug`, strings.TrimSpace(email))
 	if err != nil {
@@ -90,7 +89,7 @@ func listCloudAgents(ctx context.Context, tx pgx.Tx, email string) ([]cloudAgent
 	agents := make([]cloudAgent, 0)
 	for rows.Next() {
 		var agent cloudAgent
-		if err := rows.Scan(&agent.WorkspaceID, &agent.WorkspaceSlug, &agent.WorkspaceName, &agent.AgentID, &agent.Email, &agent.Role); err != nil {
+		if err := rows.Scan(&agent.WorkspaceID, &agent.WorkspaceSlug, &agent.WorkspaceName, &agent.AgentID, &agent.Email); err != nil {
 			return nil, fmt.Errorf("scan cloud agent: %w", err)
 		}
 		agents = append(agents, agent)

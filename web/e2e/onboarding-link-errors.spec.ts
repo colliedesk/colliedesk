@@ -59,7 +59,8 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await alphaPage.request.post(`${baseURL}/api/v1/conversations`, { headers: { Origin: baseURL }, data: { contact_id: alphaContact.id, subject: `Alpha only ${suffix}` } });
   await alphaPage.reload();
   await expect(alphaPage.getByRole('button', { name: new RegExp(`Alpha only ${suffix}`) })).toBeVisible();
-  await expect(alphaPage.getByRole('option', { name: `alpha-${suffix}@example.com` })).toHaveCount(1);
+  // The signed-in agent shows as Me in the assignee picker; another workspace's agent would show by email.
+  await expect(alphaPage.getByRole('option', { name: 'Me', exact: true })).toHaveCount(1);
   await openAndContinue(alphaPage, createWorkspace(`Beta Desk ${suffix}`, `beta-${suffix}@example.com`));
   await expect(alphaPage).toHaveURL(`${baseURL}/`);
   await expect(appNavigationWith(alphaPage, `Beta Desk ${suffix}`)).toHaveCount(1);
@@ -67,7 +68,7 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await expect(appNavigationWith(alphaPage, `Alpha Desk ${suffix}`)).toHaveCount(0);
   // Nothing cached from workspace A may show inside B: not its conversations, not its agents.
   await expect(alphaPage.getByRole('button', { name: new RegExp(`Alpha only ${suffix}`) })).toHaveCount(0);
-  await expect(alphaPage.getByRole('option', { name: `beta-${suffix}@example.com` })).toHaveCount(1);
+  await expect(alphaPage.getByRole('option', { name: 'Me', exact: true })).toHaveCount(1);
   await expect(alphaPage.getByRole('option', { name: `alpha-${suffix}@example.com` })).toHaveCount(0);
 
   // A visitor with no session who opens the app sees how to get in, not an empty inbox.

@@ -4,7 +4,7 @@ Colliedesk targets a usable screen within 200 ms from a user action. The target 
 
 ## Inbox server budget
 
-`TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95. The same test then runs the newer filters and sorts on the same data under the same budget: who replies next with the waiting-longest sort, three tags with `tag_match=all`, a search on the contact name, a search that matches nothing, the priority sort, several statuses and priorities, a waiting draft, a failed delivery, channel with source and assignee, and a date range with an organization (`docs/internals/inbox-filters.md`).
+`TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95. Three conversations in ten are in a chat (5 to 20 items each, one to one or in one of 50 groups, on a live Zalo channel or a removed one), so every row also reads its chat's channel (`may_tell_customer`). The same test then runs the newer filters and sorts on the same data under the same budget: who replies next with the waiting-longest sort, three tags with `tag_match=all`, a search on the contact name, a search that matches nothing, the priority sort, several statuses and priorities, a waiting draft, a failed delivery, channel with source and assignee, and a date range with an organization (`docs/internals/inbox-filters.md`).
 
 ## Contact page budget
 
@@ -76,6 +76,18 @@ conversations of about 3,500 characters (more than the 5,000 a search ranks) to 
 case. Five warm-up searches, then 20 timed: 50–65 ms locally beside the other latency gates. The
 window was cut twice instead of raising the budget: 20,000 conversations took 160–280 ms locally, and
 10,000 took 210 ms p95 on the CI runner. If this gate fails, cut the window again.
+
+## Intake queue budget
+
+`TestIntakeQueueLatencyBudget` holds the store calls behind the intake queue to 100 ms p95 for a page
+of 50 cards (`IntakeGatherings`: review, decided, review of one channel and scope, decided by the
+rules) and 20 ms p95 for one card with its items, decisions and the 30 conversations it may join
+(`IntakeGatheringByID`) and for the queue's summary (`IntakeSummaryOf`). The fixture is two workspaces
+with 20,000 gatherings of three chat items each (a quarter waiting) in 200 groups, and the card's group
+has 300 conversations. The candidates start from the group's items (`channel_thread_items_thread`), never
+from the workspace's conversations. Five warm-up calls, then 40
+timed. A card and its items are found by uuid: comparing `id::text` to a parameter skips the index and
+took 17 ms on the dev host; the uuid compare takes 2 ms. Do not widen either budget.
 
 ## AI draft read budget
 
@@ -193,16 +205,6 @@ same data the page's read (`store.ReadResults`: the state row and one snapshot o
 conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (5 ms locally); one seed
 serves all three. Do not widen any of them.
 
-## Pending agent requests budget
-
-`TestPendingAgentRequestsLatencyBudget` holds the store query behind
-`GET /api/v1/agent-requests?status=pending` to 20 ms p95. Every open tab polls it every 20 seconds
-for the Requests badge and the reply drafts in the inbox. The fixture is two workspaces with 5,000
-requests each from one token, 20 pending with bodies near the 64 KiB cap and the rest decided over
-the last week with 2 KiB bodies. The poll selects no body (`detail=full` does). The query first
-marks overdue pending rows expired, then lists; both use the `(workspace_id, status, created_at)`
-index. Measured on the dev host: 3 ms. Do not widen the 20 ms.
-
 ## Conversation presence budget
 
 `TestConversationPresenceLatencyBudget` holds the store call behind
@@ -220,6 +222,8 @@ Measured on the dev host: 2 ms. Do not widen the 20 ms.
 
 1. The number of SQL statements for 50 ids must equal the number for 1 id. This gate is deterministic: the cost never grows with the ids, so the API never runs one statement per conversation.
 2. The best of five runs for 50 ids must take at most 100 ms. The best of five keeps one scheduling stall on a shared host from failing the gate.
+
+Every conversation of the gate is in a chat whose channel tells each status, so the gate covers the status notices too: the update only marks each conversation with the status to tell (`conversations.status_notice_due`, in the same `UPDATE`), and the status notice worker (`autoclose.Notices`, every 5 seconds) sends them after the commit, one transaction per conversation that takes the mark. Sending them inside the update cost 368 statements for 50 ids. A status change of the conversation by any other way clears its mark (trigger `conversations_status_notice_clear`), so a notice never tells a status the conversation left.
 
 If the gate fails, look for a statement inside a loop over the ids. Do not raise the 100 ms threshold.
 
@@ -248,6 +252,22 @@ transaction: the state row, the current version's values, the products) and writ
 (`server_processes`, one upsert and one delete): about 0.4 queries a second per process on the owner
 pool, and one idle connection held by `LISTEN colliedesk_config`. A request never waits on it: the handler
 swap is an atomic pointer, and settings read at each use are an atomic load.
+
+## Attachment thumbnail budget
+
+The timeline and the gallery's strip show a picture attachment as its thumbnail
+(`GET /api/v1/attachments/{id}/thumbnail`, at most 320 px), not the original: before it, a conversation
+with 12 phone photos downloaded tens of megabytes on every open, since the original is `private, no-store`.
+`TestAttachmentThumbnailLatencyBudget` makes the thumbnails of six 12-megapixel JPEGs (4000x3000, the first
+view of each) and reads a kept one 50 times. Making one must stay at or below 400 ms for the slowest of the
+six; reading a kept one at or below 20 ms p95. On 2026-11-05 on an Apple M4: made in 96 ms median, 101 ms
+slowest; read 4.7 ms p95. A thumbnail is made once, on its first view, and kept with the attachment
+(`attachments.thumb_storage_key`); a file that is no readable picture is recorded as having none, so it is
+not decoded again. Nothing waits for it before the screen is usable: the images load lazily after the
+timeline renders. Decoding shares the media package's 128 MiB budget with knowledge base thumbnails, so a
+12-megapixel photo (48 MB decoded) runs two at a time: the first view of a conversation with 12 new photos
+fills its thumbnails over about 0.6 s. A picture over the budget (above about 32 megapixels) gets none and
+shows its original. Do not widen either budget; make the decode cheaper instead.
 
 ## Web bundle budget
 
@@ -283,6 +303,8 @@ On 2026-10-22 Settings → AI (#89: AI providers and features) became its own la
 The same day its Usage tab, the paused and allowance notices and the automatic-runs dialog grew `ai-route` to 12,071 bytes gzip plus 2,854 of CSS; the first bundle did not change. The usage of a month is asked for only when the tab opens. AI work runs as background tasks (`ai.Worker`): no request waits for a provider.
 
 On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter, the public share page's route and the strings of a refreshed list: 201,489 → 202,056 bytes (+567); the share page is a lazy part of its own. Its CSS went from 15,890 to 15,893: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
+
+On 2026-10-31 the Zalo OA pages, conversation numbers and response targets (their Settings pages are lazy parts) left 24 bytes under the gate with what the inbox itself needs (a conversation's code and target mark, the Targets filter, one timer that reads the list again when a mark comes due). The Markdown renderer of replies and notes (`react-markdown` with micromark and mdast, which `kb-chunk` shares) moved to a lazy part, `markdown-render`: the inbox starts it when it opens, before a conversation does, and a reply reads as plain text until it is there. First bundle 204,776 → 167,383 bytes (`bundle:check`); the renderer's shared chunk is about 37 KB gzip. Measured with Playwright on a local `collie serve` (Chromium, 1,280 px, an Apple M4, a new browser context each run so no chunk is cached, median of 7), against the same build without the lazy part: a conversation opened by its address, from navigation to its note's Markdown on screen, 131 ms (137 before; the plain text shows at 122 ms and turns into Markdown 9 ms later); opened from the inbox, from the click, 26 ms (19 before; the renderer has loaded by then). Cumulative layout shift is the same with and without it (0.030 to 0.034, from the page's own load): the plain text and the Markdown of a reply take the same lines.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 

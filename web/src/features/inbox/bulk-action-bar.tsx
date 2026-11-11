@@ -1,9 +1,10 @@
-import { useRef } from 'react';
-import type { ReactNode } from 'react';
+import { useState } from 'react';
 import type { BulkConversationChanges } from '../../api/client';
 import type { Conversation, TeamMember, Tag } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, CheckIcon, ChevronDownIcon, CircleDotIcon, MinusIcon, TagIcon, UserIcon, XIcon } from '../../ui/icons';
+import { CheckCircleIcon, CheckIcon, CircleDotIcon, MinusIcon, TagIcon, UserIcon, XIcon } from '../../ui/icons';
+import { ActionMenu } from './action-menu';
+import { mayTellCustomers } from './status-tell';
 import { StatusLabel } from './conversation-labels';
 
 interface BulkActionBarProps {
@@ -16,46 +17,6 @@ interface BulkActionBarProps {
   onClear: () => void;
 }
 
-interface ActionMenuProps {
-  label: string;
-  icon: ReactNode;
-  disabled: boolean;
-  children: (apply: (changes: BulkConversationChanges) => void) => ReactNode;
-  onApply: (changes: BulkConversationChanges) => void;
-}
-
-// A menu of choices that each apply at once. A button per choice, not a select: a select fires on
-// every arrow key in some browsers, and one stray key would rewrite fifty conversations.
-function ActionMenu({ label, icon, disabled, children, onApply }: ActionMenuProps) {
-  const menu = useRef<HTMLDetailsElement>(null);
-  const apply = (changes: BulkConversationChanges) => {
-    if (menu.current) {
-      menu.current.open = false;
-      // The pressed button is about to be hidden; keep focus on the menu that opened it.
-      menu.current.querySelector('summary')?.focus();
-    }
-    onApply(changes);
-  };
-  // Escape closes an open menu and stops there; the bar treats a second Escape as clearing the selection.
-  const closeOnEscape = (event: React.KeyboardEvent<HTMLDetailsElement>) => {
-    if (event.key !== 'Escape' || !menu.current?.open) return;
-    event.stopPropagation();
-    menu.current.open = false;
-    menu.current.querySelector('summary')?.focus();
-  };
-  const closeOnFocusOut = (event: React.FocusEvent<HTMLDetailsElement>) => {
-    if (menu.current?.open && !menu.current.contains(event.relatedTarget as Node | null)) menu.current.open = false;
-  };
-  return (
-    <details className="action-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} data-disabled={disabled || undefined}>
-      <summary aria-label={label} data-tip={label} aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}>
-        {icon}<ChevronDownIcon />
-      </summary>
-      <div className="action-popover" role="group" aria-label={label}>{children(apply)}</div>
-    </details>
-  );
-}
-
 // tagState says whether every, some or none of the selected conversations carry the tag.
 function tagState(selected: Conversation[], tagId: string): 'true' | 'mixed' | 'false' {
   const carrying = selected.filter((item) => item.tags.some((tag) => tag.id === tagId)).length;
@@ -65,16 +26,25 @@ function tagState(selected: Conversation[], tagId: string): 'true' | 'mixed' | '
 
 export function BulkActionBar({ selected, agents, tags, currentAgentId, busy, onApply, onClear }: BulkActionBarProps) {
   const others = agents.filter((agent) => agent.id !== currentAgentId && !agent.deactivated_at);
+  // Ticked again for each new selection: the bar is drawn afresh when rows are picked after none.
+  const [tell, setTell] = useState(true);
+  const offersTell = mayTellCustomers(selected);
+  const quiet = offersTell && !tell;
+  const setStatus = (changes: BulkConversationChanges) => onApply(quiet ? { ...changes, notify: false } : changes);
+  const resolveLabel = !offersTell ? messages.resolve : quiet ? messages.resolveQuietlyBulk : messages.resolveAndTellBulk;
+  const statusLabel = quiet ? messages.setStatusQuietly : messages.setStatus;
   const clearOnEscape = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !busy) onClear();
   };
   return (
     <div className="bulk-bar" role="group" aria-label={messages.bulkActions} onKeyDown={clearOnEscape}>
       <strong className="bulk-count">{messages.selectedCount(selected.length)}</strong>
+      {offersTell && <label className="bulk-tell" data-tip={messages.tellCustomersTip}>
+        <input type="checkbox" checked={tell} disabled={busy} onChange={(event) => setTell(event.target.checked)} />{messages.tellCustomers}</label>}
       <div className="bulk-actions">
-        <button type="button" className="icon-button bulk-resolve" aria-label={messages.resolve} data-tip={messages.resolve} disabled={busy}
-          onClick={() => onApply({ status: 'resolved' })}><CheckCircleIcon /></button>
-        <ActionMenu label={messages.setStatus} icon={<CircleDotIcon />} disabled={busy} onApply={onApply}>
+        <button type="button" className="icon-button bulk-resolve" aria-label={resolveLabel} data-tip={resolveLabel} disabled={busy}
+          onClick={() => setStatus({ status: 'resolved' })}><CheckCircleIcon /></button>
+        <ActionMenu label={statusLabel} icon={<CircleDotIcon />} disabled={busy} onApply={setStatus}>
           {(apply) => Object.keys(messages.statuses).map((value) => {
             const status = value as keyof typeof messages.statuses;
             return <button type="button" key={status} onClick={() => apply({ status })}><StatusLabel status={status} /></button>;

@@ -48,17 +48,26 @@ func githubRepositoriesList(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"repositories": list.Items}, nil
 }
 
-func githubConnectRequest(c *call, _ map[string]any) (any, error) {
-	return ask(c, http.MethodPost, "/api/v1/autofix/github/installations", nil)
+func githubConnect(c *call, _ map[string]any) (any, error) {
+	out, err := passOn(c, http.MethodPost, "/api/v1/autofix/github/installations", nil)
+	if err != nil {
+		return nil, err
+	}
+	out["next"] = forThePerson(c, "it opens GitHub's install page, where they choose Only select repositories and install the app as themselves. colliedesk_autofix_settings_get then lists the installation.")
+	return out, nil
 }
 
-func githubDisconnectRequest(c *call, arguments map[string]any) (any, error) {
+func githubDisconnect(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[autofixGitHubArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = installationNotFound
-	return ask(c, http.MethodDelete, "/api/v1/autofix/github/installations/"+url.PathEscape(args.InstallationID), nil)
+	var settings json.RawMessage
+	if err := c.send(http.MethodDelete, "/api/v1/autofix/github/installations/"+url.PathEscape(args.InstallationID), nil, &settings); err != nil {
+		return nil, err
+	}
+	return settings, nil
 }
 
 func autofixRepoConnect(c *call, arguments map[string]any) (any, error) {
@@ -103,13 +112,17 @@ func autofixRepoDisconnect(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"disconnected": true}, nil
 }
 
-func autofixRepoNotesIncludeRequest(c *call, arguments map[string]any) (any, error) {
+func autofixRepoNotesIncludeSet(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[autofixGitHubArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = autofixRepoNotFound
-	return ask(c, http.MethodPut, autofixRepoPath(args.RepoID, "/include-notes"), nil)
+	var repo json.RawMessage
+	if err := c.send(http.MethodPut, autofixRepoPath(args.RepoID, "/include-notes"), nil, &repo); err != nil {
+		return nil, err
+	}
+	return map[string]any{"repo": repo}, nil
 }
 
 func autofixRepoNotesExclude(c *call, arguments map[string]any) (any, error) {

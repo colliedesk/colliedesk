@@ -99,13 +99,10 @@ func TestAIKeysNeverLeaveTheServer(t *testing.T) {
 	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_providers WHERE position($1::bytea in sealed_key) > 0`, []byte(aiCanaryKey)); n != "0" {
 		t.Fatal("the key is stored in clear")
 	}
-	// A token below admin is refused before the key could be filed in an agent request.
+	// A token without ai_settings:manage_credentials is refused, and the key is stored nowhere.
 	draft := issueToken(t, desk.api, desk.adminA, "drafts", "draft").Token
 	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/providers/"+desk.providerA+"/key", map[string]any{"api_key": aiCanaryKey + "2"}, draft, nil),
-		http.StatusForbidden, "credentials_need_admin_token")
-	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM agent_requests WHERE body::text LIKE '%'||$1||'%'`, aiCanaryKey); n != "0" {
-		t.Fatal("an agent request holds the key")
-	}
+		http.StatusForbidden, "permission_missing")
 }
 
 func TestAgentsReadAISettingsAndAdminsChangeThem(t *testing.T) {
@@ -114,19 +111,21 @@ func TestAgentsReadAISettingsAndAdminsChangeThem(t *testing.T) {
 	if response := request(t, desk.api, http.MethodGet, "/api/v1/ai", nil, agent, nil); response.Code != http.StatusOK {
 		t.Fatalf("agent reads settings: %d %s", response.Code, response.Body.String())
 	}
-	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": desk.providerA, "enabled": true}, agent, nil), http.StatusForbidden, "forbidden")
-	wantResponse(t, request(t, desk.api, http.MethodPost, "/api/v1/ai/providers/"+desk.providerA+"/check", nil, agent, nil), http.StatusForbidden, "forbidden")
+	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": desk.providerA, "enabled": true}, agent, nil), http.StatusForbidden, "permission_missing")
+	wantResponse(t, request(t, desk.api, http.MethodPost, "/api/v1/ai/providers/"+desk.providerA+"/check", nil, agent, nil), http.StatusForbidden, "permission_missing")
 }
 
-func TestTurningAFeatureOnWaitsForAPersonWhenAnAgentAsks(t *testing.T) {
+func TestATokenTurnsAFeatureOnOnlyWithTheSettingsPermission(t *testing.T) {
 	desk := newAIDesk(t, nil)
-	admin := issueToken(t, desk.api, desk.adminA, "ai admin", "admin").Token
-	response := request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": desk.providerA, "enabled": true}, admin, nil)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("admin token turning a feature on: %d %s, want 202 (an agent request)", response.Code, response.Body.String())
-	}
+	body := map[string]any{"source": "provider", "provider_id": desk.providerA, "enabled": true}
+	send := issueToken(t, desk.api, desk.adminA, "ai send", "send").Token
+	refused(t, desk.api, http.MethodPut, "/api/v1/ai/slots/draft", body, send, "ai_settings:update")
 	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_slots`); n != "0" {
-		t.Fatal("the feature was turned on without a person")
+		t.Fatal("a refused token turned the feature on")
+	}
+	admin := issueToken(t, desk.api, desk.adminA, "ai admin", "admin").Token
+	if response := request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/draft", body, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("an Admin token turning a feature on: %d %s", response.Code, response.Body.String())
 	}
 }
 
@@ -215,8 +214,8 @@ func TestAIUsageAndAutomaticLimitsStayInTheirWorkspace(t *testing.T) {
 	}
 	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage?month=October", nil, desk.adminA, nil), http.StatusBadRequest, "invalid_request")
 	agent := joinAsAgent(t, desk.api, desk.adminA, "agent@ai-a.example.com")
-	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, agent, nil), http.StatusForbidden, "forbidden")
-	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/automatic-limits", map[string]any{"per_day": 5, "per_minute": 1}, agent, nil), http.StatusForbidden, "forbidden")
+	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, agent, nil), http.StatusForbidden, "permission_missing")
+	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/automatic-limits", map[string]any{"per_day": 5, "per_minute": 1}, agent, nil), http.StatusForbidden, "permission_missing")
 
 	limits := request(t, desk.api, http.MethodPut, "/api/v1/ai/automatic-limits", map[string]any{"per_day": 5, "per_minute": 1}, desk.adminA, nil)
 	if limits.Code != http.StatusOK || !strings.Contains(limits.Body.String(), `"per_day":5`) {

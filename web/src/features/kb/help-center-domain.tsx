@@ -17,6 +17,7 @@ const domainSchema = z.object({
   hostname: z.string().nullable(), status: z.enum(['none', 'pending', 'active']), records: z.array(recordSchema),
   created_at: date, verified_at: date, checked_at: date, check_error: z.string().nullable(), certificate_requested_at: date,
   failing_since: date, pending_reason: z.enum(['proof_lost', 'taken_over']).nullable(), awaiting_payment: z.boolean(),
+  address_url: z.string().nullable(), address_checked_at: date, address_error: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'HelpCenterDomain'>>;
 
 export type HelpCenterDomain = z.infer<typeof domainSchema>;
@@ -33,8 +34,9 @@ const failure = (error: unknown) => error instanceof InvalidRequestError ? error
 // An active domain stops serving when no check has proved it for this long (the server's release time).
 const releaseAfterMs = 7 * 24 * 60 * 60 * 1000;
 
-// HelpCenterDomainSection shows the help center's custom domain in its card: its state, the DNS records to
-// set (each copyable), the last check and what it found. Admins set, check and remove it; every agent sees it.
+// HelpCenterDomainSection shows the help center's custom domain in its card: its state and whether its
+// address really opens with the help center, the DNS records to set (each copyable), the last check and
+// what it found. Admins set, check and remove it; every agent sees it.
 export function HelpCenterDomainSection({ canManage, timezone }: { canManage: boolean; timezone: string }) {
   const client = useQueryClient();
   const current = useQuery({ queryKey: ['help-center-domain'], queryFn: domainApi.get });
@@ -63,13 +65,17 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
   if (!current.data) return null;
   const domain = current.data;
   const error = set.error ?? check.error ?? remove.error;
-  return <section className="stacked-form" aria-labelledby="help-center-domain-heading">
+  return <section className="stacked-form hc-section" aria-labelledby="help-center-domain-heading">
     <h3 id="help-center-domain-heading">{domainMessages.heading}</h3>
     <p className="muted-copy">{domainMessages.description}</p>
     {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}
     {domain.status !== 'active' && <p className="muted-copy"><strong>{domainMessages.cutoverHeading}</strong> {domainMessages.cutover}</p>}
     <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment ? 'true' : 'false'}>
       {domain.status === 'active' && domain.awaiting_payment && domain.hostname ? domainMessages.verifiedUnpaid(domain.hostname) : domainMessages.state(domain.status, domain.hostname)}</p>
+    {domain.status === 'active' && domain.address_checked_at && domain.address_url && (domain.address_error
+      ? <p className="warning-note">{domain.address_error}</p>
+      : <p className="muted-copy">{domain.address_url.startsWith('https://') && <>{domainMessages.httpsWorks} </>}
+          <a href={domain.address_url} target="_blank" rel="noopener noreferrer">{domain.address_url}</a> {domainMessages.addressOpens}</p>)}
     {domain.records.length > 0 && <div className="email-channel-dns">
       <p className="muted-copy">{domain.status === 'active' ? domainMessages.recordsKeep : domainMessages.recordsHelp}</p>
       {domain.records.map((record) => <DnsRecord key={`${record.type} ${record.name}`} record={record} />)}

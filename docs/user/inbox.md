@@ -4,10 +4,26 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
-On a phone the list and the conversation take turns. A conversation you open fills the screen, with its
-subject at the top and the composer at the bottom. **Back to Inbox** above the subject, or the browser's
-Back, returns to the list with the same filters and scrolled to where you left it. The workspace name
-and your address stay at the top while the page scrolls.
+On a computer the sidebar on the left starts folded into a row of icons. It can be made wider or narrower: drag its right edge, or focus the
+edge and use the arrow keys. Double-click the edge to restore the default width. **Expand sidebar** (the
+panel icon at the top) opens it with each page's name, as does dragging the edge to the right;
+**Collapse sidebar** folds it again, and each icon is named when you point at it. The browser remembers the width and the choice.
+
+On a phone the list and the conversation take turns. A conversation you open fills the screen, and its
+messages take most of it. The top row has **Back to Inbox** (the arrow), the subject (two lines at most)
+and **Show details** (the panel icon), which opens the properties, tags and the customer's other
+conversations. Under it the status, priority and customer slide sideways beside **Resolve**. **Back to
+Inbox**, or the browser's Back, returns to the list with the same filters and scrolled to where you left
+it. The workspace name and your address stay at the top while the page scrolls.
+
+The composer at the bottom is one line with **Send reply** until you tap it; the lock beside it starts a
+**Private note** in one tap. Tapped, it opens with the cursor in it, with
+**Reply** and **Private note**, the tools, **Send and resolve** and **Send reply**, and it stays open
+while it holds text, files, copies or a notice. Tap the conversation above with nothing written and it
+goes back to one line. The box and its buttons stay reachable while you type; on Android, where the
+page shrinks above the keyboard, the top bar and the status row step aside to make room. A draft AI wrote
+waits above the box folded to one line with **Show draft** and **Use draft** (while you write, **Show draft**);
+**Insert below**, **Replace** and **Discard** are in the open draft.
 
 The [setup guide](setup-guide.md) waits in the bottom-left corner while setup is unfinished, also when
 conversations exist; folded to one button, it does not cover them. It lists **Receive customer email**,
@@ -49,40 +65,78 @@ cannot be loaded, it says so with **Try again** instead.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
   You do not need to reload to see new mail.
 
+## Conversation numbers
+
+Every conversation has a number and a code its customer sees and can type back: `#12` in the workspace's
+default series. A channel can number what it opens in a series of its own (`settings.number_series` of
+the channel), with its own code format, for example `REF-{yyyy}-{n:04}` for `REF-2026-0170`: letters,
+digits, `#`, `-`, `_`, `/` and `.`, with `{n}` once (`{n:04}` pads it to four digits, 2 to 8), and `{yyyy}`
+for the year it was opened in the workspace's timezone. A series counts on and never restarts with the
+year; its next number can be raised, never lowered. When you move to Colliedesk from a system that
+numbered its own way, set the series' next number (and `start`, `start_year`) to where that system
+stopped: codes below it that are not here belong to the system before.
+
+In the web app:
+
+1. A conversation numbered in a series of its own shows its code first on its row and in its header,
+   with a button that copies it. The default series' `#12` is not shown, so an inbox of email and web
+   forms reads as before.
+2. **Settings → Conversation numbers** lists the series with the code the next conversation gets.
+   Admins add a series and change one: its format (codes already given keep theirs and still find their
+   conversations), its next number (it only goes up: a lower one is refused before anything is sent),
+   and where it was taken over (**Taken over at**, **In the year**). Agents read the page.
+3. A channel picks its series on its own page (Zalo OA: Connection → References).
+4. A link with `?ref=` opens the list on that conversation, in every status, with a **Reference** chip
+   that removes it.
+
+`GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
+adds or changes one (`workspace:update`, which the Admin role holds; an agent token with it does it at once). MCP: `colliedesk_number_series_list`,
+`colliedesk_number_series_set`.
+
+Find a conversation by its code with `?ref=` on `GET /api/v1/conversations` (MCP `ref` of
+`colliedesk_inbox_search`): another case, spaces around it or more or fewer leading zeros match, a code of
+another year does not. Search words that are a code find that conversation, ahead of the rest.
+
 ## Filter and sort
 
 **Filter** (next to the search box) holds every filter. Ticking several values of one filter shows
 conversations with any of them; each filter you add narrows the list further.
 - **Priority**: Urgent, High, Normal, Low.
-- **Assignee**: Assigned to me, Unassigned, Assigned to anyone, or any teammate.
-- **Tags**: conversations with any of the ticked tags, or tick **Has every chosen tag** for all of them.
-- **Who replies next**: **Waiting on us** means the newest message that is not a private note came from
-  the customer; **Waiting on the customer** means the newest one is your team's reply. A conversation
-  with no such message is neither.
-- **Needs attention**: **Reply draft waiting for approval** (an [agent request](agent-requests.md) an AI
-  agent left) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
-- **Channel**: how the conversation started: **Email**, **Web form**, **Imported** (from another helpdesk),
-  **Started by the team** (created in Colliedesk by a teammate or an agent token) or **Problem report**.
+- **Assignee**: **Me**, each other teammate, or **Unassigned**.
+- **Tags**: conversations with any of the ticked tags. Once you tick two or more, **Has every chosen tag**
+  appears; tick it to show only conversations with all of them.
+- **Needs attention**: **Waiting on us** (the newest message that is not a private note came from the
+  customer) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
+  A link with `?has_pending_draft=true` shows the conversations where an AI agent left a reply draft
+  that no one has sent or discarded yet (chip **Reply draft waiting to be sent**).
+- **Channel**: how the conversation started. **Email**, **Web form**, **Help chat** and **Zalo OA** are
+  listed once the workspace has a channel of that type. **Imported** (from another helpdesk) and **Started by the team**
+  (created in Colliedesk by a teammate or an agent token) are always listed.
   Conversations that existed before channels were recorded got theirs from their first message; one
   without a message from the customer first counts as started by the team.
-- **Email channels**, **Web form channels**: shown when the workspace has two or more channels of that
-  type. Each one lists the conversations that came through it or whose replies leave from it. The chip
+- **Email channels**, **Web form channels**, **Zalo OA channels**: shown when the workspace has two or
+  more live channels of that type. Each one lists the conversations that came through it or whose replies leave from it. The chip
   names the channel, with "(removed)" for a channel that was removed. In an address it is
   `?channel_id=<id>`, which **Settings → Channels** links use.
-- **Source**: **Imported** or **Created in Colliedesk**.
-- **Organization**: the exact organization name of the customer, in any case.
-- **Created** and **Last activity**: a range of days, picked in your timezone (see
-  [Timezones](timezones.md)); both ends are included, and **To** cannot be earlier than **From**.
 - **All conversations of** *name* in the conversation details shows that customer's conversations in
-  every status.
+  every status. When the customer belongs to an organization (a Zalo group's, a Freshdesk company), the
+  details name it under **Organization**; selecting it lists that organization's conversations in every
+  status (`organization=`).
 
 Each active filter shows as a chip under the status tabs; select its **x** to remove it, or **Clear all**
 to go back to **Open**. The Filter button counts the filters that are on.
 
-**Sort** orders the list by **Latest activity** (the default), **Oldest activity**, **Newest first**,
-**Oldest first** (by creation), **Priority, urgent first**, or **Waiting longest** (conversations waiting on
-you, the customer who wrote longest ago first, then everything else). Only the latest-activity order is
-grouped under Today and Earlier.
+A link can set filters that the menu does not list. They work and show as chips:
+`awaiting=customer` (**Waiting on the customer**: the newest message is your team's reply),
+`has_pending_draft=true`, `assignee=anyone`, `channel=problem_report`, `source=imported` or
+`source=native`, `organization=<exact name, any case>`, and the date ranges `created_after`,
+`created_before`, `updated_after` and `updated_before` (UTC instants; the chip shows the days in your
+timezone, see [Timezones](timezones.md)).
+
+**Sort** orders the list by **Latest activity** (the default), **Waiting longest** (conversations waiting on
+you, the customer who wrote longest ago first, then everything else) or **Priority** (urgent first). Only the
+latest-activity order is grouped under Today and Earlier. A link can also set `sort=updated_asc`,
+`created_desc` or `created_asc`; the menu then shows that order as chosen.
 
 The filters, the sort and the search are part of the page address, so you can bookmark a list or send its
 link to a teammate. Back returns to the list you came from. A value the inbox does not know (an old or
@@ -129,6 +183,10 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   allow them in the browser's site settings, then reload the page. The list refresh and the title count keep working.
 - Colliedesk does not email agents about new or assigned conversations.
 
+**Light or dark**
+- **Theme** in **Settings → Preferences** switches between **Light** (the default) and **Dark**. It is
+  stored in this browser only; other tabs you have open follow at once.
+
 **See who else is on a conversation**
 - A row in the list shows the initials of the teammates who have that conversation open right now,
   three at most and then a count. Hover the initials to read the names. **Replying** next to them
@@ -158,6 +216,10 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   shows how many rows are selected and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
   **Tags** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
+- With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
+  Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
+  customer whose channel has words for the new status (see [Telling the customer](#telling-the-customer)).
+  Untick it to change them quietly; the buttons' names say **Resolve quietly** and **Set status quietly**.
 - In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
   checked tag removes it from all of them; choosing any other tag adds it to the rows that lack it.
 - Press Escape to close an open menu; press it again to clear the selection.
@@ -188,6 +250,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   the conversation to **Resolved**, in one step. The status changes only after the reply was accepted: if the
   reply is refused, nothing changes and your text stays in the box with the reason. If the reply was sent but
   the status could not be changed, a message says so; press **Resolve** above the thread to try again.
+- On a chat channel with words for Resolved, **Send and resolve** also tells the customer; its tooltip
+  says so. To resolve quietly, send the reply, then choose **Resolve without telling the customer**.
 - A private note has no **Send and resolve**, because a note is often written while the work goes on. Add
   the note, then press **Resolve** above the thread.
 - Messages support Markdown.
@@ -209,9 +273,19 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
   its own time and says where it came from), and you choose **Send anyway** or **Edit reply**. Either
   way you are asked about those replies once. Private notes never trigger it.
-- Approving an AI agent's [reply draft](agent-requests.md) works the same way: when someone replied
-  after the newest reply on your screen, the draft is not sent and keeps waiting; read the new reply,
-  then send the draft again if it still fits.
+- A reply draft an AI agent left (`colliedesk_reply_draft`) shows above the reply box with the
+  token's name; you edit it, send it or discard it. Sending it is a reply like any other, so the same
+  check applies.
+- A draft can carry files (up to 10, like a message). They are listed on the draft, each a download,
+  and only your team sees them. Each has a box that is ticked: untick a file to leave it out, and
+  **Send** sends the reply with the files still ticked. The customer receives a draft's files only
+  when someone sends the draft with them.
+- A new draft from the same agent goes on top. The ones before it stay under **Earlier drafts** below
+  the waiting draft, with how each ended (replaced by a newer draft, expired after a week, or
+  discarded, by whom or when the conversation was resolved or closed), their text and files.
+  **Bring back** puts one above the reply box again, files included; the draft that waited there moves
+  to **Earlier drafts**. **Show older drafts** loads the ones before. A sent draft does not come back,
+  and earlier drafts and their files go 90 days after they ended.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
 - **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.
@@ -221,7 +295,23 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   holds the **Send** button and sends nothing until you remove a file. A file you sent stays on the
   message. A reply emails its files to the contact; a private note and its files never leave your team.
 - Attachments appear under their message with name and size. Select a file name to download it.
-  Files always download; they are never opened inside Colliedesk.
+- **Pictures, videos and voice clips** show on the timeline itself, for customer messages, replies and
+  private notes alike. Colliedesk goes by the file's type as it was received, not by its name, so a
+  photo from a chat app named `image-1` shows too. A picture is a small thumbnail (a few kilobytes,
+  made from the photo the first time someone views it); the gallery shows the original; a video and a voice clip
+  get a player with play and pause, a bar to move through it, the time, volume, speed (1×, 1.25×,
+  1.5×, 2×, 0.75×) and, for a video, full screen. With the player focused, `k` or Space plays and
+  pauses, `m` mutes and `f` goes full screen; the arrow keys move the bar or the volume. Nothing loads
+  until it is near the screen, and a video or voice clip is not downloaded whole before you play it.
+- Select a picture (or the expand button of a player) to open the **gallery** (a clip playing on the
+  timeline stops): every picture, video
+  and voice clip of the conversation in timeline order, with its position (3 / 7), its name, who sent
+  it and when, a **Download** button and a strip of all of them. **Previous** and **Next**, the arrow
+  keys or a swipe move through it; **Escape** or **Close** closes it. Pictures embedded in a formatted
+  email are part of that email and are not in the gallery.
+- Every other file, and a picture or clip the browser cannot show (an SVG drawing, a HEIC photo, a
+  voice clip in a format the browser does not play), stays a row to download. Files are never opened
+  as a page inside Colliedesk.
 
 **Start a new conversation**
 - Select **New conversation** next to the inbox title.
@@ -246,15 +336,83 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 **Change the conversation**
 - **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
   screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
-  instead, which sets it back to Open. If the change fails, a message under the button says so.
+  instead, which sets it back to Open. If the change fails, a message under the button says so. When the
+  change would tell the customer (below), the button reads **Resolve and tell** or **Reopen and tell**,
+  and the arrow beside it offers **Resolve without telling the customer** or **Reopen without telling
+  the customer** (to add a note or fix a detail).
 
 In the details pane (**Show details** on a narrower screen):
-- **Status**: every status can be changed back, for example Resolved → Open to reopen.
-- **Priority**: Low, Normal, High, Urgent.
-- **Assignee**: assign to a teammate or set back to unassigned.
+- **Status**: a menu; a status changes only once you choose it. Every status can be changed back, for
+  example Resolved → Open to reopen. On a conversation whose status may tell the customer, **Tell the
+  customer** comes first, ticked each time the menu opens, and says which statuses its channel tells;
+  untick it and the status you pick is set quietly.
+- **Priority**: Urgent, High, Normal, Low.
+- **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
+
+**Move messages to another conversation**
+A customer's message that landed in the wrong conversation can be moved, with its files: to another
+conversation, into a new conversation of its own (a split), or, for a message of a chat channel's group or
+chat, back to the [intake queue](channels.md#intake-queue) as a card to be decided again. Only customer
+messages move; the team's replies and notes stay where they are. Nothing is sent to the customer.
+
+In the timeline, the menu beside a customer message's time offers **Move to another conversation…**,
+**Split into a new conversation…** and, for a chat message, **Take back to Review**. Moving shows the
+customer's other conversations first, or finds one by subject, customer or text; tick the other customer
+messages to move with it. When every customer message goes, the move can close this conversation as no new
+request. A chat conversation nobody replied in or wrote a note in yet also offers **Not a new request?
+Move it…** above its messages (closing is still refused once a person assigned it). The moves out of and into a conversation are listed above its
+messages, newest first, with who moved what and where, and **Undo** while the move can be undone; a chat
+message says why it is in the conversation (a reply to a message here, a command, a person in
+[Review](review.md), or AI). One AI added says how sure it was, the model it asked (or the fallback model that
+answered when that one failed), when, and the reason it gave (kept 90 days). A chat message
+keeps every line break the customer typed, and a batch of chat messages put together shows each on its own
+line. A message taken back waits in Review as a card that says who took it back.
+- A message taken back to the queue leaves the conversation (it is kept, not deleted). Until its card is
+  decided it is in no timeline, search, AI suggestion or reply thread, and a customer's reply quoting it
+  does not find that conversation. Deciding the card adds the message to the conversation chosen, or opens
+  one with it; setting it aside keeps it out. One card holds the messages of one customer in one place;
+  email and web forms have no queue.
+- A resolved or closed conversation that gets a moved message reopens, as it does when the customer
+  writes again.
+- When every customer message of a conversation goes to another and nobody replied in it, wrote a note
+  or assigned it yet, the move can also close it as no new request (`close_source`); it then points to
+  where its messages went. Once someone worked on it, closing is refused and only the messages move.
+- A message moved into a conversation of another customer stays theirs: replies go to the conversation's
+  customer only, never suggest copying the writer and never thread on their mail. The move says so
+  (`other_contact`), and says when the message came through another channel (`other_channel`).
+- A customer's later answer to a moved message follows it to where it went.
+- Every move can be undone: the messages go back, a conversation the move closed reopens, a status it
+  changed comes back while nobody changed the conversation or wrote in it since, and a conversation a
+  split opened closes and points back. Only the newest move of a message can be undone, and a message
+  taken back to the queue only while its card waits.
+
+AI agents move messages with the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
+and `colliedesk_message_move_undo`, or the API `POST /api/v1/conversations/{id}/messages/move`
+(`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source`), `GET
+/api/v1/conversations/{id}/message-moves` (the moves out of and into a conversation) and `POST
+/api/v1/message-moves/{id}/undo`; moving and undoing need `conversations:update`. Through the API, send the same
+`Idempotency-Key` header on every retry of one move or undo: a repeat answers what the first one got.
 
 **Trial and locked workspaces** (hosted cloud only)
 During the trial a banner under the workspace name shows the days left. When the trial or the
 subscription ends, the inbox is replaced by a page that says so, with the ways forward for admins.
 See [Plan and billing](billing.md).
+
+## Telling the customer
+
+- A conversation of a chat (a Zalo OA) tells its customer when its status is set to Pending, Resolved or
+  Closed, or reopened, if its channel has words for that status (an email conversation a Zalo message was
+  moved into is told on that chat) (a Zalo OA's **When a conversation's
+  status changes**, see [Zalo OA](zalo.md#when-the-status-of-a-conversation-changes)). The words come from the
+  channel, as its own message, shown in the timeline as **Sent by the channel · not a reply**. Email and
+  web form conversations are never told.
+- Every way to set a status has a quiet one: the arrow next to **Resolve** / **Reopen**, unticking **Tell
+  the customer** in Status, or **Tell customers** in the bulk bar. The API takes `notify: false` on
+  `PATCH /api/v1/conversations/{id}` and on the bulk change.
+- When a status was set by something other than a person on your team (an AI agent, the customer
+  writing or typing Reopen, the import, or the channel closing it by itself), a quiet line in the
+  timeline says who, at the time it happened.
+- A status change that would tell a customer needs `messages:send`. An AI agent whose token lacks it
+  is refused with the channel that would tell them, and can set the status quietly with
+  `notify: false` instead.

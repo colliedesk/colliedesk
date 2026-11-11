@@ -48,7 +48,7 @@ export function EmailHome(props: HomeProps) {
       <thead><tr><th>{m.colAddress}</th><th>{m.colReceives}</th><th>{m.colReplies}</th><th>{m.colStatus}</th><th><span className="sr-only">{m.colAction}</span></th></tr></thead>
       <tbody>{email.map((item, index) => <Row key={item.id} channel={item} settings={settings[index]?.data} isDefault={email.length > 1 && item.id === defaultID} />)}</tbody>
     </table></div>
-    {mainSettings?.channel && <Folds channel={main} settings={mainSettings} several={email.length > 1} canManage={canManage} timezone={timezone} navigate={navigate} channels={email} />}
+    {mainSettings?.channel && <Folds channel={main} settings={mainSettings} several={email.length > 1} canManage={canManage} timezone={timezone} navigate={navigate} />}
   </section>;
 }
 
@@ -68,10 +68,10 @@ function Row({ channel, settings, isDefault }: { channel: Channel; settings?: Em
   </tr>;
 }
 
-interface FoldsProps { channel: Channel; settings: EmailChannelSettings; several: boolean; canManage: boolean; timezone: string; navigate: HomeProps['navigate']; channels: Channel[] }
+interface FoldsProps { channel: Channel; settings: EmailChannelSettings; several: boolean; canManage: boolean; timezone: string; navigate: HomeProps['navigate'] }
 
 // Folds are the default address's settings people rarely change; the dangerous ones come last.
-function Folds({ channel, settings, several, canManage, timezone, navigate, channels }: FoldsProps) {
+function Folds({ channel, settings, several, canManage, timezone, navigate }: FoldsProps) {
   const { refresh } = useEmailSettings(channel.id);
   const saveSenderName = useMutation({ mutationFn: (name: string) => channelsApi.update(channel.id, { config: { sender_name: name } }), onSuccess: refresh });
   const verifyDomain = useMutation({ mutationFn: () => channelsApi.emailVerifyDomain(channel.id), onSettled: refresh });
@@ -91,11 +91,10 @@ function Folds({ channel, settings, several, canManage, timezone, navigate, chan
       <TestMessage channelID={channel.id} ready={addressSaved(settings)} forwarding={channel.status.state === 'working'} navigate={navigate}
         onSent={(conversation) => writeMemory(channel.id, { ...readMemory(channel.id), testConversation: conversation })} />
     </details>
-    <details className="email-home-fold email-home-danger"><summary>{m.foldChange}</summary>
-      {canManage && settings.hosted_address && <ForwardingName />}
-      <p className="muted-copy">{m.disconnectHelp}</p>
-      <ul className="email-home-manage">{channels.map((item) => <li key={item.id}>
-        <a href={`/settings/channels/${encodeURIComponent(item.id)}`}>{m.manageOf(item.summary || item.name)}</a></li>)}</ul>
-    </details>
+    {canManage && settings.hosted_address && <details className="email-home-fold email-home-danger"><summary>{m.foldChange}</summary>
+      <ForwardingName />
+    </details>}
+    {/* One sentence, shown as it is: each row's Manage button is the way to an address's Disconnect email. */}
+    <p className="muted-copy email-home-disconnect">{m.disconnectHelp}</p>
   </div>;
 }

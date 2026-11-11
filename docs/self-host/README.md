@@ -32,7 +32,7 @@ receives mail without DNS or relay setup.
 Self-host if you want the data on your own hardware, or you already run Docker and an SMTP relay.
 You need to:
 
-- keep the server upgraded; Colliedesk is alpha and releases often;
+- keep the server upgraded; Colliedesk releases often;
 - back up PostgreSQL and the attachment files;
 - connect a mail forwarder and an SMTP relay before customers can email you;
 - put the server behind your own domain and reverse proxy;
@@ -78,8 +78,10 @@ customer email, import from Freshdesk, invite your team and answer your first em
 
 ## Upgrading
 
-Colliedesk is alpha: releases are `0.0.x` and any release may change the database schema. Every
-release is tested by upgrading the release before it. Follow
+Colliedesk follows Semantic Versioning from `1.0.0`. A release can change the database schema, and
+it ships the migration that upgrades your data. Every release is tested by upgrading the release
+before it. You run the same releases and migrations as Colliedesk Cloud; your backups are yours to
+run ([what general availability guarantees](../general-availability.md)). Follow
 [upgrade, roll back and restore a workspace](upgrade.md):
 
 1. Back up PostgreSQL and the attachment files, and check the backup.
@@ -93,7 +95,8 @@ one workspace without touching the others.
 The installer writes the image to `COLLIE_DESK_IMAGE` in `.env`. Pick one tag:
 
 - `ghcr.io/colliedesk/colliedesk:latest` (default): the newest release.
-- `ghcr.io/colliedesk/colliedesk:0.0.N`: one exact release, if you want to pin.
+- `ghcr.io/colliedesk/colliedesk:1.2.3`: one exact release, if you want to pin; `1.2` follows the
+  newest patch release of that minor version.
 - `ghcr.io/colliedesk/colliedesk:edge`: the newest `main` commit that passed CI and booted against
   PostgreSQL. Newer, less tested.
 
@@ -109,6 +112,7 @@ Security fixes go to the latest release and to `edge` only.
 - [Autofix: the GitHub App](github-app.md)
 - [Backups and database](database.md)
 - [Upgrade, roll back and restore a workspace](upgrade.md)
+- [Score AI intake on your own cases](intake-eval.md)
 
 ## Troubleshooting and support
 
@@ -118,6 +122,8 @@ Security fixes go to the latest release and to `edge` only.
 ## Migrate
 
 - [Migrate to Colliedesk Cloud](migrate-to-cloud.md)
+- [Import a bundle](import-bundle.md)
 
 To move from another helpdesk, see [import from Freshdesk](../user/import-freshdesk.md) and
-[import from Help Scout](../user/import-helpscout.md).
+[import from Help Scout](../user/import-helpscout.md); from any other system, prepare a
+[bundle](import-bundle.md).

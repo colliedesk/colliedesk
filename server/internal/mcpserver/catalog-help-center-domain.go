@@ -11,12 +11,17 @@ const (
 		`"type":{"type":"string","enum":["CNAME","A","AAAA","TXT"]},"name":{"type":"string"},"value":{"type":"string"},"purpose":{"type":"string","enum":["route_and_verify","route","verify"]}}}},` +
 		`"created_at":{"type":["string","null"]},"verified_at":{"type":["string","null"]},"checked_at":{"type":["string","null"]},` +
 		`"check_error":{"type":["string","null"]},"certificate_requested_at":{"type":["string","null"]},` +
-		`"failing_since":{"type":["string","null"]},"pending_reason":{"type":["string","null"],"enum":["proof_lost","taken_over",null]},"awaiting_payment":{"type":"boolean"}}}`
+		`"failing_since":{"type":["string","null"]},"pending_reason":{"type":["string","null"],"enum":["proof_lost","taken_over",null]},"awaiting_payment":{"type":"boolean"},` +
+		`"address_url":{"type":["string","null"]},"address_checked_at":{"type":["string","null"]},"address_error":{"type":["string","null"]}}}`
 	helpCenterDomainOutput = `{"type":"object","required":["domain"],"properties":{"domain":` + helpCenterDomainSchema + `}}`
 
 	helpCenterDomainRule = `The domain becomes active once DNS proves the workspace owns it: a CNAME of the host name to this claim's own target hc-<claim>.<HELP_CENTER_DOMAIN> ` +
 		`shown in records (when the server has a help center domain; it never changes while the domain is set), or the TXT record _help-center-verify.<host name> ` +
 		`holding the token shown in records. A or AAAA records never prove it. `
+
+	helpCenterAddressRule = `Whether visitors really reach it: once DNS proves an active domain whose help center serves there, the check opens address_url ` +
+		`(over HTTPS behind TLS) and records address_checked_at, with address_error saying what is wrong and what to do when the answer was not ` +
+		`this help center's (no valid certificate yet, another server answers, no answer in time); a null address_error with address_checked_at set means it works. `
 )
 
 func helpCenterDomainGetSpec() Spec {
@@ -28,12 +33,12 @@ func helpCenterDomainGetSpec() Spec {
 			`An active domain whose checks fail shows failing_since; after 7 days without proof it goes back to pending with pending_reason proof_lost, ` +
 			`or taken_over when another workspace proved the host name while this domain's records did not. ` +
 			`awaiting_payment is true while the workspace is on its trial (or locked after it): the domain can be set and verified, ` +
-			`but the help center serves on it only once the workspace is paid.` + "\n\nTier: read.",
-		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET " + helpCenterDomainPath},
-		Input:  noArguments,
-		Output: helpCenterDomainOutput,
-		run:    helpCenterDomainGet,
+			`but the help center serves on it only once the workspace is paid. ` + helpCenterAddressRule,
+		ReadOnly: true,
+		REST:     []string{"GET " + helpCenterDomainPath},
+		Input:    noArguments,
+		Output:   helpCenterDomainOutput,
+		run:      helpCenterDomainGet,
 	}
 }
 
@@ -44,12 +49,12 @@ func helpCenterDomainSetSpec() Spec {
 		Description: `Set or replace the custom domain the public help center serves on. A new host name is pending with a new token and CNAME target; sending the current one again changes nothing. ` +
 			helpCenterDomainRule + `Then set the records it returns and call colliedesk_help_center_domain_check. ` +
 			`Refused: an IP address, a single label, the app's own host and names below the server's help center domain (validation_failed), ` +
-			`A host name another workspace's help center serves on can be claimed: it waits, pending, until DNS proves this claim and no longer proves the other one. ` + `A custom token needs help_center:update and kb_articles:publish; without either it files a request for a person to approve. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST:   []string{"PUT " + helpCenterDomainPath},
-		Input:  `{"type":"object","additionalProperties":false,"required":["hostname"],"properties":{"hostname":{"type":"string","minLength":1,"maxLength":253,"description":"A host name such as help.example.com; Unicode names are stored in punycode."}}}`,
-		Output: helpCenterDomainOutput,
-		run:    helpCenterDomainSet,
+			`A host name another workspace's help center serves on can be claimed: it waits, pending, until DNS proves this claim and no longer proves the other one. `,
+		Idempotent: true,
+		REST:       []string{"PUT " + helpCenterDomainPath},
+		Input:      `{"type":"object","additionalProperties":false,"required":["hostname"],"properties":{"hostname":{"type":"string","minLength":1,"maxLength":253,"description":"A host name such as help.example.com; Unicode names are stored in punycode."}}}`,
+		Output:     helpCenterDomainOutput,
+		run:        helpCenterDomainSet,
 	}
 }
 
@@ -60,12 +65,12 @@ func helpCenterDomainCheckSpec() Spec {
 		Description: `Look up the custom domain's DNS now and record the result. ` + helpCenterDomainRule +
 			`A pending domain that passes becomes active; a failed check says which record to set in check_error. An active domain keeps serving while checks fail, ` +
 			`and goes back to pending after 7 days without proof. When another workspace serves on the host name, a passing check takes it over if DNS no longer proves ` +
-			`that workspace's claim, else domain_taken. One workspace may check 10 times an hour, people and agents together. ` + `A custom token needs help_center:update and kb_articles:publish; without either it files a request for a person to approve. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST:   []string{"POST " + helpCenterDomainPath + "/check"},
-		Input:  noArguments,
-		Output: helpCenterDomainOutput,
-		run:    helpCenterDomainCheck,
+			`that workspace's claim, else domain_taken. ` + helpCenterAddressRule + `One workspace may check 10 times an hour, people and agents together. `,
+		Idempotent: true,
+		REST:       []string{"POST " + helpCenterDomainPath + "/check"},
+		Input:      noArguments,
+		Output:     helpCenterDomainOutput,
+		run:        helpCenterDomainCheck,
 	}
 }
 
@@ -74,12 +79,12 @@ func helpCenterDomainRemoveSpec() Spec {
 		Name:  "colliedesk_help_center_domain_remove",
 		Title: "Remove the help center's custom domain",
 		Description: `Remove the custom domain: the help center stops serving on it at once and its slug address serves again. ` +
-			`Setting it again needs a new check with a new CNAME target and TXT token. Removing when there is none changes nothing. ` + `A custom token needs help_center:update and kb_articles:publish; without either it files a request for a person to approve. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin", Idempotent: true,
-		REST:   []string{"DELETE " + helpCenterDomainPath},
-		Input:  noArguments,
-		Output: helpCenterDomainOutput,
-		run:    helpCenterDomainRemove,
+			`Setting it again needs a new check with a new CNAME target and TXT token. Removing when there is none changes nothing. `,
+		Idempotent: true,
+		REST:       []string{"DELETE " + helpCenterDomainPath},
+		Input:      noArguments,
+		Output:     helpCenterDomainOutput,
+		run:        helpCenterDomainRemove,
 	}
 }
 

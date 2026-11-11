@@ -99,6 +99,9 @@ type helpChat struct {
 	surface  helpchat.Surface
 	// widget: the chat is framed by a site; its cookie is partitioned.
 	widget bool
+	// lang is the help center language the end user reads (?lang=, one customers see), "" the primary
+	// one: answers come from that language's published translations and link its pages.
+	lang string
 }
 
 // openHelpChat finds the request's channel and checks the chat may answer. A chat that is off (its
@@ -140,8 +143,14 @@ func (a *API) openHelpChat(kit channels.HelpCenterKit, response http.ResponseWri
 		return nil, false
 	}
 	surface, _ := config.(helpchat.Surface)
+	lang := ""
+	for _, shown := range at.Languages {
+		if strings.EqualFold(shown, request.URL.Query().Get("lang")) {
+			lang = shown
+		}
+	}
 	return &helpChat{response: response, request: request, at: at, kit: kit, channel: channel, surface: surface,
-		widget: request.URL.Query().Get("surface") == ai.SurfaceWidget}, true
+		widget: request.URL.Query().Get("surface") == ai.SurfaceWidget, lang: lang}, true
 }
 
 // helpCenterOrigin is scheme://host[:port] of a help center address.
@@ -227,7 +236,13 @@ type helpChatSource struct {
 }
 
 func (c *helpChat) source(number int64, title, folder string) helpChatSource {
-	return helpChatSource{Number: number, Title: title, Folder: folder, URL: c.at.Address + "/a/" + strconv.FormatInt(number, 10)}
+	// In a language, the article's page in it: the help center moves to the article's own page while
+	// no translation is published there.
+	prefix := ""
+	if c.lang != "" {
+		prefix = "/" + c.lang
+	}
+	return helpChatSource{Number: number, Title: title, Folder: folder, URL: c.at.Address + prefix + "/a/" + strconv.FormatInt(number, 10)}
 }
 
 func (a *API) helpChatSession(c *helpChat) {
@@ -356,7 +371,7 @@ func (a *API) helpChatTurn(c *helpChat) {
 	}
 	stream := &helpChatStream{chat: c, token: token}
 	err := a.ai.ChatTurn(c.request.Context(), c.at.WorkspaceID, ai.ChatTurnInput{Surface: c.chatSurface(), Browser: browser, Started: started,
-		Question: input.Question, ViewingArticle: input.ViewingArticle}, stream)
+		Question: input.Question, ViewingArticle: input.ViewingArticle, Locale: c.lang}, stream)
 	if stream.started {
 		if err != nil {
 			slog.Error("help chat turn", "workspace_id", c.at.WorkspaceID, "error", err)
@@ -454,12 +469,38 @@ func (s *helpChatStream) Done(status string, links []string, redacted bool) {
 
 func (s *helpChatStream) Error(code string) { s.line(map[string]any{"type": "error", "code": code}) }
 
-// helpChatConfig is what chat.js needs of the page it runs on (its data-config).
+// locale is the language the end user reads: the one of ?lang the help center shows, else its primary one.
+func (c *helpChat) locale() string {
+	if c.lang != "" {
+		return c.lang
+	}
+	return c.at.Look.Lang
+}
+
+// chatPage is the chat page's path below the help center, in the reader's language.
+func (c *helpChat) chatPage() string {
+	page := "/chat?channel=" + url.QueryEscape(c.channel.ID)
+	if c.lang != "" {
+		page += "&lang=" + url.QueryEscape(c.lang)
+	}
+	return page
+}
+
+// helpChatConfig is what chat.js needs of the page it runs on (its data-config). The chat page and the
+// site's frame carry the chat's words in the reader's language (text); an article's box, the same on
+// every language's pages, takes them from its page (data-text).
 func (c *helpChat) config(surface string) string {
 	look := c.at.Look
-	config := map[string]any{"surface": surface, "name": c.at.Name, "siteTitle": look.SiteTitle, "home": look.Home, "search": look.SearchURL,
-		"api": c.at.Base + "/chat", "channel": c.channel.ID, "page": c.at.Base + "/chat?channel=" + url.QueryEscape(c.channel.ID), "trial": c.at.Trial,
+	home := look.Home
+	if c.lang != "" {
+		home = c.at.Base + "/" + c.lang
+	}
+	config := map[string]any{"surface": surface, "name": c.at.Name, "siteTitle": look.SiteTitle, "home": home, "search": look.SearchURL,
+		"api": c.at.Base + "/chat", "channel": c.channel.ID, "page": c.at.Base + c.chatPage(), "trial": c.at.Trial,
 		"greeting": c.surface.Greeting, "suggestions": c.surface.Suggestions}
+	if surface != "article" {
+		config["text"] = json.RawMessage(helpcenter.ChatWordsJSON(c.locale()))
+	}
 	if look.LogoURL != "" {
 		config["logo"] = map[string]any{"url": look.LogoURL, "alt": look.LogoAlt, "width": look.LogoWidth, "height": look.LogoHeight}
 	}
@@ -487,7 +528,7 @@ func (a *API) helpChatPage(c *helpChat) {
 			c.setCookie(token, false)
 		}
 		// The code leaves the address bar and the history.
-		http.Redirect(c.response, c.request, c.at.Base+"/chat?channel="+url.QueryEscape(c.channel.ID), http.StatusSeeOther)
+		http.Redirect(c.response, c.request, c.at.Base+c.chatPage(), http.StatusSeeOther)
 		return
 	}
 	embed := query.Get("embed") == "1"
@@ -496,8 +537,13 @@ func (a *API) helpChatPage(c *helpChat) {
 		surface = "embed"
 		ancestors = strings.Join(c.surface.WidgetOrigins, " ")
 	}
-	body := helpchat.RenderPage(helpchat.Page{Look: c.at.Look, Title: "Ask " + c.at.Name, Embed: embed, Config: c.config(surface),
-		Script: c.assetPath("chat.js"), Style: c.assetPath("chat.css")})
+	words, look := helpcenter.ChatWords(c.locale()), c.at.Look
+	if c.lang != "" {
+		look.Home = c.at.Base + "/" + c.lang
+	}
+	body := helpchat.RenderPage(helpchat.Page{Look: look, Lang: c.locale(), Title: helpcenter.Fill(words.AskName, "name", c.at.Name), Embed: embed,
+		Config: c.config(surface), Script: c.assetPath("chat.js"), Style: c.assetPath("chat.css"),
+		Words: helpchat.PageWords{Skip: words.SkipToChat, NeedsJS: words.NeedsJS, SearchArticles: words.SearchArticles, OrGoBackTo: words.OrGoBackTo}})
 	header := c.response.Header()
 	header.Set("Content-Security-Policy", helpcenter.ScriptPolicy(c.at.Address+"/chat/chat.js", ancestors))
 	header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -545,6 +591,8 @@ func (a *API) helpChatAsset(name string) func(*helpChat) {
 // helpChatWidgetConfig tells widget.js on a company's site what to draw: only for a site the channel
 // lists (its Origin), with CORS for that site alone; any other site gets the help center's 404 and no
 // CORS header, so the widget draws nothing. brand is the help center's accent colors, null without.
+// lang is the language the widget speaks (its data-lang when the help center shows it, else the
+// primary one), with the button's labels in it; the widget opens the chat in it.
 func (a *API) helpChatWidgetConfig(c *helpChat) {
 	origin := strings.ToLower(c.request.Header.Get("Origin"))
 	if origin == "" || !slices.Contains(c.surface.WidgetOrigins, origin) {
@@ -558,7 +606,9 @@ func (a *API) helpChatWidgetConfig(c *helpChat) {
 	header := c.response.Header()
 	header.Set("Access-Control-Allow-Origin", origin)
 	header.Add("Vary", "Origin")
-	writeJSON(c.response, http.StatusOK, map[string]any{"name": c.at.Name, "greeting": c.surface.Greeting, "suggestions": c.surface.Suggestions, "brand": brand})
+	words := helpcenter.ChatWords(c.locale())
+	writeJSON(c.response, http.StatusOK, map[string]any{"name": c.at.Name, "greeting": c.surface.Greeting, "suggestions": c.surface.Suggestions, "brand": brand,
+		"lang": c.locale(), "label": helpcenter.Fill(words.WidgetLabel, "name", c.at.Name), "close_label": words.CloseChat})
 }
 
 // helpChatTransfer makes a one-time code that moves the frame's chat to the help center's own page.
@@ -573,7 +623,7 @@ func (a *API) helpChatTransfer(c *helpChat) {
 			return
 		}
 	}
-	page := c.at.Address + "/chat?channel=" + url.QueryEscape(c.channel.ID)
+	page := c.at.Address + c.chatPage()
 	if found {
 		page += "&t=" + url.QueryEscape(code)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,9 @@ type ChannelInput struct {
 	// IsDefault, true, makes the channel its type's default; the one that was loses it. A type keeps
 	// a default while it has a channel, so false is refused: make another channel the default.
 	IsDefault *bool
+	// ProcessingPaused pauses (true) or resumes (false) the channel's processing; only a type whose
+	// messages wait in the journal (Async) can be paused.
+	ProcessingPaused *bool
 }
 
 // nameTaken returns the live channel of the type that has the name (whatever its case), other than
@@ -82,6 +86,34 @@ func (s *Store) adapterOf(kind channels.Type) (channels.Adapter, error) {
 }
 
 // validSettings checks stored settings decode over the type's defaults.
+// numberSeriesExists refuses settings that number a channel's conversations in a series the workspace
+// does not have.
+func numberSeriesExists(ctx context.Context, tx pgx.Tx, workspaceID string, definition channels.Definition, settings json.RawMessage) error {
+	merged, err := definition.Defaults.Merge(settings)
+	if err != nil || merged.NumberSeries == "" || merged.NumberSeries == DefaultNumberSeries {
+		return nil
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversation_number_series WHERE workspace_id=$1 AND series=$2)`, workspaceID, merged.NumberSeries).Scan(&exists); err != nil {
+		return fmt.Errorf("find number series: %w", err)
+	}
+	if !exists {
+		return &channels.FieldError{Fields: map[string]string{"settings.number_series": "This workspace has no such number series: add it first."},
+			Message: "Check the channel settings."}
+	}
+	return nil
+}
+
+// autoCloseHours is the auto_close_hours of settings over the type's defaults (0: never), which
+// validSettings checked.
+func autoCloseHours(definition channels.Definition, settings json.RawMessage) int {
+	merged, err := definition.Defaults.Merge(settings)
+	if err != nil || merged.AutoCloseHours == nil {
+		return 0
+	}
+	return *merged.AutoCloseHours
+}
+
 func validSettings(definition channels.Definition, settings json.RawMessage) (json.RawMessage, error) {
 	if len(settings) == 0 {
 		return json.RawMessage(`{}`), nil
@@ -94,6 +126,44 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	if err != nil {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings": err.Error()}, Message: "Check the channel settings."}
 	}
+	if every := merged.Notices.UnmatchedEverySeconds; every != nil && (*every < 0 || *every > 86400) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.unmatched_every_seconds": "Use 0 to 86400 seconds."},
+			Message: "Check the channel settings."}
+	}
+	if hours := merged.AutoCloseHours; hours != nil && (*hours < 0 || *hours > 720) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.auto_close_hours": "Use 0 (never) to 720 hours."},
+			Message: "Check the channel settings."}
+	}
+	if every := merged.Notices.HelpEverySeconds; every != nil && (*every < 0 || *every > 86400) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.help_every_seconds": "Use 0 to 86400 seconds."},
+			Message: "Check the channel settings."}
+	}
+	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
+		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired,
+		channels.NoticeReopenNotFound: merged.Notices.ReopenNotFound, channels.NoticeReopenLegacy: merged.Notices.ReopenLegacy,
+		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted, channels.NoticeHelp: merged.Notices.Help,
+		channels.NoticeStatusPending: merged.Notices.StatusPending, channels.NoticeStatusResolved: merged.Notices.StatusResolved,
+		channels.NoticeStatusClosed: merged.Notices.StatusClosed} {
+		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
+				Message: "Check the channel settings."}
+		}
+	}
+	for key, command := range merged.Commands {
+		if command.Action != "" && command.Action != channels.ActionOpen && command.Action != channels.ActionCancel && command.Action != channels.ActionReopen &&
+			command.Action != channels.ActionConfirm && command.Action != channels.ActionHelp {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".action": "Use open, cancel, reopen, confirm or help."},
+				Message: "Check the channel settings."}
+		}
+		if placeholder := channels.UnknownPlaceholder(channels.NoticeAskDescription, command.AskDescription); placeholder != "" {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".ask_description": "This notice cannot fill " + placeholder + "."},
+				Message: "Check the channel settings."}
+		}
+		if command.Match != "" && command.Match != channels.MatchFuzzy && command.Match != channels.MatchWords && command.Match != channels.MatchExact {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.commands." + key + ".match": "Use fuzzy, words or exact, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+	}
 	for key, scope := range merged.Scopes {
 		known := false
 		for _, declared := range definition.Scopes {
@@ -105,6 +175,27 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 		}
 		if scope.Mode != "" && scope.Mode != channels.ModeAll && scope.Mode != channels.ModeCommands {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".mode": "Use all or commands."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Unmatched != "" && scope.Unmatched != channels.UnmatchedJoinOpen && scope.Unmatched != channels.UnmatchedNotice {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "Use join_open or notice, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+		// Where several customers write (a group), a notice would answer everyone's chatter.
+		if scope.Unmatched == channels.UnmatchedNotice && slices.Contains(definition.SharedScopes, key) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "A notice answers one customer: use join_open here, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Gather != nil && (scope.Gather.PreCommandSeconds < 0 || scope.Gather.PreCommandSeconds > 3600) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.pre_command_seconds": "Use 0 to 3600 seconds."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Gather != nil && (scope.Gather.ConfirmSeconds < 0 || scope.Gather.ConfirmSeconds > 3600) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.confirm_seconds": "Use 0 to 3600 seconds."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Gather != nil && (scope.Gather.ExpireSeconds < 0 || scope.Gather.ExpireSeconds > 86400) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.expire_seconds": "Use 0 to 86400 seconds."},
 				Message: "Check the channel settings."}
 		}
 	}
@@ -158,6 +249,9 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	if err != nil {
 		return channels.Channel{}, err
 	}
+	if err := numberSeriesExists(ctx, tx, workspaceID, definition, settings); err != nil {
+		return channels.Channel{}, err
+	}
 	change, err := adapter.Config().Validate(ctx, tx, workspaceID, nil, input.Config)
 	if err != nil {
 		return channels.Channel{}, err
@@ -188,9 +282,9 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	}
 	enabled := input.Enabled == nil || *input.Enabled
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default)
-		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8) RETURNING id::text`,
-		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default,auto_close_since)
+		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8,CASE WHEN $9 > 0 THEN now() END) RETURNING id::text`,
+		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault, autoCloseHours(definition, settings)).Scan(&id)
 	if err != nil {
 		return channels.Channel{}, channelWriteError(err)
 	}
@@ -307,7 +401,14 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 		if err != nil {
 			return channels.Channel{}, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE channels SET settings=$3,updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, settings); err != nil {
+		if err := numberSeriesExists(ctx, tx, workspaceID, definition, settings); err != nil {
+			return channels.Channel{}, err
+		}
+		// Closing by itself applies to what is resolved after it was turned on; changing its hours keeps that
+		// time, turning it off clears it.
+		if _, err := tx.Exec(ctx, `UPDATE channels SET settings=$3,updated_at=now(),
+			auto_close_since=CASE WHEN $4 <= 0 THEN NULL ELSE COALESCE(auto_close_since,now()) END
+			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, settings, autoCloseHours(definition, settings)); err != nil {
 			return channels.Channel{}, fmt.Errorf("save channel settings: %w", err)
 		}
 		if err := insertChannelEvent(ctx, tx, current, "config_changed", actor, map[string]any{"settings": true}); err != nil {
@@ -323,6 +424,23 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 		kind := "disabled"
 		if *input.Enabled {
 			kind = "enabled"
+		}
+		if err := insertChannelEvent(ctx, tx, current, kind, actor, nil); err != nil {
+			return channels.Channel{}, err
+		}
+	}
+	if input.ProcessingPaused != nil && *input.ProcessingPaused != (current.ProcessingPausedAt != nil) {
+		if *input.ProcessingPaused && adapter.Inbound().Mode() != channels.Async {
+			return channels.Channel{}, &channels.FieldError{Fields: map[string]string{"processing_paused": "This channel takes each message as it comes: it cannot be paused."},
+				Message: "Check the channel."}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE channels SET processing_paused_at=CASE WHEN $3 THEN now() END,processing_paused_by_agent_id=CASE WHEN $3 THEN NULLIF($4,'')::uuid END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, *input.ProcessingPaused, actor.AgentID); err != nil {
+			return channels.Channel{}, fmt.Errorf("pause or resume channel: %w", err)
+		}
+		kind := "resumed"
+		if *input.ProcessingPaused {
+			kind = "paused"
 		}
 		if err := insertChannelEvent(ctx, tx, current, kind, actor, nil); err != nil {
 			return channels.Channel{}, err
@@ -407,13 +525,15 @@ func (s *Store) removeChannel(ctx context.Context, tx pgx.Tx, workspaceID, id st
 	}
 	// What it holds is opened or discarded first. The row lock above keeps a message from being held
 	// between this count and the removal (IngestInbound locks the channel FOR SHARE).
-	var held int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='held'`,
-		workspaceID, id).Scan(&held); err != nil {
+	// Messages of cards of the intake queue are decided there, not opened or discarded one by one.
+	var held, queued int
+	if err := tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE NOT `+inIntakeQueue+`('deciding','review')))
+		FROM channel_inbound_events e WHERE workspace_id=$1 AND channel_id=$2 AND state='held'`,
+		workspaceID, id).Scan(&held, &queued); err != nil {
 		return nil, fmt.Errorf("count held messages: %w", err)
 	}
 	if held > 0 {
-		return nil, &channels.HeldError{Count: held}
+		return nil, &channels.HeldError{Count: held, Queued: queued}
 	}
 	adapter, err := s.adapterOf(channel.Type)
 	if err != nil {
@@ -476,12 +596,17 @@ func channelWriteError(err error) error {
 
 // ChannelPublic is a channel as the API shows it.
 type ChannelPublic struct {
-	Channel  channels.Channel
-	Config   any
+	Channel channels.Channel
+	Config  any
+	// Settings are the rules the channel stores over its type's defaults (what a change of settings
+	// replaces); nil for a removed channel. The channel's effective rules are Channel.Settings.
+	Settings json.RawMessage
 	Summary  string
 	Status   channels.Status
 	Held     int
 	Unsent   int
+	// Paused counts the messages kept while the channel's processing is paused (0 while it runs).
+	Paused   int
 	LastSeen *string
 }
 
@@ -499,6 +624,9 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		if public.Summary, err = adapter.Config().Summary(ctx, tx, channel); err != nil {
 			return public, err
 		}
+		if err := tx.QueryRow(ctx, `SELECT settings FROM channels WHERE workspace_id=$1 AND id=$2`, channel.WorkspaceID, channel.ID).Scan(&public.Settings); err != nil {
+			return public, fmt.Errorf("read channel settings: %w", err)
+		}
 	}
 	switch {
 	case !channel.Live():
@@ -514,8 +642,9 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		(SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='held' AND hold_reason=$3),
 		(SELECT count(*) FROM channel_outbox WHERE workspace_id=$1 AND channel_id=$2 AND status='failed' AND last_error_code=$4),
 		(SELECT to_char(max(received_at) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') FROM channel_inbound_events
-			WHERE workspace_id=$1 AND channel_id=$2 AND state NOT IN ('received','failed'))`,
-		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff).Scan(&public.Held, &public.Unsent, &public.LastSeen); err != nil {
+			WHERE workspace_id=$1 AND channel_id=$2 AND state NOT IN ('received','failed')),
+		CASE WHEN $5 THEN (SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state IN ('received','failed','pending')) ELSE 0 END`,
+		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff, channel.ProcessingPausedAt != nil).Scan(&public.Held, &public.Unsent, &public.LastSeen, &public.Paused); err != nil {
 		return public, fmt.Errorf("count channel messages: %w", err)
 	}
 	// Any event the channel received and decided on (made a message, held, dropped as the desk's own
@@ -527,7 +656,8 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 			return public, fmt.Errorf("check first channel message: %w", err)
 		}
 		if !received {
-			public.Status = channels.Status{State: channels.StateWaiting, ReasonCode: channels.ReasonNoMessageYet}
+			// The type's hint of what may keep the first message away stays.
+			public.Status = channels.Status{State: channels.StateWaiting, ReasonCode: channels.ReasonNoMessageYet, Message: public.Status.Message}
 		}
 	}
 	return public, nil

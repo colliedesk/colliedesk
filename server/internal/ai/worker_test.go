@@ -167,7 +167,7 @@ func TestAutomaticTasksStopAtTheDailyLimitAndPeopleDoNot(t *testing.T) {
 	q := newQueueEnv(t, nil)
 	q.turnOn(t, q.a, ai.SlotTriage)
 	q.turnOn(t, q.a, ai.SlotDraft)
-	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 2, 30, nil); err != nil {
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 2, 30, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	var automatic []string
@@ -334,7 +334,7 @@ func TestAStoppingProcessPutsItsTaskBackWithoutCountingIt(t *testing.T) {
 func TestABurstPastTheMinuteLimitWaitsForTheNextMinute(t *testing.T) {
 	q := newQueueEnv(t, nil)
 	q.turnOn(t, q.a, ai.SlotTriage)
-	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1, nil); err != nil {
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotTriage, Automatic: true})
@@ -410,7 +410,7 @@ func TestTheMinuteLimitLooksAcrossMidnight(t *testing.T) {
 	q := newQueueEnv(t, nil)
 	q.clock.now = time.Date(2026, 10, 22, 23, 59, 40, 0, time.UTC)
 	q.turnOn(t, q.a, ai.SlotTriage)
-	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1, nil); err != nil {
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	before := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotTriage, Automatic: true})

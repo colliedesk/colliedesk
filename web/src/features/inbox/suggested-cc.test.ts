@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { suggestedCc } from './suggested-cc';
 
-const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, body_html: null, origin: null,
+const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null };
 let counter = 0;
 type Via = 'platform' | 'workspace' | 'web_form';
@@ -56,4 +56,10 @@ test('on the hosted cloud, mail that did not come through the platform forwarder
   expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example'])], { hosted: true })).toEqual(['boss@customer.example']);
   // A self-hosted desk receives all its mail on its own inbound address.
   expect(suggestedCc(posted)).toEqual(['boss@customer.example']);
+});
+
+test('mail moved in from another customer offers nothing, neither its sender nor its Cc line', () => {
+  const moved = { ...incoming('bob@other.example', ['bobs-boss@other.example']), other_contact_id: '22222222-2222-4222-8222-222222222222' };
+  expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example']), moved])).toEqual(['boss@customer.example']);
+  expect(suggestedCc([moved, incoming('ada@customer.example')])).toEqual([]);
 });

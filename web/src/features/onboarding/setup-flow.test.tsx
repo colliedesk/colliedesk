@@ -6,6 +6,7 @@ import { routeTree } from '../../app';
 import { createQueryClient } from '../../query-client';
 import { presenceViewPart } from '../inbox/presence-part';
 import { autofixPart } from '../autofix/autofix-part';
+import { builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 
 // The setup flow through the app's own routes: the server is the only stand-in (fetch).
 const fetchMock = vi.fn();
@@ -31,7 +32,7 @@ function progress(states: Partial<Record<Key, string>> = {}, recommended: Key | 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 const config = { cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 }, product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
-const invite = { id: '33333333-3333-4333-8333-333333333333', email: 'kim@example.com', role_ceiling: 'agent', created_by_email: 'sam@example.com',
+const invite = { id: '33333333-3333-4333-8333-333333333333', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
   created_at: '2026-10-30T04:00:00Z', expires_at: '2026-11-06T04:00:00Z', used_at: null, revoked_at: null };
 
 // world is what the server holds; creating an invite moves the invite step on, as the server does.
@@ -41,8 +42,8 @@ function serve(world: { role?: 'admin' | 'agent'; setup: Progress; signedOut?: b
     const method = init?.method ?? 'GET';
     if (world.signedOut && path !== '/api/v1/config') return json(401, { error: { code: 'unauthorized', message: 'Sign in.' } });
     if (path === '/api/v1/auth/me') return json(200, {
-      agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: world.role ?? 'admin', timezone_override: null },
-      workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', scope: null, plan: null,
+      agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(world.role ?? 'admin'), timezone_override: null },
+      workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', token: null, permissions: permissionsOf(world.role ?? 'admin'), plan: null,
     });
     if (path === '/api/v1/config') return json(200, config);
     if (path === '/api/v1/workspace/setup') return world.setupDown ? json(503, { error: { code: 'unavailable', message: 'down' } }) : json(200, world.setup);
@@ -53,6 +54,7 @@ function serve(world: { role?: 'admin' | 'agent'; setup: Progress; signedOut?: b
       return json(201, { invite, url: 'https://desk.example.com/sign-in?token=one-time-invite' });
     }
     if (path === '/api/v1/auth/invites') return json(200, { items: [] });
+    if (path === '/api/v1/roles') return json(200, { items: builtInRoles });
     return json(404, { error: { code: 'not_found', message: 'no' } });
   });
 }

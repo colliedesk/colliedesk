@@ -1,0 +1,48 @@
+/* The server provider (AI & pricing): the service cards a workspace's Add provider shows, and a model per feature. */
+.ops-ai-service { margin: 0; border: 0; padding: 0; min-width: 0; }
+.ops-ai-kind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); max-width: 32rem; }
+.ops-ai-kind label { position: relative; display: grid; align-content: start; gap: 2px; border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
+.ops-ai-kind label:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ops-ai-kind label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ops-ai-kind label:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
+.ops-ai-kind input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ops-ai-kind strong { font-size: var(--fs-small); font-weight: 600; }
+.ops-ai-kind span { color: var(--text-3); font-size: var(--fs-label); }
+.ops-ai-models { margin: 0; border: 0; padding: 0; min-width: 0; }
+.ops-ai-per-feature { display: grid; gap: var(--space-2); }
+.ops-ai-model { display: grid; gap: 2px; max-width: 32rem; }
+.ops-ai-model > label { color: var(--text-2); font-size: var(--fs-label); }
+/* A model box: type to search the provider's models, the matches drop below it. */
+.ops-ai-box { position: relative; }
+.ops-ai-box input { width: 100%; }
+.ops-ai-options { position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 4px); max-height: 18rem; overflow-y: auto; margin: 0; padding: var(--space-1); list-style: none;
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-2, 0 8px 24px rgb(0 0 0 / 0.12)); }
+.ops-ai-options li { display: grid; gap: 1px; border-radius: calc(var(--radius) - 2px); padding: var(--space-1) var(--space-2); cursor: pointer; }
+.ops-ai-options li[data-active] { background: var(--surface-2, var(--line)); }
+.ops-ai-options li[aria-selected="true"] .ops-ai-option-name { font-weight: 600; }
+.ops-ai-option-name { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-label); }
+.ops-ai-option-price { color: var(--text-3); font-size: var(--fs-label); }
+.ops-ai-options .ops-ai-options-note { color: var(--text-3); font-size: var(--fs-label); cursor: default; }
+.ops-ai-options::-webkit-scrollbar { width: 8px; }
+.ops-ai-options::-webkit-scrollbar-track { background: transparent; }
+.ops-ai-options::-webkit-scrollbar-thumb { background: var(--line-control); border-radius: 999px; }
+.ops-ai-options::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+.ops-ai-options::-webkit-scrollbar-button { display: none; }
+@supports not selector(::-webkit-scrollbar) { .ops-ai-options { scrollbar-width: thin; scrollbar-color: var(--line-control) transparent; } }
+/* Prices: one row per model; the allowance: a mode and its amounts. */
+.ops-ai-prices { width: 100%; max-width: 40rem; border-collapse: collapse; font-size: var(--fs-small); }
+.ops-ai-prices th, .ops-ai-prices td { padding: var(--space-1) var(--space-1); text-align: left; vertical-align: middle; }
+.ops-ai-prices thead th { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
+.ops-ai-prices tbody th { font-weight: 400; overflow-wrap: anywhere; }
+.setting .ops-ai-prices input:not([type="checkbox"]):not([type="radio"]) { width: 4.75rem; }
+.ops-ai-prices tbody th { min-width: 7rem; }
+.ops-ai-prices tr[data-missing] td input { border-color: var(--danger); }
+.ai-mono { font-family: var(--font-mono); font-size: var(--fs-label); }
+.ops-ai-allowance { margin: 0; border: 0; padding: 0; min-width: 0; }
+.ops-ai-modes { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.ops-ai-modes label { display: inline-flex; gap: var(--space-1); align-items: center; font-size: var(--fs-small); }
+.ops-ai-amounts { display: grid; grid-template-columns: auto auto; gap: var(--space-2) var(--space-3); align-items: center; justify-content: start; font-size: var(--fs-small); }
+.ops-ai-dollars { display: inline-flex; gap: var(--space-1); align-items: center; }
+.setting .ops-ai-dollars input:not([type="checkbox"]):not([type="radio"]) { width: 7rem; }
+.ops-ai-dollars span { color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
+@media (max-width: 44rem) { .ops-ai-kind { grid-template-columns: minmax(0, 1fr); } }

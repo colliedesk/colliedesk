@@ -19,6 +19,9 @@ type UsageRow struct {
 	InputTokens   int64  `json:"input_tokens"`
 	OutputTokens  int64  `json:"output_tokens"`
 	CostMicroUSD  *int64 `json:"cost_micro_usd"`
+	// ProviderCost sums what the provider said the calls cost, in its own unit (OpenRouter: credits),
+	// never converted; nil when it said nothing.
+	ProviderCost *float64 `json:"provider_cost"`
 }
 
 // Usage is one UTC calendar month of a workspace's AI calls.
@@ -47,7 +50,7 @@ func (s *Service) Usage(ctx context.Context, workspaceID string, month time.Time
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT feature,billed_to,provider_label,count(*),count(*) FILTER (WHERE status='error'),count(*) FILTER (WHERE automatic),
 				COALESCE(sum(input_tokens),0)::bigint,COALESCE(sum(output_tokens),0)::bigint,
-				CASE WHEN billed_to='server' THEN COALESCE(sum(cost_micro_usd),0)::bigint END
+				CASE WHEN billed_to='server' THEN COALESCE(sum(cost_micro_usd),0)::bigint END,sum(provider_cost)::float8
 			FROM ai_usage WHERE workspace_id=$1 AND started_at>=$2 AND started_at<$3
 			GROUP BY feature,billed_to,provider_label ORDER BY feature,billed_to,provider_label`, workspaceID, month, month.AddDate(0, 1, 0))
 		if err != nil {
@@ -55,7 +58,7 @@ func (s *Service) Usage(ctx context.Context, workspaceID string, month time.Time
 		}
 		usage.Rows, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (UsageRow, error) {
 			var r UsageRow
-			err := row.Scan(&r.Feature, &r.BilledTo, &r.ProviderLabel, &r.Calls, &r.Failed, &r.Automatic, &r.InputTokens, &r.OutputTokens, &r.CostMicroUSD)
+			err := row.Scan(&r.Feature, &r.BilledTo, &r.ProviderLabel, &r.Calls, &r.Failed, &r.Automatic, &r.InputTokens, &r.OutputTokens, &r.CostMicroUSD, &r.ProviderCost)
 			return r, err
 		})
 		if err != nil {

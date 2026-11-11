@@ -1,8 +1,10 @@
 import { browserTimeZone } from '../lib/format-date';
+import { clearSignupAttribution, readSignupAttribution } from '../lib/signup-attribution';
 import { redeemedSchema } from './schemas';
 import type { Generated } from './schemas';
 
 // SignupAnswers are what the sign-up form asks about the team; the server stores them with the workspace.
+// A visitor who came with a plan in mind may give some, or none (the server takes each answer on its own).
 export interface SignupAnswers {
   goal: Generated<'OnboardingGoal'>;
   role: Generated<'OnboardingRole'>;
@@ -52,12 +54,16 @@ async function signupFailure(response: Response): Promise<SignupError> {
 
 // signUpCloud creates a trial workspace for the verified identity of the bearer token and returns
 // the signed-in agent and workspace (the session cookie is set by the response).
-export async function signUpCloud(token: string, workspaceName: string, answers?: SignupAnswers, next?: string) {
+// The post or ad the sign-in link came from goes with it, and is forgotten once the trial exists.
+export async function signUpCloud(token: string, workspaceName: string, answers?: Partial<SignupAnswers>, next?: string) {
+  const attribution = readSignupAttribution();
   const response = await fetch('/api/v1/auth/cloud/signup', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ workspace_name: workspaceName, ...answers, timezone: browserTimeZone(), ...(next ? { next } : {}) }),
+    body: JSON.stringify({ workspace_name: workspaceName, ...answers, timezone: browserTimeZone(), ...(next ? { next } : {}), ...(attribution ? { attribution } : {}) }),
   });
   if (!response.ok) throw await signupFailure(response);
-  return redeemedSchema.parse(await response.json());
+  const redeemed = redeemedSchema.parse(await response.json());
+  clearSignupAttribution();
+  return redeemed;
 }

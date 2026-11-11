@@ -17,12 +17,22 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 5. **Open at the core.** Roadmap, decisions and code are public. Write as if a stranger will read
    it tomorrow.
 6. **Agents can do what people can do.** Every action in the web app is available to an AI agent:
-   through an API route classified for a token tier in `server/internal/httpapi/token-scope.go`
-   and an MCP tool, or as a request a person approves. A new feature ships its route
-   classification and its MCP tool in the same PR; a gap is listed with its tracking issue
-   (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink (ceilings in the test).
+   through an API route classified with the permission it needs in `routeAccess`
+   (`server/internal/httpapi/token-scope.go`) and an MCP tool, or person-only with a stated reason.
+   A new feature ships its route classification and its MCP tool in the same PR; a gap is listed
+   with its tracking issue (person-only rows in `routeAccess`, `mcpToolPending`) and those lists
+   only shrink (ceilings in the test).
    `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
    `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
+7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
+   A person finishes the task in the fewest steps and screens, and every screen says the next step.
+   An AI agent finishes the same task in the fewest MCP calls: a tool's name and description say
+   when to use it, answers carry names and not only ids, and a refused or invalid call says how to
+   fix it. A PR that adds or changes a feature states both counts (person steps, agent calls),
+   before and after. Gates: `TestEveryToolHasADocSentence`, `TestLookupToolsReturnNamesNotJustIDs`,
+   `TestToolArgumentsAreValidatedAgainstTheSchema`,
+   `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
+   the onboarding journeys below; agent journeys with call budgets are tracked in #374.
 
 ## Glossary
 
@@ -48,11 +58,17 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 ## Hit every surface
 
 - **Entry points:** a feature reachable in the UI is also reachable through the API and through
-  MCP with the right token tier (item 6 above; the gate test names what to edit).
+  MCP with the permission it needs (item 6 above; the gate test names what to edit).
 - **Reverse states:** every way in has a way out and a way to see it.
 - **Contracts:** anything crossing the wire is typed in `contracts/openapi.yaml`.
 - **Docs:** a user-visible change updates its page in `docs/user/` (server operation: `docs/self-host/`). Internal docs record decisions
   and traps only (`docs/internals/`).
+- **Website:** before you push, check that what colliedesk.com tells people still matches the code:
+  the `docs/user/` pages it publishes and its own text, commands and claims in
+  [colliedesk/colliedesk.com](https://github.com/colliedesk/colliedesk.com) (`src/data/pages/`,
+  `src/components/`). Fix what is wrong and add what is missing, in this PR for `docs/user/` and in
+  a colliedesk.com PR for the rest. After the merge, check the live page (the site rebuilds every
+  15 minutes, or run its `Site` workflow).
 
 ## Verifying
 
@@ -74,7 +90,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 `@onboarding` tests in `web/e2e/` differ.
 
 - `self-host first run: fresh database, create-workspace, pairing link, empty inbox that explains the next step` (`web/e2e/onboarding-self-host.spec.ts`)
-- `invite teammate: admin invites, teammate joins under the agent ceiling, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
+- `invite teammate: admin invites, teammate joins with the Agent role, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
 - `email channel: forwarded mail opens a conversation, the reply is delivered by SMTP with threading headers, the customer reply threads back` (`web/e2e/onboarding-email.spec.ts`)
 - `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: an account without canned responses still migrates its tickets and says so` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
@@ -126,20 +142,33 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
 
 ## Releases
 
-Colliedesk is **alpha**: releases are `v0.0.N`. Merging to `main` never makes a release, and
+Colliedesk is **generally available**: releases follow Semantic Versioning from `v1.0.0`. A breaking
+change to the API, the CLI or the export format needs a new major version; new features raise the
+minor version, fixes only the patch version. Merging to `main` never makes a release, and
 nothing makes one on a schedule. A release is cut only when Chính (`hiimchinh`) or Long
-(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk`, or they press
+(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk -f part=minor`
+(`patch` for fixes only, `major` for a breaking change; `minor` is the default), or they press
 Run workflow themselves (it needs write access to this repository). It
 releases the commit Colliedesk Cloud runs (`version` in `GET /api/v1/config`), never the head of
-`main`, as the next `v0.0.N`, and fails when Cloud runs nothing newer than the last release.
+`main`, as the next version for that part (`.github/scripts/release-next.sh`; the first release after
+the `v0.0.N` ones is `v1.0.0`), and fails when Cloud runs nothing newer than the last release.
 Release notes are generated from merged pull request titles, so write titles a user can read.
 A run that failed after creating its tag is finished by running Release again.
 `latest` follows the newest release.
-Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
-owner announces beta. Two gates refuse other tags: the repository tag ruleset
-`alpha-release-tags-only` (no bypass, so GitHub rejects the push even from an admin) and
-`.github/scripts/release-tag-check.sh` in `release.yml`. Never edit either one without the
-owner's announcement quoted in the PR or ruleset change.
+Never call a release, page or doc "alpha" or "beta", never tag another `0.x` version, and never tag a
+pre-release suffix. Two gates refuse other tags: the repository tag ruleset on `v*` tags (no bypass,
+so GitHub rejects the push even from an admin) and `.github/scripts/release-tag-check.sh` in
+`release.yml` (`tests/release-tag-test.sh`). Never edit either one without the owner's words quoted in
+the PR or ruleset change.
+[docs/general-availability.md](docs/general-availability.md) says what general availability
+guarantees (upgrades, export, Cloud backups, uptime, self-hosted installs). A change that makes one of
+its statements untrue updates that page in the same PR.
+The Claude Code, Cursor and Codex plugin (`plugins/colliedesk`) has its own version, `version` in
+`.claude-plugin/plugin.json`: a PR that changes anything in that folder raises it (patch for a fix or
+wording, minor for a new skill or file, major when an install stops working as before), or installs
+from the colliedesk marketplace never get the change. `.codex-plugin/plugin.json` carries the same
+version. CI enforces both
+(`.github/scripts/plugin-version-check.py`, `tests/plugin-version-check-test.py`).
 
 ## Issues and the roadmap
 
@@ -153,6 +182,17 @@ the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; foll
   from ROADMAP.md in the same PR (or move it under Now without the link). CI fails otherwise.
 - **Adding to the roadmap:** link the issue and label it to match the section:
   `gh issue edit N --add-label planned` for Next/Then, `accepted` for Later.
+- **Milestones are goals.** Each is titled `Goal: …` with a measurable "Done when". When one closes,
+  AGENTS.md records what it made true: each guarantee becomes a rule naming its gate, and text it
+  made stale is updated. `milestone-agents-md.yml` opens that issue, assigned to whoever closed the
+  milestone; the PR that updates AGENTS.md closes it.
+- **Read the whole issue before code.** Run `gh issue view N --comments`: the plan and the
+  design spec often arrive as comments after the issue was opened, and they are part of the task.
+  A comment that starts with "Design spec" is the design to build. A PR that says `Closes #N`,
+  `Part of #N` or `Refs #N` for such an issue carries a `## Design spec` section with one item per
+  mechanism: `- done: …`, `- changed: … because …` or `- not in this PR: … (#issue)`. The `roadmap`
+  job fails without it (`.github/scripts/design-spec-check.py`); after editing the description,
+  re-run that job.
 - **New ideas from users** belong in Discussions → Ideas, not Issues. When a maintainer accepts
   one, open an issue that links the discussion.
 - Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`

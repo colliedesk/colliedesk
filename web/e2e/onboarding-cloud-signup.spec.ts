@@ -32,19 +32,24 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   });
   expect(unverified.status()).toBe(401);
 
+  // The visitor comes from a TikTok post: the sign-in page keeps the link's keys for the sign-up, which sends
+  // them as the page does once the identity provider verified the email.
+  await page.goto(`${baseURL}/sign-in?intent=trial&utm_source=tiktok&utm_content=post-07`);
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem('colliedesk.signup-attribution'))).not.toBeNull();
+  const attribution = await page.evaluate(() => (JSON.parse(window.sessionStorage.getItem('colliedesk.signup-attribution') ?? '{}') as { values: Record<string, string> }).values);
   const created = await page.request.post(`${baseURL}/api/v1/auth/cloud/signup`, {
     headers: { Origin: baseURL, Authorization: `Bearer ${provider.token({ email })}`, 'X-Forwarded-For': newClientAddress() },
-    data: { workspace_name: name, goal: 'leave_helpdesk', role: 'support_lead', source: 'ai_claude' },
+    data: { workspace_name: name, goal: 'leave_helpdesk', role: 'support_lead', source: 'ai_claude', attribution },
   });
   expect(created.status()).toBe(201);
-  const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; role: string } };
-  expect(body.agent).toMatchObject({ email, role: 'admin' });
-  expect(psql(`SELECT source FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`, database).trim()).toBe('ai_claude');
+  const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; roles: { name: string; system: string | null }[] } };
+  expect(body.agent).toMatchObject({ email, roles: [{ name: 'Admin', system: 'admin' }] });
+  expect(psql(`SELECT concat_ws('/', source, utm_source, utm_content) FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`, database).trim()).toBe('ai_claude/tiktok/post-07');
 
   // The session cookie from the sign-up opens the new workspace with its trial banner.
   await page.goto(baseURL);
   await expect(appNavigationWith(page, name)).toHaveCount(1);
-  await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
+  await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
   await expect(page.getByRole('button', { name: 'Choose a plan' })).toBeVisible();
   // The goal given at sign-up picks the first step of the empty inbox.
   const firstStep = page.getByRole('region', { name: 'Finish setting up' }).getByRole('listitem').first();
@@ -66,7 +71,7 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   // server derives the state on every request.
   psql(`UPDATE workspaces SET trial_ends_at = now() - interval '1 hour' WHERE slug = '${body.workspace.slug}'`, database);
   await page.goto(baseURL);
-  await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeVisible();
   await expect(appNavigationWith(page, name)).toHaveCount(1);
   // While Founding has free slots it is the plan on sale, as on the website.
   await expect(page.getByRole('button', { name: /Founding, \$99 per quarter/ })).toBeVisible();
@@ -95,9 +100,10 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   // A browser that opens the spent link lands back in the app with the reason, never on a JSON page.
   await page.goto(`${baseURL}${url}`);
   await expect(page.getByRole('alert')).toContainText('already used or has expired');
-  await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeVisible();
 
-  // Signing out ends the session and lands on the sign-in page.
+  // Signing out ends the session and lands on the sign-in page. The locked screen has no button of its own: the way out is the account menu.
+  await page.getByRole('button', { name: 'Account' }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(`${baseURL}/sign-in?signed_out=true`);
   await expect(page.getByRole('alert')).toContainText('You are signed out');

@@ -118,17 +118,63 @@ func attachFiles(ctx context.Context, q rowsQuerier, messages []domain.Message, 
 
 // ReplaceAttachmentBytes points an existing attachment at freshly stored bytes,
 // for example after its stored file was lost. It reports false when the
-// attachment no longer exists on that message.
-func ReplaceAttachmentBytes(ctx context.Context, q Querier, workspaceID, id string, input NewAttachment) (bool, error) {
-	var replaced string
-	err := q.QueryRow(ctx, `UPDATE attachments SET filename=$4,content_type=$5,size=$6,sha256=$7,storage_key=$8,inline=$9
-		WHERE workspace_id=$1 AND id=$2 AND message_id=$3 RETURNING id::text`, workspaceID, id, input.MessageID,
-		input.Filename, input.ContentType, input.Object.Size, input.Object.SHA256, input.Object.Key, input.Inline).Scan(&replaced)
+// attachment no longer exists on that message. New bytes drop the thumbnail made
+// of the old ones (it is made again on the next view); staleThumb is that
+// thumbnail's key, for the caller to discard once the transaction committed.
+func ReplaceAttachmentBytes(ctx context.Context, q Querier, workspaceID, id string, input NewAttachment) (replaced bool, staleThumb string, err error) {
+	var row string
+	err = q.QueryRow(ctx, `WITH old AS (SELECT storage_key, thumb_storage_key FROM attachments
+			WHERE workspace_id=$1 AND id=$2 AND message_id=$3 FOR UPDATE)
+		UPDATE attachments a SET filename=$4,content_type=$5,size=$6,sha256=$7,storage_key=$8,inline=$9,
+			thumb_storage_key=CASE WHEN old.storage_key=$8 THEN old.thumb_storage_key END
+		FROM old WHERE a.workspace_id=$1 AND a.id=$2 AND a.message_id=$3
+		RETURNING a.id::text, CASE WHEN old.storage_key=$8 THEN '' ELSE COALESCE(old.thumb_storage_key,'') END`, workspaceID, id, input.MessageID,
+		input.Filename, input.ContentType, input.Object.Size, input.Object.SHA256, input.Object.Key, input.Inline).Scan(&row, &staleThumb)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+		return false, "", nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("replace attachment bytes: %w", err)
+		return false, "", fmt.Errorf("replace attachment bytes: %w", err)
 	}
-	return true, nil
+	return true, staleThumb, nil
+}
+
+// AttachmentThumbnail returns an attachment with the storage keys of its bytes and of its thumbnail. thumb is
+// nil while no thumbnail was made, and "" when the file is no picture the server can read.
+func (s *Store) AttachmentThumbnail(ctx context.Context, workspaceID, id string) (domain.Attachment, string, *string, error) {
+	var item domain.Attachment
+	var key string
+	var thumb *string
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT `+attachmentColumns+`,storage_key,thumb_storage_key FROM attachments WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
+			Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.Inline, &item.CreatedAt, &key, &thumb)
+	})
+	if err != nil {
+		return domain.Attachment{}, "", nil, fmt.Errorf("get attachment thumbnail: %w", err)
+	}
+	item.CreatedAt = domain.UTC(item.CreatedAt)
+	return item, key, thumb, nil
+}
+
+// SetAttachmentThumbnail records the thumbnail made from the bytes at sourceKey ("" for none possible) once,
+// and only while the attachment still holds those bytes: an import that put other bytes in their place
+// meanwhile, or another request that recorded first, wins, and the stored thumbnail is discarded.
+func (s *Store) SetAttachmentThumbnail(ctx context.Context, workspaceID, id, sourceKey, thumbKey string) error {
+	updated, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		if thumbKey != "" {
+			if err := VerifyObjects(ctx, tx, s.objects, thumbKey); err != nil {
+				return false, err
+			}
+		}
+		tag, err := tx.Exec(ctx, `UPDATE attachments SET thumb_storage_key=$4
+			WHERE workspace_id=$1 AND id=$2 AND storage_key=$3 AND thumb_storage_key IS NULL`, workspaceID, id, sourceKey, thumbKey)
+		return tag.RowsAffected() == 1, err
+	})
+	if err != nil {
+		return fmt.Errorf("record attachment thumbnail: %w", err)
+	}
+	if !updated && thumbKey != "" {
+		return s.DiscardObject(ctx, workspaceID, thumbKey)
+	}
+	return nil
 }

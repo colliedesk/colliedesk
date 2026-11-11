@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"io"
 	"log/slog"
 	"net"
@@ -29,7 +30,9 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
+	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
+	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -109,6 +112,12 @@ type Config struct {
 	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
 	// check; nil uses the system resolver.
 	LookupCNAME func(ctx context.Context, host string) (string, error)
+	// OAuthMetadataClient fetches the client ID metadata documents of AI apps; nil is the guarded client
+	// (oauth-clients.go). Tests set one that reaches their local server.
+	OAuthMetadataClient *http.Client
+	// HelpCenterAddressTransport opens a custom domain's help center address after a DNS check proved
+	// the claim; nil dials public addresses only and checks certificates (helpcenter.NewAddressTransport).
+	HelpCenterAddressTransport http.RoundTripper
 	// HelpCenterProbe fetches a help center page under a domain on trial (D12) and returns its HTTP status;
 	// nil uses an HTTP client with a short timeout.
 	HelpCenterProbe func(ctx context.Context, url string) (int, error)
@@ -136,6 +145,9 @@ type Config struct {
 	// Funnel receives the cloud's trial, activation (email channel, reply, teammate) and payment
 	// events; nil records nothing.
 	Funnel FunnelRecorder
+	// MetaConversions reports trials and first payments of sign-ups from Meta ads to Meta's Conversions API
+	// (queued here, sent by metaconversions.Worker). Zero on a self-hosted server: it reports nothing.
+	MetaConversions metaconversions.Config
 	// ProductAnalytics is the PostHog project the web app reports to; nil (telemetry turned off
 	// with DISABLE_TELEMETRY or DO_NOT_TRACK, or a development build) keeps it from loading.
 	ProductAnalytics *ProductAnalytics
@@ -146,6 +158,8 @@ type Config struct {
 	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
 	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
 	ExtraChannelTypes []channels.Adapter
+	// Zalo is where the Zalo type reaches Zalo; a test points it at a stand-in.
+	Zalo zalo.Config
 	// SwitchedOff are the features an operator switched off (serverconfig features.<name> = false). Their
 	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
 	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
@@ -230,6 +244,8 @@ type API struct {
 	operatorSignIns, operatorSignInIPs *webFormLimiter
 	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
 	helpCenterHostLookups *webFormLimiter
+	// channelFileLookups counts each client address's requests for a channel type's public file.
+	channelFileLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
@@ -239,9 +255,13 @@ type API struct {
 	cursorCalls *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
+	// oauth limits client registrations and remembers client ID metadata documents.
+	oauth *oauthState
 	// testMessages limits the test messages a workspace sends itself per hour.
 	testMessages *webFormLimiter
-	polar        *polar.Client
+	// migrationRequests limits the Freshdesk migration requests a workspace sends per hour.
+	migrationRequests *webFormLimiter
+	polar             *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
 	founding *foundingState
@@ -285,6 +305,12 @@ func (s *Server) AI() *ai.Service { return s.api.ai }
 // GitHub App is not set up.
 func (s *Server) GitHubSync() *githubsync.Service { return s.api.githubSync }
 
+// IntakeHandler decides the intake cards of chat channels for the AI worker; a nil gate opens an action's
+// gate only when the scope's readiness does (otherwise AI suggests and the rules apply).
+func (s *Server) IntakeHandler(gate intake.Gate) ai.Handler {
+	return s.api.intakeService().WithGate(gate).AIHandler()
+}
+
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
 func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
@@ -313,7 +339,9 @@ func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Co
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat})
+	zaloConfig := config.Zalo
+	zaloConfig.Origin, zaloConfig.HostDomain = config.Origin, config.HelpCenterDomain
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat, Zalo: zaloConfig})
 	if len(config.ExtraChannelTypes) == 0 {
 		return registered
 	}
@@ -337,6 +365,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if config.LookupCNAME == nil {
 		config.LookupCNAME = net.DefaultResolver.LookupCNAME
 	}
+	if config.HelpCenterAddressTransport == nil {
+		config.HelpCenterAddressTransport = helpcenter.NewAddressTransport()
+	}
 	outbound := Outbound(config)
 	requestPool := config.RequestPool
 	if requestPool == nil {
@@ -354,9 +385,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		carry = NewCarry(config)
 	}
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
-		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
-		testMessages: carry.testMessages, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
-		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports, oauth: carry.oauth,
+		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
+		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
@@ -389,6 +420,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	aiConfig.PlanLimits = limits
 	if config.SwitchedOff[serverconfig.FeatureAIServer] {
+		if aiConfig.Server != nil {
+			aiConfig.ServerOffLabel = aiConfig.Server.Label
+		}
 		aiConfig.Server, aiConfig.ServerOff = nil, true
 	}
 	if aiConfig.ChatGate == nil {
@@ -467,7 +501,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
-	return &Server{Handler: withRequestID(api.observeTrial(mux)), api: api}
+	api.mountOAuth(mux)
+	return &Server{Handler: withRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
 }
 
 // observeTrial counts, while a trial change runs, the distinct client addresses this process sees, so the
@@ -515,250 +550,305 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/operator/operators", auth.PermissionOperator},
 		{http.MethodDelete, "/api/v1/operator/operators/{id}", auth.PermissionOperator},
 		{http.MethodDelete, "/api/v1/operator/sessions/{id}", auth.PermissionOperator},
-		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
-		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},
-		{http.MethodGet, "/api/v1/auth/sessions", auth.PermissionAccessRead},
-		{http.MethodDelete, "/api/v1/auth/sessions/{id}", auth.PermissionAccessRead},
-		{http.MethodPost, "/api/v1/auth/tokens", auth.PermissionAuthenticated},
-		{http.MethodPost, "/api/v1/auth/invites", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/auth/invites", auth.PermissionAccessRead},
-		{http.MethodDelete, "/api/v1/auth/invites/{id}", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/conversations", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/conversations", auth.PermissionConversationsWrite},
-		{http.MethodPatch, "/api/v1/conversations", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/conversations/{id}", auth.PermissionConversationsRead},
-		{http.MethodPatch, "/api/v1/conversations/{id}", auth.PermissionConversationsWrite},
-		{http.MethodPut, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/conversations/{id}/presence", auth.PermissionConversationsRead},
-		{http.MethodDelete, "/api/v1/conversations/{id}/presence/{clientId}", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
-		{http.MethodGet, mailimage.ProxyPath, auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
-		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
-		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},
-		{http.MethodPatch, "/api/v1/contacts/{id}", auth.PermissionContactsWrite},
-		{http.MethodPost, "/api/v1/contacts/{id}/merges", auth.PermissionContactsWrite},
-		{http.MethodDelete, "/api/v1/contacts/{id}/merges/{mergeId}", auth.PermissionContactsWrite},
-		{http.MethodGet, "/api/v1/agents", auth.PermissionAccessRead},
-		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
-		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
-		{http.MethodPatch, "/api/v1/workspace/name", auth.PermissionAccessWrite},
-		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
-		{http.MethodPatch, "/api/v1/agents/me/display-name", auth.PermissionAuthenticated},
-		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/tags", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/tags", auth.PermissionConversationsWrite},
-		{http.MethodPatch, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/saved-replies", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/saved-replies", auth.PermissionConversationsWrite},
-		{http.MethodPatch, "/api/v1/saved-replies/{id}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/saved-replies/{id}", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/saved-replies/trash", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/saved-replies/{id}/restore", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/saved-replies/{id}/versions", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/saved-replies/{id}/versions/{version}/restore", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/saved-views", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/saved-views", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/saved-views/trash", auth.PermissionConversationsRead},
-		{http.MethodPatch, "/api/v1/saved-views/{id}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/saved-views/{id}", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/saved-views/{id}/restore", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/collections", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/kb/collections", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/collections/trash", auth.PermissionConversationsRead},
-		{http.MethodPatch, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/collections/{id}/restore", auth.PermissionConversationsWrite},
-		{http.MethodPut, "/api/v1/kb/order", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/articles", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/kb/articles", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/articles/trash", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/kb/articles/{id}", auth.PermissionConversationsRead},
-		{http.MethodPatch, "/api/v1/kb/articles/{id}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/kb/articles/{id}", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/articles/{id}/restore", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/articles/{id}/versions", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/kb/articles/{id}/versions/{version}/restore", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/images", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/images/{id}", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/kb/media", auth.PermissionConversationsRead},
-		{http.MethodPatch, "/api/v1/kb/media/{id}", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/media/trash", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/kb/media/trash", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media/trash-unused", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media/restore", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media/purge", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/kb/media/{id}", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media/{id}/restore", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media/{id}/replace", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media-replacements/{id}/undo", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media-uploads", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/media-uploads", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/kb/media-uploads/{id}/complete", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/media/{id}", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/kb/media/{id}/poster", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/kb/media/{id}/poster/{version}", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/kb/media/{id}/details", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/kb/media/{id}/thumbnail", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/help-center", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/help-center", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/help-center/theme", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/help-center/search-console", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/help-center/search-console", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/help-center/freshdesk-redirect", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/help-center/domain", auth.PermissionConversationsRead},
-		{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/help-center/domain", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/help-center/theme/preview", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/auth/me", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/auth/sessions", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/auth/sessions/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/auth/tokens", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/auth/invites", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/auth/invites", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/auth/invites/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/conversations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/conversations/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/conversations/{id}/presence", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/conversations/{id}/presence/{clientId}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/attachments/{id}/thumbnail", auth.PermissionSession},
+		{http.MethodGet, mailimage.ProxyPath, auth.PermissionSession},
+		{http.MethodGet, "/api/v1/contacts", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/contacts", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/contacts/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/contacts/{id}/merges", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/contacts/{id}/merges/{mergeId}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/agents", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversation-number-series", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/conversation-number-series/{series}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/response-targets", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/response-targets", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/workspace/name", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/agents/me/sla-alerts", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/agents/me/display-name", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/tags", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/tags", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/tags/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/tags/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/saved-replies", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/saved-replies", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/saved-replies/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/saved-replies/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/saved-replies/trash", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/saved-replies/{id}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/saved-replies/{id}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/saved-replies/{id}/versions/{version}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/saved-views", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/saved-views", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/saved-views/trash", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/saved-views/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/saved-views/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/saved-views/{id}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/collections", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/collections", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/collections/trash", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/collections/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/collections/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/collections/{id}/restore", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/order", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/trash", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/articles/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/versions/{version}/restore", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/images", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/images/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/media/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media/trash", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media/trash", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media/trash-unused", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media/restore", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media/purge", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/media/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media/{id}/restore", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media/{id}/replace", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media-replacements/{id}/undo", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media-uploads", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media-uploads", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media-uploads/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/media-uploads/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/media-uploads/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/media-uploads/{id}/complete", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/media/{id}/poster", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media/{id}/poster/{version}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media/{id}/details", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/media/{id}/thumbnail", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/theme", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/search-console", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/search-console", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/freshdesk-redirect", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/domain", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/help-center/domain", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/help-center/theme/preview", auth.PermissionSession},
 		{http.MethodGet, helpCenterTLSAskPath, auth.PermissionPublic},
-		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
-		{http.MethodPut, "/api/v1/channels/email", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/channels/email", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/channels/email/domain-verification", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/email", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/channels/email", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/channels/email", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/email/domain-verification", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/channels/email/inbound", auth.PermissionChannelInbound},
 		{http.MethodPost, "/api/v1/channels/email/inbound/recipient", auth.PermissionChannelInbound},
-		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionAccessWrite},
-		{http.MethodPost, gmailPath, auth.PermissionAccessWrite},
-		{http.MethodDelete, gmailPath, auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionSession},
+		{http.MethodPost, gmailPath, auth.PermissionSession},
+		{http.MethodDelete, gmailPath, auth.PermissionSession},
 		{http.MethodGet, gmailCallbackPath, auth.PermissionPublic},
-		{http.MethodGet, "/api/v1/billing", auth.PermissionBillingManage},
-		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
-		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
+		{http.MethodGet, "/api/v1/billing", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/billing/migration-request", auth.PermissionSession},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 		{http.MethodPost, resendWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, foundingPath, auth.PermissionPublic},
-		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
-		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
-		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/export", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionSession},
 		{http.MethodPost, webFormSubmitPattern, auth.PermissionPublic},
-		{http.MethodPost, "/api/v1/export/link", auth.PermissionWorkspaceExport},
+		{http.MethodPost, "/api/v1/export/link", auth.PermissionSession},
 		{http.MethodGet, exportLinkPath + "{token}", auth.PermissionPublic},
-		{http.MethodGet, "/api/v1/agent-requests", auth.PermissionAuthenticated},
-		{http.MethodGet, "/api/v1/agent-requests/{id}", auth.PermissionAuthenticated},
-		{http.MethodPost, "/api/v1/agent-requests/{id}/approve", auth.PermissionAuthenticated},
-		{http.MethodPost, "/api/v1/agent-requests/{id}/reject", auth.PermissionAuthenticated},
-		{http.MethodPost, "/api/v1/agent-requests/{id}/cancel", auth.PermissionAuthenticated},
-		{http.MethodPost, problemReportPath, auth.PermissionAuthenticated},
+		{http.MethodPost, "/api/v1/agent-requests/{id}/approve", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/agent-requests/{id}/reject", auth.PermissionSession},
+		{http.MethodPost, problemReportPath, auth.PermissionSession},
 		// The order is the contract fixture's: each case finds its job in the state it needs.
-		{http.MethodGet, "/api/v1/imports", auth.PermissionWorkspaceImport},
-		{http.MethodGet, "/api/v1/imports/{id}", auth.PermissionWorkspaceImport},
-		{http.MethodPut, "/api/v1/imports/{id}/key", auth.PermissionWorkspaceImport},
-		{http.MethodPost, "/api/v1/imports/{id}/cancel", auth.PermissionWorkspaceImport},
-		{http.MethodPost, "/api/v1/imports/{id}/start", auth.PermissionWorkspaceImport},
-		{http.MethodPost, "/api/v1/imports", auth.PermissionWorkspaceImport},
-		{http.MethodGet, "/api/v1/imports/{id}/report", auth.PermissionWorkspaceImport},
-		{http.MethodPost, "/api/v1/imports/{id}/undo", auth.PermissionWorkspaceImport},
-		{http.MethodGet, "/api/v1/imports/{id}/people", auth.PermissionWorkspaceImport},
-		{http.MethodPut, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
-		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
-		{http.MethodGet, "/api/v1/ai", auth.PermissionAccessRead},
-		{http.MethodPost, "/api/v1/ai/providers", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/ai/models", auth.PermissionAccessWrite},
-		{http.MethodPatch, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
-		{http.MethodPut, "/api/v1/ai/providers/{id}/key", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/ai/providers/{id}/check", auth.PermissionAccessWrite},
-		{http.MethodPut, "/api/v1/ai/slots/{slot}", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/ai/usage", auth.PermissionBillingManage},
-		{http.MethodGet, "/api/v1/ai/chat/usage", auth.PermissionBillingManage},
-		{http.MethodGet, "/api/v1/ai/chat/sessions", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/ai/chat/sessions/{id}", auth.PermissionConversationsRead},
-		{http.MethodDelete, "/api/v1/ai/chat/sessions/{id}", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/ai/chat/preview", auth.PermissionConversationsWrite},
-		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/discard", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/conversations/{id}/ai-triage", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite},
-		{http.MethodGet, "/api/v1/results", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/results/share-link", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/results/share-link", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/imports", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/imports/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/imports/{id}/key", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/imports/{id}/cancel", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/imports/{id}/start", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/imports", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/imports/{id}/report", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/imports/{id}/undo", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/imports/{id}/people", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/ai", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/ai/providers", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/ai/models", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/ai/providers/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/ai/providers/{id}/key", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/ai/providers/{id}/check", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/ai/slots/{slot}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/ai/providers/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/ai/usage", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/ai/chat/usage", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/ai/chat/sessions", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/ai/chat/sessions/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/ai/chat/sessions/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/ai/chat/preview", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/discard", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-triage", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/results", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/results/share-link", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/results/share-link", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/results/share-link", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/results/shared", auth.PermissionPublic},
-		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionAuthenticated},
-		{http.MethodGet, "/api/v1/workspace/setup", auth.PermissionAuthenticated},
-		{http.MethodPut, "/api/v1/agents/me/setup-guide", auth.PermissionAuthenticated},
-		{http.MethodGet, "/api/v1/channels", auth.PermissionAccessRead},
-		{http.MethodPost, "/api/v1/channels", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/channels/events", auth.PermissionAccessRead},
-		{http.MethodGet, "/api/v1/channels/{id}", auth.PermissionAccessRead},
-		{http.MethodPatch, "/api/v1/channels/{id}", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/channels/{id}", auth.PermissionAccessWrite},
-		{http.MethodPut, "/api/v1/channels/{id}/credentials", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/channels/{id}/check", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/channels/{id}/held/replay", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/channels/{id}/held/discard", auth.PermissionAccessWrite},
+		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/workspace/setup", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/agents/me/setup-guide", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/events", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/channels/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/channels/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/channels/{id}/credentials", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/check", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/held/replay", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/held/discard", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}/ai", auth.PermissionSession},
+		// The handler decides by the body: a token below its tier, or a raise, files a request.
+		{http.MethodPut, channelAIRoute, auth.PermissionSession},
+		{http.MethodPut, "/api/v1/ai/source-consents/{class}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/ai/source-consents/{class}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}/ai/intake/readiness", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/ai/intake/evaluations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}/ai/intake/evaluations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/chat", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}/threads", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}/threads/{threadId}/items", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channels/{id}/senders", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/channel-thread-items", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/gatherings", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/gatherings/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}", auth.PermissionSession},
+		{http.MethodPost, intakeDecideRoute, auth.PermissionSession},
+		{http.MethodPost, "/api/v1/intake/gatherings/{id}/requeue", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/summary", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/stats", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/intake", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/messages/move", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/message-moves", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/message-moves/{id}/undo", auth.PermissionSession},
 		// One email channel or web form of several; the routes above without an id act on the default one.
-		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionAccessRead},
-		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/channels/{id}/email/secret", auth.PermissionAccessWrite},
-		{http.MethodPost, channelGmailPath, auth.PermissionAccessWrite},
-		{http.MethodDelete, channelGmailPath, auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/email/secret", auth.PermissionSession},
+		{http.MethodPost, channelGmailPath, auth.PermissionSession},
+		{http.MethodDelete, channelGmailPath, auth.PermissionSession},
 		{http.MethodPost, webFormChannelPattern, auth.PermissionPublic},
 		// Microsoft 365, beside Gmail: the default email channel, the callbacks, then one channel of several.
-		{http.MethodPost, microsoftPath, auth.PermissionAccessWrite},
-		{http.MethodDelete, microsoftPath, auth.PermissionAccessWrite},
+		{http.MethodPost, microsoftPath, auth.PermissionSession},
+		{http.MethodDelete, microsoftPath, auth.PermissionSession},
 		{http.MethodGet, microsoftCallbackPath, auth.PermissionPublic},
 		{http.MethodGet, microsoftAdminConsentPath, auth.PermissionPublic},
-		{http.MethodPost, channelMicrosoftPath, auth.PermissionAccessWrite},
-		{http.MethodDelete, channelMicrosoftPath, auth.PermissionAccessWrite},
+		{http.MethodPost, channelMicrosoftPath, auth.PermissionSession},
+		{http.MethodDelete, channelMicrosoftPath, auth.PermissionSession},
 		// Autofix: what was sent to coding agents and where each fix is.
-		{http.MethodGet, "/api/v1/autofix/status", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/autofix/fixes", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/autofix/fixes/{id}", auth.PermissionConversationsRead},
-		{http.MethodGet, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/autofix/status", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/autofix/fixes", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/autofix/fixes/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/fixes", auth.PermissionSession},
 		// Autofix settings: the GitHub App's installations and the connected repositories.
-		{http.MethodGet, "/api/v1/autofix/settings", auth.PermissionAccessRead},
-		{http.MethodPost, "/api/v1/autofix/github/installations", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/autofix/github/installations/{id}", auth.PermissionAccessWrite},
-		{http.MethodGet, "/api/v1/autofix/github/installations/{id}/repositories", auth.PermissionAccessRead},
+		{http.MethodGet, "/api/v1/autofix/settings", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/autofix/github/installations", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/github/installations/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/autofix/github/installations/{id}/repositories", auth.PermissionSession},
 		{http.MethodGet, autofixCallbackPath, auth.PermissionPublic},
-		{http.MethodPost, "/api/v1/autofix/repos", auth.PermissionAccessWrite},
-		{http.MethodPatch, "/api/v1/autofix/repos/{id}", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/autofix/repos/{id}", auth.PermissionAccessWrite},
-		{http.MethodPut, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/autofix/repos", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/autofix/repos/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/repos/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionSession},
 		{http.MethodPost, githubWebhookPath, auth.PermissionPublic},
 		// Autofix: sending a conversation to a coding agent and a person's changes to its fix.
-		{http.MethodPost, "/api/v1/conversations/{id}/fixes/preview", auth.PermissionConversationsRead},
-		{http.MethodPost, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/autofix/fixes/{id}/retry", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/autofix/fixes/{id}/cancel", auth.PermissionConversationsWrite},
-		{http.MethodPut, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
-		{http.MethodPut, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
-		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/fixes/preview", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/fixes", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/autofix/fixes/{id}/retry", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/autofix/fixes/{id}/cancel", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionSession},
 		// Autofix's coding agents: turned on with the admin's data consent, checked, and Cursor's key.
-		{http.MethodPut, "/api/v1/autofix/connectors/{kind}", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/autofix/connectors/{kind}", auth.PermissionAccessWrite},
-		{http.MethodPost, "/api/v1/autofix/connectors/{kind}/check", auth.PermissionAccessRead},
-		{http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
-		{http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/autofix/connectors/{kind}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/connectors/{kind}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/autofix/connectors/{kind}/check", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionSession},
 		// A test message from the signed-in agent, on the default email channel or one of several.
-		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
-		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionSession},
 		// What Gmail sent to confirm a new forwarding address, shown in the email setup.
-		{http.MethodGet, "/api/v1/channels/{id}/email/forwarding-confirmation", auth.PermissionAccessRead},
+		{http.MethodGet, "/api/v1/channels/{id}/email/forwarding-confirmation", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/roles", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/roles", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/roles/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/roles/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/roles/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/roles/{id}/reset", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/roles/{id}/restore", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/agents/{id}/roles", auth.PermissionSession},
+		{http.MethodPost, replyDraftsPath, auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/languages", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/languages", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/translations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/translations/trash", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/translations/{locale}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
+		// OAuth for AI apps: the consent page reads the app, then the person allows it.
+		{http.MethodGet, oauthClientRoutePath, auth.PermissionPublic},
+		{http.MethodPost, oauthAllowRoutePath, auth.PermissionSession},
 	}
 }
 
@@ -770,38 +860,22 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			next(response, request)
 			return
 		}
-		// An approved agent request replays its call in process as the approving person, who was
-		// authenticated (and checked for CSRF) on the approve call itself.
-		replay, replaying := approvalOf(request.Context())
-		var raw string
-		var viaCookie bool
-		var principal auth.Principal
-		if replaying {
-			principal = replay.approver
-		} else {
-			var ok bool
-			raw, viaCookie, ok = credential(request)
-			if !ok {
-				writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
-				return
-			}
-			var err error
-			principal, err = a.auth.Authenticate(request.Context(), raw, viaCookie)
-			if err != nil {
-				// A cookie that no longer signs in here (revoked, expired, or another workspace's on a
-				// workspace host) is dropped, so the browser stops sending it.
-				if viaCookie && errors.Is(err, auth.ErrInvalidCredential) {
-					clearSessionCookie(response)
-				}
-				writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
-				return
-			}
-			if a.gateToken(response, request, route, principal) {
-				return
-			}
+		raw, viaCookie, ok := credential(request)
+		if !ok {
+			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
+			return
 		}
-		if !auth.HasPermission(principal.Agent.Role, permission) {
-			writeError(response, http.StatusForbidden, "forbidden", "This session does not have permission.")
+		principal, err := a.auth.Authenticate(request.Context(), raw, viaCookie)
+		if err != nil {
+			// A cookie that no longer signs in here (revoked, expired, or another workspace's on a
+			// workspace host) is dropped, so the browser stops sending it.
+			if viaCookie && errors.Is(err, auth.ErrInvalidCredential) {
+				clearSessionCookie(response)
+			}
+			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
+			return
+		}
+		if a.refuseByAccess(response, request, route, principal) {
 			return
 		}
 		if viaCookie && writes(request.Method) && request.Header.Get("Origin") != a.requestOrigin(request) {

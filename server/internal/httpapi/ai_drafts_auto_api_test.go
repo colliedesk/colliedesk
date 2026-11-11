@@ -129,7 +129,7 @@ func TestAutomaticDraftsStopAtTheirLimitsAndLeaveTriageAndPeople(t *testing.T) {
 	d.triageOn(t)
 	d.autoDraftsOn(t)
 	draftsPerDay := 0
-	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay); err != nil {
+	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay, nil); err != nil {
 		t.Fatal(err)
 	}
 	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
@@ -151,7 +151,7 @@ func TestAutomaticDraftsStopAtTheirLimitsAndLeaveTriageAndPeople(t *testing.T) {
 	}
 	// Five automatic drafts on one conversation in a day: the sixth is not written.
 	draftsPerDay = 100
-	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay); err != nil {
+	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 300, 30, &draftsPerDay, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_tasks(workspace_id,kind,conversation_id,automatic,state,started_at,finished_at)
@@ -307,5 +307,28 @@ func TestAnAutomaticDraftOvertakenWhileWrittenIsNotShown(t *testing.T) {
 	d.run(t)
 	if got := d.automaticTasks(t, again); got != "1:cancelled/answered" || len(d.draftRequests()) != calls {
 		t.Fatalf("try again after a reply = %s, %d calls", got, len(d.draftRequests())-calls)
+	}
+}
+
+// The channel's own received notice answers nobody: the automatic draft the customer's message asked for
+// still waits, and is written.
+func TestTheReceivedNoticeLeavesTheAutomaticDraftWaiting(t *testing.T) {
+	d := newDraftDesk(t)
+	d.autoDraftsOn(t)
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer jam"})
+	d.customerWrites(t, d.workspaceA, conversation, "My printer jams.", nil)
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body,notice_kind) VALUES($1,$2,'outgoing','We got your message.','received')`,
+		d.workspaceA, conversation); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.automaticTasks(t, conversation); got != "1:queued/-" {
+		t.Fatalf("automatic drafts after the notice = %s", got)
+	}
+	d.fake.Script(draftAnswer("Hi Lin, open tray two.", []string{"kb1"}, ""))
+	d.due(t, conversation)
+	d.run(t)
+	if got := d.automaticDraft(t, d.adminA, conversation); got == nil || got.Status != ai.DraftReady {
+		t.Fatalf("automatic draft after the notice = %+v, tasks %s", got, d.automaticTasks(t, conversation))
 	}
 }

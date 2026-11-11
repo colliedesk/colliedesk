@@ -18,6 +18,8 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
@@ -45,6 +47,13 @@ var cursorBaseURL = ""
 // microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
 // end-to-end builds set it.
 var microsoftBaseURL = ""
+
+// e2eChannelTypes are channel types run after the shipped ones; only end-to-end builds set them (a
+// loopback chat type whose groups collect messages for intake).
+var e2eChannelTypes []channels.Adapter
+
+// e2eZalo points the Zalo channel type at a local stand-in of Zalo's API; only end-to-end builds set it.
+var e2eZalo zalo.Config
 
 func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -203,6 +212,9 @@ func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
 var (
 	lookupCNAME func(ctx context.Context, host string) (string, error)
 	lookupTXT   func(ctx context.Context, name string) ([]string, error)
+	// helpCenterAddressTransport opens a custom domain's address after its DNS check; nil dials public
+	// addresses only. End-to-end builds reach the local server instead (e2e_dns.go).
+	helpCenterAddressTransport http.RoundTripper
 )
 
 // recheckHelpCenterDomainsDaily looks up the DNS of every active custom help center domain at start
@@ -229,7 +241,7 @@ func recheckHelpCenterDomainsDaily(ctx context.Context, api *httpapi.Server) {
 
 // sweepDaily runs the daily clean-up at start and then daily until ctx ends: it clears the call and
 // answer of agent requests decided more than 90 days ago (the rows stay as the record of who asked and
-// who decided), and deletes for good the saved replies and knowledge base articles and collections that
+// who decided), erases the reasons of AI intake decisions older than 90 days, and deletes for good the saved replies and knowledge base articles and collections that
 // have been in the trash for 30 days, and knowledge base images no article has linked for 30 days.
 func sweepDaily(ctx context.Context, data *store.Store) {
 	ticker := time.NewTicker(24 * time.Hour)
@@ -240,6 +252,11 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 		} else if pruned > 0 {
 			slog.Info("pruned old agent requests", "count", pruned)
 		}
+		if pruned, err := data.PruneIntakeReasons(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("prune old intake reasons", "error", err)
+		} else if pruned > 0 {
+			slog.Info("erased the reasons of AI intake decisions older than 90 days", "count", pruned)
+		}
 		if purged, err := data.PurgeSavedReplyTrash(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("purge saved reply trash", "error", err)
 		} else if purged > 0 {
@@ -249,7 +266,12 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 			slog.Error("purge knowledge base trash", "error", err)
 		} else if purged != (store.KBPurge{}) {
 			slog.Info("purged knowledge base articles and collections deleted more than 30 days ago, and unused images",
-				"articles", purged.Articles, "collections", purged.Collections, "images", purged.Images)
+				"articles", purged.Articles, "translations", purged.Translations, "collections", purged.Collections, "images", purged.Images)
+		}
+		if removed, err := data.SweepDraftFiles(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("sweep reply draft files", "error", err)
+		} else if removed > 0 {
+			slog.Info("removed the files of reply drafts that were sent, stopped or ended more than 90 days ago", "count", removed)
 		}
 		backfillKBMedia(ctx, data)
 		select {

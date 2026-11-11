@@ -9,6 +9,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -39,6 +41,9 @@ var (
 	ErrDraftNotFound = errors.New("no AI draft with that id on this conversation")
 	// ErrDraftDecided means the draft was already sent, discarded or replaced.
 	ErrDraftDecided = errors.New("this AI draft was already sent, discarded or replaced")
+	// ErrDraftNotRestorable means the draft cannot wait again: it was sent, the built-in AI wrote it, or
+	// its text was erased.
+	ErrDraftNotRestorable = errors.New("only an earlier written draft that was not sent can be brought back")
 	// ErrDraftsRateLimited means the workspace asked for draftsPerMinute drafts in the last minute.
 	ErrDraftsRateLimited = fmt.Errorf("at most %d AI drafts and suggestions a minute in a workspace", draftsPerMinute)
 	// ErrConversationNotFound means no conversation with that id in this workspace.
@@ -63,20 +68,27 @@ type DraftWarning struct {
 
 // Draft is one AI reply draft.
 type Draft struct {
-	ID                 string         `json:"id"`
-	ConversationID     string         `json:"conversation_id"`
-	Status             string         `json:"status"`
-	ErrorCode          *string        `json:"error_code"`
-	Prompt             string         `json:"prompt"`
-	Text               *string        `json:"text"`
-	MissingInfo        *string        `json:"missing_info"`
-	Sources            []DraftSource  `json:"sources"`
-	Warnings           []DraftWarning `json:"warnings"`
-	Model              *string        `json:"model"`
-	Outcome            *string        `json:"outcome"`
-	Similarity         *float64       `json:"similarity"`
-	SentMessageID      *string        `json:"sent_message_id"`
-	RequestedByAgentID *string        `json:"requested_by_agent_id"`
+	ID             string `json:"id"`
+	ConversationID string `json:"conversation_id"`
+	Status         string `json:"status"`
+	// Source is ai for a draft the provider wrote, written for words someone (usually an agent token)
+	// left for a person to send; CC and WrittenBy only on a written one.
+	Source    string          `json:"source"`
+	CC        []string        `json:"cc"`
+	WrittenBy *DraftWrittenBy `json:"written_by"`
+	// Files are the files left with a written draft, which only the team sees until it is sent.
+	Files              []domain.AIDraftFile `json:"files"`
+	ErrorCode          *string              `json:"error_code"`
+	Prompt             string               `json:"prompt"`
+	Text               *string              `json:"text"`
+	MissingInfo        *string              `json:"missing_info"`
+	Sources            []DraftSource        `json:"sources"`
+	Warnings           []DraftWarning       `json:"warnings"`
+	Model              *string              `json:"model"`
+	Outcome            *string              `json:"outcome"`
+	Similarity         *float64             `json:"similarity"`
+	SentMessageID      *string              `json:"sent_message_id"`
+	RequestedByAgentID *string              `json:"requested_by_agent_id"`
 	// Automatic: written by itself for a customer's message (AnswersMessageID), for the whole team.
 	// ReplyNeeded is the model's view that the message wants a reply; null for a person's draft.
 	Automatic        bool       `json:"automatic"`
@@ -85,6 +97,15 @@ type Draft struct {
 	CreatedAt        time.Time  `json:"created_at"`
 	ReadyAt          *time.Time `json:"ready_at"`
 	DecidedAt        *time.Time `json:"decided_at"`
+	// DecidedByName names who sent, discarded or replaced it; RestoredAt is when it was last brought back.
+	DecidedByName *string    `json:"decided_by_name"`
+	RestoredAt    *time.Time `json:"restored_at"`
+}
+
+// DraftWrittenBy names who left a written draft: the agent token (nil when a person did) and the person.
+type DraftWrittenBy struct {
+	TokenLabel *string `json:"token_label"`
+	AgentName  string  `json:"agent_name"`
 }
 
 // draftColumns read a draft with the state its task gives it: a pending draft is queued, running,
@@ -96,25 +117,197 @@ const draftColumns = `d.id::text,d.conversation_id::text,
 		WHEN d.status='pending' AND t.state='done' THEN 'internal'
 		WHEN d.status='pending' AND t.state IN ('failed','cancelled') THEN t.error_code END,
 	d.prompt,d.text,d.missing_info,d.sources,d.warnings,d.model,d.outcome,d.similarity::float8,d.sent_message_id::text,
-	d.requested_by_agent_id::text,d.automatic,d.answers_message_id::text,d.reply_needed,d.created_at,d.ready_at,d.decided_at
+	d.requested_by_agent_id::text,d.automatic,d.answers_message_id::text,d.reply_needed,d.created_at,d.ready_at,d.decided_at,
+	d.source,d.cc,(SELECT s.label FROM sessions s WHERE s.workspace_id=d.workspace_id AND s.id=d.requested_by_token_id),
+	(SELECT COALESCE(NULLIF(btrim(a.display_name),''),a.email) FROM agents a WHERE a.workspace_id=d.workspace_id AND a.id=d.requested_by_agent_id),
+	(SELECT COALESCE(NULLIF(btrim(a.display_name),''),a.email) FROM agents a WHERE a.workspace_id=d.workspace_id AND a.id=d.decided_by_agent_id),d.restored_at
 	FROM ai_drafts d LEFT JOIN ai_tasks t ON t.workspace_id=d.workspace_id AND t.id=d.task_id`
 
 func scanDraft(row pgx.Row) (Draft, error) {
 	var d Draft
 	var sources, warnings []byte
+	var tokenLabel, agentName *string
 	err := row.Scan(&d.ID, &d.ConversationID, &d.Status, &d.ErrorCode, &d.Prompt, &d.Text, &d.MissingInfo, &sources, &warnings, &d.Model,
-		&d.Outcome, &d.Similarity, &d.SentMessageID, &d.RequestedByAgentID, &d.Automatic, &d.AnswersMessageID, &d.ReplyNeeded, &d.CreatedAt, &d.ReadyAt, &d.DecidedAt)
+		&d.Outcome, &d.Similarity, &d.SentMessageID, &d.RequestedByAgentID, &d.Automatic, &d.AnswersMessageID, &d.ReplyNeeded, &d.CreatedAt, &d.ReadyAt, &d.DecidedAt,
+		&d.Source, &d.CC, &tokenLabel, &agentName, &d.DecidedByName, &d.RestoredAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Draft{}, ErrDraftNotFound
 	}
 	if err != nil {
 		return Draft{}, err
 	}
-	d.Sources, d.Warnings = []DraftSource{}, []DraftWarning{}
+	d.Sources, d.Warnings, d.Files = []DraftSource{}, []DraftWarning{}, []domain.AIDraftFile{}
+	if d.Source == DraftWritten {
+		d.WrittenBy = &DraftWrittenBy{TokenLabel: tokenLabel}
+		if agentName != nil {
+			d.WrittenBy.AgentName = *agentName
+		}
+	}
 	_ = json.Unmarshal(sources, &d.Sources)
 	_ = json.Unmarshal(warnings, &d.Warnings)
-	d.CreatedAt, d.ReadyAt, d.DecidedAt = d.CreatedAt.UTC(), utcPointer(d.ReadyAt), utcPointer(d.DecidedAt)
+	d.CreatedAt, d.ReadyAt, d.DecidedAt, d.RestoredAt = d.CreatedAt.UTC(), utcPointer(d.ReadyAt), utcPointer(d.DecidedAt), utcPointer(d.RestoredAt)
 	return d, nil
+}
+
+// readDraft reads one draft with its files.
+func readDraft(ctx context.Context, tx pgx.Tx, workspaceID, where string, args ...any) (Draft, error) {
+	draft, err := scanDraft(tx.QueryRow(ctx, `SELECT `+draftColumns+` WHERE `+where, args...))
+	if err != nil {
+		return Draft{}, err
+	}
+	drafts := []Draft{draft}
+	err = withFiles(ctx, tx, workspaceID, drafts)
+	return drafts[0], err
+}
+
+// withFiles fills in the files of the drafts, in one read.
+func withFiles(ctx context.Context, tx pgx.Tx, workspaceID string, drafts []Draft) error {
+	ids := make([]string, 0, len(drafts))
+	for _, draft := range drafts {
+		if draft.Source == DraftWritten {
+			ids = append(ids, draft.ID)
+		}
+	}
+	files, err := store.DraftFiles(ctx, tx, workspaceID, ids)
+	if err != nil {
+		return err
+	}
+	for index := range drafts {
+		if found := files[drafts[index].ID]; found != nil {
+			drafts[index].Files = found
+		}
+	}
+	return nil
+}
+
+// DraftWritten marks a draft someone wrote for a person to send (ai_drafts.source).
+const DraftWritten = "written"
+
+// maxWrittenDraftRunes bounds a written draft, as a reply.
+const maxWrittenDraftRunes = 20000
+
+// CreateWrittenDraft leaves text (and copies) as a ready draft above the reply box, for a person to send,
+// edit or discard like an AI draft. It calls no provider and works while AI drafts are off. The earlier
+// draft of the same person and token, never anyone else's, becomes an earlier one (superseded): it stays,
+// with its files, and RestoreDraft brings it back. attach, when set, records the draft's files in the
+// transaction that writes it.
+func (s *Service) CreateWrittenDraft(ctx context.Context, workspaceID string, actor Actor, conversationID, text string, cc []string,
+	attach func(tx pgx.Tx, draftID string) error) (Draft, error) {
+	text = strings.TrimSpace(text)
+	if text == "" || utf8.RuneCountInString(text) > maxWrittenDraftRunes {
+		return Draft{}, invalid("A draft needs text of 1 to %d characters.", maxWrittenDraftRunes)
+	}
+	if !isUUID(conversationID) {
+		return Draft{}, ErrConversationNotFound
+	}
+	var copies []string
+	if len(cc) > 0 {
+		copies = cc
+	}
+	now := s.now().UTC()
+	var draft Draft
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		if err := conversationExists(ctx, tx, workspaceID, conversationID); err != nil {
+			return err
+		}
+		if err := lockWrittenSlot(ctx, tx, workspaceID, conversationID, actor.AgentID, actor.TokenID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='superseded',decided_at=$4,decided_by_agent_id=$3
+			WHERE workspace_id=$1 AND conversation_id=$2 AND requested_by_agent_id=$3 AND requested_by_token_id IS NOT DISTINCT FROM $5::uuid
+			AND source='written' AND status='ready' AND outcome IS NULL`,
+			workspaceID, conversationID, actor.AgentID, now, nullable(actor.TokenID)); err != nil {
+			return err
+		}
+		var id string
+		if err := tx.QueryRow(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,requested_by_agent_id,requested_by_token_id,status,source,text,cc,ready_at,created_at)
+			VALUES($1,$2,$3,$4,'ready','written',$5,$6,$7,$7) RETURNING id::text`, workspaceID, conversationID, nullable(actor.AgentID), nullable(actor.TokenID),
+			text, copies, now).Scan(&id); err != nil {
+			return err
+		}
+		if attach != nil {
+			if err := attach(tx, id); err != nil {
+				return err
+			}
+		}
+		var err error
+		draft, err = readDraft(ctx, tx, workspaceID, `d.workspace_id=$1 AND d.id=$2`, workspaceID, id)
+		return err
+	})
+	return draft, err
+}
+
+// lockWrittenSlot serializes the changes to one author's (person and token) written drafts on a
+// conversation, for the rest of the transaction: one of them waits at a time.
+func lockWrittenSlot(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, agentID, tokenID string) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "written-draft:"+workspaceID+":"+conversationID+":"+agentID+":"+tokenID)
+	return err
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// RestoreDraft brings an earlier written draft back above the reply box: replaced, expired or discarded,
+// it waits again with its text, copies and files, and the draft of the same person and token that
+// waited in its place becomes the earlier one. A draft that already waits is answered as it is. A sent
+// draft, one the built-in AI wrote (its outcome feeds the team's numbers) or one whose text was erased
+// is ErrDraftNotRestorable.
+func (s *Service) RestoreDraft(ctx context.Context, workspaceID string, actor Actor, conversationID, id string) (Draft, error) {
+	if !isUUID(conversationID) || !isUUID(id) {
+		return Draft{}, ErrDraftNotFound
+	}
+	now := s.now().UTC()
+	var draft Draft
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var source, status string
+		var outcome, agent, token *string
+		var cleared *time.Time
+		// The author's slot is locked before the draft is read, so restores and new drafts of one author
+		// take turns and each sees the one the other left waiting.
+		err := tx.QueryRow(ctx, `SELECT requested_by_agent_id::text,requested_by_token_id::text FROM ai_drafts
+			WHERE workspace_id=$1 AND conversation_id=$2 AND id=$3`, workspaceID, conversationID, id).Scan(&agent, &token)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrDraftNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if err := lockWrittenSlot(ctx, tx, workspaceID, conversationID, stringValue(agent), stringValue(token)); err != nil {
+			return err
+		}
+		err = tx.QueryRow(ctx, `SELECT source,status,outcome,text_cleared_at FROM ai_drafts
+			WHERE workspace_id=$1 AND conversation_id=$2 AND id=$3 FOR UPDATE`, workspaceID, conversationID, id).Scan(&source, &status, &outcome, &cleared)
+		if err != nil {
+			return err
+		}
+		switch {
+		case source != DraftWritten || status != DraftReady || cleared != nil:
+			return ErrDraftNotRestorable
+		case outcome == nil:
+			// Waiting already: nothing to bring back.
+		case *outcome == "superseded" || *outcome == "expired" || *outcome == "discarded":
+			if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='superseded',decided_at=$4,decided_by_agent_id=$5
+				WHERE workspace_id=$1 AND conversation_id=$2 AND id<>$3 AND requested_by_agent_id IS NOT DISTINCT FROM $6::uuid
+				AND requested_by_token_id IS NOT DISTINCT FROM $7::uuid AND source='written' AND status='ready' AND outcome IS NULL`,
+				workspaceID, conversationID, id, now, nullable(actor.AgentID), agent, token); err != nil {
+				return err
+			}
+			// It waits a full week again before it expires.
+			if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome=NULL,decided_at=NULL,decided_by_agent_id=NULL,ready_at=$3,restored_at=$3,restored_by_agent_id=$4
+				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, now, nullable(actor.AgentID)); err != nil {
+				return err
+			}
+		default:
+			return ErrDraftNotRestorable
+		}
+		draft, err = readDraft(ctx, tx, workspaceID, `d.workspace_id=$1 AND d.id=$2`, workspaceID, id)
+		return err
+	})
+	return draft, err
 }
 
 // CreateDraft queues a draft of a reply to the conversation, with the person's optional prompt. It
@@ -205,7 +398,7 @@ func (s *Service) CreateDraft(ctx context.Context, workspaceID string, actor Act
 			prompt, now).Scan(&id); err != nil {
 			return err
 		}
-		draft, err = scanDraft(tx.QueryRow(ctx, `SELECT `+draftColumns+` WHERE d.workspace_id=$1 AND d.id=$2`, workspaceID, id))
+		draft, err = readDraft(ctx, tx, workspaceID, `d.workspace_id=$1 AND d.id=$2`, workspaceID, id)
 		return err
 	})
 	return draft, err
@@ -230,7 +423,7 @@ func (s *Service) GetDraft(ctx context.Context, workspaceID, conversationID, id 
 	var draft Draft
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var err error
-		draft, err = scanDraft(tx.QueryRow(ctx, `SELECT `+draftColumns+` WHERE d.workspace_id=$1 AND d.conversation_id=$2 AND d.id=$3`, workspaceID, conversationID, id))
+		draft, err = readDraft(ctx, tx, workspaceID, `d.workspace_id=$1 AND d.conversation_id=$2 AND d.id=$3`, workspaceID, conversationID, id)
 		return err
 	})
 	return draft, err
@@ -253,27 +446,65 @@ func (s *Service) WaitDraft(ctx context.Context, workspaceID, conversationID, id
 	}
 }
 
-// ListDrafts lists the conversation's newest drafts, newest first.
-func (s *Service) ListDrafts(ctx context.Context, workspaceID, conversationID string) ([]Draft, error) {
-	drafts := []Draft{}
+// Draft pages: DefaultDraftPage drafts unless the caller asks for up to MaxDraftPage.
+const (
+	DefaultDraftPage = 20
+	MaxDraftPage     = 50
+)
+
+// ErrDraftCursor means before does not name a draft of this conversation.
+var ErrDraftCursor = errors.New("before must be the id of a draft of this conversation")
+
+// ListDrafts lists a page of the conversation's drafts, newest first: limit of them (1 to MaxDraftPage),
+// older than the draft before names when it is set. next names the last one listed when older ones
+// remain (the before of the next page), and is empty on the last page.
+func (s *Service) ListDrafts(ctx context.Context, workspaceID, conversationID, before string, limit int) (drafts []Draft, next string, err error) {
+	drafts = []Draft{}
 	if !isUUID(conversationID) {
-		return drafts, ErrConversationNotFound
+		return drafts, "", ErrConversationNotFound
 	}
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+	if before != "" && !isUUID(before) {
+		return drafts, "", ErrDraftCursor
+	}
+	if limit < 1 || limit > MaxDraftPage {
+		return drafts, "", invalid("limit is 1 to %d drafts.", MaxDraftPage)
+	}
+	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		if err := conversationExists(ctx, tx, workspaceID, conversationID); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT `+draftColumns+` WHERE d.workspace_id=$1 AND d.conversation_id=$2 ORDER BY d.created_at DESC, d.id LIMIT 20`, workspaceID, conversationID)
+		where := `d.workspace_id=$1 AND d.conversation_id=$2`
+		args := []any{workspaceID, conversationID, limit + 1}
+		if before != "" {
+			var exists bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ai_drafts WHERE workspace_id=$1 AND conversation_id=$2 AND id=$3)`,
+				workspaceID, conversationID, before).Scan(&exists); err != nil {
+				return err
+			}
+			if !exists {
+				return ErrDraftCursor
+			}
+			where += ` AND (d.created_at,d.id) < (SELECT c.created_at,c.id FROM ai_drafts c WHERE c.workspace_id=$1 AND c.id=$4)`
+			args = append(args, before)
+		}
+		rows, err := tx.Query(ctx, `SELECT `+draftColumns+` WHERE `+where+` ORDER BY d.created_at DESC, d.id DESC LIMIT $3`, args...)
 		if err != nil {
 			return err
 		}
 		drafts, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Draft, error) { return scanDraft(row) })
-		return err
+		if err != nil {
+			return err
+		}
+		if len(drafts) > limit {
+			drafts = drafts[:limit]
+			next = drafts[limit-1].ID
+		}
+		return withFiles(ctx, tx, workspaceID, drafts)
 	})
 	if drafts == nil {
 		drafts = []Draft{}
 	}
-	return drafts, err
+	return drafts, next, err
 }
 
 // DiscardDraft stops a draft being written (cancelled, which does not count as discarded: nobody saw
@@ -315,7 +546,7 @@ func (s *Service) DiscardDraft(ctx context.Context, workspaceID string, actor Ac
 		default:
 			return ErrDraftDecided
 		}
-		draft, err = scanDraft(tx.QueryRow(ctx, `SELECT `+draftColumns+` WHERE d.workspace_id=$1 AND d.id=$2`, workspaceID, id))
+		draft, err = readDraft(ctx, tx, workspaceID, `d.workspace_id=$1 AND d.id=$2`, workspaceID, id)
 		return err
 	})
 	return draft, err
@@ -331,7 +562,7 @@ func (s *Service) DraftOutcomes(ctx context.Context, workspaceID string, from, t
 				WHEN d.status='ready' THEN 'open'
 				WHEN t.state IN ('queued','running') THEN 'open' ELSE 'failed' END, count(*)
 			FROM ai_drafts d LEFT JOIN ai_tasks t ON t.workspace_id=d.workspace_id AND t.id=d.task_id
-			WHERE d.workspace_id=$1 AND d.created_at>=$2 AND d.created_at<$3 GROUP BY 1`, workspaceID, from, to)
+			WHERE d.workspace_id=$1 AND d.source='ai' AND d.created_at>=$2 AND d.created_at<$3 GROUP BY 1`, workspaceID, from, to)
 		if err != nil {
 			return err
 		}

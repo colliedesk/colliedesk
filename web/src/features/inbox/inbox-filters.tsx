@@ -18,6 +18,8 @@ interface InboxFiltersProps {
   timezone?: string;
   // The rows on screen, so a customer filter reads as the customer's name.
   conversations?: Conversation[];
+  // The signed-in agent, listed as Me in the Filter menu.
+  currentAgentId?: string;
   focusSearch?: boolean;
   // Bumped to move focus to the search box, for example after the list's Clear filters.
   focusSignal?: number;
@@ -53,7 +55,7 @@ const ownControls = ['status', 'sort', 'search'];
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; everything else shares one
 // Filter menu that counts what is on, and each active filter shows as a chip that removes it.
-export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, focusSearch = false, focusSignal = 0, views }: InboxFiltersProps) {
+export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views }: InboxFiltersProps) {
   const search = useRef<HTMLInputElement>(null);
   const setStatus = (value: string) => {
     const next: InboxQuery = { ...query, status: value };
@@ -71,7 +73,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
   useEffect(() => {
     if (focusSignal > 0) search.current?.focus();
   }, [focusSignal]);
-  const part = { query, onChange, tags, agents, timezone, conversations };
+  const part = { query, onChange, tags, agents, timezone, conversations, currentAgentId };
   const status = query.status ?? defaultStatus;
   return (
     // A search region, not a form: the saved views menu inside it has forms of its own, and a form inside a

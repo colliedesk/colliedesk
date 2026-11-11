@@ -76,3 +76,17 @@ func TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError(t *testing.T) {
 		t.Errorf("message=%q, want a plain too large explanation", message)
 	}
 }
+
+// A refused field is named with why, whatever the status (400 or 422), so an agent fixes its next call.
+func TestARefusedFieldIsNamedWithWhy(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Field Desk", "admin@field.example.com")
+	session := e.connect(w.adminTier, "")
+	created := e.ok(session, "colliedesk_channels_create", map[string]any{"type": "zalo", "config": map[string]any{"oa_id": "5550001", "app_id": "700003"}})
+	channel, _ := created["channel"].(map[string]any)
+	id, _ := channel["id"].(string)
+	message := e.fails(session, "colliedesk_channels_update", map[string]any{"channel_id": id, "config": map[string]any{"site_verification": "not a code"}})
+	if !strings.Contains(message, "site_verification") || !strings.Contains(message, "8 to 100") {
+		t.Fatalf("a wrong code: %q, want it to name site_verification and its rule", message)
+	}
+}

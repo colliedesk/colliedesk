@@ -9,6 +9,7 @@ import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { leaveTo } from '../../lib/leave-to';
 import { readCheckoutIntent } from '../settings/checkout-intent';
+import { readPlanIntent } from '../settings/plan-intent';
 import { preconnectClerk } from './clerk-appearance';
 import { RedeemPage } from './redeem-page';
 
@@ -20,7 +21,14 @@ const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: mo
 // "Start free trial" link. On APP_ORIGIN of a server whose workspaces each have a host of their own, a
 // completed sign-in continues on the workspace's host; on a workspace host, the server signs in to that
 // workspace only, and an email that is not an agent there is pointed to APP_ORIGIN to find its workspace.
-export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean }) {
+// returnTo is an AI app's consent page (/oauth/authorize?…) that sent the person here to sign in: the
+// sign-in goes back to it, on the workspace's own host where workspaces have one.
+export function returnToConsent(next: string | undefined): string | undefined {
+  return next?.startsWith('/oauth/authorize?') ? next : undefined;
+}
+
+export function RedeemRoute({ token, buy, trial = false, signedOut = false, next: asked }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean; next?: string }) {
+  const consent = returnToConsent(asked);
   const navigate = useNavigate();
   const client = useQueryClient();
   // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
@@ -36,12 +44,17 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
       return undefined;
     }
     await client.resetQueries({ queryKey: ['me'] });
+    if (consent) return navigate({ href: consent });
     return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: landing });
-  }, [client, navigate]);
+  }, [client, consent, navigate]);
   // The page a sign-in here opens on the workspace host. A plan to buy rides in it: that host's storage
-  // is not this page's.
+  // is not this page's. So does the plan a trial visitor came for, which opens the inbox, not a checkout.
   const plan = readCheckoutIntent();
-  const next = plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : undefined;
+  const planIntent = readPlanIntent();
+  const nextFor = (landing: '/' | '/setup') => consent ?? (plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : planIntent ? `${landing}?plan=${planIntent}` : undefined);
+  const next = nextFor('/');
+  // A new team opens the setup flow; the plan it came for rides along to that page.
+  const signUpNext = nextFor('/setup') ?? '/setup';
   // The website's trial and buy links only lead to cloud sign-in: its chunk downloads beside the config
   // instead of after it. A page without a sign-in form lets what waited for one go.
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);
@@ -64,9 +77,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
     }
   }, [goAfterSignIn, next, workspaceSlug]);
   // A new team opens the setup flow, also when the sign-up continues on the workspace's own host.
-  const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: SignupAnswers) => {
-    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next ?? '/setup'), '/setup');
-  }, [goAfterSignIn, next]);
+  const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: Partial<SignupAnswers>) => {
+    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, signUpNext), '/setup');
+  }, [goAfterSignIn, signUpNext]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
   useEffect(() => { if (config.data && !cloudEnabled) markSignInFormReady(); }, [config.data, cloudEnabled]);
@@ -75,12 +88,13 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   const appOrigin = config.data?.app_origin ?? '';
   // On a workspace's own host a new team cannot start here: sign-up and finding a workspace are on APP_ORIGIN.
   const findWorkspaceAt = config.data?.workspace_hosts && appOrigin !== '' && appOrigin !== window.location.origin ? `${appOrigin}/sign-in` : undefined;
+  const hostedCloud = cloudConfig?.enabled === true && config.data?.billing.enabled === true;
 
-  return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
+  return <RedeemPage token={token} cloudEnabled={cloudEnabled} hostedCloud={hostedCloud} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
     buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
-        onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} endSession={signedOut} />
+        onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} optionalQuestions={buying !== undefined || planIntent !== undefined} endSession={signedOut} />
     </Suspense>} />;
 }

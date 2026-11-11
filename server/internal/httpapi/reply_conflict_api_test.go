@@ -287,56 +287,38 @@ func TestRepliesAndABulkChangeOnTheSameConversationsNeverDeadlock(t *testing.T) 
 
 // The person who approves an AI agent's reply draft says which replies they had on screen: a reply sent
 // since refuses the approval and the draft keeps waiting, so it can be read again and approved.
-func TestApprovingAReplyDraftAfterSomeoneRepliedKeepsTheDraftWaiting(t *testing.T) {
+func TestSendingAWrittenDraftAfterSomeoneRepliedKeepsTheDraftWaiting(t *testing.T) {
 	d, _ := newReplyDesk(t)
 	token := issueToken(t, d.api, d.admin, "Claude Code", "draft")
-	filed := d.send(t, token.Token, d.conversation, map[string]any{"kind": "outgoing", "body": "Drafted by the agent"})
-	var accepted struct {
-		RequestID string `json:"request_id"`
+	var draft struct {
+		ID string `json:"id"`
 	}
-	decode(t, filed, &accepted)
-	if filed.Code != http.StatusAccepted || accepted.RequestID == "" {
-		t.Fatalf("draft status=%d body=%s", filed.Code, filed.Body.String())
-	}
+	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+d.conversation+"/reply-drafts", map[string]any{"text": "Drafted by the agent"}, token.Token, http.StatusCreated, &draft)
 	if response := d.send(t, d.teammate, d.conversation, map[string]any{"kind": "outgoing", "body": "Lan answered first"}); response.Code != http.StatusCreated {
 		t.Fatalf("teammate reply status=%d", response.Code)
 	}
-	approve := func(body map[string]any) *httptest.ResponseRecorder {
-		return request(t, d.api, http.MethodPost, "/api/v1/agent-requests/"+accepted.RequestID+"/approve", body, d.admin, nil)
+	send := func(seen int) *httptest.ResponseRecorder {
+		return d.send(t, d.admin, d.conversation, map[string]any{"kind": "outgoing", "body": "Drafted by the agent", "ai_draft_id": draft.ID, "seen_reply_number": seen})
 	}
-	stale := approve(map[string]any{"seen_reply_number": 0})
+	stale := send(0)
 	var conflict replyConflict
 	decode(t, stale, &conflict)
 	if stale.Code != http.StatusConflict || conflict.Error.Code != "reply_conflict" || len(conflict.Error.NewerReplies) != 1 || conflict.Error.NewerReplies[0].Body != "Lan answered first" {
-		t.Fatalf("stale approval status=%d body=%s", stale.Code, stale.Body.String())
+		t.Fatalf("stale send status=%d body=%s", stale.Code, stale.Body.String())
 	}
 	var waiting struct {
-		Status string `json:"status"`
+		Status  string  `json:"status"`
+		Outcome *string `json:"outcome"`
 	}
-	decode(t, request(t, d.api, http.MethodGet, "/api/v1/agent-requests/"+accepted.RequestID, nil, d.admin, nil), &waiting)
-	if waiting.Status != "pending" {
-		t.Fatalf("draft after a refused approval is %q, want pending", waiting.Status)
+	kbCall(t, d.api, http.MethodGet, "/api/v1/conversations/"+d.conversation+"/ai-drafts/"+draft.ID, nil, d.admin, http.StatusOK, &waiting)
+	if waiting.Status != "ready" || waiting.Outcome != nil {
+		t.Fatalf("draft after a refused send is %+v, want ready and undecided", waiting)
 	}
-	approved := approve(map[string]any{"seen_reply_number": 1})
-	var result struct {
-		Request struct {
-			Status       string `json:"status"`
-			ResultStatus *int   `json:"result_status"`
-		} `json:"request"`
-		Result numberedMessage `json:"result"`
-	}
-	decode(t, approved, &result)
-	if approved.Code != http.StatusOK || result.Request.Status != "approved" || result.Result.ReplyNumber == nil || *result.Result.ReplyNumber != 2 {
-		t.Fatalf("approval with the latest mark status=%d body=%s", approved.Code, approved.Body.String())
-	}
-	// The mark is for reply drafts only.
-	other := request(t, d.api, http.MethodPatch, "/api/v1/conversations/"+d.conversation, map[string]any{"priority": "high"}, issueToken(t, d.api, d.admin, "Reader", "read").Token, nil)
-	var otherRequest struct {
-		RequestID string `json:"request_id"`
-	}
-	decode(t, other, &otherRequest)
-	if response := request(t, d.api, http.MethodPost, "/api/v1/agent-requests/"+otherRequest.RequestID+"/approve", map[string]any{"seen_reply_number": 2}, d.admin, nil); response.Code != http.StatusBadRequest {
-		t.Fatalf("seen on a non-draft approval status=%d", response.Code)
+	sent := send(1)
+	var result numberedMessage
+	decode(t, sent, &result)
+	if sent.Code != http.StatusCreated || result.ReplyNumber == nil || *result.ReplyNumber != 2 {
+		t.Fatalf("send with the latest mark status=%d body=%s", sent.Code, sent.Body.String())
 	}
 }
 

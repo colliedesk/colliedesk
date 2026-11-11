@@ -44,8 +44,8 @@ func wantLocked(t *testing.T, got *responseView, what string) {
 func TestNewWorkspaceStartsAFourteenDayTrial(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	view := f.usage(t, f.adminA)
-	if view.Plan != "trial" || view.TrialEndsAt != "2026-10-15T09:00:00Z" || view.Locked || view.Limits.Agents != 10 {
-		t.Fatalf("billing=%+v, want trial ending 2026-10-15T09:00:00Z, unlocked, 10 agents", view)
+	if view.Plan != "trial" || view.TrialEndsAt != "2026-10-15T09:00:00Z" || view.Locked || view.Limits.Agents != 25 {
+		t.Fatalf("billing=%+v, want trial ending 2026-10-15T09:00:00Z, unlocked, 25 agents", view)
 	}
 	var me struct {
 		Plan struct {

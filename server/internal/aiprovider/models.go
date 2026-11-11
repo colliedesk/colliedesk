@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -17,6 +20,34 @@ import (
 
 // MaxListedModels bounds a model list: OpenRouter offers a few hundred, and a person picks a few.
 const MaxListedModels = 1000
+
+// ImageTaker is an adapter that can say whether a model reads pictures, so a feature sends them only
+// to one that does.
+type ImageTaker interface {
+	TakesImages(ctx context.Context, model string) bool
+}
+
+// TakesImages: every Claude model Colliedesk lists (structured outputs and efforts) reads pictures.
+func (p *anthropicProvider) TakesImages(context.Context, string) bool { return true }
+
+// TakesImages reports whether the server lists the model as reading images (OpenRouter's
+// architecture.input_modalities). A server that does not say, or a list that cannot be read, says no:
+// pictures are then not sent.
+func (p *openAIProvider) TakesImages(ctx context.Context, model string) bool {
+	list := p.modelList(ctx)
+	if list.images[model] {
+		return true
+	}
+	base, _, cut := strings.Cut(model, ":")
+	return cut && list.images[base]
+}
+
+// TakesImages is ImageModels's say; the fake has no list to ask.
+func (f *Fake) TakesImages(_ context.Context, model string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.ImageModels, model)
+}
 
 // ModelLister is an adapter that can say which models its key may use, so a person picks a model
 // instead of typing its id. Listing is free at every provider: it is not metered.
@@ -65,45 +96,14 @@ func claudeAnswersColliedesk(model anthropic.ModelInfo) bool {
 // on a server that lists each model's parameters (OpenRouter), one that takes a JSON schema. A model
 // past its shutdown or expiration date, or served only in batches, is left out.
 func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(p.endpoint, "/chat/completions")+"/models", nil)
+	listed, err := p.listModels(ctx)
 	if err != nil {
-		return nil, &Error{Code: ErrorBadRequest}
+		return nil, err
 	}
-	httpRequest.Header.Set("Accept", "application/json")
-	if p.apiKey != "" {
-		httpRequest.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
-	reply, err := p.http.Do(httpRequest)
-	if err != nil {
-		return nil, transportError(ctx, err)
-	}
-	defer reply.Body.Close()
-	requestID := reply.Header.Get("X-Request-Id")
-	if reply.StatusCode < 200 || reply.StatusCode > 299 {
-		return nil, statusError(reply.StatusCode, reply.Header, requestID)
-	}
-	data, err := io.ReadAll(io.LimitReader(reply.Body, maxResponseBytes+1))
-	if err != nil {
-		return nil, transportError(ctx, err)
-	}
-	var parsed struct {
-		Data []struct {
-			ID                  string    `json:"id"`
-			SupportedParameters *[]string `json:"supported_parameters"`
-			// ShutdownDate is the day OpenAI turns a model off (YYYY-MM-DD), or null; GET /models
-			// keeps listing a model after it, and every request to it then fails with model_not_found.
-			ShutdownDate *string `json:"shutdown_date"`
-			// ExpirationDate is OpenRouter's: the day after which it may remove the model.
-			ExpirationDate *string `json:"expiration_date"`
-		} `json:"data"`
-	}
-	if len(data) > maxResponseBytes || json.Unmarshal(data, &parsed) != nil {
-		return nil, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
-	}
-	ids := make([]string, 0, len(parsed.Data))
+	ids := make([]string, 0, len(listed))
 	seen := map[string]bool{}
 	today := time.Now().UTC().Format(time.DateOnly)
-	for _, model := range parsed.Data {
+	for _, model := range listed {
 		id := strings.TrimSpace(model.ID)
 		if p.openAIHost && !openAIAnswersColliedesk(id) {
 			continue
@@ -130,6 +130,188 @@ func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
 		ids = ids[:MaxListedModels]
 	}
 	return ids, nil
+}
+
+// ListedPrice is what a server lists a model to cost, in US dollars per million tokens.
+type ListedPrice struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cache_read"`
+	CacheWrite float64 `json:"cache_write"`
+}
+
+// ModelPricer is an adapter whose server lists what its models cost (OpenRouter), so an operator's prices
+// are filled in instead of typed.
+type ModelPricer interface {
+	ModelPrices(ctx context.Context) (map[string]ListedPrice, error)
+}
+
+// ModelPrices is what the server lists each model to cost (OpenRouter's pricing, in dollars per token); a
+// model it gives no price is left out, and a server that lists none answers an empty map.
+func (p *openAIProvider) ModelPrices(ctx context.Context) (map[string]ListedPrice, error) {
+	listed, err := p.listModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	perMillion := func(value string) (float64, bool) {
+		number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || number < 0 || math.IsNaN(number) || math.IsInf(number, 0) {
+			return 0, false
+		}
+		return math.Round(number*1e6*1e6) / 1e6, true
+	}
+	prices := map[string]ListedPrice{}
+	for _, model := range listed {
+		if model.Pricing == nil {
+			continue
+		}
+		input, okIn := perMillion(model.Pricing.Prompt)
+		output, okOut := perMillion(model.Pricing.Completion)
+		if !okIn || !okOut {
+			continue
+		}
+		read, _ := perMillion(model.Pricing.InputCacheRead)
+		write, _ := perMillion(model.Pricing.InputCacheWrite)
+		prices[strings.TrimSpace(model.ID)] = ListedPrice{Input: input, Output: output, CacheRead: read, CacheWrite: write}
+	}
+	return prices, nil
+}
+
+// ModelPrices is FakePrices.
+func (f *Fake) ModelPrices(context.Context) (map[string]ListedPrice, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.FakePrices, nil
+}
+
+// listedModel is one model of GET {BaseURL}/models.
+type listedModel struct {
+	ID string `json:"id"`
+	// Pricing is OpenRouter's: dollars per token, as strings.
+	Pricing *struct {
+		Prompt          string `json:"prompt"`
+		Completion      string `json:"completion"`
+		InputCacheRead  string `json:"input_cache_read"`
+		InputCacheWrite string `json:"input_cache_write"`
+	} `json:"pricing"`
+	SupportedParameters *[]string `json:"supported_parameters"`
+	// ShutdownDate is the day OpenAI turns a model off (YYYY-MM-DD), or null; GET /models
+	// keeps listing a model after it, and every request to it then fails with model_not_found.
+	ShutdownDate *string `json:"shutdown_date"`
+	// ExpirationDate is OpenRouter's: the day after which it may remove the model.
+	ExpirationDate *string `json:"expiration_date"`
+	// Reasoning is OpenRouter's, on a model that reasons: the efforts it takes, null for every one.
+	Reasoning *struct {
+		SupportedEfforts []string `json:"supported_efforts"`
+	} `json:"reasoning"`
+	// Architecture is OpenRouter's: what the model reads ("text", "image", "file"…).
+	Architecture *struct {
+		InputModalities []string `json:"input_modalities"`
+	} `json:"architecture"`
+}
+
+func (p *openAIProvider) listModels(ctx context.Context) ([]listedModel, error) {
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(p.endpoint, "/chat/completions")+"/models", nil)
+	if err != nil {
+		return nil, &Error{Code: ErrorBadRequest}
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	if p.apiKey != "" {
+		httpRequest.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	reply, err := p.http.Do(httpRequest)
+	if err != nil {
+		return nil, transportError(ctx, err)
+	}
+	defer reply.Body.Close()
+	requestID := reply.Header.Get("X-Request-Id")
+	if reply.StatusCode < 200 || reply.StatusCode > 299 {
+		return nil, statusError(reply.StatusCode, reply.Header, requestID)
+	}
+	data, err := io.ReadAll(io.LimitReader(reply.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, transportError(ctx, err)
+	}
+	var parsed struct {
+		Data []listedModel `json:"data"`
+	}
+	if len(data) > maxResponseBytes || json.Unmarshal(data, &parsed) != nil {
+		return nil, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
+	}
+	return parsed.Data, nil
+}
+
+// How long what OpenRouter says of its models (reasoning, pictures) is kept, and how long a failed ask is.
+const (
+	reasoningListFor     = time.Hour
+	reasoningListRetryIn = 5 * time.Minute
+	reasoningListTimeout = 5 * time.Second
+)
+
+// reasoningLists keeps, per OpenRouter endpoint, which models reason and at which efforts and which
+// read pictures, so a request asks GET /models at most once an hour (it is public and free).
+var reasoningLists = struct {
+	sync.Mutex
+	byEndpoint map[string]*reasoningList
+}{byEndpoint: map[string]*reasoningList{}}
+
+type reasoningList struct {
+	sync.Mutex
+	until time.Time
+	// efforts maps a model that reasons to the efforts it takes; nil takes every one.
+	efforts map[string][]string
+	// images holds the models that read pictures.
+	images map[string]bool
+}
+
+// reasonsAt reports whether OpenRouter lists the model as one that reasons at the effort. When the
+// list cannot be read it says no: the request then goes without an effort, as it did before.
+func (p *openAIProvider) reasonsAt(ctx context.Context, model string, effort Effort) bool {
+	list := p.modelList(ctx)
+	efforts, ok := list.efforts[model]
+	if !ok {
+		// A variant (model:nitro, model:floor) reasons as its model does.
+		if base, _, cut := strings.Cut(model, ":"); cut {
+			efforts, ok = list.efforts[base]
+		}
+	}
+	return ok && (efforts == nil || slices.Contains(efforts, string(effort)))
+}
+
+// modelList is what the endpoint says of its models, read at most once an hour; a copy, safe to read.
+func (p *openAIProvider) modelList(ctx context.Context) reasoningList {
+	reasoningLists.Lock()
+	list := reasoningLists.byEndpoint[p.endpoint]
+	if list == nil {
+		list = &reasoningList{}
+		reasoningLists.byEndpoint[p.endpoint] = list
+	}
+	reasoningLists.Unlock()
+	list.Lock()
+	defer list.Unlock()
+	if now := time.Now(); now.After(list.until) {
+		lookup, cancel := context.WithTimeout(ctx, reasoningListTimeout)
+		listed, err := p.listModels(lookup)
+		cancel()
+		if err != nil {
+			list.efforts, list.images, list.until = nil, nil, now.Add(reasoningListRetryIn)
+		} else {
+			list.efforts, list.images, list.until = map[string][]string{}, map[string]bool{}, now.Add(reasoningListFor)
+			for _, listed := range listed {
+				if listed.SupportedParameters != nil && slices.Contains(*listed.SupportedParameters, "reasoning") {
+					var efforts []string
+					if listed.Reasoning != nil {
+						efforts = listed.Reasoning.SupportedEfforts
+					}
+					list.efforts[listed.ID] = efforts
+				}
+				if listed.Architecture != nil && slices.Contains(listed.Architecture.InputModalities, "image") {
+					list.images[listed.ID] = true
+				}
+			}
+		}
+	}
+	return reasoningList{until: list.until, efforts: list.efforts, images: list.images}
 }
 
 // Models lists FakeModels; the fake has no network to ask.

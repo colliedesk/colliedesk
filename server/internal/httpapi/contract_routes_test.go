@@ -5,6 +5,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -63,10 +64,18 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 		}
 		return req
 	}
-	return newRequest(t, method, item.path, item.body, token, cookie)
+	req := newRequest(t, method, item.path, item.body, token, cookie)
+	if item.path == "/api/v1/oauth/authorize" && cookie == nil {
+		// The consent page's Allow is checked against the page's origin for every caller.
+		req.Header.Set("Origin", testOrigin)
+	}
+	return req
 }
 
 // sessionRoute reports whether a route is authenticated by an agent session (not public, not a channel secret).
+// replyDraftsPath is the route of a written draft.
+const replyDraftsPath = "/api/v1/conversations/{id}/reply-drafts"
+
 func sessionRoute(route httpapi.Route) bool {
 	return route.Permission != auth.PermissionPublic && route.Permission != auth.PermissionChannelInbound
 }
@@ -117,7 +126,9 @@ func TestAgentGetsContractValidForbiddenOnEveryAdminRoute(t *testing.T) {
 	fixture := newContractFixture(t)
 	cases := successfulContractCases(fixture)
 	for _, route := range httpapi.Routes() {
-		if !sessionRoute(route) || auth.HasPermission("agent", route.Permission) {
+		access := httpapi.RouteAccessTable()[route.Method+" "+route.Pattern]
+		if !sessionRoute(route) || (route.Permission != auth.PermissionOperator && (access.Anyone || access.Closed != "" || access.ByHandler ||
+			slices.Contains(auth.AgentRolePermissions(), access.Permission))) {
 			continue
 		}
 		item := cases[route.Method+" "+route.Pattern]
@@ -198,8 +209,8 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/auth/me":                                        {"/api/v1/auth/me", nil, admin, 200, ""},
 		"GET /api/v1/auth/sessions":                                  {"/api/v1/auth/sessions", nil, admin, 200, ""},
 		"DELETE /api/v1/auth/sessions/{id}":                          {"/api/v1/auth/sessions/" + f.sessionID, nil, admin, 204, ""},
-		"POST /api/v1/auth/tokens":                                   {"/api/v1/auth/tokens", map[string]any{"label": "Contract agent", "scope": "draft"}, admin, 201, ""},
-		"POST /api/v1/auth/invites":                                  {"/api/v1/auth/invites", map[string]any{"email": "new@contract.example.com", "role_ceiling": "agent"}, admin, 201, ""},
+		"POST /api/v1/auth/tokens":                                   {"/api/v1/auth/tokens", map[string]any{"label": "Contract agent", "permissions": []string{"messages:read", "messages:note", "conversations:read", "conversations:update", "messages:send"}}, admin, 201, ""},
+		"POST /api/v1/auth/invites":                                  {"/api/v1/auth/invites", map[string]any{"email": "new@contract.example.com", "roles": []string{"Agent"}}, admin, 201, ""},
 		"GET /api/v1/auth/invites":                                   {"/api/v1/auth/invites", nil, admin, 200, ""},
 		"DELETE /api/v1/auth/invites/{id}":                           {"/api/v1/auth/invites/" + f.inviteID, nil, admin, 204, ""},
 		"GET /api/v1/conversations":                                  {"/api/v1/conversations", nil, admin, 200, ""},
@@ -223,9 +234,12 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/workspace/timezone":                           {"/api/v1/workspace/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
 		"PATCH /api/v1/workspace/name":                               {"/api/v1/workspace/name", map[string]any{"name": "Contract Desk"}, admin, 200, ""},
 		"PATCH /api/v1/workspace/slug":                               {"/api/v1/workspace/slug", map[string]any{"slug": "contract-desk"}, admin, 200, ""},
+		"PUT /api/v1/conversation-number-series/{series}":            {"/api/v1/conversation-number-series/ref", map[string]any{"format": "REF-{yyyy}-{n:04}", "next": 10}, admin, 200, ""},
+		"PUT /api/v1/response-targets":                               {"/api/v1/response-targets", map[string]any{"enabled": false, "hours": []any{}, "targets": map[string]any{}}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/timezone":                           {"/api/v1/agents/me/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
+		"PATCH /api/v1/agents/me/sla-alerts":                         {"/api/v1/agents/me/sla-alerts", map[string]any{"email": true}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/display-name":                       {"/api/v1/agents/me/display-name", map[string]any{"display_name": "Contract Admin"}, admin, 200, ""},
-		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"role": "agent"}, admin, 200, ""},
+		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"display_name": "Contract Agent"}, admin, 200, ""},
 		"GET /api/v1/tags":                                           {"/api/v1/tags", nil, admin, 200, ""},
 		"GET /api/v1/results":                                        {"/api/v1/results", nil, admin, 200, ""},
 		"GET /api/v1/autofix/status":                                 {"/api/v1/autofix/status", nil, admin, 200, ""},
@@ -302,32 +316,65 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 			"From: Contract Customer <contract@customer.example>", "Subject: Contract mail", "Message-ID: <contract@customer.example>",
 		}, "Contract inbound.")},
 		// Routes run in order; PATCH /workspace/slug above renamed the workspace to contract-desk.
-		"POST /api/v1/channels/email/inbound/recipient":           {path: recipientPath, body: map[string]any{"recipient": "support@contract-desk." + hostedDomain}, status: 204},
-		"GET /api/v1/billing":                                     {path: "/api/v1/billing", token: admin, status: 200},
-		"POST /api/v1/billing/checkout":                           {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
-		"POST /api/v1/billing/portal":                             {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
-		"POST " + webhookPath:                                     {path: webhookPath, raw: f.webhookBody, status: 200},
-		"POST " + resendWebhookPath:                               {path: resendWebhookPath, raw: string(resendEvent("email.delivered", "Desk <support@contract-all.example.com>", []string{"contact@contract-all.example.com"}, "", time.Now())), status: 200},
-		"GET /api/v1/founding":                                    {path: "/api/v1/founding", status: 200},
-		"GET /api/v1/conversations/{id}/time-entries":             {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
-		"GET /api/v1/inbox/activity":                              {path: "/api/v1/inbox/activity?since=2026-01-01T00:00:00Z", token: admin, status: 200},
-		"GET /api/v1/attachments/{id}":                            {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
-		"GET /api/v1/mail-image":                                  {path: f.mailImagePath, token: admin, status: 200},
-		"GET /api/v1/export":                                      {path: "/api/v1/export", token: admin, status: 200},
-		"POST /api/v1/export/link":                                {path: "/api/v1/export/link", token: admin, status: 201},
-		"GET /api/v1/export/download/{token}":                     {path: "/api/v1/export/download/not-a-link", status: 303},
-		"GET /api/v1/channels/web-form":                           {path: "/api/v1/channels/web-form", token: admin, status: 200},
-		"PUT /api/v1/channels/web-form":                           {path: "/api/v1/channels/web-form", body: map[string]any{"enabled": true, "allowed_origins": []string{"https://contract.example.com"}}, token: admin, status: 200},
-		"GET /api/v1/channels":                                    {path: "/api/v1/channels", token: admin, status: 200},
-		"POST /api/v1/channels":                                   {path: "/api/v1/channels", body: map[string]any{"type": "web_form", "config": map[string]any{"allowed_origins": []string{}}}, token: admin, status: 201},
-		"GET /api/v1/channels/events":                             {path: "/api/v1/channels/events", token: admin, status: 200},
-		"GET /api/v1/channels/{id}":                               {path: "/api/v1/channels/" + f.webFormChannelID, token: admin, status: 200},
-		"PATCH /api/v1/channels/{id}":                             {path: "/api/v1/channels/" + f.webFormChannelID, body: map[string]any{"name": "Contact form"}, token: admin, status: 200},
-		"DELETE /api/v1/channels/{id}":                            {path: "/api/v1/channels/" + f.emailChannelID, token: admin, status: 204},
-		"PUT /api/v1/channels/{id}/credentials":                   {path: "/api/v1/channels/" + f.webFormChannelID + "/credentials", body: map[string]any{"name": "token", "value": "x"}, token: admin, status: 400},
-		"POST /api/v1/channels/{id}/check":                        {path: "/api/v1/channels/" + f.webFormChannelID + "/check", token: admin, status: 200},
-		"POST /api/v1/channels/{id}/held/replay":                  {path: "/api/v1/channels/" + f.webFormChannelID + "/held/replay", body: map[string]any{}, token: admin, status: 200},
-		"POST /api/v1/channels/{id}/held/discard":                 {path: "/api/v1/channels/" + f.webFormChannelID + "/held/discard", body: map[string]any{}, token: admin, status: 200},
+		"POST /api/v1/channels/email/inbound/recipient": {path: recipientPath, body: map[string]any{"recipient": "support@contract-desk." + hostedDomain}, status: 204},
+		"GET /api/v1/billing":                           {path: "/api/v1/billing", token: admin, status: 200},
+		"POST /api/v1/billing/checkout":                 {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
+		"POST /api/v1/billing/portal":                   {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
+		"POST " + webhookPath:                           {path: webhookPath, raw: f.webhookBody, status: 200},
+		"POST " + resendWebhookPath:                     {path: resendWebhookPath, raw: string(resendEvent("email.delivered", "Desk <support@contract-all.example.com>", []string{"contact@contract-all.example.com"}, "", time.Now())), status: 200},
+		"GET /api/v1/founding":                          {path: "/api/v1/founding", status: 200},
+		"GET /api/v1/conversations/{id}/time-entries":   {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
+		"GET /api/v1/inbox/activity":                    {path: "/api/v1/inbox/activity?since=2026-01-01T00:00:00Z", token: admin, status: 200},
+		"GET /api/v1/attachments/{id}":                  {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
+		// The fixture file is text: no picture, so no thumbnail (the picture case is in attachment_thumbnail_api_test.go).
+		"GET /api/v1/attachments/{id}/thumbnail":          {path: "/api/v1/attachments/" + f.attachmentID + "/thumbnail", token: admin, status: 404},
+		"GET /api/v1/mail-image":                          {path: f.mailImagePath, token: admin, status: 200},
+		"GET /api/v1/export":                              {path: "/api/v1/export", token: admin, status: 200},
+		"POST /api/v1/export/link":                        {path: "/api/v1/export/link", token: admin, status: 201},
+		"GET /api/v1/export/download/{token}":             {path: "/api/v1/export/download/not-a-link", status: 303},
+		"GET /api/v1/channels/web-form":                   {path: "/api/v1/channels/web-form", token: admin, status: 200},
+		"PUT /api/v1/channels/web-form":                   {path: "/api/v1/channels/web-form", body: map[string]any{"enabled": true, "allowed_origins": []string{"https://contract.example.com"}}, token: admin, status: 200},
+		"GET /api/v1/channels":                            {path: "/api/v1/channels", token: admin, status: 200},
+		"POST /api/v1/channels":                           {path: "/api/v1/channels", body: map[string]any{"type": "web_form", "config": map[string]any{"allowed_origins": []string{}}}, token: admin, status: 201},
+		"GET /api/v1/channels/events":                     {path: "/api/v1/channels/events", token: admin, status: 200},
+		"GET /api/v1/channels/{id}":                       {path: "/api/v1/channels/" + f.webFormChannelID, token: admin, status: 200},
+		"PATCH /api/v1/channels/{id}":                     {path: "/api/v1/channels/" + f.webFormChannelID, body: map[string]any{"name": "Contact form"}, token: admin, status: 200},
+		"DELETE /api/v1/channels/{id}":                    {path: "/api/v1/channels/" + f.emailChannelID, token: admin, status: 204},
+		"PUT /api/v1/channels/{id}/credentials":           {path: "/api/v1/channels/" + f.webFormChannelID + "/credentials", body: map[string]any{"name": "token", "value": "x"}, token: admin, status: 400},
+		"POST /api/v1/channels/{id}/check":                {path: "/api/v1/channels/" + f.webFormChannelID + "/check", token: admin, status: 200},
+		"POST /api/v1/channels/{id}/held/replay":          {path: "/api/v1/channels/" + f.webFormChannelID + "/held/replay", body: map[string]any{}, token: admin, status: 200},
+		"POST /api/v1/channels/{id}/held/discard":         {path: "/api/v1/channels/" + f.webFormChannelID + "/held/discard", body: map[string]any{}, token: admin, status: 200},
+		"GET /api/v1/channels/{id}/ai":                    {path: "/api/v1/channels/" + f.webFormChannelID + "/ai", token: admin, status: 200},
+		"PUT /api/v1/channels/{id}/ai/{slot}":             {path: "/api/v1/channels/" + f.webFormChannelID + "/ai/draft", body: map[string]any{"scope": "", "level": "off"}, token: admin, status: 200},
+		"PUT /api/v1/ai/source-consents/{class}":          {path: "/api/v1/ai/source-consents/images", token: admin, status: 200},
+		"GET /api/v1/channels/{id}/ai/intake/readiness":   {path: "/api/v1/channels/" + f.webFormChannelID + "/ai/intake/readiness?scope=group", token: admin, status: 400},
+		"GET /api/v1/channels/{id}/ai/intake/evaluations": {path: "/api/v1/channels/" + f.webFormChannelID + "/ai/intake/evaluations", token: admin, status: 200},
+		"POST /api/v1/channels/{id}/ai/intake/evaluations": {path: "/api/v1/channels/" + f.webFormChannelID + "/ai/intake/evaluations", token: admin, status: 400,
+			body: map[string]any{"scope": "group", "model": "m", "prompt_version": "v", "dataset_sha256": strings.Repeat("a", 64),
+				"counts": map[string]any{"create": map[string]any{"labels": 1, "correct": 1, "severe": 0, "light": 0}}}},
+		"GET /api/v1/conversations/{id}/chat":                {path: "/api/v1/conversations/" + f.conversationID + "/chat", token: admin, status: 200},
+		"GET /api/v1/channels/{id}/threads":                  {path: "/api/v1/channels/" + f.webFormChannelID + "/threads", token: admin, status: 200},
+		"GET /api/v1/channels/{id}/threads/{threadId}/items": {path: "/api/v1/channels/" + f.webFormChannelID + "/threads/00000000-0000-4000-8000-000000000000/items", token: admin, status: 404},
+		"GET /api/v1/channels/{id}/senders":                  {path: "/api/v1/channels/" + f.webFormChannelID + "/senders", token: admin, status: 200},
+		"GET /api/v1/conversation-number-series":             {path: "/api/v1/conversation-number-series", token: admin, status: 200},
+		"GET /api/v1/response-targets":                       {path: "/api/v1/response-targets", token: admin, status: 200},
+		"GET /api/v1/channel-thread-items":                   {path: "/api/v1/channel-thread-items?older_than=900", token: admin, status: 200},
+		"GET /api/v1/intake/gatherings":                      {path: "/api/v1/intake/gatherings?state=decided", token: admin, status: 200},
+		"GET /api/v1/intake/gatherings/{id}":                 {path: "/api/v1/intake/gatherings/" + f.intakeCardID, token: admin, status: 200},
+		// The fixture's card is a web form's, with no files: the bytes are read in intake_files_api_test.go.
+		"GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}": {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/items/00000000-0000-4000-8000-000000000000/files/0", token: admin, status: 404},
+		"POST /api/v1/intake/gatherings/{id}/decide":                      {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/decide", body: map[string]any{"action": "ignore"}, token: admin, status: 200},
+		"POST /api/v1/intake/gatherings/{id}/requeue":                     {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/requeue", token: admin, status: 200},
+		"GET /api/v1/intake/summary":                                      {path: "/api/v1/intake/summary", token: admin, status: 200},
+		"GET /api/v1/intake/stats":                                        {path: "/api/v1/intake/stats?days=7", token: admin, status: 200},
+		"GET /api/v1/conversations/{id}/intake":                           {path: "/api/v1/conversations/" + f.conversationID + "/intake", token: admin, status: 200},
+		// Moving is shown failing the same way for every tier: a message that is not the conversation's.
+		"POST /api/v1/conversations/{id}/messages/move": {path: "/api/v1/conversations/" + f.conversationID + "/messages/move",
+			body: map[string]any{"message_ids": []string{"00000000-0000-4000-8000-000000000000"}, "to": map[string]any{"new": map[string]any{"subject": "Split"}}}, token: admin, status: 400},
+		"GET /api/v1/conversations/{id}/message-moves":            {path: "/api/v1/conversations/" + f.conversationID + "/message-moves", token: admin, status: 200},
+		"POST /api/v1/message-moves/{id}/undo":                    {path: "/api/v1/message-moves/00000000-0000-4000-8000-000000000000/undo", token: admin, status: 404},
+		"POST /api/v1/billing/migration-request":                  {path: "/api/v1/billing/migration-request", body: map[string]any{"freshdesk_address": "contract.freshdesk.com"}, token: admin, status: 200},
+		"DELETE /api/v1/ai/source-consents/{class}":               {path: "/api/v1/ai/source-consents/images", token: admin, status: 200},
 		"GET /api/v1/channels/{id}/email":                         {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email", token: admin, status: 200},
 		"GET /api/v1/channels/{id}/email/forwarding-confirmation": {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/forwarding-confirmation", token: admin, status: 404},
 		"POST /api/v1/channels/{id}/email/domain-verification":    {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/domain-verification", token: admin, status: 200},
@@ -339,11 +386,17 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/{id}/email/test-message":           {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/test-message", token: admin, status: 201},
 		"POST /api/v1/channels/email/test-message":                {path: "/api/v1/channels/email/test-message", token: admin, status: 201},
 		"POST /api/v1/public/web-forms/{channel_id}":              {path: "/api/v1/public/web-forms/" + f.webFormChannelID, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:careers"}, status: 202},
-		"GET /api/v1/agent-requests":                              {path: "/api/v1/agent-requests?status=pending", token: admin, status: 200},
-		"GET /api/v1/agent-requests/{id}":                         {path: "/api/v1/agent-requests/" + f.approveRequestID, token: f.requestToken, status: 200},
-		"POST /api/v1/agent-requests/{id}/approve":                {path: "/api/v1/agent-requests/" + f.approveRequestID + "/approve", token: admin, status: 200},
-		"POST /api/v1/agent-requests/{id}/reject":                 {path: "/api/v1/agent-requests/" + f.rejectRequestID + "/reject", body: map[string]any{"reason": "Not now"}, token: admin, status: 200},
-		"POST /api/v1/agent-requests/{id}/cancel":                 {path: "/api/v1/agent-requests/" + f.cancelRequestID + "/cancel", token: f.requestToken, status: 200},
+		"POST /api/v1/agent-requests/{id}/approve":                {path: "/api/v1/agent-requests/" + f.approveRequestID + "/approve", token: admin, status: 410},
+		"POST /api/v1/agent-requests/{id}/reject":                 {path: "/api/v1/agent-requests/" + f.rejectRequestID + "/reject", body: map[string]any{"reason": "Not now"}, token: admin, status: 410},
+		"GET /api/v1/roles":                                       {path: "/api/v1/roles", token: admin, status: 200},
+		"POST /api/v1/roles":                                      {path: "/api/v1/roles", body: map[string]any{"name": "Contract new", "permissions": []string{"tags:read"}}, token: admin, status: 201},
+		"GET /api/v1/roles/{id}":                                  {path: "/api/v1/roles/" + f.roleID, token: admin, status: 200},
+		"PATCH /api/v1/roles/{id}":                                {path: "/api/v1/roles/" + f.roleID, body: map[string]any{"description": "Edits and reads articles"}, token: admin, status: 200},
+		"DELETE /api/v1/roles/{id}":                               {path: "/api/v1/roles/" + f.spareRoleID, token: admin, status: 204},
+		"POST /api/v1/roles/{id}/reset":                           {path: "/api/v1/roles/Agent/reset", token: admin, status: 200},
+		"POST /api/v1/roles/{id}/restore":                         {path: "/api/v1/roles/" + f.deletedRoleID + "/restore", token: admin, status: 200},
+		"PUT /api/v1/agents/{id}/roles":                           {path: "/api/v1/agents/" + f.agentID + "/roles", body: map[string]any{"roles": []string{"Agent", "Contract editors"}}, token: admin, status: 200},
+		"POST " + replyDraftsPath:                                 {path: "/api/v1/conversations/" + f.conversationID + "/reply-drafts", body: map[string]any{"text": "Thanks, it is fixed."}, token: admin, status: 201},
 		"POST /api/v1/support/problem-reports":                    {path: "/api/v1/support/problem-reports", body: goodReport(), token: admin, status: 201},
 		"GET /api/v1/imports":                                     {path: "/api/v1/imports", token: admin, status: 200},
 		"GET /api/v1/imports/{id}":                                {path: "/api/v1/imports/" + f.imports.previewed, token: admin, status: 200},
@@ -357,31 +410,37 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/imports/{id}/people":                      {path: "/api/v1/imports/" + f.imports.finished + "/people", token: admin, status: 200},
 		"PUT /api/v1/imports/{id}/people/{externalId}/link":    {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", body: map[string]any{"agent_id": f.agentID}, token: admin, status: 200},
 		"DELETE /api/v1/imports/{id}/people/{externalId}/link": {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", token: admin, status: 200},
-		"GET /api/v1/ai":                                                   {path: "/api/v1/ai", token: admin, status: 200},
-		"POST /api/v1/ai/providers":                                        {path: "/api/v1/ai/providers", body: map[string]any{"kind": "openai_compatible", "label": "Contract router", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0002", "models": []string{"openai/gpt-5"}}, token: admin, status: 201},
-		"POST /api/v1/ai/models":                                           {path: "/api/v1/ai/models", body: map[string]any{"kind": "openai_compatible", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0004"}, token: admin, status: 200},
-		"PATCH /api/v1/ai/providers/{id}":                                  {path: "/api/v1/ai/providers/" + f.aiProviderID, body: map[string]any{"label": "Contract key renamed"}, token: admin, status: 200},
-		"PUT /api/v1/ai/providers/{id}/key":                                {path: "/api/v1/ai/providers/" + f.aiProviderID + "/key", body: map[string]any{"api_key": "sk-contract-0003"}, token: admin, status: 200},
-		"POST /api/v1/ai/providers/{id}/check":                             {path: "/api/v1/ai/providers/" + f.aiProviderID + "/check", token: admin, status: 200},
-		"PUT /api/v1/ai/slots/{slot}":                                      {path: "/api/v1/ai/slots/triage", body: map[string]any{"source": "provider", "provider_id": f.aiDraftsProviderID, "enabled": true}, token: admin, status: 200},
-		"DELETE /api/v1/ai/providers/{id}":                                 {path: "/api/v1/ai/providers/" + f.aiProviderID, token: admin, status: 200},
-		"GET /api/v1/ai/usage":                                             {path: "/api/v1/ai/usage?month=2026-10", token: admin, status: 200},
-		"GET /api/v1/ai/chat/usage":                                        {path: "/api/v1/ai/chat/usage", token: admin, status: 200},
-		"GET /api/v1/ai/chat/sessions":                                     {path: "/api/v1/ai/chat/sessions?status=handed_off", token: admin, status: 200},
-		"GET /api/v1/ai/chat/sessions/{id}":                                {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 200},
-		"DELETE /api/v1/ai/chat/sessions/{id}":                             {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 204},
-		"POST /api/v1/ai/chat/preview":                                     {path: "/api/v1/ai/chat/preview", body: map[string]any{"question": "Where is my order?"}, token: admin, status: 409},
-		"PUT /api/v1/ai/automatic-limits":                                  {path: "/api/v1/ai/automatic-limits", body: map[string]any{"per_day": 200, "per_minute": 20}, token: admin, status: 200},
-		"POST /api/v1/conversations/{id}/ai-drafts":                        {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", body: map[string]any{"prompt": "Another contract draft"}, token: admin, status: 202},
-		"GET /api/v1/conversations/{id}/ai-drafts":                         {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", token: admin, status: 200},
-		"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":               {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts/" + f.aiDraftID, token: admin, status: 200},
-		"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard":      {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts/" + f.aiDraftID + "/discard", token: admin, status: 200},
-		"GET /api/v1/conversations/{id}/ai-triage":                         {path: "/api/v1/conversations/" + f.conversationID + "/ai-triage", token: admin, status: 200},
-		"POST /api/v1/conversations/{id}/ai-triage":                        {path: "/api/v1/conversations/" + f.aiTriageNewConversation + "/ai-triage", token: admin, status: 202},
-		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  {path: "/api/v1/conversations/" + f.conversationID + "/ai-triage/" + f.aiTriageID + "/accept", token: admin, status: 200},
-		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": {path: "/api/v1/conversations/" + f.aiTriageOtherConversation + "/ai-triage/" + f.aiTriageOtherID + "/dismiss", token: admin, status: 200},
-		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    {path: "/api/v1/conversations/" + f.aiTriageAutoConversation + "/ai-triage/" + f.aiTriageAutoID + "/undo", token: admin, status: 200},
-		"POST /api/v1/public/forms/{workspace_slug}":                       {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
+		"GET /api/v1/ai":                                              {path: "/api/v1/ai", token: admin, status: 200},
+		"POST /api/v1/ai/providers":                                   {path: "/api/v1/ai/providers", body: map[string]any{"kind": "openai_compatible", "label": "Contract router", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0002", "models": []string{"openai/gpt-5"}}, token: admin, status: 201},
+		"POST /api/v1/ai/models":                                      {path: "/api/v1/ai/models", body: map[string]any{"kind": "openai_compatible", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0004"}, token: admin, status: 200},
+		"PATCH /api/v1/ai/providers/{id}":                             {path: "/api/v1/ai/providers/" + f.aiProviderID, body: map[string]any{"label": "Contract key renamed"}, token: admin, status: 200},
+		"PUT /api/v1/ai/providers/{id}/key":                           {path: "/api/v1/ai/providers/" + f.aiProviderID + "/key", body: map[string]any{"api_key": "sk-contract-0003"}, token: admin, status: 200},
+		"POST /api/v1/ai/providers/{id}/check":                        {path: "/api/v1/ai/providers/" + f.aiProviderID + "/check", token: admin, status: 200},
+		"PUT /api/v1/ai/slots/{slot}":                                 {path: "/api/v1/ai/slots/triage", body: map[string]any{"source": "provider", "provider_id": f.aiDraftsProviderID, "enabled": true}, token: admin, status: 200},
+		"DELETE /api/v1/ai/providers/{id}":                            {path: "/api/v1/ai/providers/" + f.aiProviderID, token: admin, status: 200},
+		"GET /api/v1/ai/usage":                                        {path: "/api/v1/ai/usage?month=2026-10", token: admin, status: 200},
+		"GET /api/v1/ai/chat/usage":                                   {path: "/api/v1/ai/chat/usage", token: admin, status: 200},
+		"GET /api/v1/ai/chat/sessions":                                {path: "/api/v1/ai/chat/sessions?status=handed_off", token: admin, status: 200},
+		"GET /api/v1/ai/chat/sessions/{id}":                           {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 200},
+		"DELETE /api/v1/ai/chat/sessions/{id}":                        {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 204},
+		"POST /api/v1/ai/chat/preview":                                {path: "/api/v1/ai/chat/preview", body: map[string]any{"question": "Where is my order?"}, token: admin, status: 409},
+		"PUT /api/v1/ai/automatic-limits":                             {path: "/api/v1/ai/automatic-limits", body: map[string]any{"per_day": 200, "per_minute": 20}, token: admin, status: 200},
+		"POST /api/v1/conversations/{id}/ai-drafts":                   {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", body: map[string]any{"prompt": "Another contract draft"}, token: admin, status: 202},
+		"GET /api/v1/conversations/{id}/ai-drafts":                    {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", token: admin, status: 200},
+		"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":          {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts/" + f.aiDraftID, token: admin, status: 200},
+		"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard": {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts/" + f.aiDraftID + "/discard", token: admin, status: 200},
+		// Only a written draft comes back: the built-in AI's draft answers 409 ai_draft_not_restorable.
+		"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/restore":       {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts/" + f.aiDraftID + "/restore", token: admin, status: 409},
+		"GET /api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}": {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts/" + f.aiDraftID + "/files/" + f.aiDraftID, token: admin, status: 404},
+		"GET /api/v1/conversations/{id}/ai-triage":                          {path: "/api/v1/conversations/" + f.conversationID + "/ai-triage", token: admin, status: 200},
+		"POST /api/v1/conversations/{id}/ai-triage":                         {path: "/api/v1/conversations/" + f.aiTriageNewConversation + "/ai-triage", token: admin, status: 202},
+		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":   {path: "/api/v1/conversations/" + f.conversationID + "/ai-triage/" + f.aiTriageID + "/accept", token: admin, status: 200},
+		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss":  {path: "/api/v1/conversations/" + f.aiTriageOtherConversation + "/ai-triage/" + f.aiTriageOtherID + "/dismiss", token: admin, status: 200},
+		"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":     {path: "/api/v1/conversations/" + f.aiTriageAutoConversation + "/ai-triage/" + f.aiTriageAutoID + "/undo", token: admin, status: 200},
+		"POST /api/v1/public/forms/{workspace_slug}":                        {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
+		"GET /api/v1/oauth/client":                                          {path: "/api/v1/oauth/client?" + url.Values{"client_id": {f.oauthClientID}, "redirect_uri": {"http://127.0.0.1:4000/callback"}}.Encode(), status: 200},
+		"POST /api/v1/oauth/authorize": {path: "/api/v1/oauth/authorize", body: map[string]any{"client_id": f.oauthClientID, "redirect_uri": "http://127.0.0.1:4000/callback",
+			"response_type": "code", "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", "code_challenge_method": "S256", "state": "s"}, token: admin, status: 200},
 	}
 	maps.Copy(cases, kbContractCases(f))
 	return cases

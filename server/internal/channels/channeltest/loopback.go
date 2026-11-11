@@ -40,7 +40,9 @@ type LoopbackEvent struct {
 	Intent  string `json:"intent,omitempty"`
 	Collect bool   `json:"collect,omitempty"`
 	Echo    bool   `json:"echo,omitempty"`
-	Archive bool   `json:"archive,omitempty"`
+	// Staff marks a team member writing on the channel's own app.
+	Staff   bool `json:"staff,omitempty"`
+	Archive bool `json:"archive,omitempty"`
 	// Failed reports that our sent message with this id did not arrive.
 	Failed string `json:"failed,omitempty"`
 	// Links are files the channel serves by link, fetched by the frame.
@@ -65,9 +67,11 @@ type LoopbackFile struct {
 // Sent is a reply the loopback sender handed to its endpoint.
 type Sent struct {
 	ChannelID, To, Text, ExternalID string
-	References                      []string
-	Files                           []string
-	Token                           string
+	// Place is the chat it went to (out.Place), "" when the delivery named none.
+	Place      string
+	References []string
+	Files      []string
+	Token      string
 }
 
 // Endpoint is the outside world of loopback: what it sent, and what the next sends do.
@@ -120,6 +124,12 @@ type Loopback struct {
 	Quiet, Max time.Duration
 	// PartSize splits a longer reply into parts of this many bytes; zero sends one part.
 	PartSize int
+	// IntakeScopes are the scopes it declares for intake (each needs a Gather in Defaults.Scopes).
+	IntakeScopes []string
+	// ExtraScopes are declared after user and group.
+	ExtraScopes []string
+	// SharedScopes are the scopes it declares several customers write in.
+	SharedScopes []string
 }
 
 // NewLoopback returns the Async loopback type with an endpoint.
@@ -134,7 +144,7 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 
 func (l *Loopback) Definition() channels.Definition {
 	return channels.Definition{Type: l.Type, Identified: true, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
-		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
+		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: append([]string{"user", "group"}, l.ExtraScopes...), IntakeScopes: l.IntakeScopes, SharedScopes: l.SharedScopes,
 		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
 		Routes:     []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
 		HelpCenterRoutes: []channels.HelpCenterRoute{{Method: http.MethodGet, Path: "/" + string(l.Type), Handler: l.helpCenter},
@@ -314,6 +324,13 @@ func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, snap
 	if event.Reference != "" {
 		in.Thread.References = []string{event.Reference}
 	}
+	in.Place = &channels.Place{Kind: channels.PlaceDirect, ExternalID: key, OpensConversations: true}
+	if event.Group != "" {
+		in.Place.Kind, in.Place.Name = channels.PlaceGroup, organization
+	}
+	if event.Staff {
+		in.Role = channels.RoleStaff
+	}
 	in.Subject = "Loopback: " + event.Text
 	if len(in.Subject) > 80 {
 		in.Subject = in.Subject[:80]
@@ -389,7 +406,10 @@ func (o loopbackOutbound) Send(ctx context.Context, out channels.Outbound, kit c
 		return result
 	}
 	endpoint.mu.Unlock()
-	to := ""
+	to, place := "", ""
+	if out.Place != nil {
+		place = out.Place.ExternalID
+	}
 	for _, identity := range out.Recipient.Identities {
 		if identity.Kind == LoopbackIdentity {
 			to = identity.Value
@@ -446,7 +466,7 @@ func (o loopbackOutbound) Send(ctx context.Context, out channels.Outbound, kit c
 		id := fmt.Sprintf("part-%d-%s", i+1, out.Message.ID)
 		ids = append(ids, id)
 		endpoint.sent = append(endpoint.sent, Sent{ChannelID: out.Channel.ID, To: to, Text: parts[i], ExternalID: id,
-			References: out.References, Files: files, Token: token})
+			References: out.References, Files: files, Token: token, Place: place})
 	}
 	meta, _ := json.Marshal(map[string]int{"sent": len(parts)})
 	result := channels.Sent("")

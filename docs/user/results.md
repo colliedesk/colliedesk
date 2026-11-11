@@ -43,7 +43,7 @@ apart.
 side now, the baseline when its import finished. A reply that came later does not count.
 
 **First response time.** Time from the customer's first message to the first reply your team sent
-after it. Notes, automatic replies and forwards are not replies. The page shows the median (half
+after it. Notes, automatic replies (a channel's own received notice among them) and forwards are not replies. The page shows the median (half
 got a reply faster) and the 90th percentile (90% got one within that time), with how many were
 answered and how many still wait for a first reply. Time is calendar time, nights and weekends
 included.
@@ -98,7 +98,7 @@ replaced more than a day ago says "These numbers were refreshed. Open Results ag
 
 ## Share the numbers
 
-Admins see **Share and email** at the bottom of the page.
+People with `results:share` (the admins) see **Share and email** at the bottom of the page.
 
 **Share link.** **Create link** makes an address anyone can open without signing in: the page's
 totals, medians and sample sizes, and nothing else (no customer or team names, no subjects, no
@@ -108,19 +108,20 @@ message text, and no way into the conversations). Copy it when it appears: it is
 when it was last opened (updated at most once an hour). On Colliedesk Cloud a workspace whose plan
 ended shares nothing.
 
-**Weekly email.** Every Monday at 8:00 in the workspace's timezone, each admin gets the last 30 days
+**Weekly email.** Every Monday at 8:00 in the workspace's timezone, everyone with `results:share` gets the last 30 days
 next to the baseline, last week's volume and the AI drafts, with a link to the page. Totals only,
-never customer names or messages. Each admin turns it off (or on again) for themselves with **Email
+never customer names or messages. Each of them turns it off (or on again) for themselves with **Email
 me on Mondays**; the email has the same link at the bottom. A workspace with no numbers yet gets no
 email. It needs the server's outgoing mail settings ([self-host email](../self-host/email.md)); without
 them the page says so.
 
 ## For AI agents
 
-`GET /api/v1/results` returns the numbers (token tier `read`), and `GET /api/v1/conversations?result=…`
+`GET /api/v1/results` returns the numbers (`results:read`), and `GET /api/v1/conversations?result=…`
 the conversations behind one. The MCP tool `colliedesk_results_get` and the `result` argument of
-`colliedesk_inbox_search` do the same ([MCP](mcp.md)). An admin token reads and turns off the share
-link (`colliedesk_results_share_link_get`, `colliedesk_results_share_link_revoke`); creating one is a
-request a person approves (`colliedesk_results_share_link_create`), since the numbers leave sign-in,
-and the approver gets the link. `colliedesk_results_email_set` turns the token owner's weekly email
+`colliedesk_inbox_search` do the same ([MCP](mcp.md)). The share link needs `results:share`, since
+the numbers leave sign-in: with it, a token reads, creates and turns off the link
+(`colliedesk_results_share_link_get`, `colliedesk_results_share_link_create`,
+`colliedesk_results_share_link_revoke`), and creating one returns the link to the agent at once. A
+token created before roles cannot. `colliedesk_results_email_set` turns the token owner's weekly email
 on or off.

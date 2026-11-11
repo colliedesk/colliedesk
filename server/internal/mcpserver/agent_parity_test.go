@@ -15,26 +15,31 @@ import (
 // its MCP tool in the same pull request. When a tool starts calling a route, remove it here.
 var mcpToolPending = map[string]int{}
 
-// The gap lists only shrink, and both are empty: every route a person reaches is open to a tier or
-// becomes an agent request. Raising a ceiling needs the maintainer's approval written in the pull
-// request. maxClosedToTokens counts rows closed for any reason other than PersonOnly and NotForPeople.
-// PersonOnly rows are not a gap (a person's decision on an agent request stays a person's), but they
-// are capped too, so the class cannot become a way to close a route without saying so.
+// The gap lists only shrink, and both are empty: every route a person reaches needs one permission,
+// the same for people and tokens. Raising a ceiling needs the maintainer's approval written in the
+// pull request. maxClosedToTokens counts rows closed for any reason other than PersonOnly and
+// NotForPeople. PersonOnly rows are not a gap, but they are capped too, so the class cannot become a
+// way to close a route without saying so.
 const (
 	maxMCPToolPending = 0
 	maxClosedToTokens = 0
-	maxPersonOnly     = 3 // the two agent-request decisions, and the signed image address of the email view (an agent reads the stored HTML and has no screen)
+	// Creating an agent token (a token that makes tokens outlives its own revocation), the signed image
+	// address of the email view (an agent reads the stored HTML and has no screen), and the operator's
+	// decision on an operator request (approve, reject), and allowing an AI app with OAuth (an app connected
+	// by another app would outlive its disconnection). Raised from 4 to 5 for #477 with the maintainer's
+	// approval, Long (buiduclong0511), 2026-11-06: "cách nào là cách chuẩn thì bạn làm theo cách đó".
+	maxPersonOnly = 5
 )
 
 const (
-	tokenScopeFile = "server/internal/httpapi/token-scope.go"
-	pendingFile    = "server/internal/mcpserver/agent_parity_test.go"
+	routeAccessFile = "server/internal/httpapi/token-scope.go"
+	pendingFile     = "server/internal/mcpserver/agent_parity_test.go"
 )
 
-// Everything a person can do in the web app must be doable by an AI agent: each route is classified
-// for agent tokens, and each route a token may call is reached by an MCP tool or tracked as a gap.
+// Everything a person can do in the web app must be doable by an AI agent: each route says what it
+// needs (routeAccess), and each route a token may call is reached by an MCP tool or tracked as a gap.
 func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
-	table := httpapi.TokenAccessTable()
+	table := httpapi.RouteAccessTable()
 	routes := map[string]httpapi.Route{}
 	for _, route := range httpapi.Routes() {
 		routes[route.Method+" "+route.Pattern] = route
@@ -45,41 +50,53 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 			covered[rest] = spec.Name
 		}
 	}
-	// The operator tier is its own vocabulary, not a fifth workspace tier (operator tokens reach only the
-	// operator routes and /mcp/operator): adding it here closes nothing and raises no ceiling.
-	tiers := append(slices.Clone(auth.ScopeNames), "handler", auth.ScopeOperator)
+	permissions := auth.AllPermissions()
 	closedReasons := []string{httpapi.PersonOnly, httpapi.NotForPeople}
-	// A token calls a route directly at its tier or above, and gets an agent request below it or on an
-	// Approval route: either way an MCP tool must reach it.
-	callable := func(access httpapi.TokenAccess) bool { return access.Tier != "" || access.Approval }
+	operatorRoute := func(key string) bool {
+		return strings.Contains(key, " /api/v1/operator/") || strings.Contains(key, "/agent-requests/")
+	}
+	// A token calls a route that needs a permission, one the handler checks from the body, or one any
+	// signed-in caller may use; an operator token calls an operator route, or files a request on one.
+	callable := func(access httpapi.TokenAccess) bool {
+		return access.Closed == "" && (access.Permission != "" || access.Anyone || access.Tier != "" || access.Approval)
+	}
 
 	for key, route := range routes {
 		access, ok := table[key]
 		if !ok {
-			t.Errorf("%s is not classified for agent tokens: add it to tokenTiers in %s with a tier "+
-				"(read, draft, send, admin), Approval, PersonOnly with why, or NotForPeople", key, tokenScopeFile)
+			t.Errorf("%s says nothing about what it needs: add it to routeAccess in %s with need(permission), byHandler(permission), "+
+				"anyone, personOnly with why, or notForPeople", key, routeAccessFile)
 			continue
 		}
 		noSession := route.Permission == auth.PermissionPublic || route.Permission == auth.PermissionChannelInbound
 		if noSession && access.Closed != httpapi.NotForPeople {
-			t.Errorf("%s takes no session, so no token reaches it: classify it NotForPeople in %s", key, tokenScopeFile)
+			t.Errorf("%s takes no session, so no token reaches it: classify it notForPeople in %s", key, routeAccessFile)
 		}
 	}
 	for key, access := range table {
 		if _, ok := routes[key]; !ok {
-			t.Errorf("tokenTiers in %s classifies %s, which is not a route in Routes(): remove the stale row", tokenScopeFile, key)
+			t.Errorf("routeAccess in %s classifies %s, which is not a route in Routes(): remove the stale row", routeAccessFile, key)
 		}
+		workspacePermission := !operatorRoute(key) && access.Permission != ""
 		switch {
-		case access.Tier != "" && access.Closed != "":
-			t.Errorf("%s is both open (%s) and closed (%s) in %s: keep one", key, access.Tier, access.Closed, tokenScopeFile)
-		case access.Approval && (access.Tier != "" || access.Closed != ""):
-			t.Errorf("%s needs approval for every tier in %s, so it has no tier and no closed reason: drop them", key, tokenScopeFile)
-		case access.Tier != "" && !slices.Contains(tiers, access.Tier):
-			t.Errorf("%s has tier %q in %s, want one of %v", key, access.Tier, tokenScopeFile, tiers)
-		case !callable(access) && !slices.Contains(closedReasons, access.Closed):
-			t.Errorf("%s is closed for reason %q in %s, want one of %v", key, access.Closed, tokenScopeFile, closedReasons)
+		case access.Closed != "" && (access.Permission != "" || access.Anyone || access.Approval):
+			t.Errorf("%s is both open and closed (%s) in %s: keep one", key, access.Closed, routeAccessFile)
+		case access.Anyone && access.Permission != "":
+			t.Errorf("%s is open to anyone and needs %s in %s: keep one", key, access.Permission, routeAccessFile)
+		case access.Approval && !operatorRoute(key):
+			t.Errorf("%s waits for approval in %s, but only operator routes may: a workspace token acts at once with the permission, or is refused", key, routeAccessFile)
+		case access.Tier != "" && !operatorRoute(key):
+			t.Errorf("%s has tier %q in %s; tiers are gone, only operator routes keep the operator tier", key, access.Tier, routeAccessFile)
+		case workspacePermission && !slices.Contains(permissions, access.Permission):
+			t.Errorf("%s needs %q in %s, which is not a permission (auth.AllPermissions)", key, access.Permission, routeAccessFile)
+		case access.Closed == "" && !callable(access):
+			t.Errorf("%s needs nothing and is not open to anyone in %s: say what it needs", key, routeAccessFile)
+		case access.Closed != "" && !slices.Contains(closedReasons, access.Closed):
+			t.Errorf("%s is closed for reason %q in %s, want one of %v", key, access.Closed, routeAccessFile, closedReasons)
 		case access.Closed == httpapi.PersonOnly && strings.TrimSpace(access.Why) == "":
-			t.Errorf("%s is PersonOnly in %s without saying why a person must do it: set Why", key, tokenScopeFile)
+			t.Errorf("%s is personOnly in %s without saying why a person must do it: set Why", key, routeAccessFile)
+		case access.PersonNeeds != "" && (access.Closed != httpapi.PersonOnly || !slices.Contains(permissions, access.PersonNeeds)):
+			t.Errorf("%s: PersonNeeds %q goes only on a personOnly row, with a real permission", key, access.PersonNeeds)
 		}
 		if !callable(access) {
 			continue
@@ -87,8 +104,8 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 		tool, isCovered := covered[key]
 		_, isPending := mcpToolPending[key]
 		if !isCovered && !isPending {
-			t.Errorf("%s is open to agent tokens (tier %q, approval %v) but no MCP tool calls it: add a tool in server/internal/mcpserver/catalog*.go "+
-				"that lists it in Spec.REST (or, only with a tracking issue, add it to mcpToolPending in %s)", key, access.Tier, access.Approval, pendingFile)
+			t.Errorf("%s is open to agent tokens (needs %q) but no MCP tool calls it: add a tool in server/internal/mcpserver/catalog*.go "+
+				"that lists it in Spec.REST (or, only with a tracking issue, add it to mcpToolPending in %s)", key, access.Permission, pendingFile)
 		}
 		if isCovered && isPending {
 			t.Errorf("%s is called by MCP tool %s: remove it from mcpToolPending in %s", key, tool, pendingFile)
@@ -116,16 +133,52 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 		}
 	}
 	if closed > maxClosedToTokens {
-		t.Errorf("%d routes in %s are closed to every token, over the ceiling of %d: classify the new route for a tier, or Approval, instead",
-			closed, tokenScopeFile, maxClosedToTokens)
+		t.Errorf("%d routes in %s are closed to every token, over the ceiling of %d: say what the route needs instead",
+			closed, routeAccessFile, maxClosedToTokens)
 	}
 	if personOnly > maxPersonOnly {
-		t.Errorf("%d routes in %s are PersonOnly, over the ceiling of %d: a route a person can do is for agents too, at a tier or as an agent request",
-			personOnly, tokenScopeFile, maxPersonOnly)
+		t.Errorf("%d routes in %s are personOnly, over the ceiling of %d: a route a person can do is for agents too, with the permission it needs",
+			personOnly, routeAccessFile, maxPersonOnly)
 	}
 	for rest, tool := range covered {
 		if access := table[rest]; !callable(access) {
-			t.Errorf("MCP tool %s calls %s, which is closed to every token in %s: open it for the tool's tier or drop it from Spec.REST", tool, rest, tokenScopeFile)
+			t.Errorf("MCP tool %s calls %s, which is closed to every token in %s: drop it from Spec.REST", tool, rest, routeAccessFile)
+		}
+	}
+}
+
+// A tool states what it needs, and that is exactly what its routes need: a tool never claims less (a
+// model would call it and be refused) or more (whoami would hide a tool the token can use).
+func TestEveryToolNeedsWhatItsRoutesNeed(t *testing.T) {
+	table := httpapi.RouteAccessTable()
+	for _, spec := range mcpserver.Catalog() {
+		if spec.Operator {
+			continue
+		}
+		want := []string{}
+		for _, rest := range spec.REST {
+			access := table[rest]
+			if access.Closed == httpapi.PersonOnly {
+				t.Errorf("%s calls %s, which only a person may call: drop the route or the tool", spec.Name, rest)
+			}
+			if !access.Anyone && access.Permission != "" && !slices.Contains(want, access.Permission) {
+				want = append(want, access.Permission)
+			}
+		}
+		for _, need := range spec.BodyNeeds {
+			if !slices.ContainsFunc(spec.REST, func(rest string) bool { return table[rest].ByHandler }) {
+				t.Errorf("%s states BodyNeeds %s, but none of its routes decides by the body", spec.Name, need)
+			}
+			if !slices.Contains(want, need) {
+				want = append(want, need)
+			}
+		}
+		slices.Sort(want)
+		if !slices.Equal(spec.Needs, want) {
+			t.Errorf("%s needs %v, its routes need %v", spec.Name, spec.Needs, want)
+		}
+		if !strings.HasSuffix(spec.Description, "Needs: "+strings.Join(want, ", ")+".") && len(want) > 0 {
+			t.Errorf("%s: its description does not end with Needs: %s.", spec.Name, strings.Join(want, ", "))
 		}
 	}
 }

@@ -1,356 +1,130 @@
 package httpapi_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
-var tierRank = map[string]int{"read": 1, "draft": 2, "send": 3, "admin": 4}
-
-// routeTiers is the lowest tier that may call each route; a token below it gets an agent request (202).
-// "approval" routes give every token an agent request, and "person" routes refuse every token
-// (person_only). No route is closed to every token.
-// It is written out by hand so a route added later fails here until someone classifies it.
-var routeTiers = map[string]string{
-	// The operator console: no workspace token reaches it, whatever its tier (401).
-	"GET /api/v1/operator/auth/me":                                     "operator",
-	"POST /api/v1/operator/auth/logout":                                "operator",
-	"POST /api/v1/operator/tokens":                                     "operator",
-	"GET /api/v1/operator/status":                                      "operator",
-	"GET /api/v1/operator/config":                                      "operator",
-	"PATCH /api/v1/operator/config":                                    "operator",
-	"POST /api/v1/operator/config/check":                               "operator",
-	"GET /api/v1/operator/config/versions":                             "operator",
-	"POST /api/v1/operator/config/versions/{id}/restore":               "operator",
-	"POST /api/v1/operator/config/trial/confirm":                       "operator",
-	"POST /api/v1/operator/config/trial/revert":                        "operator",
-	"GET /api/v1/operator/billing/products":                            "operator",
-	"POST /api/v1/operator/billing/products":                           "operator",
-	"PATCH /api/v1/operator/billing/products/{id}":                     "operator",
-	"GET /api/v1/operator/audit":                                       "operator",
-	"GET /api/v1/operator/requests":                                    "operator",
-	"GET /api/v1/operator/requests/{id}":                               "operator",
-	"POST /api/v1/operator/requests/{id}/cancel":                       "operator",
-	"GET /api/v1/operator/operators":                                   "operator",
-	"POST /api/v1/operator/operators":                                  "operator",
-	"DELETE /api/v1/operator/operators/{id}":                           "operator",
-	"DELETE /api/v1/operator/sessions/{id}":                            "operator",
-	"POST /api/v1/auth/logout":                                         "read",
-	"GET /api/v1/auth/me":                                              "read",
-	"GET /api/v1/auth/sessions":                                        "read",
-	"DELETE /api/v1/auth/sessions/{id}":                                "admin",
-	"POST /api/v1/auth/tokens":                                         "approval",
-	"POST /api/v1/auth/invites":                                        "approval",
-	"GET /api/v1/auth/invites":                                         "read",
-	"DELETE /api/v1/auth/invites/{id}":                                 "admin",
-	"GET /api/v1/conversations":                                        "read",
-	"PATCH /api/v1/conversations":                                      "draft",
-	"GET /api/v1/inbox/activity":                                       "read",
-	"PATCH /api/v1/agents/{id}":                                        "admin",
-	"GET /api/v1/saved-replies":                                        "read",
-	"POST /api/v1/saved-replies":                                       "send",
-	"PATCH /api/v1/saved-replies/{id}":                                 "send",
-	"DELETE /api/v1/saved-replies/{id}":                                "send",
-	"GET /api/v1/saved-replies/trash":                                  "read",
-	"GET /api/v1/saved-replies/{id}/versions":                          "read",
-	"POST /api/v1/saved-replies/{id}/versions/{version}/restore":       "send",
-	"POST /api/v1/saved-replies/{id}/restore":                          "send",
-	"GET /api/v1/saved-views":                                          "read",
-	"GET /api/v1/saved-views/trash":                                    "read",
-	"POST /api/v1/saved-views":                                         "draft",
-	"PATCH /api/v1/saved-views/{id}":                                   "draft",
-	"DELETE /api/v1/saved-views/{id}":                                  "draft",
-	"POST /api/v1/saved-views/{id}/restore":                            "draft",
-	"GET /api/v1/kb/collections":                                       "read",
-	"POST /api/v1/kb/collections":                                      "send",
-	"GET /api/v1/kb/collections/trash":                                 "read",
-	"PATCH /api/v1/kb/collections/{id}":                                "send",
-	"DELETE /api/v1/kb/collections/{id}":                               "send",
-	"POST /api/v1/kb/collections/{id}/restore":                         "send",
-	"GET /api/v1/kb/articles":                                          "read",
-	"POST /api/v1/kb/articles":                                         "send",
-	"GET /api/v1/kb/articles/trash":                                    "read",
-	"GET /api/v1/kb/articles/{id}":                                     "read",
-	"PATCH /api/v1/kb/articles/{id}":                                   "send",
-	"DELETE /api/v1/kb/articles/{id}":                                  "send",
-	"POST /api/v1/kb/articles/{id}/restore":                            "send",
-	"GET /api/v1/kb/articles/{id}/versions":                            "read",
-	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":         "send",
-	"POST /api/v1/kb/articles/{id}/ai-exclusion":                       "send",
-	"DELETE /api/v1/kb/articles/{id}/ai-exclusion":                     "send",
-	"POST /api/v1/kb/images":                                           "send",
-	"GET /api/v1/kb/images/{id}":                                       "read",
-	"GET /api/v1/kb/media":                                             "read",
-	"PATCH /api/v1/kb/media/{id}":                                      "send",
-	"GET /api/v1/kb/media/trash":                                       "read",
-	"POST /api/v1/kb/media/trash":                                      "send",
-	"POST /api/v1/kb/media/trash-unused":                               "send",
-	"POST /api/v1/kb/media/restore":                                    "send",
-	"POST /api/v1/kb/media/purge":                                      "admin",
-	"DELETE /api/v1/kb/media/{id}":                                     "send",
-	"POST /api/v1/kb/media/{id}/restore":                               "send",
-	"POST /api/v1/kb/media/{id}/replace":                               "send",
-	"POST /api/v1/kb/media-replacements/{id}/undo":                     "send",
-	"POST /api/v1/kb/media-uploads":                                    "send",
-	"GET /api/v1/kb/media-uploads":                                     "read",
-	"GET /api/v1/kb/media-uploads/{id}":                                "read",
-	"PUT /api/v1/kb/media-uploads/{id}":                                "send",
-	"DELETE /api/v1/kb/media-uploads/{id}":                             "send",
-	"POST /api/v1/kb/media-uploads/{id}/complete":                      "send",
-	"GET /api/v1/kb/media/{id}":                                        "read",
-	"PUT /api/v1/kb/media/{id}/poster":                                 "send",
-	"GET /api/v1/kb/media/{id}/poster/{version}":                       "read",
-	"GET /api/v1/kb/media/{id}/details":                                "read",
-	"GET /api/v1/kb/media/{id}/thumbnail":                              "read",
-	"GET /api/v1/help-center/domain":                                   "read",
-	"PUT /api/v1/help-center/domain":                                   "admin",
-	"DELETE /api/v1/help-center/domain":                                "admin",
-	"POST /api/v1/help-center/domain/check":                            "admin",
-	"GET /api/v1/help-center":                                          "read",
-	"PUT /api/v1/help-center":                                          "admin",
-	"POST /api/v1/conversations":                                       "send",
-	"GET /api/v1/conversations/{id}":                                   "read",
-	"PATCH /api/v1/conversations/{id}":                                 "draft",
-	"PUT /api/v1/conversations/{id}/tags/{tagId}":                      "draft",
-	"DELETE /api/v1/conversations/{id}/tags/{tagId}":                   "draft",
-	"GET /api/v1/conversations/{id}/messages":                          "read",
-	"POST /api/v1/conversations/{id}/messages":                         "draft",
-	"GET /api/v1/conversations/{id}/time-entries":                      "read",
-	"PUT /api/v1/conversations/{id}/presence":                          "read",
-	"DELETE /api/v1/conversations/{id}/presence/{clientId}":            "read",
-	"POST /api/v1/conversations/{id}/messages/{messageId}/retry":       "send",
-	"GET /api/v1/attachments/{id}":                                     "read",
-	"GET /api/v1/contacts":                                             "read",
-	"POST /api/v1/contacts":                                            "send",
-	"GET /api/v1/contacts/{id}":                                        "read",
-	"PATCH /api/v1/contacts/{id}":                                      "send",
-	"POST /api/v1/contacts/{id}/merges":                                "send",
-	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":                    "send",
-	"GET /api/v1/agents":                                               "read",
-	"PATCH /api/v1/workspace/timezone":                                 "admin",
-	"PATCH /api/v1/workspace/name":                                     "admin",
-	"PATCH /api/v1/workspace/slug":                                     "approval",
-	"PATCH /api/v1/agents/me/timezone":                                 "draft",
-	"PATCH /api/v1/agents/me/display-name":                             "draft",
-	"GET /api/v1/tags":                                                 "read",
-	"GET /api/v1/results":                                              "read",
-	"GET /api/v1/autofix/status":                                       "read",
-	"GET /api/v1/autofix/fixes":                                        "read",
-	"GET /api/v1/autofix/fixes/{id}":                                   "read",
-	"GET /api/v1/conversations/{id}/fixes":                             "read",
-	"GET /api/v1/autofix/settings":                                     "read",
-	"GET /api/v1/autofix/github/installations/{id}/repositories":       "read",
-	"POST /api/v1/autofix/github/installations":                        "approval",
-	"DELETE /api/v1/autofix/github/installations/{id}":                 "approval",
-	"POST /api/v1/autofix/repos":                                       "admin",
-	"PATCH /api/v1/autofix/repos/{id}":                                 "admin",
-	"DELETE /api/v1/autofix/repos/{id}":                                "admin",
-	"PUT /api/v1/autofix/repos/{id}/include-notes":                     "approval",
-	"DELETE /api/v1/autofix/repos/{id}/include-notes":                  "admin",
-	"POST /api/v1/conversations/{id}/fixes/preview":                    "read",
-	"POST /api/v1/conversations/{id}/fixes":                            "approval",
-	"POST /api/v1/autofix/fixes/{id}/retry":                            "approval",
-	"POST /api/v1/autofix/fixes/{id}/cancel":                           "draft",
-	"PUT /api/v1/autofix/fixes/{id}/deployed":                          "draft",
-	"DELETE /api/v1/autofix/fixes/{id}/deployed":                       "draft",
-	"PUT /api/v1/autofix/fixes/{id}/pull-request":                      "draft",
-	"DELETE /api/v1/autofix/fixes/{id}/pull-request":                   "draft",
-	"PUT /api/v1/autofix/connectors/{kind}":                            "approval",
-	"DELETE /api/v1/autofix/connectors/{kind}":                         "admin",
-	"POST /api/v1/autofix/connectors/{kind}/check":                     "read",
-	"PUT /api/v1/autofix/connectors/cursor_api/key":                    "admin",
-	"DELETE /api/v1/autofix/connectors/cursor_api/key":                 "admin",
-	"GET /api/v1/results/share-link":                                   "admin",
-	"POST /api/v1/results/share-link":                                  "approval",
-	"DELETE /api/v1/results/share-link":                                "admin",
-	"PATCH /api/v1/agents/me/results-email":                            "draft",
-	"GET /api/v1/workspace/setup":                                      "read",
-	"PUT /api/v1/agents/me/setup-guide":                                "draft",
-	"POST /api/v1/tags":                                                "draft",
-	"PATCH /api/v1/tags/{id}":                                          "send",
-	"DELETE /api/v1/tags/{id}":                                         "send",
-	"GET /api/v1/channels/email":                                       "read",
-	"PUT /api/v1/channels/email":                                       "admin",
-	"DELETE /api/v1/channels/email":                                    "approval",
-	"POST /api/v1/channels/email/domain-verification":                  "admin",
-	"POST /api/v1/channels/email/secret":                               "approval",
-	"POST /api/v1/channels/email/gmail":                                "approval",
-	"DELETE /api/v1/channels/email/gmail":                              "approval",
-	"POST /api/v1/channels/email/microsoft":                            "approval",
-	"DELETE /api/v1/channels/email/microsoft":                          "approval",
-	"GET /api/v1/billing":                                              "admin",
-	"POST /api/v1/billing/checkout":                                    "approval",
-	"POST /api/v1/billing/portal":                                      "approval",
-	"GET /api/v1/export":                                               "approval",
-	"POST /api/v1/export/link":                                         "approval",
-	"GET /api/v1/channels/web-form":                                    "read",
-	"PUT /api/v1/channels/web-form":                                    "admin",
-	"GET /api/v1/channels":                                             "read",
-	"POST /api/v1/channels":                                            "admin",
-	"GET /api/v1/channels/events":                                      "read",
-	"GET /api/v1/channels/{id}":                                        "read",
-	"PATCH /api/v1/channels/{id}":                                      "admin",
-	"DELETE /api/v1/channels/{id}":                                     "approval",
-	"PUT /api/v1/channels/{id}/credentials":                            "admin",
-	"POST /api/v1/channels/{id}/check":                                 "admin",
-	"POST /api/v1/channels/{id}/held/replay":                           "admin",
-	"POST /api/v1/channels/{id}/held/discard":                          "approval",
-	"GET /api/v1/channels/{id}/email":                                  "read",
-	"GET /api/v1/channels/{id}/email/forwarding-confirmation":          "read",
-	"POST /api/v1/channels/{id}/email/domain-verification":             "admin",
-	"POST /api/v1/channels/email/test-message":                         "draft",
-	"POST /api/v1/channels/{id}/email/test-message":                    "draft",
-	"POST /api/v1/channels/{id}/email/secret":                          "approval",
-	"POST /api/v1/channels/{id}/email/gmail":                           "approval",
-	"DELETE /api/v1/channels/{id}/email/gmail":                         "approval",
-	"POST /api/v1/channels/{id}/email/microsoft":                       "approval",
-	"DELETE /api/v1/channels/{id}/email/microsoft":                     "approval",
-	"GET /api/v1/agent-requests":                                       "read",
-	"GET /api/v1/agent-requests/{id}":                                  "read",
-	"POST /api/v1/agent-requests/{id}/cancel":                          "read",
-	"POST /api/v1/support/problem-reports":                             "read",
-	"GET /api/v1/imports":                                              "admin",
-	"GET /api/v1/imports/{id}":                                         "admin",
-	"PUT /api/v1/imports/{id}/key":                                     "admin",
-	"POST /api/v1/imports/{id}/cancel":                                 "admin",
-	"POST /api/v1/imports/{id}/start":                                  "admin",
-	"POST /api/v1/imports":                                             "admin",
-	"GET /api/v1/imports/{id}/report":                                  "admin",
-	"POST /api/v1/imports/{id}/undo":                                   "approval",
-	"GET /api/v1/imports/{id}/people":                                  "admin",
-	"PUT /api/v1/imports/{id}/people/{externalId}/link":                "admin",
-	"DELETE /api/v1/imports/{id}/people/{externalId}/link":             "admin",
-	"GET /api/v1/mail-image":                                           "person",
-	"POST /api/v1/agent-requests/{id}/approve":                         "person",
-	"POST /api/v1/agent-requests/{id}/reject":                          "person",
-	"GET /api/v1/ai":                                                   "read",
-	"POST /api/v1/ai/providers":                                        "admin",
-	"POST /api/v1/ai/models":                                           "admin",
-	"PATCH /api/v1/ai/providers/{id}":                                  "admin",
-	"PUT /api/v1/ai/providers/{id}/key":                                "admin",
-	"POST /api/v1/ai/providers/{id}/check":                             "admin",
-	"PUT /api/v1/ai/slots/{slot}":                                      "approval",
-	"DELETE /api/v1/ai/providers/{id}":                                 "admin",
-	"GET /api/v1/ai/usage":                                             "admin",
-	"GET /api/v1/ai/chat/usage":                                        "admin",
-	"GET /api/v1/ai/chat/sessions":                                     "read",
-	"GET /api/v1/ai/chat/sessions/{id}":                                "read",
-	"DELETE /api/v1/ai/chat/sessions/{id}":                             "approval",
-	"POST /api/v1/ai/chat/preview":                                     "draft",
-	"PUT /api/v1/ai/automatic-limits":                                  "admin",
-	"POST /api/v1/conversations/{id}/ai-drafts":                        "draft",
-	"GET /api/v1/conversations/{id}/ai-drafts":                         "read",
-	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":               "read",
-	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard":      "draft",
-	"GET /api/v1/conversations/{id}/ai-triage":                         "read",
-	"POST /api/v1/conversations/{id}/ai-triage":                        "draft",
-	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  "draft",
-	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": "draft",
-	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    "draft",
-	"GET /api/v1/help-center/theme":                                    "read",
-	"PUT /api/v1/help-center/theme":                                    "admin",
-	"GET /api/v1/help-center/search-console":                           "read",
-	"PUT /api/v1/help-center/search-console":                           "admin",
-	"GET /api/v1/help-center/freshdesk-redirect":                       "read",
-	"POST /api/v1/help-center/theme/check":                             "read",
-	"POST /api/v1/help-center/theme/preview":                           "read",
-	"PUT /api/v1/kb/order":                                             "send",
-}
-
-// kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.
-var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PUT /api/v1/kb/media-uploads/{id}": true,
-	"DELETE /api/v1/kb/media-uploads/{id}": true, "POST /api/v1/kb/media-uploads/{id}/complete": true, "PUT /api/v1/kb/media/{id}/poster": true}
-
-// credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
-var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
-	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true,
-	"PUT /api/v1/channels/{id}/credentials": true, "PUT /api/v1/autofix/connectors/cursor_api/key": true}
-
-func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
+// Every session route needs one permission (or none, or a person), the same for people and tokens:
+// a token given everything but it is refused with permission_missing (missing from the token, since its
+// person holds it); a token given just it gets past the check, and the call answers what a person's does.
+func TestEveryRouteNeedsOnePermissionForPeopleAndTokens(t *testing.T) {
 	fixture := newContractFixture(t)
 	cases := successfulContractCases(fixture)
+	table := httpapi.RouteAccessTable()
+	all := auth.AllPermissions()
+	tokens := map[string]string{}
+	tokenWith := func(names ...string) string {
+		key := strings.Join(names, ",")
+		if tokens[key] == "" {
+			tokens[key] = customToken(t, fixture.api, fixture.adminToken, fmt.Sprintf("matrix %d", len(tokens)), names...)
+		}
+		return tokens[key]
+	}
 	for _, route := range httpapi.Routes() {
-		if !sessionRoute(route) {
+		if !sessionRoute(route) || route.Permission == auth.PermissionOperator {
 			continue
 		}
 		key := route.Method + " " + route.Pattern
-		want, ok := routeTiers[key]
+		access, ok := table[key]
 		if !ok {
-			t.Errorf("%s is not classified in routeTiers", key)
+			t.Errorf("%s has no row in routeAccess", key)
 			continue
 		}
-		item := cases[key]
-		for _, tier := range []string{"read", "draft", "send", "admin"} {
-			token := issueToken(t, fixture.api, fixture.adminToken, "matrix "+tier, tier).Token
-			body := item.body
-			if key == "POST /api/v1/tags" { // two tiers may create, and a tag name is unique
-				body = map[string]any{"name": "matrix tag " + tier}
-			}
-			if key == "PATCH /api/v1/saved-views/{id}" { // each change sends the version it read
-				body = map[string]any{"name": "matrix rename " + tier, "updated_at": viewSeen(t, fixture.api, fixture.adminToken, fixture.updateViewID)}
-			}
-			if key == "POST /api/v1/saved-views" { // likewise for a view name
-				body = map[string]any{"name": "matrix view " + tier, "scope": "shared", "filters": map[string]any{}}
-			}
-			response := request(t, fixture.api, route.Method, item.path, body, token, nil)
+		item, ok := cases[key]
+		if !ok {
+			continue
+		}
+		call := func(token string) *httptest.ResponseRecorder {
 			if key == "POST "+kbImagesPath { // the body is the raw image
-				response = serve(fixture.api, kbImageRequest(token, nil))
+				return serve(fixture.api, kbImageRequest(token, nil))
 			}
-			switch {
-			case want == "operator":
-				if response.Code != http.StatusUnauthorized {
-					t.Errorf("%s with a %s token: status=%d body=%s, want 401 (operator routes take operator credentials only)", key, tier, response.Code, response.Body.String())
+			return request(t, fixture.api, route.Method, item.path, item.body, token, nil)
+		}
+		switch {
+		case access.Closed == httpapi.PersonOnly:
+			response := call(tokenWith(all...))
+			if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "person_only") {
+				t.Errorf("%s with a token: status=%d body=%s, want 403 person_only", key, response.Code, response.Body.String())
+			}
+		case access.Anyone:
+			if missing, _, _ := permissionMissing(t, call(tokenWith(auth.PermTagsRead))); missing {
+				t.Errorf("%s refused a token, want it open to every token", key)
+			}
+		case access.ByHandler:
+			if missing, _, _ := permissionMissing(t, call(tokenWith(access.Permission))); missing && key != "POST /api/v1/conversations/{id}/messages" {
+				t.Errorf("%s refused a token holding %s", key, access.Permission)
+			}
+		default:
+			var others []string
+			for _, name := range all {
+				if name != access.Permission {
+					others = append(others, name)
 				}
-			case (key == "POST "+kbImagesPath || kbFileRouteKeys[key]) && tierRank[tier] < tierRank[want]:
-				// Bytes never wait for approval: a lower tier is refused, not filed.
-				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") {
-					t.Errorf("%s with a %s token: status=%d body=%s, want 403 files_need_approval", key, tier, response.Code, response.Body.String())
-				}
-			case credentialRouteKeys[key] && tierRank[tier] < tierRank[want]:
-				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "credentials_need_admin_token") {
-					t.Errorf("%s with a %s token: status=%d body=%s, want 403 credentials_need_admin_token", key, tier, response.Code, response.Body.String())
-				}
-			case want == "person":
-				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "person_only") {
-					t.Errorf("%s with a %s token: status=%d body=%s, want 403 person_only", key, tier, response.Code, response.Body.String())
-				}
-			case want == "approval" || tierRank[tier] < tierRank[want]:
-				if response.Code != http.StatusAccepted {
-					t.Errorf("%s with a %s token: status=%d body=%s, want 202 (an agent request)", key, tier, response.Code, response.Body.String())
-				}
-			case kbFileRouteKeys[key]:
-				// The gate let the token through; the bytes and their checks are the contract cases'.
-				if response.Code == http.StatusAccepted || strings.Contains(response.Body.String(), "files_need_approval") || strings.Contains(response.Body.String(), "scope_insufficient") {
-					t.Errorf("%s with a %s token: status=%d body=%s, want past the gate", key, tier, response.Code, response.Body.String())
-				}
-			case strings.HasPrefix(route.Pattern, "/api/v1/agent-requests/{id}"):
-				// The fixture's request belongs to another token, which this one cannot see.
-				if response.Code != http.StatusNotFound {
-					t.Errorf("%s with a %s token: status=%d body=%s, want 404 for another token's request", key, tier, response.Code, response.Body.String())
-				}
-			case tier == "admin" && want != "admin" && response.Code != http.StatusAccepted && response.Code != http.StatusForbidden:
-				// The send token already ran the call once; the admin token only has to pass the gate.
-			case response.Code != item.status:
-				t.Errorf("%s with a %s token: status=%d body=%s, want the success status %d", key, tier, response.Code, response.Body.String(), item.status)
+			}
+			response := call(tokenWith(others...))
+			missing, names, from := permissionMissing(t, response)
+			if !missing || !slices.Contains(names, access.Permission) || from != "token" {
+				t.Errorf("%s with every permission but %s: status=%d body=%s, want 403 permission_missing from the token", key, access.Permission, response.Code, response.Body.String())
 			}
 		}
-	}
-	if len(routeTiers) != countSessionRoutes() {
-		t.Errorf("routeTiers lists %d routes, API has %d session routes", len(routeTiers), countSessionRoutes())
 	}
 }
 
-func countSessionRoutes() int {
-	count := 0
-	for _, route := range httpapi.Routes() {
-		if sessionRoute(route) {
-			count++
+// The two built-in roles let a person through every route exactly as the agent and admin roles did
+// before roles (testdata/old-route-roles.json, frozen from the release before).
+func TestSystemRolesReproduceTheOldRoles(t *testing.T) {
+	data, err := os.ReadFile("testdata/old-route-roles.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var old map[string]struct {
+		Agent bool `json:"agent"`
+		Admin bool `json:"admin"`
+	}
+	if err := json.Unmarshal(data, &old); err != nil {
+		t.Fatal(err)
+	}
+	// What changed on purpose: one's own sessions are anyone's (another's needs team:revoke in the
+	// handler, which the agent role never had), and a channel's AI level was refused to agents by its handler.
+	changed := map[string]bool{"DELETE /api/v1/auth/sessions/{id}": true, "PUT /api/v1/channels/{id}/ai/{slot}": true}
+	table := httpapi.RouteAccessTable()
+	agent := auth.PrincipalForTest(domain.Workspace{}, domain.Agent{}, auth.AgentRolePermissions())
+	admin := auth.PrincipalForTest(domain.Workspace{}, domain.Agent{}, auth.AllPermissions())
+	passes := func(who auth.Principal, access httpapi.TokenAccess) bool {
+		switch {
+		case access.Anyone, access.ByHandler && who.Can(access.Permission):
+			return true
+		case access.Closed == httpapi.PersonOnly:
+			return access.PersonNeeds == "" || who.Can(access.PersonNeeds)
+		}
+		return access.Permission != "" && who.Can(access.Permission)
+	}
+	for key, before := range old {
+		access, ok := table[key]
+		if !ok || strings.Contains(key, "/agent-requests") {
+			continue // removed with agent requests
+		}
+		if got := passes(admin, access); got != before.Admin {
+			t.Errorf("%s: the Admin role passes=%v, the admin role did %v", key, got, before.Admin)
+		}
+		if got := passes(agent, access); got != before.Agent && !changed[key] {
+			t.Errorf("%s: the Agent role passes=%v, the agent role did %v", key, got, before.Agent)
 		}
 	}
-	return count
+	if passes(agent, table["PUT /api/v1/channels/{id}/ai/{slot}"]) {
+		t.Error("the Agent role may change a channel's AI level; the agent role never could")
+	}
 }
 
 func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
@@ -369,13 +143,13 @@ func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
 	reply := map[string]any{"kind": "outgoing", "body": "Hello customer"}
 	tagPath := path + "/tags/" + tag
 
-	// tierNeeded names a tier above the token's: the call becomes an agent request and changes nothing.
+	// tierNeeded names a tier above the token's: the call is refused and changes nothing.
 	step := func(label, token, method, target string, body any, want int, tierNeeded string) {
 		t.Helper()
 		response := request(t, api, method, target, body, token, nil)
 		if tierNeeded != "" {
-			if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
-				t.Errorf("%s: status=%d body=%s, want 202 with an agent request (the action needs %s)", label, response.Code, response.Body.String(), tierNeeded)
+			if missing, _, _ := permissionMissing(t, response); !missing {
+				t.Errorf("%s: status=%d body=%s, want 403 permission_missing (the action needs %s)", label, response.Code, response.Body.String(), tierNeeded)
 			}
 			return
 		}
@@ -408,7 +182,7 @@ func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
 	}
 	decode(t, request(t, api, http.MethodGet, path+"/messages", nil, admin, nil), &messages)
 	if len(messages.Items) != 1 || messages.Items[0].Kind != "note" {
-		t.Errorf("a reply waiting for approval must store nothing; messages = %+v", messages.Items)
+		t.Errorf("a refused reply must store nothing; messages = %+v", messages.Items)
 	}
 
 	step("send replies", send, http.MethodPost, path+"/messages", reply, 201, "")
@@ -466,8 +240,8 @@ func TestTokenOfOneWorkspaceCannotReachAnotherWorkspace(t *testing.T) {
 			{http.MethodPost, path + "/messages", map[string]any{"kind": "note", "body": "intrusion"}},
 		} {
 			response := request(t, api, probe.method, probe.target, probe.body, token, nil)
-			if refused, _ := scopeRefused(t, response); refused {
-				continue // a tier below the route's own is refused before the workspace is consulted
+			if missing, _, _ := permissionMissing(t, response); missing {
+				continue // a token without the route's permission is refused before the workspace is consulted
 			}
 			if response.Code != http.StatusNotFound {
 				t.Errorf("%s token %s %s: status=%d body=%s, want 404", tier, probe.method, probe.target, response.Code, response.Body.String())

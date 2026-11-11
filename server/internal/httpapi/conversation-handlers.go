@@ -1,15 +1,18 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -66,7 +69,7 @@ func (a *API) createConversation(response http.ResponseWriter, request *http.Req
 			}
 			return item, nil
 		}
-		actor, _ := messageActor(ctx, identity, "outgoing")
+		actor, _ := messageActor(identity, "outgoing")
 		cc, refusal := a.cleanCC(ctx, identity.Workspace.ID, "outgoing", input.CC)
 		if refusal != nil {
 			a.writeUploadError(response, refusal)
@@ -138,8 +141,10 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 		Priority   *string         `json:"priority"`
 		AssigneeID json.RawMessage `json:"assignee_id"`
 		TagIDs     *[]string       `json:"tag_ids"`
+		Notify     *bool           `json:"notify"`
 	}
-	if err := decodeJSON(request, &input); err != nil {
+	_, err := readBody(request)
+	if err != nil || decodeJSON(request, &input) != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Conversation changes are invalid.")
 		return
 	}
@@ -153,8 +158,12 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 		assignee = &value
 	}
 	identity := principal(request)
+	quiet := input.Notify != nil && !*input.Notify
+	if a.refuseStatusThatTells(response, request, identity, []string{request.PathValue("id")}, input.Status, quiet) {
+		return
+	}
 	item, err := a.store.UpdateConversation(request.Context(), identity.Workspace.ID, request.PathValue("id"), store.ConversationUpdate{
-		Status: input.Status, Priority: input.Priority, AssigneeID: assignee, TagIDs: input.TagIDs, ActorID: identity.Agent.ID,
+		Status: input.Status, Priority: input.Priority, AssigneeID: assignee, TagIDs: input.TagIDs, ActorID: identity.Agent.ID, TokenID: tokenOf(request), Quiet: quiet,
 	})
 	if err != nil {
 		writeStoreError(response, err)
@@ -169,4 +178,43 @@ func positiveInt(value string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+// refuseStatusThatTells answers 403 permission_missing and reports true when the caller may not write
+// to customers (messages:send) and the status it sets would tell one (the channel's status notice). A
+// quiet change (notify false) tells nobody and needs no more than the route.
+func (a *API) refuseStatusThatTells(response http.ResponseWriter, request *http.Request, who auth.Principal, ids []string, status *string, quiet bool) bool {
+	if status == nil || quiet || who.Can(auth.PermMessagesSend) {
+		return false
+	}
+	notices, err := a.store.StatusNoticePreview(request.Context(), who.Workspace.ID, ids, *status)
+	if err != nil {
+		writeStoreError(response, err)
+		return true
+	}
+	if len(notices) == 0 {
+		return false
+	}
+	a.writePermissionMissingHint(response, request, who,
+		"This status tells the customer ("+notices[0].ChannelName+"), which is writing to them; send notify: false to change it without telling them.",
+		auth.PermMessagesSend)
+	return true
+}
+
+// tokenOf is the id of the AI agent's token making a call, or "" for a person's own.
+func tokenOf(request *http.Request) string {
+	if who := principal(request); who.IsToken() {
+		return who.SessionID
+	}
+	return ""
+}
+
+// readBody reads the JSON body once and puts it back for decodeJSON, so a call can be filed as it came.
+func readBody(request *http.Request) (json.RawMessage, error) {
+	raw, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	request.Body = io.NopCloser(bytes.NewReader(raw))
+	return raw, nil
 }

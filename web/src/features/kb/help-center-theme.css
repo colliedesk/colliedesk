@@ -1,6 +1,8 @@
-/* The brand settings of the help center card: the form, then the preview; side by side from 1,180 px. */
+/* The brand settings of the help center card: the form, then the preview; side by side once the card itself is
+   at least 50rem wide (a container query: the window's width says nothing about the card's beside the nav). */
+.theme-settings { container-type: inline-size; }
 .theme-layout { display: grid; gap: var(--space-6); align-items: start; }
-@media (min-width: 1180px) {
+@container (min-width: 50rem) {
   .theme-layout { grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr); }
   .theme-preview { position: sticky; top: var(--space-4); }
 }
@@ -27,6 +29,8 @@
 .theme-values li { display: flex; flex-wrap: wrap; gap: var(--space-2); overflow-wrap: anywhere; }
 
 .theme-preview { display: grid; gap: var(--space-3); min-width: 0; }
+/* A fieldset is as wide as its content by default; the width switch wraps instead of pushing out of the card. */
+.theme-preview fieldset { min-inline-size: 0; }
 .theme-preview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
 .theme-preview-bar h3 { margin: 0 auto 0 0; font-size: var(--fs-ui); font-weight: 600; }
 .theme-preview-state { min-width: 5rem; font-size: var(--fs-label); }
@@ -34,6 +38,11 @@
 .theme-preview-stage iframe { display: block; width: 100%; height: 40rem; max-height: 75vh; border: 0; background: var(--surface-1); }
 .theme-preview-stage[data-width="phone"] { padding: var(--space-3) 0; }
 .theme-preview-stage[data-width="phone"] iframe { width: min(100%, 390px); border-inline: 1px solid var(--line); }
+
+/* The preview's switches look like every other segmented choice in Settings: a grey track, the choice on white. */
+.theme-preview-bar .segmented { border: 0; background: var(--surface-2); gap: 0; }
+.theme-preview-bar .segmented label { min-height: var(--control, 32px); padding: 0 var(--space-3); }
+.theme-preview-bar .segmented label:has(input:checked) { box-shadow: var(--shadow-1); }
 
 @media (max-width: 44rem) {
   .theme-preview-bar .segmented label { min-height: var(--touch); }

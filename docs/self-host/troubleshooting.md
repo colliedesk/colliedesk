@@ -76,8 +76,17 @@ create an agent token on the server:
 
 ```sh
 docker compose exec server /app/collie token create \
-  --workspace <slug> --email you@example.com --scope draft --label "Claude Code"
+  --workspace <slug> --email you@example.com --role Agent --label "Claude Code"
 ```
+
+`--role` is a role of the workspace, by name, whose permissions that person all holds (an admin
+may name any role, for example Agent); the token follows it. For a fixed list
+instead, repeat `--permission`, for example `--permission conversations:read --permission
+messages:note`; each must be a permission the person holds. Give one or the other. The token is
+printed once; Colliedesk keeps only its hash. See [roles and permissions](../user/roles-and-permissions.md).
+
+`--scope read|draft|send|admin` is deprecated: it still works and prints a warning. `read`, `draft` and
+`send` become the fixed list of permissions that tier had; `admin` follows the Admin role.
 
 ## Still stuck?
 

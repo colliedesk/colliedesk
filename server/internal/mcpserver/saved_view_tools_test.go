@@ -106,8 +106,8 @@ func TestSavedViewToolsKeepPersonalViewsPrivateAndDeletesRestorable(t *testing.T
 		t.Fatalf("list after restore = %v", views)
 	}
 	// A read token's write waits for a person.
-	requestedForTier(t, e, w.read, "colliedesk_saved_view_create", map[string]any{"name": "Proposed", "scope": "shared", "filters": map[string]any{}})
-	requestedForTier(t, e, w.read, "colliedesk_saved_view_delete", map[string]any{"saved_view_id": id})
+	refusedWithoutPermission(t, e, w.read, "colliedesk_saved_view_create", map[string]any{"name": "Proposed", "scope": "shared", "filters": map[string]any{}})
+	refusedWithoutPermission(t, e, w.read, "colliedesk_saved_view_delete", map[string]any{"saved_view_id": id})
 
 	// The admin's personal view is the admin's: a token acting as the admin sees it, the other workspace never does.
 	personal := e.created("/api/v1/saved-views", map[string]any{"name": "Admin only", "scope": "personal", "filters": map[string]any{}}, w.admin)

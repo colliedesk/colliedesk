@@ -4,10 +4,11 @@ We share what we are building and in what order. Dates are targets, not promises
 Feature details live in [docs/feature-spec.md](docs/feature-spec.md). Releases are listed in the
 [changelog](CHANGELOG.md).
 
-## Now: alpha (0.0.x)
+## Now: generally available (1.x)
 
-Released as `0.0.x` and running on Colliedesk Cloud. Any release may change the interface or the
-database schema.
+Released from `1.0.0` under Semantic Versioning and running on Colliedesk Cloud. Upgrades keep your
+data; [what general availability guarantees](docs/general-availability.md) covers export, backups,
+uptime and self-hosted installs.
 
 - Passwordless sign-in: one-time pairing and invite links, role ceilings, revocable sessions;
   cloud sign-in through Clerk.
@@ -46,9 +47,7 @@ database schema.
   response, time to resolve, reopens, volume, AI drafts), each opening the conversations it counts,
   with a share link and a weekly email to admins.
 
-## Next: beta (0.1.0)
-
-Beta starts when HC Labs announces it. Before that:
+## Next
 
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
@@ -67,7 +66,6 @@ Beta starts when HC Labs announces it. Before that:
 - Simple rules on arrival: assign, tag, set priority ([#103](https://github.com/colliedesk/colliedesk/issues/103)).
 - AI drafts that look up customer data through your MCP servers, read-only ([#104](https://github.com/colliedesk/colliedesk/issues/104)).
 - Macros: a saved reply plus actions in one step ([#117](https://github.com/colliedesk/colliedesk/issues/117)).
-- SLA targets, business hours and overdue alerts ([#118](https://github.com/colliedesk/colliedesk/issues/118)).
 - Log time on conversations and export it per company ([#119](https://github.com/colliedesk/colliedesk/issues/119)).
 - Customer satisfaction rating after a conversation is resolved ([#120](https://github.com/colliedesk/colliedesk/issues/120)).
 - Reports: volume, first response and resolution time per agent and tag ([#121](https://github.com/colliedesk/colliedesk/issues/121)).

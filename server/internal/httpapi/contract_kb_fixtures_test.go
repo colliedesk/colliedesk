@@ -33,6 +33,9 @@ type contractKB struct {
 	videoID, posterPath, posterVideoID string
 	partUploadID, completeUploadID     string
 	cancelUploadID                     string
+	// Translations: fr of the article (read, changed), pt of it (a version to restore), de of the
+	// versioned article (deleted), es of it in the trash (restored); a collection name in de to remove.
+	translationSeen, ptSeen, esTrashSeen, deSeen string
 }
 
 // contractVideoPart is the part the contract case sends: the whole of a tiny upload.
@@ -99,8 +102,25 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	var edited kbArticleView
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+versioned.ID, map[string]any{"updated_at": versioned.UpdatedAt, "body_md": "Second"}, admin, http.StatusOK, &edited)
 	kb.versionArticleID, kb.versionArticleSeen = versioned.ID, edited.UpdatedAt
+	kbCall(t, api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": contractLanguages}, admin, http.StatusOK, nil)
+	var translation kbTranslationView
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+article.ID+"/translations", map[string]any{"locale": "fr", "title": "Article de contrat", "body_md": "x"}, admin, http.StatusCreated, &translation)
+	kb.translationSeen = translation.UpdatedAt
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+article.ID+"/translations", map[string]any{"locale": "pt", "title": "Artigo", "body_md": "x"}, admin, http.StatusCreated, &translation)
+	kb.ptSeen = translation.UpdatedAt
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+versioned.ID+"/translations", map[string]any{"locale": "de", "title": "Vertrag", "body_md": "x"}, admin, http.StatusCreated, &translation)
+	kb.deSeen = translation.UpdatedAt
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+versioned.ID+"/translations", map[string]any{"locale": "es", "title": "Contrato", "body_md": "x"}, admin, http.StatusCreated, &translation)
+	kbCall(t, api, http.MethodDelete, "/api/v1/kb/articles/"+versioned.ID+"/translations/es?updated_at="+url.QueryEscape(translation.UpdatedAt), nil, admin, http.StatusNoContent, nil)
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+versioned.ID+"/translations/es", nil, admin, http.StatusOK, &translation)
+	kb.esTrashSeen = translation.UpdatedAt
+	kbCall(t, api, http.MethodPut, "/api/v1/kb/collections/"+collection.ID+"/translations/de", map[string]any{"name": "Vertragssammlung"}, admin, http.StatusOK, nil)
 	return kb
 }
+
+// contractLanguages are the contract workspace's languages besides English.
+var contractLanguages = []map[string]any{{"locale": "fr", "visible": true}, {"locale": "pt", "visible": false}, {"locale": "de", "visible": false},
+	{"locale": "es", "visible": false}, {"locale": "it", "visible": false}}
 
 // kbImageRequest is the contract request of an image upload: raw PNG bytes.
 func kbImageRequest(token string, cookie *http.Cookie) *http.Request {
@@ -118,48 +138,62 @@ func kbImageRequest(token string, cookie *http.Cookie) *http.Request {
 func kbContractCases(f contractFixture) map[string]contractCase {
 	admin, kb := f.adminToken, f.kb
 	return map[string]contractCase{
-		"GET /api/v1/kb/collections":                               {"/api/v1/kb/collections", nil, admin, 200, ""},
-		"POST /api/v1/kb/collections":                              {"/api/v1/kb/collections", map[string]any{"name": "Created contract collection", "parent_id": kb.collectionID}, admin, 201, ""},
-		"GET /api/v1/kb/collections/trash":                         {"/api/v1/kb/collections/trash", nil, admin, 200, ""},
-		"PATCH /api/v1/kb/collections/{id}":                        {"/api/v1/kb/collections/" + kb.collectionID, map[string]any{"updated_at": kb.collectionSeen, "description": "Updated"}, admin, 200, ""},
-		"DELETE /api/v1/kb/collections/{id}":                       {"/api/v1/kb/collections/" + kb.deleteCollectionID + "?updated_at=" + url.QueryEscape(kb.deleteCollectionSeen), nil, admin, 204, ""},
-		"POST /api/v1/kb/collections/{id}/restore":                 {"/api/v1/kb/collections/" + kb.trashCollectionID + "/restore", map[string]any{"updated_at": kb.trashCollectionSeen}, admin, 200, ""},
-		"PUT /api/v1/kb/order":                                     {"/api/v1/kb/order", map[string]any{"parent_id": kb.collectionID, "collection_ids": []string{}, "article_ids": []string{}}, admin, 409, ""},
-		"GET /api/v1/kb/articles":                                  {"/api/v1/kb/articles?q=contract&status=draft", nil, admin, 200, ""},
-		"POST /api/v1/kb/articles":                                 {"/api/v1/kb/articles", map[string]any{"collection_id": kb.collectionID, "title": "Created contract article", "body_md": "Hi", "status": "published"}, admin, 201, ""},
-		"GET /api/v1/kb/articles/trash":                            {"/api/v1/kb/articles/trash", nil, admin, 200, ""},
-		"GET /api/v1/kb/articles/{id}":                             {"/api/v1/kb/articles/" + kb.articleID, nil, admin, 200, ""},
-		"PATCH /api/v1/kb/articles/{id}":                           {"/api/v1/kb/articles/" + kb.articleID, map[string]any{"updated_at": kb.articleSeen, "status": "published"}, admin, 200, ""},
-		"DELETE /api/v1/kb/articles/{id}":                          {"/api/v1/kb/articles/" + kb.deleteArticleID + "?updated_at=" + url.QueryEscape(kb.deleteArticleSeen), nil, admin, 204, ""},
-		"POST /api/v1/kb/articles/{id}/restore":                    {"/api/v1/kb/articles/" + kb.trashArticleID + "/restore", map[string]any{"updated_at": kb.trashArticleSeen}, admin, 200, ""},
-		"GET /api/v1/kb/articles/{id}/versions":                    {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions", nil, admin, 200, ""},
-		"POST /api/v1/kb/articles/{id}/versions/{version}/restore": {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions/1/restore", map[string]any{"updated_at": kb.versionArticleSeen}, admin, 200, ""},
-		"POST /api/v1/kb/articles/{id}/ai-exclusion":               {"/api/v1/kb/articles/" + kb.articleID + "/ai-exclusion", nil, admin, 200, ""},
-		"DELETE /api/v1/kb/articles/{id}/ai-exclusion":             {"/api/v1/kb/articles/" + kb.versionArticleID + "/ai-exclusion", nil, admin, 200, ""},
-		"POST /api/v1/kb/images":                                   {path: kbImagesPath, token: admin, status: 201},
-		"GET /api/v1/kb/images/{id}":                               {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
-		"GET /api/v1/kb/media":                                     {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},
-		"PATCH /api/v1/kb/media/{id}":                              {"/api/v1/kb/media/" + kb.imageID, map[string]any{"updated_at": kb.imageSeen, "alt": "The settings screen"}, admin, 200, ""},
-		"GET /api/v1/kb/media/trash":                               {path: "/api/v1/kb/media/trash", token: admin, status: 200},
-		"POST /api/v1/kb/media/trash":                              {"/api/v1/kb/media/trash", map[string]any{"ids": []string{kb.trashMediaID}}, admin, 200, ""},
-		"POST /api/v1/kb/media/trash-unused":                       {"/api/v1/kb/media/trash-unused", map[string]any{"before": "2100-01-01T00:00:00Z"}, admin, 200, ""},
-		"POST /api/v1/kb/media/restore":                            {"/api/v1/kb/media/restore", map[string]any{"ids": []string{kb.trashMediaID}}, admin, 200, ""},
-		"POST /api/v1/kb/media/purge":                              {"/api/v1/kb/media/purge", map[string]any{"ids": []string{kb.purgeMediaID}}, admin, 200, ""},
-		"DELETE /api/v1/kb/media/{id}":                             {path: "/api/v1/kb/media/" + kb.deleteMediaID, token: admin, status: 200},
-		"POST /api/v1/kb/media/{id}/restore":                       {path: "/api/v1/kb/media/" + kb.restoreMediaID + "/restore", token: admin, status: 200},
-		"POST /api/v1/kb/media/{id}/replace":                       {"/api/v1/kb/media/" + kb.replaceMediaID + "/replace", map[string]any{"with_media_id": kb.replaceWithID}, admin, 200, ""},
-		"POST /api/v1/kb/media-replacements/{id}/undo":             {path: "/api/v1/kb/media-replacements/" + kb.replacementID + "/undo", token: admin, status: 200},
-		"POST /api/v1/kb/media-uploads":                            {"/api/v1/kb/media-uploads", map[string]any{"size": 1000, "name": "Tour"}, admin, 201, ""},
-		"GET /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
-		"GET /api/v1/kb/media-uploads":                             {path: "/api/v1/kb/media-uploads", token: admin, status: 200},
-		"PUT /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
-		"DELETE /api/v1/kb/media-uploads/{id}":                     {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 204},
-		"POST /api/v1/kb/media-uploads/{id}/complete":              {path: "/api/v1/kb/media-uploads/" + kb.completeUploadID + "/complete", token: admin, status: 201},
-		"GET /api/v1/kb/media/{id}":                                {path: "/api/v1/kb/media/" + kb.videoID, token: admin, status: 200},
-		"PUT /api/v1/kb/media/{id}/poster":                         {path: "/api/v1/kb/media/" + kb.posterVideoID + "/poster", token: admin, status: 200},
-		"GET /api/v1/kb/media/{id}/poster/{version}":               {path: kb.posterPath, token: admin, status: 200},
-		"GET /api/v1/kb/media/{id}/details":                        {path: "/api/v1/kb/media/" + kb.imageID + "/details", token: admin, status: 200},
-		"GET /api/v1/kb/media/{id}/thumbnail":                      {path: "/api/v1/kb/media/" + kb.imageID + "/thumbnail", token: admin, status: 200},
+		"GET /api/v1/kb/collections":                                  {"/api/v1/kb/collections", nil, admin, 200, ""},
+		"POST /api/v1/kb/collections":                                 {"/api/v1/kb/collections", map[string]any{"name": "Created contract collection", "parent_id": kb.collectionID}, admin, 201, ""},
+		"GET /api/v1/kb/collections/trash":                            {"/api/v1/kb/collections/trash", nil, admin, 200, ""},
+		"PATCH /api/v1/kb/collections/{id}":                           {"/api/v1/kb/collections/" + kb.collectionID, map[string]any{"updated_at": kb.collectionSeen, "description": "Updated"}, admin, 200, ""},
+		"DELETE /api/v1/kb/collections/{id}":                          {"/api/v1/kb/collections/" + kb.deleteCollectionID + "?updated_at=" + url.QueryEscape(kb.deleteCollectionSeen), nil, admin, 204, ""},
+		"POST /api/v1/kb/collections/{id}/restore":                    {"/api/v1/kb/collections/" + kb.trashCollectionID + "/restore", map[string]any{"updated_at": kb.trashCollectionSeen}, admin, 200, ""},
+		"PUT /api/v1/kb/order":                                        {"/api/v1/kb/order", map[string]any{"parent_id": kb.collectionID, "collection_ids": []string{}, "article_ids": []string{}}, admin, 409, ""},
+		"GET /api/v1/kb/articles":                                     {"/api/v1/kb/articles?q=contract&status=draft", nil, admin, 200, ""},
+		"POST /api/v1/kb/articles":                                    {"/api/v1/kb/articles", map[string]any{"collection_id": kb.collectionID, "title": "Created contract article", "body_md": "Hi", "status": "published"}, admin, 201, ""},
+		"GET /api/v1/kb/articles/trash":                               {"/api/v1/kb/articles/trash", nil, admin, 200, ""},
+		"GET /api/v1/kb/articles/{id}":                                {"/api/v1/kb/articles/" + kb.articleID, nil, admin, 200, ""},
+		"PATCH /api/v1/kb/articles/{id}":                              {"/api/v1/kb/articles/" + kb.articleID, map[string]any{"updated_at": kb.articleSeen, "status": "published"}, admin, 200, ""},
+		"DELETE /api/v1/kb/articles/{id}":                             {"/api/v1/kb/articles/" + kb.deleteArticleID + "?updated_at=" + url.QueryEscape(kb.deleteArticleSeen), nil, admin, 204, ""},
+		"POST /api/v1/kb/articles/{id}/restore":                       {"/api/v1/kb/articles/" + kb.trashArticleID + "/restore", map[string]any{"updated_at": kb.trashArticleSeen}, admin, 200, ""},
+		"GET /api/v1/kb/articles/{id}/versions":                       {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions", nil, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/versions/{version}/restore":    {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions/1/restore", map[string]any{"updated_at": kb.versionArticleSeen}, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/ai-exclusion":                  {"/api/v1/kb/articles/" + kb.articleID + "/ai-exclusion", nil, admin, 200, ""},
+		"DELETE /api/v1/kb/articles/{id}/ai-exclusion":                {"/api/v1/kb/articles/" + kb.versionArticleID + "/ai-exclusion", nil, admin, 200, ""},
+		"POST /api/v1/kb/images":                                      {path: kbImagesPath, token: admin, status: 201},
+		"GET /api/v1/kb/images/{id}":                                  {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
+		"GET /api/v1/kb/media":                                        {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},
+		"PATCH /api/v1/kb/media/{id}":                                 {"/api/v1/kb/media/" + kb.imageID, map[string]any{"updated_at": kb.imageSeen, "alt": "The settings screen"}, admin, 200, ""},
+		"GET /api/v1/kb/media/trash":                                  {path: "/api/v1/kb/media/trash", token: admin, status: 200},
+		"POST /api/v1/kb/media/trash":                                 {"/api/v1/kb/media/trash", map[string]any{"ids": []string{kb.trashMediaID}}, admin, 200, ""},
+		"POST /api/v1/kb/media/trash-unused":                          {"/api/v1/kb/media/trash-unused", map[string]any{"before": "2100-01-01T00:00:00Z"}, admin, 200, ""},
+		"POST /api/v1/kb/media/restore":                               {"/api/v1/kb/media/restore", map[string]any{"ids": []string{kb.trashMediaID}}, admin, 200, ""},
+		"POST /api/v1/kb/media/purge":                                 {"/api/v1/kb/media/purge", map[string]any{"ids": []string{kb.purgeMediaID}}, admin, 200, ""},
+		"DELETE /api/v1/kb/media/{id}":                                {path: "/api/v1/kb/media/" + kb.deleteMediaID, token: admin, status: 200},
+		"POST /api/v1/kb/media/{id}/restore":                          {path: "/api/v1/kb/media/" + kb.restoreMediaID + "/restore", token: admin, status: 200},
+		"POST /api/v1/kb/media/{id}/replace":                          {"/api/v1/kb/media/" + kb.replaceMediaID + "/replace", map[string]any{"with_media_id": kb.replaceWithID}, admin, 200, ""},
+		"POST /api/v1/kb/media-replacements/{id}/undo":                {path: "/api/v1/kb/media-replacements/" + kb.replacementID + "/undo", token: admin, status: 200},
+		"POST /api/v1/kb/media-uploads":                               {"/api/v1/kb/media-uploads", map[string]any{"size": 1000, "name": "Tour"}, admin, 201, ""},
+		"GET /api/v1/kb/media-uploads/{id}":                           {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
+		"GET /api/v1/kb/media-uploads":                                {path: "/api/v1/kb/media-uploads", token: admin, status: 200},
+		"PUT /api/v1/kb/media-uploads/{id}":                           {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
+		"DELETE /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 204},
+		"POST /api/v1/kb/media-uploads/{id}/complete":                 {path: "/api/v1/kb/media-uploads/" + kb.completeUploadID + "/complete", token: admin, status: 201},
+		"GET /api/v1/kb/media/{id}":                                   {path: "/api/v1/kb/media/" + kb.videoID, token: admin, status: 200},
+		"PUT /api/v1/kb/media/{id}/poster":                            {path: "/api/v1/kb/media/" + kb.posterVideoID + "/poster", token: admin, status: 200},
+		"GET /api/v1/kb/media/{id}/poster/{version}":                  {path: kb.posterPath, token: admin, status: 200},
+		"GET /api/v1/kb/media/{id}/details":                           {path: "/api/v1/kb/media/" + kb.imageID + "/details", token: admin, status: 200},
+		"GET /api/v1/kb/media/{id}/thumbnail":                         {path: "/api/v1/kb/media/" + kb.imageID + "/thumbnail", token: admin, status: 200},
+		"GET /api/v1/help-center/languages":                           {"/api/v1/help-center/languages", nil, admin, 200, ""},
+		"PUT /api/v1/help-center/languages":                           {"/api/v1/help-center/languages", map[string]any{"languages": contractLanguages}, admin, 200, ""},
+		"GET /api/v1/kb/translations":                                 {"/api/v1/kb/translations?locale=fr&state=missing", nil, admin, 200, ""},
+		"GET /api/v1/kb/translations/trash":                           {"/api/v1/kb/translations/trash", nil, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/translations":                  {"/api/v1/kb/articles/" + kb.articleID + "/translations", map[string]any{"locale": "it", "title": "Articolo", "body_md": "x"}, admin, 201, ""},
+		"GET /api/v1/kb/articles/{id}/translations/{locale}":          {"/api/v1/kb/articles/" + kb.articleID + "/translations/fr", nil, admin, 200, ""},
+		"PATCH /api/v1/kb/articles/{id}/translations/{locale}":        {"/api/v1/kb/articles/" + kb.articleID + "/translations/fr", map[string]any{"updated_at": kb.translationSeen, "outdated": false, "status": "published"}, admin, 200, ""},
+		"DELETE /api/v1/kb/articles/{id}/translations/{locale}":       {"/api/v1/kb/articles/" + kb.versionArticleID + "/translations/de?updated_at=" + url.QueryEscape(kb.deSeen), nil, admin, 204, ""},
+		"POST /api/v1/kb/articles/{id}/translations/{locale}/restore": {"/api/v1/kb/articles/" + kb.versionArticleID + "/translations/es/restore", map[string]any{"updated_at": kb.esTrashSeen}, admin, 200, ""},
+		"GET /api/v1/kb/articles/{id}/translations/{locale}/versions": {"/api/v1/kb/articles/" + kb.articleID + "/translations/fr/versions", nil, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore": {"/api/v1/kb/articles/" + kb.articleID + "/translations/pt/versions/1/restore",
+			map[string]any{"updated_at": kb.ptSeen}, admin, 200, ""},
+		"PUT /api/v1/kb/collections/{id}/translations/{locale}":    {"/api/v1/kb/collections/" + kb.collectionID + "/translations/fr", map[string]any{"name": "Collection de contrat"}, admin, 200, ""},
+		"DELETE /api/v1/kb/collections/{id}/translations/{locale}": {"/api/v1/kb/collections/" + kb.collectionID + "/translations/de", nil, admin, 200, ""},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},
 		"PUT /api/v1/help-center":                                  {"/api/v1/help-center", map[string]any{"enabled": true, "title": "Contract help", "locale": "en"}, admin, 200, ""},
 		"GET /api/v1/help-center/theme":                            {path: "/api/v1/help-center/theme", token: admin, status: 200},

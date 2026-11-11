@@ -7,10 +7,15 @@ type Spec struct {
 	Description string
 	// Doc is one Markdown sentence for people: the "What it does" of the tool table in the user guide.
 	Doc string
-	// Tier is the lowest agent token tier that may call the tool: read, draft, send or admin. "any" means
-	// every valid token, because the tool needs nothing a read token lacks. "operator" is an operator token
-	// on OperatorPath, never a workspace token.
-	Tier       string
+	// Needs is what a caller must hold to use the tool: every permission the routes in REST need
+	// (httpapi.RouteAccessTable), worked out by Catalog, never written by hand. Empty means any valid
+	// token or sign-in.
+	Needs []string
+	// BodyNeeds is what the tool also needs because of the body it always sends to a route whose
+	// handler decides by the body (a reply needs messages:send where a note needs messages:note).
+	BodyNeeds []string
+	// Operator marks an operator tool: served on OperatorPath to operator tokens only, never to a workspace.
+	Operator   bool
 	ReadOnly   bool
 	Idempotent bool
 	// Destructive marks a tool whose effect cannot be undone now: it reaches a customer, deletes for
@@ -42,33 +47,47 @@ func Catalog() []Spec {
 		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbImageUploadSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
 		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
+		helpCenterLanguagesGetSpec(), helpCenterLanguagesSetSpec(), kbTranslationsListSpec(), kbTranslationsTrashSpec(), kbTranslationCreateSpec(), kbTranslationGetSpec(),
+		kbTranslationUpdateSpec(), kbTranslationDeleteSpec(), kbTranslationUndeleteSpec(), kbTranslationHistorySpec(), kbTranslationVersionRestoreSpec(),
+		kbCollectionTranslationSetSpec(), kbCollectionTranslationDeleteSpec(),
 		helpCenterThemeGetSpec(), helpCenterThemeCheckSpec(), helpCenterSearchConsoleGetSpec(), helpCenterFreshdeskRedirectGetSpec(), helpCenterDomainGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
-		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
-		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
-		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), microsoftConnectRequestSpec(), microsoftDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
+		replyDraftSpec(),
+		replyDraftRestoreSpec(),
+		workspaceExportSpec(), billingActionSpec(), emailChannelDisconnectSpec(),
+		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
+		rolesListSpec(), roleCreateSpec(), roleUpdateSpec(), roleDeleteSpec(), roleResetSpec(), roleRestoreSpec(), memberRolesSetSpec(),
 		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), helpCenterSearchConsoleUpdateSpec(), helpCenterDomainSetSpec(), helpCenterDomainCheckSpec(), helpCenterDomainRemoveSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), emailTestMessageSendSpec(), emailForwardingConfirmationGetSpec(), billingGetSpec(),
-		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
+		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoSpec(),
 		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
-		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
-		aiChatUsageGetSpec(), aiChatSessionsListSpec(), aiChatSessionGetSpec(), aiChatSessionDeleteRequestSpec(), aiChatPreviewSpec(),
+		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
+		aiChatUsageGetSpec(), aiChatSessionsListSpec(), aiChatSessionGetSpec(), aiChatSessionDeleteSpec(), aiChatPreviewSpec(),
+		channelAIGetSpec(), channelAISetSpec(), aiSourceConsentSetSpec(), aiSourceConsentRemoveSpec(),
+		channelAIIntakeReadinessSpec(), channelAIIntakeEvaluationsListSpec(), channelAIIntakeEvaluationRecordSpec(),
+		conversationChatGetSpec(), channelThreadsListSpec(), channelThreadItemsSpec(), channelSendersSpec(), channelUnresolvedItemsSpec(),
+		intakeListSpec(), intakeGetSpec(), intakeDecideSpec(), intakeRequeueSpec(), intakeSummarySpec(), intakeStatsSpec(), conversationIntakeGetSpec(),
+		messagesMoveSpec(), messageMovesListSpec(), messageMoveUndoSpec(),
 		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
 		aiTriageGetSpec(), aiTriageCreateSpec(), aiTriageAcceptSpec(), aiTriageDismissSpec(), aiTriageUndoSpec(),
 		resultsGetSpec(), resultsShareLinkGetSpec(), resultsShareLinkCreateSpec(), resultsShareLinkRevokeSpec(), resultsEmailSetSpec(),
 		setupProgressGetSpec(), setupGuideSetSpec(),
 		channelsListSpec(), channelsGetSpec(), channelsEventsSpec(), channelsCreateSpec(), channelsUpdateSpec(), channelsCheckSpec(), channelsHeldReplaySpec(),
-		channelsCredentialsSetSpec(), channelsDeleteRequestSpec(), channelsHeldDiscardRequestSpec(),
+		channelsCredentialsSetSpec(), channelsDeleteSpec(), channelsHeldDiscardSpec(),
 		autofixStatusSpec(), fixesListSpec(), fixGetSpec(), conversationFixesListSpec(),
-		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectRequestSpec(), githubDisconnectRequestSpec(),
-		autofixRepoConnectSpec(), autofixRepoUpdateSpec(), autofixRepoDisconnectSpec(), autofixRepoNotesIncludeRequestSpec(), autofixRepoNotesExcludeSpec(),
-		fixPreviewSpec(), fixSendRequestSpec(), fixRetryRequestSpec(), fixCancelSpec(), fixDeployedSpec(), fixUndeployedSpec(), fixPRLinkSpec(), fixPRUnlinkSpec(),
-		codingAgentEnableRequestSpec(), codingAgentDisableSpec(), codingAgentCheckSpec(), cursorKeySetSpec(), cursorKeyRemoveSpec(),
+		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectSpec(), githubDisconnectSpec(),
+		autofixRepoConnectSpec(), autofixRepoUpdateSpec(), autofixRepoDisconnectSpec(), autofixRepoNotesIncludeSetSpec(), autofixRepoNotesExcludeSpec(),
+		fixPreviewSpec(), fixSendSpec(), fixRetrySpec(), fixCancelSpec(), fixDeployedSpec(), fixUndeployedSpec(), fixPRLinkSpec(), fixPRUnlinkSpec(),
+		codingAgentEnableSpec(), codingAgentDisableSpec(), codingAgentCheckSpec(), cursorKeySetSpec(), cursorKeyRemoveSpec(),
 	}
 	specs = append(specs, operatorSpecs()...)
 	for i := range specs {
 		specs[i].Doc = toolDocs[specs[i].Name]
+		if !specs[i].Operator {
+			specs[i].Needs = routeNeeds(specs[i].REST, specs[i].BodyNeeds)
+			specs[i].Description += needsLine(specs[i].Needs)
+		}
 	}
 	return specs
 }
@@ -94,11 +113,14 @@ const (
 
 // conversationRowSchema lists how a conversation started from the registry (channel-values.go), so it is not a constant.
 var conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
-	`"id":{"type":"string"},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
+	`"id":{"type":"string"},"display_ref":{"type":"string","description":"The code customers see and type back (#12); find one with ref."},` +
+	`"sla":{"type":"object","description":"Its response clocks (state overdue, due_soon, ok, paused, stopped or met; first_response and resolution with due_at, overdue, business_minutes_left); left out when it has none."},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
 	`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
 	`"tags":{"type":"array","items":{"type":"string"}},` +
 	`"channel":{"type":"string","enum":` + conversationChannelEnum + `,"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +
 	`"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
 	`"contact_id":{"type":"string"},` +
+	`"last_status_change":{"type":"object","description":"The newest change of its status: to, at, by (agent, token, customer, command, auto_close or import) and the name of the team member or token; left out when it never changed."},` +
+	`"may_tell_customer":{"type":"boolean","description":"true: a status set now may tell its customer in their chat (colliedesk_conversation_update notify); left out when it would not."},` +
 	`"untrusted_customer_content":{"type":"object","required":["subject","contact"],"properties":{"subject":{"type":"string"},` +
 	`"contact":{"type":["object","null"],"properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}}}`

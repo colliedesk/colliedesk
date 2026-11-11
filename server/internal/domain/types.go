@@ -14,25 +14,26 @@ type Workspace struct {
 }
 
 type Agent struct {
-	ID               string  `json:"id"`
-	Email            string  `json:"email"`
-	DisplayName      string  `json:"display_name"`
-	Role             string  `json:"role"`
-	TimezoneOverride *string `json:"timezone_override"`
+	ID               string    `json:"id"`
+	Email            string    `json:"email"`
+	DisplayName      string    `json:"display_name"`
+	Roles            []RoleRef `json:"roles"`
+	TimezoneOverride *string   `json:"timezone_override"`
 	// SetupGuideHidden is read with the session; GET /auth/me returns it beside the agent.
 	SetupGuideHidden bool `json:"-"`
 }
 
-// Session is a sign-in. Scope is the tier of an agent token (read, draft or send); nil for a
-// person's full session.
+// Session is a sign-in. Token is what an agent token was given, nil for a person's session; Role is
+// the one role a person's session is limited to, if any.
 type Session struct {
-	ID         string  `json:"id"`
-	AgentID    string  `json:"agent_id"`
-	AgentEmail string  `json:"agent_email"`
-	Label      string  `json:"label"`
-	Scope      *string `json:"scope"`
-	// Permissions is what an agent token holds: its tier's permissions, or a custom token's own list.
-	// Empty for a person's session.
+	ID         string      `json:"id"`
+	AgentID    string      `json:"agent_id"`
+	AgentEmail string      `json:"agent_email"`
+	AgentName  string      `json:"agent_name"`
+	Label      string      `json:"label"`
+	Token      *TokenGrant `json:"token"`
+	Role       *RoleRef    `json:"role"`
+	// Permissions is what an agent token was given (Token.Permissions); empty for a person's session.
 	Permissions []string `json:"permissions"`
 	// Current marks the session that made the request; it is not stored.
 	Current    bool       `json:"current"`
@@ -40,12 +41,23 @@ type Session struct {
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	// App is the AI app an OAuth grant connected; nil for a person's session and an API token.
+	App *ConnectedApp `json:"app"`
+}
+
+// ConnectedApp is what Settings shows of an AI app connected with OAuth, one per sign-in (device).
+type ConnectedApp struct {
+	ClientID    string    `json:"client_id"`
+	UserAgent   string    `json:"user_agent"`
+	ConnectedAt time.Time `json:"connected_at"`
+	// NeedsReconnecting: the grant was disconnected, revoked or expired; the app must sign in again.
+	NeedsReconnecting bool `json:"needs_reconnecting"`
 }
 
 type Invite struct {
 	ID             string     `json:"id"`
 	Email          string     `json:"email"`
-	RoleCeiling    string     `json:"role_ceiling"`
+	Roles          []RoleRef  `json:"roles"`
 	CreatedByEmail string     `json:"created_by_email"`
 	CreatedAt      time.Time  `json:"created_at"`
 	ExpiresAt      time.Time  `json:"expires_at"`
@@ -134,12 +146,14 @@ type Conversation struct {
 	ID        string `json:"id"`
 	ContactID string `json:"contact_id"`
 	// ContactName saves the reply box a second request for the customer's name.
-	ContactName string  `json:"contact_name"`
-	Subject     string  `json:"subject"`
-	Status      string  `json:"status"`
-	Priority    string  `json:"priority"`
-	AssigneeID  *string `json:"assignee_id"`
-	Tags        []Tag   `json:"tags"`
+	ContactName string `json:"contact_name"`
+	// ContactOrganization is its customer's organization, the name the organization filter matches.
+	ContactOrganization *string `json:"contact_organization"`
+	Subject             string  `json:"subject"`
+	Status              string  `json:"status"`
+	Priority            string  `json:"priority"`
+	AssigneeID          *string `json:"assignee_id"`
+	Tags                []Tag   `json:"tags"`
 	// Channel is how the conversation started: one of the Channel* values.
 	Channel string `json:"channel"`
 	// ChannelID is the channel it came through; nil for one that came through none.
@@ -154,6 +168,54 @@ type Conversation struct {
 	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
 	// older seen_reply_number is refused with ReplyConflictError.
 	LatestReplyNumber int `json:"latest_reply_number"`
+	// Number is its number in NumberSeries; DisplayRef the code customers see and type back ("#12").
+	Number       int64  `json:"number"`
+	NumberSeries string `json:"number_series"`
+	DisplayRef   string `json:"display_ref"`
+	// SLA is its response clocks; nil while the workspace's targets are off or none applies to it.
+	SLA *ConversationSLA `json:"sla"`
+	// LastStatusChange is the newest change of its status and who made it; nil when it never changed.
+	LastStatusChange *StatusChangeView `json:"last_status_change"`
+	// StatusNotices are the statuses that, set by the team now, would tell its customer (its chat channel
+	// has words for them); read with one conversation only.
+	StatusNotices []string `json:"status_notices,omitempty"`
+	// MayTellCustomer says a status the team sets may tell its customer: its chat channel is live and has
+	// words for a status other than this one (StatusNotices names which, on the detail).
+	MayTellCustomer bool `json:"may_tell_customer"`
+	// ChatChannelID is the channel of the chat it is in (its newest linked item's), read with it.
+	ChatChannelID *string `json:"-"`
+}
+
+// ConversationSLA is a conversation's response clocks and the most pressing of their states: overdue,
+// due_soon, ok (running), paused, stopped or met.
+type ConversationSLA struct {
+	State         string        `json:"state"`
+	FirstResponse *SLAClockView `json:"first_response"`
+	Resolution    *SLAClockView `json:"resolution"`
+	// Alerts are the reminder and overdue emails its clocks sent, oldest first.
+	Alerts []SLAAlertRecord `json:"alerts"`
+}
+
+// SLAAlertRecord is one reminder or overdue email of a conversation's clock.
+type SLAAlertRecord struct {
+	Clock      string    `json:"clock"`
+	Threshold  string    `json:"threshold"`
+	DueAt      time.Time `json:"due_at"`
+	Status     string    `json:"status"`
+	Recipients int       `json:"recipients"`
+	At         time.Time `json:"at"`
+}
+
+// SLAClockView is one clock as the API shows it, read at the time of the request.
+type SLAClockView struct {
+	State               string     `json:"state"`
+	DueAt               *time.Time `json:"due_at"`
+	WarnAt              *time.Time `json:"warn_at"`
+	MetAt               *time.Time `json:"met_at"`
+	BreachedAt          *time.Time `json:"breached_at"`
+	DueSoon             bool       `json:"due_soon"`
+	Overdue             bool       `json:"overdue"`
+	BusinessMinutesLeft *int       `json:"business_minutes_left"`
 }
 
 // ChannelRef names a conversation's channel and the one its replies leave through.
@@ -168,7 +230,10 @@ type ChannelRef struct {
 
 // ChannelRepliesVia is the channel replies leave through.
 type ChannelRepliesVia struct {
-	ID      string `json:"id"`
+	ID string `json:"id"`
+	// Type is the channel's type: what a client reads to know how the replies leave (email settings only
+	// for an email channel).
+	Type    string `json:"type"`
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
 	// InsteadOf is the channel the replies would leave from, removed, when the default stands in for it.
@@ -188,6 +253,8 @@ const (
 	// ChannelHelpChat is the help center's AI chat: a conversation opens when an end user hands a chat
 	// to the team.
 	ChannelHelpChat = "help_chat"
+	// ChannelZalo is a Zalo Official Account: its one-to-one chats and the groups it is in.
+	ChannelZalo = "zalo"
 	// ChannelImported marks a conversation brought over from another helpdesk; Origin.Source keeps its own channel.
 	ChannelImported = "imported"
 	// ChannelAgent marks a conversation a team member started. An older image that does not know the column also writes it.
@@ -258,7 +325,6 @@ type TimeEntry struct {
 type MessageToken struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
-	Scope     string `json:"scope"`
 	AgentName string `json:"agent_name"`
 }
 
@@ -273,12 +339,15 @@ type Message struct {
 	// AIDraftID names the AI draft a reply was written from.
 	AIDraftID *string `json:"ai_draft_id"`
 	// AIDraftOutcome says whether the reply was sent as the draft was written or edited.
-	AIDraftOutcome *string        `json:"ai_draft_outcome"`
-	Kind           string         `json:"kind"`
-	Body           string         `json:"body"`
-	BodyHTML       *string        `json:"body_html"`
-	Origin         *MessageOrigin `json:"origin"`
-	Attachments    []Attachment   `json:"attachments"`
+	AIDraftOutcome *string `json:"ai_draft_outcome"`
+	// AIDraftSource says who wrote that draft: ai, or written by an agent token (DraftedBy).
+	AIDraftSource *string        `json:"ai_draft_source"`
+	DraftedBy     *MessageToken  `json:"drafted_by"`
+	Kind          string         `json:"kind"`
+	Body          string         `json:"body"`
+	BodyHTML      *string        `json:"body_html"`
+	Origin        *MessageOrigin `json:"origin"`
+	Attachments   []Attachment   `json:"attachments"`
 	// CC lists the addresses an outgoing reply was copied to; empty for every other message.
 	CC        []string         `json:"cc"`
 	CreatedAt time.Time        `json:"created_at"`
@@ -292,6 +361,15 @@ type Message struct {
 	ChannelID   *string         `json:"channel_id"`
 	ExternalID  *string         `json:"external_id"`
 	ChannelMeta json.RawMessage `json:"channel_meta"`
+	// OtherContactID is the contact whose conversation a customer message was moved from, while it sits
+	// in a conversation of another contact.
+	OtherContactID *string `json:"other_contact_id"`
+	// IntakeReplyKind is what intake said a chat customer's message added to the conversation it joined:
+	// an acknowledgement kept a resolved conversation resolved.
+	IntakeReplyKind *string `json:"intake_reply_kind,omitempty"`
+	// NoticeKind marks a reply the channel sent by itself (received: its received notice); nil for a
+	// reply of the team.
+	NoticeKind *string `json:"notice_kind"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the
@@ -325,6 +403,8 @@ type MessageDelivery struct {
 	LastError  *string    `json:"last_error"`
 	ReasonCode *string    `json:"reason_code"`
 	SentAt     *time.Time `json:"sent_at"`
+	// Retryable says a person's retry may succeed: a failed delivery that would not fail the same way again.
+	Retryable bool `json:"retryable"`
 }
 
 // Doors an inbound message can come through.
@@ -413,4 +493,43 @@ func UTCOptional(value *time.Time) *time.Time {
 	}
 	normalized := value.UTC()
 	return &normalized
+}
+
+// MarshalJSON writes the origin as the contract has it whatever the row held: an import that recorded
+// none of its lists (a bundle, an older row) reads with empty lists, never null.
+func (o ConversationOrigin) MarshalJSON() ([]byte, error) {
+	type plain ConversationOrigin
+	if o.CC == nil {
+		o.CC = []string{}
+	}
+	if o.ForwardedTo == nil {
+		o.ForwardedTo = []string{}
+	}
+	return json.Marshal(plain(o))
+}
+
+// MarshalJSON writes the origin as the contract has it: lists are never null, and an item the source did
+// not classify is "other".
+func (o MessageOrigin) MarshalJSON() ([]byte, error) {
+	type plain MessageOrigin
+	for _, list := range []*[]string{&o.To, &o.CC, &o.BCC} {
+		if *list == nil {
+			*list = []string{}
+		}
+	}
+	if o.Kind == "" {
+		o.Kind = "other"
+	}
+	return json.Marshal(plain(o))
+}
+
+// StatusChangeView is one change of a conversation's status: to what, when, and by whom (agent: a team
+// member; token: an AI agent's token; customer: the customer writing again; command: a customer's reopen
+// command; auto_close: the channel closing it by itself; import: an import). Name is the team member's or
+// the token's.
+type StatusChangeView struct {
+	To   string    `json:"to"`
+	At   time.Time `json:"at"`
+	By   string    `json:"by"`
+	Name *string   `json:"name,omitempty"`
 }

@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -75,21 +74,35 @@ func clearSessionCookie(response http.ResponseWriter) {
 	http.SetCookie(response, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 }
 
+// mePlan is the plan of GET /auth/me: the workspace's access, and for a non-admin person without a paid
+// plan the admins to ask.
+type mePlan struct {
+	domain.Access
+	Admins []string `json:"admins,omitempty"`
+}
+
+// maxPlanNames bounds the people listed to someone who must ask one of them for a plan.
+const maxPlanNames = 5
+
 func (a *API) me(response http.ResponseWriter, request *http.Request) {
+	var err error
 	identity := principal(request)
 	effectiveTimezone := identity.Workspace.Timezone
 	if identity.Agent.TimezoneOverride != nil {
 		effectiveTimezone = *identity.Agent.TimezoneOverride
 	}
 	// plan is null without billing (self-hosted) so the client shows no trial or lock.
-	var plan *domain.Access
+	var plan *mePlan
 	if a.limits {
-		plan = &identity.Access
-	}
-	// scope is the tier of an agent token (custom for its own list) and null for a person's session.
-	var scope *string
-	if identity.Scope != "" {
-		scope = &identity.Scope
+		plan = &mePlan{Access: identity.Access}
+		// A person who cannot change the plan and cannot use the workspace for lack of one learns whom to ask.
+		if !identity.IsToken() && !identity.Can(auth.PermBillingManage) && (identity.Access.Plan == domain.PlanTrial || identity.Access.Plan == domain.PlanNone) {
+			if plan.Admins, err = a.store.NamesHolding(request.Context(), identity.Workspace.ID, auth.PermBillingManage); err != nil {
+				writeStoreError(response, err)
+				return
+			}
+			plan.Admins = plan.Admins[:min(len(plan.Admins), maxPlanNames)]
+		}
 	}
 	goal, err := a.store.OnboardingGoal(request.Context(), identity.Workspace.ID)
 	if err != nil {
@@ -101,13 +114,10 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 		writeStoreError(response, err)
 		return
 	}
-	// permissions is what an agent token holds (its tier's, or its own list); empty for a person.
-	permissions := identity.HeldPermissions()
-	if permissions == nil {
-		permissions = []string{}
-	}
+	// permissions is what this call may do: the person's roles, and for a token what it was given
+	// limited to that. token is what a token was given; null for a person's session.
 	writeJSON(response, http.StatusOK, map[string]any{
-		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "permissions": permissions, "plan": plan,
+		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "token": identity.Token, "permissions": identity.Effective(), "plan": plan,
 		"onboarding_goal": goal, "ai_features": features, "setup_guide_hidden": identity.Agent.SetupGuideHidden,
 	})
 }
@@ -121,23 +131,15 @@ func (a *API) listSessions(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]any{"items": sessions})
 }
 
-var sessionRevokeRoute = Route{http.MethodDelete, "/api/v1/auth/sessions/{id}", auth.PermissionAccessRead}
-
+// revokeSession signs out one session or revokes one token: the caller's own always, another person's
+// with team:revoke when the caller outranks them.
 func (a *API) revokeSession(response http.ResponseWriter, request *http.Request) {
-	// Signing another person out waits for a person whatever the token's tier; the creator's own
-	// sign-ins and any agent token are revoked directly.
-	if who := principal(request); who.IsToken() {
-		target, found, err := a.workspaceSession(request.Context(), who, request.PathValue("id"))
-		if err != nil {
-			writeStoreError(response, err)
-			return
-		}
-		if found && target.Scope == nil && target.AgentID != who.Agent.ID {
-			a.fileAgentRequest(response, request, sessionRevokeRoute, who, domain.AgentRequestAction, json.RawMessage{}, "")
-			return
-		}
-	}
 	ok, err := a.auth.RevokeSession(request.Context(), principal(request), request.PathValue("id"))
+	var missing *auth.MissingPermissionError
+	if errors.As(err, &missing) {
+		a.writePermissionMissing(response, request, principal(request), missing.Permission)
+		return
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -156,26 +158,30 @@ func (a *API) revokeSession(response http.ResponseWriter, request *http.Request)
 func (a *API) createAgentToken(response http.ResponseWriter, request *http.Request) {
 	var input struct {
 		Label       string   `json:"label"`
-		Scope       string   `json:"scope"`
+		RoleID      string   `json:"role_id"`
 		Permissions []string `json:"permissions"`
+		Scope       *string  `json:"scope"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a scope (a tier) or a list of permissions are required.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a role_id (a role whose permissions you all hold) or a list of permissions are required.")
+		return
+	}
+	if input.Scope != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Tiers were replaced by roles: send role_id (a role whose permissions you all hold) or a list of permissions.")
 		return
 	}
 	// The raw token is in the body once; no cache may keep it, and a repeat of one press (the same
 	// Idempotency-Key) answers the same session without it.
 	response.Header().Set("Cache-Control", "no-store")
 	permissions := slices.Sorted(slices.Values(input.Permissions))
-	a.createOnce(response, request, createAgentTokenOperation, append([]string{input.Label, input.Scope}, permissions...), func(ctx context.Context) (any, error) {
-		created, err := a.auth.CreateAgentToken(ctx, principal(request), auth.TokenRequest{Label: input.Label, Scope: input.Scope, Permissions: input.Permissions})
+	a.createOnce(response, request, createAgentTokenOperation, append([]string{input.Label, input.RoleID}, permissions...), func(ctx context.Context) (any, error) {
+		created, err := a.auth.CreateAgentToken(ctx, principal(request), auth.TokenRequest{Label: input.Label, RoleID: input.RoleID, Permissions: input.Permissions})
 		var invalid *auth.InvalidTokenError
 		if errors.As(err, &invalid) {
 			writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
 			return nil, errAnswered
 		}
-		if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
-			writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token or give a token an admin-only permission. Choose read, draft or send, or leave out the admin-only permissions.")
+		if writeRoleError(response, err) {
 			return nil, errAnswered
 		}
 		if err != nil {

@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, expect, test, vi } from 'vitest';
-import type { Message } from '../../api/schemas';
+import type { Conversation, Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
+import { mediaViewerPart } from './media-part';
 
 const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
-  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null };
+  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null };
 const incoming: Message = {
   ...base, id: '22222222-2222-4222-8222-222222222222', kind: 'incoming', body: 'Please help.',
   email: { from: 'ceo@customer.example', authentication: 'fail', attachments: [{ filename: 'invoice.pdf', content_type: 'application/pdf' }], original_attachment_id: null },
@@ -24,6 +25,8 @@ const note: Message = { ...base, id: '55555555-5555-4555-8555-555555555555', kin
 beforeAll(async () => {
   presenceViewPart.preload();
   await import('./presence-view');
+  mediaViewerPart.preload();
+  await import('./media-viewer');
 });
 
 test('shows the sender, a verification warning and attachments that were not imported', () => {
@@ -85,7 +88,7 @@ test('names the agent token that wrote a message and leaves a person\'s message 
   const written: Message = {
     ...base, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', kind: 'outgoing', body: 'Your refund is on its way.',
     author_agent_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', scope: 'send', agent_name: 'Ada Admin' }, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
+    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', agent_name: 'Ada Admin' }, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null,
   };
   render(<TimelinePanel items={[written, note]} timezone="UTC" />);
   const [byToken, byPerson] = screen.getAllByRole('article');
@@ -179,6 +182,93 @@ test('the header button ignores presses while the change runs, keeps the focus, 
   expect(resolve).not.toHaveAttribute('aria-disabled');
 });
 
+const zaloRef = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+test('a change that would tell the customer says so on the button, and its arrow offers the quiet one', async () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, status_notices: ['resolved', 'closed'] }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' });
+  expect(resolve).toHaveTextContent('Resolve and tell');
+  expect(resolve).not.toHaveAttribute('data-tip');
+  const more = screen.getByLabelText('More ways to resolve', { selector: 'summary' });
+  expect(more).toHaveAttribute('data-tip', 'More ways to resolve');
+  fireEvent.click(within(screen.getByRole('group', { name: 'More ways to resolve' })).getByRole('button', { name: 'Resolve without telling the customer' }));
+  expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
+  await waitFor(() => expect(resolve).not.toHaveAttribute('aria-disabled'));
+  fireEvent.click(resolve);
+  expect(onSetStatus).toHaveBeenLastCalledWith('resolved');
+});
+
+test('Reopen that tells offers a quiet reopen, to add a note; a change that tells nothing has no arrow', async () => {
+  const { unmount } = render(<TimelinePanel conversation={{ ...thread, status: 'closed', channel_ref: zaloRef, status_notices: ['open'] }} items={[]} timezone="UTC" onSetStatus={vi.fn().mockResolvedValue(undefined)} />);
+  expect(screen.getByRole('button', { name: 'Reopen and tell the customer on Hảo Đạt OA' })).toHaveTextContent('Reopen and tell');
+  expect(within(screen.getByRole('group', { name: 'More ways to reopen' })).getByRole('button', { name: /Reopen without telling the customer/ })).toHaveTextContent('To add a note or fix a detail');
+  unmount();
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, status_notices: ['open'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('More ways to resolve')).not.toBeInTheDocument();
+});
+
+test('the last status change not made by a person on the team is one quiet line, at its time among the messages', () => {
+  const later: Message = { ...incoming, id: '66666666-6666-4666-8666-666666666666', created_at: '2026-10-20T10:00:00Z' };
+  const first: Message = { ...incoming, created_at: '2026-10-14T00:00:00Z' };
+  const closed = { ...thread, status: 'closed' as const, channel_ref: zaloRef, last_status_change: { to: 'closed' as const, at: '2026-10-18T09:00:00Z', by: 'auto_close' as const } };
+  const { unmount } = render(<TimelinePanel conversation={closed} items={[first, later]} timezone="UTC" canManageChannels />);
+  const line = screen.getByText(/Closed by itself after staying resolved/).closest('p') as HTMLElement;
+  expect(line).toHaveTextContent('Closed by itself after staying resolved (Hảo Đạt OA setting)');
+  expect(within(line).getByRole('link', { name: 'Hảo Đạt OA' })).toHaveAttribute('href', `/settings/channels/${zaloRef.id}?tab=messages`);
+  expect(line.querySelector('time')).toHaveAttribute('datetime', '2026-10-18T09:00:00Z');
+  const stack = line.parentElement as HTMLElement;
+  const order = Array.from(stack.children);
+  expect(order.indexOf(line)).toBeGreaterThan(order.findIndex((node) => node.textContent?.includes(first.body)));
+  expect(order.indexOf(line)).toBeLessThan(order.length - 1);
+  unmount();
+  render(<TimelinePanel conversation={closed} items={[first]} timezone="UTC" />);
+  expect(screen.queryByRole('link', { name: 'Hảo Đạt OA' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Closed by itself after staying resolved \(Hảo Đạt OA setting\)/)).toBeInTheDocument();
+});
+
+test('a status line names who set it: a token, the customer, their Reopen command, the import; never a person on the team', () => {
+  const cases = [
+    [{ to: 'resolved', by: 'token', name: 'Claude (Queue triage)' }, 'Claude (Queue triage) resolved it'],
+    [{ to: 'open', by: 'customer' }, 'Reopened when the customer wrote'],
+    [{ to: 'open', by: 'command' }, 'Reopened by the customer’s Reopen command'],
+    [{ to: 'resolved', by: 'import' }, 'Set to Resolved by the import'],
+  ] as const;
+  for (const [change, words] of cases) {
+    const { unmount } = render(<TimelinePanel conversation={{ ...thread, last_status_change: { at: '2026-10-18T09:00:00Z', ...change } }} items={[]} timezone="UTC" />);
+    expect(screen.getByText(words)).toBeInTheDocument();
+    unmount();
+  }
+  render(<TimelinePanel conversation={{ ...thread, last_status_change: { to: 'resolved', at: '2026-10-18T09:00:00Z', by: 'agent', name: 'Ann' } }} items={[]} timezone="UTC" />);
+  expect(document.querySelector('.status-event')).toBeNull();
+});
+
+test('a chat conversation whose notices are still unknown cannot be resolved yet; if they never come, the quiet way is offered', () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve' });
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  expect(resolve).toHaveAttribute('aria-busy', 'true');
+  fireEvent.click(resolve);
+  expect(onSetStatus).not.toHaveBeenCalled();
+  rerender(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef }} items={[]} timezone="UTC" onSetStatus={onSetStatus} noticesFailed />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+  fireEvent.click(within(screen.getByRole('group', { name: 'More ways to resolve' })).getByRole('button', { name: 'Resolve without telling the customer' }));
+  expect(onSetStatus).toHaveBeenCalledWith('resolved', { notify: false });
+});
+
+test('a chat conversation the server says tells nothing has a plain Resolve, ready at once', () => {
+  render(<TimelinePanel conversation={{ ...thread, channel_ref: zaloRef, may_tell_customer: false }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
+  expect(screen.queryByRole('group', { name: 'More ways to resolve' })).not.toBeInTheDocument();
+});
+
+test('an email conversation the server says would tell (a chat message moved in) offers the quiet way too', () => {
+  render(<TimelinePanel conversation={{ ...thread, status_notices: ['resolved'] }} items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Resolve and tell the customer on the channel' })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'More ways to resolve' })).toBeInTheDocument();
+});
+
 test('no conversation, no status button', () => {
   render(<TimelinePanel items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
   expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
@@ -194,4 +284,33 @@ test('a help chat conversation says its sender is unverified and links the chat 
 test('another conversation shows neither', () => {
   render(<TimelinePanel conversation={thread} items={[]} timezone="UTC" />);
   expect(screen.queryByText('Unverified sender (Help chat)')).not.toBeInTheDocument();
+});
+
+test('a notice the channel sent by itself is written by the channel, named even when it was removed', () => {
+  const notice: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Đã nhận yêu cầu.', notice_kind: 'received' };
+  const conversation = (deleted: boolean) => ({ id: base.conversation_id, subject: 'Máy in', channel_ref: { id: '77777777-7777-4777-8777-777777777777', type: 'zalo_oa', name: 'Hảo Đạt OA', enabled: true, deleted, replies_via: null } }) as unknown as Conversation;
+  const { unmount } = render(<TimelinePanel conversation={conversation(false)} items={[notice]} timezone="UTC" />);
+  expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
+  expect(screen.getByText('Sent by the channel · not a reply')).toBeInTheDocument();
+  unmount();
+  render(<TimelinePanel conversation={conversation(true)} items={[notice]} timezone="UTC" />);
+  expect(screen.getByText('Hảo Đạt OA')).toBeInTheDocument();
+});
+
+// A press on a picture opens every picture, video and voice clip of the conversation, in timeline order.
+test('a press on a picture opens the gallery of all media in the conversation, at that picture', async () => {
+  const media = (id: string, filename: string, content_type: string, message_id: string) => ({ id, message_id, filename, content_type, size: 1000, sha256: 'a'.repeat(64), inline: false, created_at: base.created_at });
+  const first: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'incoming', author_name: 'Đào Toàn', body: 'Look',
+    attachments: [media('i1', 'image-1', 'image/jpeg', '6'), media('p1', 'terms.pdf', 'application/pdf', '6')] };
+  const second: Message = { ...base, id: '77777777-7777-4777-8777-777777777777', kind: 'note', author_name: 'Mai', body: 'Same here', created_at: '2026-10-14T01:00:00Z',
+    attachments: [media('v1', 'clip', 'video/mp4', '7'), media('i2', 'image-2', 'image/png', '7')] };
+  render(<TimelinePanel items={[first, second]} timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open image-2' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('3 / 3')).toBeInTheDocument();
+  expect(within(dialog).getByText(/Mai/)).toBeInTheDocument();
+  const strip = within(dialog).getByRole('list', { name: 'All media in this conversation' });
+  expect(within(strip).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['image-1', 'clip', 'image-2']);
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });

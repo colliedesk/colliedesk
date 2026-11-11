@@ -35,8 +35,8 @@ func TestTrialWorkspaceBillingShowsLimitsAndSeatUsage(t *testing.T) {
 	if got.Plan != "trial" || got.Status != "none" || got.CurrentPeriodEnd != nil || got.CancelAtPeriodEnd || got.Locked {
 		t.Fatalf("billing=%+v, want an unlocked trial workspace with no subscription", got)
 	}
-	if got.Limits.Agents != 10 {
-		t.Fatalf("limits=%+v, want 10 agents", got.Limits)
+	if got.Limits.Agents != 25 {
+		t.Fatalf("limits=%+v, want 25 agents", got.Limits)
 	}
 	if got.Usage.Agents != 2 {
 		t.Fatalf("usage=%+v, want 2 agents (admin + invited agent)", got.Usage)

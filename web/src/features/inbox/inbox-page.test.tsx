@@ -3,6 +3,7 @@ import { beforeAll, expect, test, vi } from 'vitest';
 import { useState } from 'react';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { InboxPage } from './inbox-page';
+import { markdownPart } from './markdown-body';
 import { presenceViewPart } from './presence-part';
 
 const conversation = { latest_reply_number: 0,
@@ -25,6 +26,9 @@ const conversation = { latest_reply_number: 0,
 // start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
 // after the test environment is gone).
 beforeAll(async () => {
+  // Replies' Markdown renders from its own chunk; it is there before these tests start.
+  markdownPart.preload();
+  await import('./markdown-render');
   presenceViewPart.preload();
   await import('./presence-view');
 });
@@ -37,8 +41,11 @@ test('shows the dense inbox filters and three-pane conversation workspace', asyn
   fireEvent.click(within(filters).getByText('Filter'));
   await screen.findByRole('checkbox', { name: 'Urgent' });
   const menu = within(filters).getByRole('group', { name: 'Filter' });
-  for (const name of ['Priority', 'Assignee', 'Tags', 'Who replies next', 'Needs attention', 'Channel', 'Source', 'Created', 'Last activity']) {
+  for (const name of ['Priority', 'Assignee', 'Tags', 'Needs attention', 'Channel']) {
     expect(within(menu).getByRole('group', { name })).toBeInTheDocument();
+  }
+  for (const name of ['Who replies next', 'Source', 'Created', 'Last activity']) {
+    expect(within(menu).queryByRole('group', { name })).not.toBeInTheDocument();
   }
   expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: /conversation list/i })).toBeInTheDocument();
@@ -98,7 +105,7 @@ test('renders message Markdown in the timeline', () => {
     conversation_id: conversation.id,
     author_agent_id: null,
     author_name: null,
-    agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
+    agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null,
     kind: 'outgoing',
     body: 'Use the **secure link**.',
     body_html: null,
@@ -115,8 +122,17 @@ test('renders message Markdown in the timeline', () => {
 
 test('tells the agent when replies will not be emailed', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
-  expect(screen.getByText('Outgoing email is not configured on this server.')).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('status')).toHaveTextContent('Outgoing email is not configured on this server.');
   expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
+});
+
+test('the notice keeps its words in a line of their own beside Open Settings, so a phone can show it on one line with the link', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." canManage />);
+  const words = screen.getByText('Outgoing email is not configured on this server.');
+  expect(words).toHaveClass('composer-notice-text');
+  // Cut short on a phone, the whole sentence is still its title (and what a screen reader reads).
+  expect(words).toHaveAttribute('title', 'Outgoing email is not configured on this server.');
+  expect(within(screen.getByRole('status')).getByRole('link', { name: 'Open Settings' })).toBeInTheDocument();
 });
 
 test('an admin can go straight to Settings from the notice that replies are not emailed', () => {
@@ -130,7 +146,7 @@ test('shows the author name and attachment download links on a timeline message'
     conversation_id: conversation.id,
     author_agent_id: null,
     author_name: 'Grace Hopper',
-    agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
+    agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null,
     kind: 'incoming',
     body: 'Logs attached.',
     body_html: null,
@@ -161,7 +177,7 @@ const imported = {
   conversation_id: conversation.id,
   author_agent_id: null,
   author_name: 'Bob Former',
-  agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
+  agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null,
   kind: 'note' as const,
   body: 'Forwarding the logs',
   body_html: '<p onclick="steal()">Forwarding the <b>logs</b><img src="https://tracker.example/p.gif"></p>',
@@ -324,7 +340,7 @@ test('Escape inside a select does not close the drawer, Escape elsewhere does', 
   render(<InboxPage selected={conversation} conversations={[conversation]} />);
   openDrawer();
   const panel = screen.getByRole('complementary', { name: /conversation details/i });
-  fireEvent.keyDown(within(panel).getByLabelText(/^status$/i), { key: 'Escape' });
+  fireEvent.keyDown(within(panel).getByLabelText(/^priority$/i), { key: 'Escape' });
   expect(screen.getByRole('button', { name: /hide details/i })).toBeInTheDocument();
   fireEvent.keyDown(within(panel).getByLabelText(/new tag name/i), { key: 'Escape' });
   expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
@@ -366,7 +382,7 @@ test('a delivery notice from a retry is shown above the composer', () => {
 test('the reply box starts with the people the customer copied and sends them with the reply', () => {
   const onMessage = vi.fn();
   const timeline = [{
-    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'incoming' as const,
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null, kind: 'incoming' as const,
     body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
     email: { from: 'mai@customer.example', authentication: 'pass' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
   }];
@@ -380,7 +396,7 @@ test('the reply box starts with the people the customer copied and sends them wi
 
 test('on the hosted cloud the reply box offers no Cc from mail the workspace posted itself', () => {
   const posted = [{
-    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'incoming' as const,
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, ai_draft_source: null, drafted_by: null, agent_request_id: null, kind: 'incoming' as const,
     body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
     email: { from: 'mai@customer.example', authentication: 'pass' as const, via: 'workspace' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
   }];

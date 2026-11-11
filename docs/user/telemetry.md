@@ -48,11 +48,11 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 
 | Event | When | Fields |
 |---|---|---|
-| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version`, and `website_visitor_id` when the browser has the colliedesk.com analytics cookie (set only after the person accepted cookies on the website): the random id PostHog gave that visit, so the team can see which page led to the trial, and `internal` = `true` when the admin's address (any spelling of that mailbox: `+tag`, Gmail dots) or its domain is listed in the server's `INTERNAL_SIGNUP_EMAILS`, or the sign-up came from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's own tests, left out of the trial count; never the address itself) |
+| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version`, and `website_visitor_id` when the browser has the colliedesk.com analytics cookie (set only after the person accepted cookies on the website): the random id PostHog gave that visit, so the team can see which page led to the trial; the post or ad the sign-in link came from, when it had any: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and the ad click IDs `ttclid` (TikTok) and `fbclid` (Meta), each only when it is a plain token of letters, digits, `.`, `_` and `-`; and `internal` = `true` when the admin's address (any spelling of that mailbox: `+tag`, Gmail dots) or its domain is listed in the server's `INTERNAL_SIGNUP_EMAILS`, or the sign-up came from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's own tests, left out of the trial count; never the address itself) |
 | `email_channel_saved` | An admin saves the workspace's support address | `distinct_id` = the workspace id, `realm`, `version` (never the address) |
 | `reply_sent` | A reply to a customer is sent from Colliedesk; a note is not a reply | `distinct_id` = the workspace id, `by` (`person`, or `ai_agent` for an agent token), `realm`, `version` (never the text or the recipient) |
 | `teammate_invited` | An admin invites a teammate | `distinct_id` = the workspace id, `realm`, `version` (never the invited address) |
-| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`solo`, `small`, `team`, `team25` or `founding`), `realm`, `version` |
+| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`solo`, `small`, `team`, `team25` or `founding`), the same `utm_*`, `ttclid` and `fbclid` values as its `trial_started`, `realm`, `version` |
 
 Once a day, with the instance heartbeat, Colliedesk Cloud also sends one `workspace_snapshot` event
 per workspace, so the team can see how each customer is doing: `distinct_id` = the workspace id,
@@ -88,6 +88,29 @@ never carry the email address of the person who signed up, the workspace name or
 The events are sent in the background; a failure is logged as `funnel event not sent` and changes
 nothing in the workspace.
 
+## Colliedesk Cloud only: sign-ups from Meta ads
+
+When a team starts a Colliedesk Cloud trial after clicking one of our ads on Facebook or Instagram, the
+sign-in link carries Meta's click ID (`fbclid`). The server then reports to Meta's Conversions API that
+the click led to a trial (`StartTrial`), and later, if the team subscribes, to a paid plan (`Subscribe`).
+Each report carries only:
+
+- `fbc`: the click ID and the time the browser first saw it,
+- the IP address and browser (User-Agent) of the sign-up,
+- `fbp`: if the person accepted cookies on colliedesk.com, the random browser ID the Meta pixel stored
+  there in the `_fbp` cookie, which the browser sends with the sign-up,
+- `event_id` = the workspace id, so Meta counts a report once even when it is sent again,
+- for `Subscribe`, the plan's price and currency.
+
+It never carries an email address, a name, a company, the workspace name or anything from the
+workspace. Nothing is reported for a sign-up without `fbclid`. The app loads no Meta pixel and sets no
+Meta cookie; the website loads the Meta pixel only after the visitor accepts cookies there. The server
+sends the reports in the background, after the sign-up or the payment, and retries a failed one later;
+neither ever waits for Meta. Once the `Subscribe` report is sent, or 90 days after a sign-up, the server
+forgets the sign-up's IP address, browser and browser ID.
+
+A self-hosted server never sends anything to Meta and has no setting to turn it on.
+
 ## How the web app is used
 
 The web app also reports which screens agents open and which buttons they click, so the team can
@@ -97,7 +120,8 @@ alike, and the same switch as the usage report turns it off: set `DISABLE_TELEME
 never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
 
 - On Colliedesk Cloud the agent is named by their agent id, email address and display name, with
-  their role (`admin` or `agent`), and every event carries the workspace id, name, slug and plan, so
+  their role (`admin` when they hold the Admin role, `agent` when they hold the Agent role, `other`
+  when they hold only roles the workspace made), and every event carries the workspace id, name, slug and plan, so
   the team knows which customer it is helping. A self-hosted install sends only the random agent id,
   role, workspace id and plan: its agents are not our customers.
 - Every element's text and attributes are masked, so no conversation, message, contact or form
@@ -117,7 +141,7 @@ Each is sent only after the action succeeded.
 | `conversation_status_changed` | `to`: the new status |
 | `conversation_assigned` | `to_self` |
 | `bulk_action_applied` | `action`: `status`, `assign`, `add_tag` or `remove_tag`; `count` |
-| `agent_request_decided` | `decision`: `approved` or `rejected` |
+| `reply_draft_decided` | `decision`: `sent` or `discarded`; sent when someone sends or discards a reply draft an AI made or an AI agent left |
 | `settings_section_opened` | `section`: the settings section |
 | `workspace_export_requested` | none |
 | `onboarding_step_started` | `step`: `email`, `import`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |

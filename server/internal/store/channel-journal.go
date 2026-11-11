@@ -60,11 +60,16 @@ type InboundWork struct {
 func (s *Store) DueInbound(ctx context.Context, now time.Time, limit, maxAttempts int) ([]InboundWork, error) {
 	var work []InboundWork
 	err := s.db.Privileged(ctx, database.PrivilegeChannelInboundClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `(SELECT workspace_id::text,channel_id::text,ARRAY[id::text],false FROM channel_inbound_events
-				WHERE state IN ('received','failed') AND attempts<$2 ORDER BY received_at LIMIT $3)
+		// A paused channel's events wait where they are.
+		rows, err := tx.Query(ctx, `(SELECT e.workspace_id::text,e.channel_id::text,ARRAY[e.id::text],false FROM channel_inbound_events e
+				WHERE e.state IN ('received','failed') AND e.attempts<$2
+					AND NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id=e.workspace_id AND c.id=e.channel_id AND c.processing_paused_at IS NOT NULL)
+				ORDER BY e.received_at LIMIT $3)
 			UNION ALL
-			(SELECT workspace_id::text,channel_id::text,array_agg(id::text ORDER BY received_at,id),true FROM channel_inbound_events
-				WHERE state='pending' GROUP BY workspace_id,channel_id,aggregate_key HAVING max(flush_at)<=$1 LIMIT $3)`, now, maxAttempts, limit)
+			(SELECT e.workspace_id::text,e.channel_id::text,array_agg(e.id::text ORDER BY e.received_at,e.id),true FROM channel_inbound_events e
+				WHERE e.state='pending'
+					AND NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id=e.workspace_id AND c.id=e.channel_id AND c.processing_paused_at IS NOT NULL)
+				GROUP BY e.workspace_id,e.channel_id,e.aggregate_key HAVING max(e.flush_at)<=$1 LIMIT $3)`, now, maxAttempts, limit)
 		if err != nil {
 			return err
 		}
@@ -81,6 +86,39 @@ func (s *Store) DueInbound(ctx context.Context, now time.Time, limit, maxAttempt
 	return work, nil
 }
 
+// PausedInbound lists events of paused channels whose files were not fetched yet, oldest first: their
+// links expire, so their files are fetched while the rest waits.
+func (s *Store) PausedInbound(ctx context.Context, limit int) ([]InboundWork, error) {
+	var work []InboundWork
+	err := s.db.Privileged(ctx, database.PrivilegeChannelInboundClaim, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT e.workspace_id::text,e.channel_id::text,ARRAY[e.id::text],false FROM channel_inbound_events e
+			JOIN channels c ON c.workspace_id=e.workspace_id AND c.id=e.channel_id AND c.processing_paused_at IS NOT NULL
+			WHERE e.state IN ('received','failed') AND e.files_fetched_at IS NULL ORDER BY e.received_at LIMIT $1`, limit)
+		if err != nil {
+			return err
+		}
+		work, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (InboundWork, error) {
+			var item InboundWork
+			err := row.Scan(&item.WorkspaceID, &item.ChannelID, &item.EventIDs, &item.Flush)
+			return item, err
+		})
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list paused channel events: %w", err)
+	}
+	return work, nil
+}
+
+// MarkFilesFetched records that an event's files were fetched while its channel was paused.
+func (s *Store) MarkFilesFetched(ctx context.Context, workspaceID string, ids []string) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		_, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET files_fetched_at=now() WHERE workspace_id=$1 AND id::text=ANY($2)`, workspaceID, ids)
+		return struct{}{}, err
+	})
+	return err
+}
+
 // InboundEvents reads journal events of a channel of the workspace, in the order they arrived.
 func (s *Store) InboundEvents(ctx context.Context, workspaceID, channelID string, ids []string) ([]InboundEvent, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]InboundEvent, error) {
@@ -94,6 +132,40 @@ func (s *Store) InboundEvents(ctx context.Context, workspaceID, channelID string
 	})
 }
 
+// GatheringEvents reads the held events of a gathering still to be decided, oldest first, with its
+// channel; ErrGatheringNotFound when there is none, ErrGatheringDecided when it was decided.
+func (s *Store) GatheringEvents(ctx context.Context, workspaceID, id string) (string, []InboundEvent, error) {
+	type found struct {
+		channelID string
+		events    []InboundEvent
+	}
+	if !isID(id) {
+		return "", nil, ErrGatheringNotFound
+	}
+	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (found, error) {
+		var f found
+		var state string
+		err := tx.QueryRow(ctx, `SELECT channel_id::text,state FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id).Scan(&f.channelID, &state)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return f, ErrGatheringNotFound
+		}
+		if err != nil {
+			return f, err
+		}
+		if state != GatheringDeciding && state != GatheringReview {
+			return f, ErrGatheringDecided
+		}
+		rows, err := tx.Query(ctx, `SELECT id::text,workspace_id::text,channel_id::text,COALESCE(external_event_id,''),state,raw,COALESCE(raw_object_key,''),
+			COALESCE(hold_reason,''),received_at FROM channel_inbound_events WHERE workspace_id=$1 AND gathering_id=$2::uuid ORDER BY received_at,id`, workspaceID, id)
+		if err != nil {
+			return f, err
+		}
+		f.events, err = pgx.CollectRows(rows, scanInboundEvent)
+		return f, err
+	})
+	return got.channelID, got.events, err
+}
+
 func scanInboundEvent(row pgx.CollectableRow) (InboundEvent, error) {
 	var event InboundEvent
 	err := row.Scan(&event.ID, &event.WorkspaceID, &event.ChannelID, &event.ExternalEventID, &event.State, &event.Raw, &event.ObjectKey,
@@ -101,15 +173,21 @@ func scanInboundEvent(row pgx.CollectableRow) (InboundEvent, error) {
 	return event, err
 }
 
-// HeldEvents lists the events a channel holds (all, or those of ids), oldest first.
+// inIntakeQueue keeps out of the held messages a person opens or discards one by one those of a chat's
+// intake that wait to be decided, or were set aside: they are decided as a gathering, in the queue.
+const inIntakeQueue = `NOT EXISTS(SELECT 1 FROM intake_gatherings g WHERE g.workspace_id=e.workspace_id AND g.id=e.gathering_id AND g.state IN `
+
+// HeldEvents lists the events a channel holds (all, or those of ids), oldest first, but those a
+// gathering of intake decides.
 func (s *Store) HeldEvents(ctx context.Context, workspaceID, channelID string, ids []string) ([]InboundEvent, error) {
 	if ids == nil {
 		ids = []string{}
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]InboundEvent, error) {
 		rows, err := tx.Query(ctx, `SELECT id::text,workspace_id::text,channel_id::text,COALESCE(external_event_id,''),state,raw,COALESCE(raw_object_key,''),
-			COALESCE(hold_reason,''),received_at FROM channel_inbound_events
-			WHERE workspace_id=$1 AND channel_id=$2 AND state='held' AND (cardinality($3::text[])=0 OR id::text=ANY($3)) ORDER BY received_at,id`,
+			COALESCE(hold_reason,''),received_at FROM channel_inbound_events e
+			WHERE workspace_id=$1 AND channel_id=$2 AND state='held' AND (cardinality($3::text[])=0 OR id::text=ANY($3))
+			AND `+inIntakeQueue+`('deciding','review','ignored')) ORDER BY received_at,id`,
 			workspaceID, channelID, ids)
 		if err != nil {
 			return nil, err
@@ -161,8 +239,10 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 		if err != nil {
 			return discarded{}, err
 		}
-		rows, err := tx.Query(ctx, `UPDATE channel_inbound_events SET state='discarded',hold_reason=NULL,decided_by_agent_id=NULLIF($4,'')::uuid,processed_at=now()
+		// What intake set aside may be thrown away; what waits to be decided is decided in the queue.
+		rows, err := tx.Query(ctx, `UPDATE channel_inbound_events e SET state='discarded',hold_reason=NULL,decided_by_agent_id=NULLIF($4,'')::uuid,processed_at=now()
 			WHERE workspace_id=$1 AND channel_id=$2 AND state='held' AND (cardinality($3::text[])=0 OR id::text=ANY($3))
+			AND `+inIntakeQueue+`('deciding','review'))
 			RETURNING COALESCE(raw_object_key,'')`, workspaceID, channelID, ids, actor.AgentID)
 		if err != nil {
 			return discarded{}, fmt.Errorf("discard held messages: %w", err)
@@ -172,6 +252,25 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 			return discarded{}, err
 		}
 		count := len(keys)
+		// A gathering set aside whose held messages are all thrown away is over. A card of messages taken
+		// back to the queue holds no held message: it is never ended here.
+		if _, err := tx.Exec(ctx, `UPDATE intake_gatherings g SET state='cancelled',updated_at=now() WHERE g.workspace_id=$1 AND g.channel_id=$2 AND g.state='ignored'
+			AND EXISTS(SELECT 1 FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id)
+			AND NOT EXISTS(SELECT 1 FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id AND e.state<>'discarded')`,
+			workspaceID, channelID); err != nil {
+			return discarded{}, fmt.Errorf("end discarded gatherings: %w", err)
+		}
+		// What a discarded message said goes from its chat place too (and with it any link).
+		if _, err := tx.Exec(ctx, `DELETE FROM channel_thread_items i USING channel_inbound_events e
+			WHERE i.workspace_id=$1 AND e.workspace_id=i.workspace_id AND e.id=i.inbound_event_id AND e.channel_id=$2 AND e.state='discarded'`,
+			workspaceID, channelID); err != nil {
+			return discarded{}, fmt.Errorf("discard held chat items: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM channel_senders s WHERE s.workspace_id=$1 AND s.channel_id=$2 AND NOT EXISTS(SELECT 1 FROM channel_thread_items i
+			WHERE i.workspace_id=s.workspace_id AND i.channel_id=s.channel_id AND i.sender_kind=s.sender_kind AND i.sender_value=s.sender_value)`,
+			workspaceID, channelID); err != nil {
+			return discarded{}, fmt.Errorf("discard held chat senders: %w", err)
+		}
 		if count > 0 {
 			if err := insertChannelEvent(ctx, tx, channel, "held_discarded", actor, map[string]any{"count": count}); err != nil {
 				return discarded{}, err

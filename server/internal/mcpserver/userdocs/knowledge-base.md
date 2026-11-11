@@ -17,7 +17,7 @@ levels deep. Every article belongs to one collection, so a new knowledge base st
 one, for example "Getting started".
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
-  goes under **Inside**, then **Create collection**. To add one inside the collection you are looking
+  goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
   at, select **Add a collection inside**. A collection on the third level cannot hold another one.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
   articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
@@ -72,10 +72,11 @@ the end of a published article's row opens its public page.
    lists, `- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes` and code. The Markdown
    is colored as you type, and what you type is exactly what is stored. Raw HTML in the text is not
    shown, except a [YouTube or Vimeo video](#videos).
-   - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic, a link,
-     numbered and bulleted lists, a quote and a table; **Insert image or video** adds an
-     [image](#images) or a [video](#videos); **⋯** (More formatting) holds strikethrough, code, a
-     checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
+   - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
+     Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
+     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image or
+     video** adds an [image](#images) or a [video](#videos); **⋯** (More formatting) holds
+     strikethrough, code, a checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
      italic and link, and the rest is under **⋯**. With the keyboard, Tab reaches the toolbar and the
      arrow keys move along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
@@ -140,7 +141,8 @@ The column on the right of the editor lists the images of the article that have 
 
 **Knowledge → Media** shows every image and video of the workspace, newest first, with a search by
 name or alt text, a choice of images or videos, of what is in use, not used or missing alt text
-(on a phone, under **Filter**), and a sort (newest, oldest, name, largest). A card shows only what
+(on a phone, under **Filter**), and a sort: newest first, name, or largest first (what frees the most
+storage). A link with `sort=oldest` still lists oldest first. A card shows only what
 needs your attention: **No alt** on an image without alt text, **Not used**, and a pin on a kept item.
 An image the help center shows says **Used by the help center (logo)** (or favicon) and is in use.
 **Upload** takes several files at once, or drop them anywhere on the page; an upload made here is
@@ -267,8 +269,8 @@ text are used. Line breaks and repeated spaces become one space. Both are part o
 history and of the [export](export.md), and are set through the API (`seo_title`,
 `seo_description` on `POST` and `PATCH /api/v1/kb/articles`) and by AI agents
 (`colliedesk_kb_article_create`, `colliedesk_kb_article_update`). Changing them on a published
-article changes the help center, so a token that may edit but not publish files a request a person
-approves.
+article changes the help center, so it needs `kb_articles:publish` as well as `kb_articles:update`;
+without it the save is refused and names the permission.
 
 If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
 nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs
@@ -279,7 +281,7 @@ Leaving the page with unsaved changes asks first.
 ## History
 
 **⋯ → Version history** on an article lists every version, newest first: who made it (and through which AI
-agent token or approved request), when, and what changed (title, address name, text, status,
+agent token, or an agent request approved before requests were removed), when, and what changed (title, address name, text, status,
 collection). **Restore version N** makes that version's title, address name and text current again,
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
 an article by surprise. Save or undo your own changes first.
@@ -287,27 +289,84 @@ an article by surprise. Save or undo your own changes first.
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published
-articles that fit a conversation by themselves, in every language an article has, and quote them;
-nobody has to sort the knowledge base for AI. A draft, an article in the trash and an internal note
-of a conversation are never read.
+articles that fit a conversation by themselves, in their own language and in each published
+[translation](#translations), and quote them; nobody has to sort the knowledge base for AI. A draft
+(of an article or of a translation), anything in the trash and an internal note of a conversation
+are never read.
 
 To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
 AI**. From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
 it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
-token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`, tier
-`send`).
+token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
+`kb_articles:update`).
+
+## Translations
+
+A translation is the same article in another language, not a new article: it has the article's
+number, collection and place, and its own title, text, address name, search title and description,
+status (draft or published) and [history](#history). Customers see a translation only while it is
+published, its article is published, and its language is shown.
+
+### Languages
+
+**Knowledge base → Languages** lists the help center's languages. The primary language is the one
+the articles are written in (set it with the help center's **Language** in
+[Help center settings](#help-center-settings)). Add another language with its code (`fr`, `de`,
+`pt-BR`); it starts **hidden**, so you can translate first and show it when it is ready. Tick
+**Shown to customers** to show it, untick it to hide it again; nothing is deleted either way. The
+arrows set the order of the language menu. A language that still holds translations or collection
+names, in the trash too, cannot be removed: hide it, or delete what is written in it first.
+
+Each language says how many articles are published, drafts, **not translated** and **outdated** in
+it. Select a count to list those articles; each opens its translation.
+
+### Translate an article
+
+Open an article: **Translations** in its sidebar lists every language with the translation's status,
+**Outdated** when the article changed since, or **Not translated**. Select a language to open the
+translation beside the original (side by side on a wide screen, one above the other on a phone).
+A new translation starts empty; **Start from the original text** copies the article's text to
+translate over it. **Save translation** keeps it as a draft; **Publish** puts it on the help center
+once the language is shown. Steps: open the article, select the language, write, Publish (4).
+
+### Outdated translations
+
+When the article's own title or text changes (an edit, a version restored, a newer import), its
+translations are marked **Outdated**; changing the article's collection, status or images does not.
+Open the translation, bring it up to date, tick **Mark as up to date with the original** and save,
+or select the same button without changing the text. **Mark as outdated** sets it back. Both are
+versions of the translation, so its history says who did it.
+
+### Collection names
+
+On a collection, **Names in other languages** sets its name and description in each language. A
+language without one shows the primary name. **Remove** takes it away; a name an import brought in
+comes back with the next run of that import.
+
+### History and trash
+
+**Version history** and **Delete translation** are on the translation's page. A deleted translation
+goes to the [trash](#trash) for 30 days with its history; the article stays. While it is there the
+article cannot get a new translation in that language: restore it instead.
+
+### Imported translations
+
+A [Freshdesk import](import-freshdesk.md#knowledge-base) brings every translation with its status,
+search title and description, the categories' and folders' names in each language, and the
+languages: shown when the Freshdesk portal showed them, hidden otherwise. An import never changes a
+language you already set, nor a translation someone edited in Colliedesk.
 
 ## Trash
 
 Select **Trash** at the top of the articles to see deleted articles and collections. Each shows who deleted it and how many days
 are left; after 30 days it is deleted for good, with its history. **Restore** brings it back as it
 was: a published article is published again. Restore a collection before the articles that were in
-it. Articles in the trash count toward the 2,000 articles a workspace can hold.
+it. Deleted translations are listed there too. Articles in the trash count toward the 2,000 articles a workspace can hold.
 
 ## Help center settings
 
-Open **Settings → Help center**. Every agent sees whether the help center is on. An admin can turn
+Open **Settings → Help center**. Everyone with `help_center:read` (Agent and Admin hold it) sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
@@ -333,8 +392,9 @@ see the saved brand and its preview, without the controls. A brand has:
 - **Colors**: primary, header, header text, background, text, links and footer, each `#rrggbb`. Any
   color set makes the help center light only.
 - **Fonts** for text and headings, from fonts already on the reader's device, so nothing is
-  downloaded: `system-sans` (the default text font), `humanist-sans`, `geometric-sans`,
-  `classic-serif` (the default heading font), `transitional-serif`, `rounded-sans`, `mono`.
+  downloaded: **Sans** (`system-sans`, the default text font) or **Serif** (`classic-serif`, the default
+  heading font). The API also takes `humanist-sans`, `geometric-sans`, `transitional-serif`,
+  `rounded-sans` and `mono`; a font saved that way stays and shows in the form until you choose another.
 - **Custom CSS** (`custom_css`), for details the fields above do not cover, such as
   `.masthead{border-bottom:2px solid #0b5cad}`. See [custom CSS](#custom-css).
 
@@ -377,9 +437,9 @@ letter outside ASCII takes 2 to 4 bytes; the field counts them as you type). An 
 spaces) removes it. A save through the API must send `custom_css` (null or `""` for none): a save
 without it is refused with 422 and changes nothing, so a page or an agent that does not know the field
 cannot remove your CSS by accident. Pages keep the same security policy: the CSS comes from the help
-center's own address, in the brand's style sheet, never inline in a page. A custom agent token needs
-both `help_center:update` and `kb_articles:publish` to save the theme; without either it files a
-request for a person to approve, and the public pages stay unchanged.
+center's own address, in the brand's style sheet, never inline in a page. Saving the theme needs
+both `help_center:update` and `kb_articles:publish`, for a person and an agent token alike; without
+either it is refused and the public pages stay unchanged.
 
 **The contrast checks do not cover custom CSS.** A color or a hidden element it sets can make a page
 hard to read. Check the preview before you save, and clear the field to go back.
@@ -432,10 +492,36 @@ of address names, `/c/billing/cards`; changing one is not redirected. Addresses 
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Email) changes every help center address, and old links stop working.
 
+### In other languages
+
+Each language you show (see [Languages](#languages)) has the same pages below its code:
+`<help center address>/fr/`, `/fr/a/12-<French address name>`, `/fr/c/billing` and `/fr/search`. The
+primary language keeps the addresses it always had; `/<primary code>/...` leads to them. A language's
+pages show only the articles published in it (with their collections' names in that language), and
+its search searches only its translations. An article not published in that language yet leads to
+the article in the primary language.
+
+- **Language menu.** The header of every page lists every language you show, in your order. Each
+  opens this page in that language, or that language's home where the page is not translated yet.
+  A language with nothing published yet has a home that says so and links the primary language;
+  search engines are told only about the pages that exist.
+- **Browser language.** A visitor who opens the help center's home page with a browser set to a
+  language you show (or a close one: `fr-CA` for `fr`) moves to that language's home. Other pages,
+  links and search engines are never moved; choosing the primary language in the menu keeps it.
+- **Words of the help center** (Search, Home, Updated, Previous…) are in the page's language for
+  English, French, German, Spanish, Italian, Portuguese (also of Brazil), Dutch, Japanese, Simplified
+  Chinese, Korean, Vietnamese, Polish, Swedish and Russian, and in English for any other; so is the
+  "Ask AI" link to the help chat. The chat window's own words are still in English. Editing them is
+  not possible yet.
+- **Old Freshdesk links in a language** (`/fr/support/solutions/articles/<id>`) lead to the
+  translation once it is published in that language, and to the article otherwise.
+- The [AI chat](ai-chat.md) on a page of a language answers from that language's published
+  translations and links their pages.
+
 ### Custom domain
 
 The help center can answer on an address of your own domain, such as `help.example.com`. Open
-**Settings → Help center → Custom domain**. Every agent sees the domain and its state; an admin sets,
+**Settings → Help center → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
 checks and removes it.
 
 1. Type the host name in **Host name** and press **Set domain**. The card then shows the DNS records
@@ -463,6 +549,23 @@ checks and removes it.
    again, and the domain goes live at that moment.
 
 The certificate (`https://`) is issued automatically the first time someone opens the address.
+
+**Does the address really open?** When a check finds the records and the help center serves on the
+domain, the server then opens the address once, as a visitor would. That first visit also gets the
+certificate issued, so your first real visitor does not wait. The line under the state shows the result:
+
+- *HTTPS works: https://help.example.com opens this help center.* Everything is in place.
+- *… has no valid certificate yet …*: the certificate is not issued yet. Press **Check now** again in a
+  minute. If it still fails on a server you run yourself, its reverse proxy cannot get a certificate
+  for the name.
+- *… answers, but not with this help center …*: another server answers on the name, for example an
+  old DNS record or a proxy such as a CDN in front of it. Point the name at Colliedesk only.
+- *… did not answer in time* or *… could not be reached*: check that the name points at Colliedesk
+  and press **Check now** again.
+
+The daily check opens the address too and updates the line. A server without TLS opens it over
+`http://`, and the line does not mention HTTPS. During the trial the address is not opened, since the
+help center does not serve there yet.
 
 **Moving from Freshdesk: verify by TXT first, then change the CNAME.** Add only the `TXT` record and
 press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Change the
@@ -495,7 +598,7 @@ to serve on the domain again.
   record is still there), **Check now** says the name is taken. In the same way, if another workspace
   proves your domain while your records are gone, the domain moves there, and your card says so.
 - **Check now** can run 10 times an hour per workspace (people and AI agents together); the server
-  asks DNS each time.
+  asks DNS each time, and opens the address only after DNS proves the domain is yours.
 - **Refused names:** an IP address, a single word such as `help`, more than 253 characters, the
   Colliedesk address itself, and names below it. A name with accents, such as `hilfe.bücher.de`, is
   stored in its ASCII form (`hilfe.xn--bcher-kva.de`), which is the form DNS uses.
@@ -558,12 +661,14 @@ domain, or `/help/<slug>` on a server without a help center domain). Everything 
 address, never the app's address or another workspace's:
 
 - Every page has a canonical link, `og:url` and an `hreflang` link for the help center's language
-  (and `x-default`). Every other address of a page, such as a trailing slash, `?page=1`, a tracking
+  (and `x-default`); a page that exists in other languages links each of them (`hreflang`), and
+  `x-default` is the primary language's. Every other address of a page, such as a trailing slash, `?page=1`, a tracking
   query (`?utm_source=…`), an old article slug or the slug host after a custom domain is active,
   answers **301** to the canonical address, so search engines never see the same page twice.
 - `robots.txt` (on a host of its own) allows crawlers and names the sitemap.
 - `sitemap.xml` lists the home page, every collection that shows something and every published
-  article with the date it last changed.
+  article with the date it last changed; with other languages shown, also each of their pages, every
+  page with its versions in the other languages.
 - `llms.txt` lists the published articles by collection, for AI assistants, each with a link to its
   Markdown.
 - Every article's address followed by `.md` (`/a/12-reset-your-password.md`) is the article as
@@ -588,9 +693,8 @@ Then press **Verify** in Search Console or Bing.
 - Paste the value, not the whole tag. A value that is not 16 to 100 letters, digits, `-` or `_`
   is refused and nothing is saved.
 - To remove a token, clear its field and save. A token you do not touch stays as it is.
-- Saving changes the public help center, so it needs the same permission as publishing: an admin
-  saves it at once, and an AI agent token needs `help_center:update` and `kb_articles:publish`
-  (without them, it files a request a person approves). The API is `GET` and `PUT
+- Saving changes the public help center, so it needs `help_center:update` and
+  `kb_articles:publish`, for a person and an AI agent token alike; without either it is refused. The API is `GET` and `PUT
   /api/v1/help-center/search-console`; AI agents use `colliedesk_help_center_search_console_get` and
   `colliedesk_help_center_search_console_update`.
 - The tokens are in the [export](export.md) (`help-center.ndjson`), so a move away keeps them.
@@ -640,10 +744,9 @@ articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, 
 restore them, manage collections, put collections and articles in [order](#order)
 (`colliedesk_kb_order_set`, `PUT /api/v1/kb/order`), upload and read images, and read the help center settings and
 brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one) and
-its custom domain (`colliedesk_help_center_domain_get`). An admin token also sets, checks and removes
-the custom domain (`colliedesk_help_center_domain_set`, `_check`, `_remove`). A custom token needs
-both `help_center:update` and `kb_articles:publish` for these changes; without either it files an
-[agent request](agent-requests.md) for a person to approve.
+its custom domain (`colliedesk_help_center_domain_get`). A token with `help_center:update` and
+`kb_articles:publish` also sets, checks and removes the custom domain
+(`colliedesk_help_center_domain_set`, `_check`, `_remove`); without either it is refused.
 Every article an agent reads or finds carries its public address in `url` (also in the API), so an
 agent links an article in a reply the same way a person does: the title and the address on two
 lines, from a search with `status` published while the help center is on. In
@@ -651,16 +754,32 @@ the media library (`colliedesk_kb_media_list`, `colliedesk_kb_media_get`) an age
 no article uses and which have no alt text, and can name, describe or keep them
 (`colliedesk_kb_media_update`), move them to the trash or back (`colliedesk_kb_media_trash`,
 `colliedesk_kb_media_undelete`) and replace one in every article (`colliedesk_kb_media_replace`), with
-the same tiers as writing an article. A request from a lower tier always names the images it would
-move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's. An agent with a `send` token uploads
-a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets its poster
-(`colliedesk_kb_video_poster_set`); a lower tier cannot upload files.
+the `kb_media:*` permissions below. Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
+An agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets
+its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
+An agent translates with the same permissions as articles: `colliedesk_help_center_languages_get`
+names the languages and what is missing or outdated in each, `colliedesk_kb_translations_list` lists
+those articles, `colliedesk_kb_translation_get` reads a translation and its original in one call,
+`colliedesk_kb_translation_create` and `colliedesk_kb_translation_update` write one (`outdated`
+false marks it up to date in the same call), and `_delete`, `_undelete`, `_history`,
+`_version_restore` and `colliedesk_kb_collection_translation_set` / `_delete` do the rest.
+`colliedesk_help_center_languages_set` adds, orders, shows and hides languages (`help_center:update`,
+and `kb_articles:publish` to show or hide one). Translating one missing article takes three calls:
+list, read the article, create.
 
-| Token tier | Read, search, history, trash | Write, publish, delete, restore, order, upload images | Turn the help center on or off, set its brand and custom domain |
-|---|---|---|---|
-| `admin` | Yes | Yes, at once | Yes |
-| `send` | Yes | Yes, at once. The version names the token | Proposed for an admin to approve |
-| `draft`, `read` | Yes | Proposed: an [agent request](agent-requests.md) a person approves; an image upload is refused | Proposed for an admin to approve |
+Each action needs its permission, and happens at once; the version names the token. Without it the
+call is refused and names what is missing ([Roles and permissions](roles-and-permissions.md)).
+
+| To | Needs |
+|---|---|
+| Read, search, history, trash | `kb_articles:read`, `kb_media:read`, `help_center:read` |
+| Write a draft, order, restore a version | `kb_articles:create`, `kb_articles:update` |
+| Delete and restore from the trash | `kb_articles:delete` |
+| Anything that changes the public help center (publish, edit or trash a published article, a published collection) | `kb_articles:publish` as well |
+| Upload, name, replace, trash images and videos | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
+| Turn the help center on or off, add or order its languages | `help_center:update` |
+| Show or hide a language | `help_center:update` and `kb_articles:publish` |
+| Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
 
 ## Limits
 
@@ -671,4 +790,4 @@ a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and 
   200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
-- Translations an import brings in are kept and exported, but not shown or edited yet.
+- 40 languages besides the primary one; one translation per article and language.

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { ConflictError } from '../../api/client';
 import type { AIProvider, AISettings, AISlot } from '../../api/ai';
@@ -9,20 +9,20 @@ import { refusal } from './ai-route';
 const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
-  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, automatic: false, auto_parts: [], active: false, off_reason: null,
+  return { slot: 'triage', source: 'none', provider_id: null, model: null, fallback_model: null, effort: 'low', enabled: false, default_level: 'off', automatic: false, auto_parts: [], active: false, off_reason: null,
     consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null, ...change };
 }
 
 function provider(change: Partial<AIProvider> = {}): AIProvider {
   return { id: providerID, kind: 'anthropic', label: 'Team key', base_url: null, auth_kind: 'api_key', key_hint: '7Qx2',
     models: ['claude-sonnet-5-5', 'claude-haiku-5-5'], check_status: 'ok', check_error_code: null, checked_at: '2026-10-22T08:00:00Z',
-    created_by: null, created_at: '2026-10-22T08:00:00Z', updated_at: '2026-10-22T08:00:00Z', used_by: [], ...change };
+    created_by: null, created_at: '2026-10-22T08:00:00Z', updated_at: '2026-10-22T08:00:00Z', used_by: [], routing: null, ...change };
 }
 
 function settings(change: Partial<AISettings> = {}): AISettings {
-  return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
-    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null }, allowance: null,
-    auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, ...change };
+  return { server: null, server_off: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
+    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null }, allowance: null,
+    auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, channels: [], source_consents: [], ...change };
 }
 
 function page(props: Partial<AIPageProps> = {}) {
@@ -71,9 +71,34 @@ test('the consent banner turns both features on with the server provider, or goe
 test('a feature is switched on with its provider and model, and moving it sends the new provider', () => {
   const { onSetSlot } = page({ settings: settings({ server, providers: [provider()], slots: [slot({ source: 'server', model: 'claude-haiku-5-5' }), slot({ slot: 'draft' })] }) });
   fireEvent.click(screen.getByRole('switch', { name: 'Triage suggestions on' }));
-  expect(onSetSlot).toHaveBeenLastCalledWith('triage', { source: 'server', model: 'claude-haiku-5-5', effort: 'low', enabled: true });
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', { source: 'server', effort: 'low', enabled: true });
   fireEvent.change(screen.getByRole('combobox', { name: 'Reply drafts provider' }), { target: { value: providerID } });
   expect(onSetSlot).toHaveBeenLastCalledWith('draft', { source: 'provider', provider_id: providerID, effort: 'low', enabled: false });
+});
+
+test('on the server provider a feature shows the operator’s model and offers no model to pick', () => {
+  page({ settings: settings({ server, providers: [provider()], slots: [slot({ source: 'server', model: 'claude-haiku-5-5' }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5' })] }) });
+  expect(screen.queryByRole('combobox', { name: 'Triage suggestions model' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: 'Reply drafts model' })).not.toBeInTheDocument();
+  expect(screen.getAllByText('Set by the server')).toHaveLength(2);
+  expect(screen.getByText('claude-sonnet-5-5')).toBeInTheDocument();
+});
+
+test('a feature on the server provider the operator switched off shows it greyed, says why on hover, and moves to another provider', async () => {
+  const { onSetSlot } = page({ settings: settings({ server_off: { label: 'Colliedesk AI' }, providers: [provider()],
+    slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: false, off_reason: 'server_provider_off' }), slot({ slot: 'draft' })] }) });
+  const triage = screen.getByRole('combobox', { name: 'Triage suggestions provider' });
+  expect(triage).toHaveClass('ai-select-off');
+  expect(within(triage).getByRole('option', { name: 'Colliedesk AI' })).toBeDisabled();
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  fireEvent.focus(triage);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent("Colliedesk AI, the server's default AI provider, is turned off.");
+  fireEvent.keyDown(triage, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+  // Nobody can pick it for another feature.
+  expect(within(screen.getByRole('combobox', { name: 'Reply drafts provider' })).queryByRole('option', { name: 'Colliedesk AI' })).not.toBeInTheDocument();
+  fireEvent.change(triage, { target: { value: providerID } });
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', { source: 'provider', provider_id: providerID, effort: 'low', enabled: true });
 });
 
 test('a feature on a server provider the operator removed says it stopped and why', () => {
@@ -304,7 +329,7 @@ test('a number out of range marks its own field', async () => {
 
 test('a paused day and a used-up allowance each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
-    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },
+    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null },
     allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
   expect(screen.queryByText(/drafts left/)).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
@@ -317,8 +342,8 @@ test('a paused day and a used-up allowance each say what happens and what to do'
 
 test('the usage tab is asked for when it opens and sums each feature', () => {
   const { onUsageMonth } = page({ usage: { month: '2026-10', allowance: null, rows: [
-    { feature: 'draft', billed_to: 'server', provider_label: 'Colliedesk AI', calls: 87, failed: 1, automatic: 0, input_tokens: 740_000, output_tokens: 98_000, cost_micro_usd: 2_150_000 },
-    { feature: 'check', billed_to: 'workspace_key', provider_label: 'Team key', calls: 6, failed: 2, automatic: 0, input_tokens: 400, output_tokens: 100, cost_micro_usd: null },
+    { feature: 'draft', billed_to: 'server', provider_label: 'Colliedesk AI', calls: 87, failed: 1, automatic: 0, input_tokens: 740_000, output_tokens: 98_000, cost_micro_usd: 2_150_000, provider_cost: null },
+    { feature: 'check', billed_to: 'workspace_key', provider_label: 'Team key', calls: 6, failed: 2, automatic: 0, input_tokens: 400, output_tokens: 100, cost_micro_usd: null, provider_cost: null },
   ] } });
   fireEvent.click(screen.getByRole('tab', { name: 'Usage' }));
   expect(onUsageMonth).toHaveBeenCalled();
@@ -337,7 +362,7 @@ test('agents do not see the usage tab', () => {
 
 test('a paused feature says so on its row', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })],
-    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null } }) });
+    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null } }) });
   expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
 });
 
@@ -351,37 +376,59 @@ test('the allowance says about how many reply drafts are left', () => {
   expect(screen.getByText('About 1,240 reply drafts left')).toBeInTheDocument();
 });
 
+const triageLevel = () => screen.getByRole('group', { name: 'Triage: default for channels' });
+const draftLevel = () => screen.getByRole('group', { name: 'Reply drafts: default for channels' });
+
 test('an admin turns on automatic triage only through a dialog that says what it does', async () => {
   const onSetSlot = vi.fn();
-  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'suggest' });
   page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })] }), onSetSlot });
-  const toggle = screen.getByRole('switch', { name: 'Apply suggestions automatically' });
-  expect(toggle).not.toBeChecked();
-  expect(screen.getByRole('checkbox', { name: 'Tags' })).toBeDisabled();
-  fireEvent.click(toggle);
+  expect(within(triageLevel()).getByRole('radio', { name: 'Suggest' })).toBeChecked();
+  expect(screen.queryByRole('checkbox', { name: 'Tags' })).not.toBeInTheDocument();
+  fireEvent.click(within(triageLevel()).getByRole('radio', { name: 'Auto' }));
   const dialog = await screen.findByRole('dialog', { name: 'Apply triage suggestions automatically?' });
   expect(within(dialog).getByText(/tags and priority as soon as they arrive/)).toBeInTheDocument();
   expect(onSetSlot).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
-  expect(onSetSlot).toHaveBeenCalledWith('triage', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: true });
+  expect(onSetSlot).toHaveBeenCalledWith('triage', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: true, default_level: 'auto' });
+});
+
+test('an admin lowers triage to on demand at once, without a dialog', () => {
+  const onSetSlot = vi.fn();
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'suggest' });
+  page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })] }), onSetSlot });
+  fireEvent.click(within(triageLevel()).getByRole('radio', { name: 'Off' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(onSetSlot).toHaveBeenCalledWith('triage', expect.objectContaining({ default_level: 'off' }));
+});
+
+test('the channels that set their own level are listed under the feature, each linking to its AI tab', () => {
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'suggest' });
+  const level = (change: Partial<AISettings['channels'][number]>) => ({ channel_id: '44444444-4444-4444-8444-444444444444', channel_name: 'Zalo HC Labs', scope: 'group',
+    slot: 'triage' as const, level: 'auto' as const, effective_level: 'auto' as const, off_reason: null, options: null, updated_by: null, updated_at: '2026-10-25T10:00:00Z', ...change });
+  page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })],
+    channels: [level({}), level({ scope: 'direct', level: 'off', effective_level: 'off' })] }) });
+  const chip = screen.getByRole('link', { name: 'Zalo HC Labs · Groups: Auto · One-to-one: Off' });
+  expect(chip).toHaveAttribute('href', '/settings/channels/44444444-4444-4444-8444-444444444444?tab=ai');
+  expect(screen.getByText('Every channel follows this default.')).toBeInTheDocument();
 });
 
 test('with automatic triage on, an admin picks what it applies, sees how it went, and turns it off at once', () => {
   const onSetSlot = vi.fn();
-  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, automatic: true, auto_parts: ['tags', 'priority'] });
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'auto', automatic: true, auto_parts: ['tags', 'priority'] });
   page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })], auto_triage: { applied: 212, undone: 9 } }), onSetSlot });
   expect(screen.getByText('AI applied 212, undone 9')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('checkbox', { name: 'Assignee' }));
   expect(onSetSlot).toHaveBeenCalledWith('triage', expect.objectContaining({ auto_parts: ['tags', 'priority', 'assignee'] }));
-  fireEvent.click(screen.getByRole('switch', { name: 'Apply suggestions automatically' }));
-  expect(onSetSlot).toHaveBeenLastCalledWith('triage', expect.objectContaining({ automatic: false }));
+  fireEvent.click(within(triageLevel()).getByRole('radio', { name: 'Suggest' }));
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', expect.objectContaining({ default_level: 'suggest' }));
 });
 
 test('automatic triage waits for the feature to be on, and says when a provider change turned it off', () => {
   const off = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5' });
   page({ settings: settings({ providers: [provider()], slots: [off, slot({ slot: 'draft' })] }) });
   expect(screen.getByText('Turn on Triage suggestions first.')).toBeInTheDocument();
-  expect(screen.getByRole('switch', { name: 'Apply suggestions automatically' })).toBeDisabled();
+  expect(triageLevel()).toBeDisabled();
   cleanup();
   const moved = { id: '33333333-3333-4333-8333-333333333333', kind: 'slot_changed' as const, actor_agent_id: null, actor_name: 'Mai Tran', via_token: false,
     provider_id: providerID, provider_label: 'Team key', slot: 'triage' as const, created_at: '2026-10-22T10:00:00Z',
@@ -396,20 +443,20 @@ test('an admin turns on automatic drafts only after a dialog estimates what they
   const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true });
   page({ settings: settings({ server, slots: [slot(), drafts], allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z', drafts_left: 140 },
     auto_draft_estimate: { customer_messages: 412, draft_cost_micro_usd: 64_000 } }), onSetSlot });
-  fireEvent.click(screen.getByRole('switch', { name: 'Write a draft when a customer writes' }));
+  fireEvent.click(within(draftLevel()).getByRole('radio', { name: 'Suggest' }));
   const dialog = await screen.findByRole('dialog', { name: 'Write a draft for every customer message?' });
   expect(within(dialog).getByText('412 customer messages')).toBeInTheDocument();
   expect(within(dialog).getByText('$26.37 a month · $0.06 a draft')).toBeInTheDocument();
   expect(within(dialog).getByText(/Automatic drafts may use half: \$4\.50, about 70 drafts/)).toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
-  expect(onSetSlot).toHaveBeenCalledWith('draft', expect.objectContaining({ source: 'server', enabled: true, automatic: true }));
+  expect(onSetSlot).toHaveBeenCalledWith('draft', expect.objectContaining({ source: 'server', enabled: true, default_level: 'suggest' }));
 });
 
 test('automatic drafts paused for the day say so and offer to raise the limit', () => {
-  const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true, automatic: true });
+  const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true, default_level: 'suggest', automatic: true });
   const onSetAutomatic = vi.fn().mockResolvedValue(undefined);
   page({ settings: settings({ server, slots: [slot(), drafts],
-    automatic: { per_day: 300, per_minute: 30, used_today: 100, paused_until: null, draft_per_day: 100, drafts_today: 100, drafts_paused_until: '2026-10-24T00:00:00Z', drafts_reserved_until: null } }),
+    automatic: { per_day: 300, per_minute: 30, used_today: 100, paused_until: null, draft_per_day: 100, drafts_today: 100, drafts_paused_until: '2026-10-24T00:00:00Z', drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null } }),
   onSetAutomatic });
   expect(screen.getByText('100 of 100 automatic drafts today.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Raise the limit' }));
@@ -452,4 +499,55 @@ test('the data notice says what a draft keeps, for how long, and that it is expo
   const notice = document.querySelector('.ai-sends');
   expect(notice).toHaveTextContent('Private notes are never sent. A draft keeps its text and your request for 90 days after it ended, and both are in the export.');
   expect(notice).not.toHaveTextContent('prompts are not stored');
+});
+
+
+test('a channel level equal to what it follows is not listed as differing, and a level the server lowered says why', () => {
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'suggest' });
+  const drafts = slot({ slot: 'draft', source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'off' });
+  const level = (change: Partial<AISettings['channels'][number]>) => ({ channel_id: '44444444-4444-4444-8444-444444444444', channel_name: 'Contact form', scope: '',
+    slot: 'draft' as const, level: 'off' as const, effective_level: 'off' as const, off_reason: null, options: null, updated_by: null, updated_at: '2026-10-25T10:00:00Z', ...change });
+  const lowered = { id: '33333333-3333-4333-8333-333333333334', kind: 'channel_level_changed' as const, actor_agent_id: null, actor_name: 'Mai Tran', via_token: false,
+    provider_id: null, provider_label: null, slot: 'intake' as const, created_at: '2026-10-25T10:00:00Z',
+    detail: { channel_name: 'Zalo HC Labs', scope: 'group', before: 'auto', after: 'suggest', reason: 'model_changed', options_changed: false } };
+  page({ settings: settings({ providers: [provider({ used_by: ['triage', 'draft'] })], slots: [on, drafts],
+    channels: [level({}), level({ slot: 'triage', level: 'suggest', effective_level: 'suggest' })], events: [lowered] }) });
+  expect(screen.queryByRole('link', { name: /Contact form/ })).toBeNull();
+  expect(screen.getAllByText('Every channel follows this default.')).toHaveLength(2);
+  fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+  expect(screen.getByText(/moved Chat intake to another model, so it went down to Suggest on Zalo HC Labs · Groups/)).toBeInTheDocument();
+});
+
+test('chat intake has a row only where a chat channel collects messages; its default is Off or Suggest, Auto is per channel', () => {
+  const intake = slot({ slot: 'intake', source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  const withIntake = settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake] });
+  page({ settings: withIntake });
+  expect(screen.queryByText('Chat intake')).not.toBeInTheDocument();
+  cleanup();
+  const handlers = page({ settings: withIntake, chatChannels: true });
+  const level = screen.getByRole('group', { name: 'Intake: default for channels' });
+  expect(within(level).getAllByRole('radio').map((radio) => radio.closest('label')?.textContent)).toEqual(['Off', 'Suggest']);
+  expect(screen.getByText(/Auto is set on each chat channel/)).toBeInTheDocument();
+  expect(screen.getByText('300 decisions a day, inside the automatic runs')).toBeInTheDocument();
+  fireEvent.click(within(level).getByRole('radio', { name: 'Suggest' }));
+  expect(handlers.onSetSlot).toHaveBeenCalledWith('intake', expect.objectContaining({ source: 'provider', provider_id: providerID, default_level: 'suggest' }));
+});
+
+test('an admin agrees that chat intake may send pictures or the customer\'s profile, and takes it back', async () => {
+  const intake = slot({ slot: 'intake', source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  const onSourceConsent = vi.fn().mockResolvedValue(undefined);
+  page({ chatChannels: true, onSourceConsent, settings: settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake],
+    source_consents: [{ source_class: 'images', consented_by: null, consented_at: '2026-10-25T08:00:00Z' }] }) });
+  const group = screen.getByRole('group', { name: 'What chat intake may send besides the messages' });
+  const images = within(group).getByRole('switch', { name: 'Images customers sent' });
+  const profile = within(group).getByRole('switch', { name: 'The customer’s profile' });
+  expect(images).toBeChecked();
+  expect(profile).not.toBeChecked();
+  fireEvent.click(profile);
+  expect(onSourceConsent).toHaveBeenCalledWith('contact_profile', true);
+  fireEvent.click(images);
+  expect(onSourceConsent).toHaveBeenCalledWith('images', false);
+  cleanup();
+  page({ isAdmin: false, chatChannels: true, onSourceConsent, settings: settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake] }) });
+  expect(within(screen.getByRole('group', { name: 'What chat intake may send besides the messages' })).getByRole('switch', { name: 'Images customers sent' })).toBeDisabled();
 });

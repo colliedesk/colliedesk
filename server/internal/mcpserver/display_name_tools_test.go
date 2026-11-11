@@ -29,11 +29,11 @@ func TestDisplayNameToolsSetClearAndStayInTheirWorkspace(t *testing.T) {
 	if message := e.fails(draft, "colliedesk_my_display_name_set", map[string]any{"display_name": "Line\nbreak"}); !strings.Contains(message, "80 characters") {
 		t.Errorf("a control character: %q", message)
 	}
-	requestedForTier(t, e, w.read, "colliedesk_my_display_name_set", map[string]any{"display_name": "Asked"})
+	refusedWithoutPermission(t, e, w.read, "colliedesk_my_display_name_set", map[string]any{"display_name": "Asked"})
 
 	admin := e.connect(w.adminTier, "")
 	renamed := e.ok(admin, "colliedesk_team_member_update", map[string]any{"member": "agent@name-tools.example.com", "display_name": "Sam Support"})
-	if at(t, renamed, "member", "display_name") != "Sam Support" || at(t, renamed, "member", "role") != "agent" {
+	if at(t, renamed, "member", "display_name") != "Sam Support" || at(t, renamed, "member", "roles", 0) != "Agent" {
 		t.Fatalf("admin rename = %v", renamed)
 	}
 	_, team := e.rest(http.MethodGet, "/api/v1/agents", nil, w.admin)

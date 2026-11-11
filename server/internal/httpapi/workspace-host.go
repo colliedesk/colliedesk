@@ -148,12 +148,12 @@ func appPageLoad(request *http.Request) bool {
 		return false
 	}
 	path := request.URL.Path
-	for _, prefix := range []string{"/api/", "/assets/", "/help/"} {
+	for _, prefix := range []string{"/api/", "/assets/", "/help/", "/.well-known/"} {
 		if strings.HasPrefix(path, prefix) {
 			return false
 		}
 	}
-	return path != "/mcp" && path != "/help" && path != "/sign-in" && path != "/r" && !strings.Contains(path[strings.LastIndex(path, "/")+1:], ".")
+	return path != "/mcp" && path != "/oauth/token" && path != "/oauth/register" && path != "/help" && path != "/sign-in" && path != "/r" && !strings.Contains(path[strings.LastIndex(path, "/")+1:], ".")
 }
 
 // localPath is path when it is a path of this site ("/settings?tab=x"), else "": never an address that

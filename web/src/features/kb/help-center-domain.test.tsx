@@ -8,13 +8,13 @@ afterEach(() => vi.unstubAllGlobals());
 
 const none = {
   hostname: null, status: 'none', records: [], created_at: null, verified_at: null, checked_at: null, check_error: null, certificate_requested_at: null,
-  failing_since: null, pending_reason: null, awaiting_payment: false,
+  failing_since: null, pending_reason: null, awaiting_payment: false, address_url: null, address_checked_at: null, address_error: null,
 };
 const records = [
   { type: 'CNAME', name: 'help.acme.example', value: 'hc-0123456789abcdef01234567.help.example.net', purpose: 'route_and_verify' },
   { type: 'TXT', name: '_help-center-verify.help.acme.example', value: '0123456789abcdef0123456789abcdef', purpose: 'verify' },
 ];
-const pending = { ...none, hostname: 'help.acme.example', status: 'pending', records, created_at: '2026-10-22T08:00:00Z' };
+const pending = { ...none, hostname: 'help.acme.example', status: 'pending', records, created_at: '2026-10-22T08:00:00Z', address_url: 'https://help.acme.example' };
 const active = { ...pending, status: 'active', verified_at: '2026-10-22T08:05:00Z', checked_at: '2026-10-22T08:05:00Z' };
 
 function open(canManage: boolean) {
@@ -164,4 +164,29 @@ test('the card says to verify by TXT first and then change the CNAME, before the
   open(true);
   await screen.findByText('The help center is served on help.acme.example.');
   expect(screen.queryByText(/Verify by TXT first/)).not.toBeInTheDocument();
+});
+
+test('under the status, one line says whether the address really opens with the help center, and what to do when not', async () => {
+  let state: object = { ...active, address_checked_at: '2026-10-22T08:05:01Z' };
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, state) });
+  open(true);
+  const works = await screen.findByText((_, element) => element?.tagName === 'P' && element.textContent === 'HTTPS works: https://help.acme.example opens this help center.');
+  expect(within(works).getByRole('link', { name: 'https://help.acme.example' })).toHaveAttribute('href', 'https://help.acme.example');
+  expect(screen.getByRole('status').nextElementSibling).toBe(works);
+  cleanup();
+  state = { ...active, address_checked_at: '2026-10-22T08:05:01Z', address_error: 'https://help.acme.example has no valid certificate yet, so browsers refuse it. One is requested on the first visit: check again in a minute.' };
+  open(true);
+  expect(await screen.findByText(/^https:\/\/help\.acme\.example has no valid certificate yet/)).toHaveClass('warning-note');
+  expect(screen.queryByText(/HTTPS works/)).not.toBeInTheDocument();
+  cleanup();
+  // A server without TLS: the address opens over http, and the line does not claim HTTPS.
+  state = { ...active, address_url: 'http://help.acme.example:8080', address_checked_at: '2026-10-22T08:05:01Z' };
+  open(true);
+  expect(await screen.findByText((_, element) => element?.tagName === 'P' && element.textContent === 'http://help.acme.example:8080 opens this help center.')).toBeInTheDocument();
+  cleanup();
+  // Not opened (during the trial, or before a check proved DNS): no line, and no failure.
+  state = { ...active, awaiting_payment: true };
+  open(true);
+  await screen.findByText(/is verified\. The help center serves there once you pay/);
+  expect(screen.queryByText(/opens this help center|certificate/)).not.toBeInTheDocument();
 });

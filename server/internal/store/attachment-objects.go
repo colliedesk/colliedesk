@@ -45,7 +45,7 @@ func lockObjects(ctx context.Context, tx pgx.Tx, keys []string) error {
 	return nil
 }
 
-// DiscardObject deletes the object when no attachment, cached mail image, knowledge base media (its
+// DiscardObject deletes the object when no attachment (its bytes or thumbnail), reply draft file, cached mail image, knowledge base media (its
 // bytes, thumbnail or poster) or channel event still waiting to become a message (held, collected,
 // failed) of the workspace references it. Objects are content-addressed, so one object can back several rows. The
 // reference check and the delete happen under the object's lock, so a request that stored the same
@@ -63,7 +63,9 @@ func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Sto
 	// The proxy's image cache and knowledge base images point at objects too; a file shared between them
 	// stays while any of them needs it.
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND storage_key=$2)
+		OR EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND thumb_storage_key=$2)
 		OR EXISTS(SELECT 1 FROM mail_image_cache WHERE workspace_id=$1 AND storage_key=$2)
+		OR EXISTS(SELECT 1 FROM ai_draft_files WHERE workspace_id=$1 AND storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND thumb_storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND poster_storage_key=$2)

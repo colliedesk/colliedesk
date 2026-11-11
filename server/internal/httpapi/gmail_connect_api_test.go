@@ -515,18 +515,18 @@ func disconnectTogether(t *testing.T, round int) {
 	}
 }
 
-func TestAnAgentTokenAsksAPersonToConnectOrDisconnectGmail(t *testing.T) {
+// A token holding channels:manage_credentials gets the consent address at once, for its person to open
+// in a browser signed in to Colliedesk; a token without it is refused.
+func TestAnAgentTokenGetsTheConsentAddressForItsPersonToGmail(t *testing.T) {
 	desk := newGmailDesk(t, "Token Gmail")
+	send := issueToken(t, desk.api, desk.admin, "Sender", "send").Token
+	refused(t, desk.api, http.MethodPost, "/api/v1/channels/email/gmail", nil, send, "channels:manage_credentials")
+	refused(t, desk.api, http.MethodDelete, "/api/v1/channels/email/gmail", nil, send, "channels:manage_credentials")
 	admin := issueToken(t, desk.api, desk.admin, "Ops agent", "admin").Token
-	asked := accepted(t, desk.api, http.MethodPost, "/api/v1/channels/email/gmail", nil, admin)
-	approved := approve(t, desk.api, desk.admin, asked.RequestID, nil)
-	if approved.Code != http.StatusOK || !strings.Contains(approved.Body.String(), "accounts") && !strings.Contains(approved.Body.String(), "/o/oauth2/v2/auth") {
-		t.Fatalf("approver gets the consent address: %d %s", approved.Code, approved.Body.String())
+	started := request(t, desk.api, http.MethodPost, "/api/v1/channels/email/gmail", nil, admin, nil)
+	if started.Code >= 300 || !strings.Contains(started.Body.String(), "/o/oauth2/v2/auth") {
+		t.Fatalf("an Admin token gets the consent address: %d %s", started.Code, started.Body.String())
 	}
-	if stored := getRequest(t, desk.api, admin, asked.RequestID); strings.Contains(string(stored.Result), "oauth2") {
-		t.Fatalf("the token can read the consent address: %s", stored.Result)
-	}
-	accepted(t, desk.api, http.MethodDelete, "/api/v1/channels/email/gmail", nil, admin)
 }
 
 // Gmail sends as the channel: the account must be the channel's support address mailbox, and one

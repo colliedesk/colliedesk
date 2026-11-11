@@ -1,0 +1,12 @@
+/* A conversation to pick, as radio rows that read like the inbox's (Review, moving messages). */
+/* max-content rows: Chromium squeezes a scrolling fieldset's grid rows below their content, and rows overlap. */
+.candidate-list { display: grid; grid-auto-rows: max-content; gap: 2px; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px; max-height: 18rem; overflow-y: auto; }
+.candidate-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; align-content: center; gap: 2px var(--space-2); min-height: var(--touch, 44px); border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2); cursor: pointer; }
+.candidate-row:hover { background: color-mix(in srgb, var(--text-1) 5%, transparent); }
+.candidate-row:has(input:checked) { background: var(--accent-soft); }
+/* The radio sits on the subject's first line, however many lines the subject wraps to. */
+.candidate-check { grid-row: span 2; display: flex; align-items: center; block-size: 1lh; }
+.candidate-check input { margin: 0; }
+.candidate-subject { font-weight: 500; overflow-wrap: anywhere; }
+.candidate-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); color: var(--text-3); font-size: var(--fs-small); }

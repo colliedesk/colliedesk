@@ -5,6 +5,7 @@ import { MediaRoute } from './media-page';
 import type { MediaSearch, MediaView } from './media-page';
 import { UploadQueue } from './media-uploads';
 import type { PartSender } from './media-api';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { json, me, refusal, serve } from './kb.test.fixture';
 
 const navigate = vi.hoisted(() => vi.fn());
@@ -53,6 +54,37 @@ test('the library shows images and videos, a video with its length, and leads to
   fireEvent.click(within(grid).getByRole('button', { name: /Product tour/ }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { item: id(2) }, replace: false, resetScroll: false });
   expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('usage') === 'unused' && call.search.get('sort') === 'largest')).toBe(true);
+});
+
+test('the library sorts newest first, by name or largest first; an old address with sort=oldest still lists oldest first and shows it', async () => {
+  const calls = serve(base);
+  const show = open();
+  await screen.findByRole('list', { name: 'Library items' });
+  const sort = screen.getByRole('combobox', { name: 'Sort' });
+  const names = () => within(screen.getByRole('combobox', { name: 'Sort' })).getAllByRole('option').map((option) => option.textContent);
+  // Oldest first is not offered: nobody browses a media library from its oldest file.
+  expect(names()).toEqual(['Newest first', 'Name', 'Largest']);
+  expect(sort).toHaveValue('newest');
+  fireEvent.change(sort, { target: { value: 'largest' } });
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { sort: 'largest' }, replace: false });
+  show({ sort: 'oldest' });
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Sort' })).toHaveValue('oldest'));
+  expect(names()).toEqual(['Newest first', 'Oldest first', 'Name', 'Largest']);
+  await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('sort') === 'oldest' && !call.search.has('usage'))).toBe(true));
+});
+
+test('on a phone, Use and Sort wait under Filter: the row has no room for both', async () => {
+  const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
+  vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
+  serve(base);
+  open();
+  await screen.findByRole('list', { name: 'Library items' });
+  expect(screen.queryByRole('combobox', { name: 'Sort' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /^Use and sort/ }));
+  const dialog = screen.getByRole('dialog', { name: 'Use and sort' });
+  expect(within(within(dialog).getByRole('combobox', { name: 'Sort' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Newest first', 'Name', 'Largest']);
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'Use' }), { target: { value: 'unused' } });
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { usage: 'unused' }, replace: false });
 });
 
 test('the panel saves a name and alt text with the version it read, and a used item stays out of the trash', async () => {
@@ -190,7 +222,7 @@ test('the trash gives no purge date for an item the purge keeps, and Delete fore
 });
 
 test('an agent cannot delete forever', async () => {
-  const agent = { ...me, agent: { ...me.agent, role: 'agent' } };
+  const agent = { ...me, agent: { ...me.agent, roles: rolesOf('agent') }, permissions: permissionsOf('agent') };
   serve({ ...base, 'GET /api/v1/auth/me': () => json(200, agent), 'GET /api/v1/kb/media/trash': () => json(200, { items: [item(6, { deleted_at: '2026-10-10T00:00:00Z' })], next_cursor: null }) });
   open('trash');
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Screenshot 6' }));
@@ -314,7 +346,7 @@ test('uploads in progress that this page is not sending are listed, go on with t
 });
 
 test('an agent sees uploads in progress but cancels only their own', async () => {
-  const agent = { ...me, agent: { ...me.agent, role: 'agent' } };
+  const agent = { ...me, agent: { ...me.agent, roles: rolesOf('agent') }, permissions: permissionsOf('agent') };
   const open_ = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null,
     created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
   serve({ ...base, 'GET /api/v1/auth/me': () => json(200, agent), 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }) });

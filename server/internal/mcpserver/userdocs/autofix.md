@@ -118,7 +118,7 @@ back to the conversation, where the fix shows **Sending** and then **Sent**. In 
 If a check fails, nothing is created on GitHub and the fix says why (see below). If you close GitHub
 without confirming, the fix ends by itself after 15 to 25 minutes (*authorization abandoned*). After two
 minutes the fix offers **Retry**, which ends it and sends it again with the GitHub account of whoever
-presses it (an approver of an AI agent's request cannot reopen the confirmation), or **Cancel**. One fix of a conversation is in progress at a time.
+presses it, or **Cancel**. One fix of a conversation is in progress at a time.
 
 **Copilot** is assigned from Colliedesk when GitHub allows it. When GitHub refuses the assignment, the
 issue is still created and the fix says **Assign to Copilot on GitHub**: assign it there and the fix moves
@@ -157,28 +157,27 @@ Why a fix ended:
 
 **Fixes** in the navigation (shown once a repository is connected) lists every fix in three groups:
 **Needs a person** (failed, merged but not released, or no word from the agent), **Running** and **Done**.
-Filter by repository and agent. The badge counts the fixes that need a person.
-
-## Requests from AI agents
-
-An AI agent's token cannot send a fix, install the app, allow notes or turn an agent on by itself: it files
-a request. The request says in words what approving starts. Approving a fix that goes through GitHub takes
-you to GitHub and you become the sender. Turning an agent on is approved in the request itself, after you
-tick the consent; if the consent text changed since the agent asked, reject it and turn the agent on in
-Settings → Autofix.
-
+Filter by repository once two are connected, and by agent once two are turned on; a filter set in the address
+stays shown so you can clear it. The badge counts the fixes that need a person.
 
 ## AI agents
 
-An agent token can read the settings (`autofix_settings:read`, `read` tier) and, at the `admin` tier
-(`autofix_settings:update`), connect and disconnect repositories, set their coding agent and stop notes
-going with fixes. Installing the App, disconnecting GitHub and letting notes go with fixes always wait
-for a person's approval: the person who approves installs the App as themselves. A `read` token previews a
-fix (`autofix:read`); a `draft` token cancels a fix, marks or takes back its release and links or
-unlinks its pull request (`autofix:update`). Sending and retrying a fix always wait for a person's
-approval (`autofix:send`): the person who approves confirms on GitHub, and the issue is created with
-their GitHub account; the agent never sees the confirmation address. See the tools in
-[Connect an AI agent (MCP)](mcp.md).
+An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once:
+
+1. `autofix_settings:read` reads the settings; `autofix_settings:update` connects and disconnects
+   repositories, sets their coding agent, lets notes go with fixes or stops them, turns a coding agent
+   on or off (`colliedesk_coding_agent_enable` carries the consent to what it receives), and starts
+   installing or uninstalling the GitHub App. Installing happens on GitHub: the agent gets the address,
+   and the person behind the token opens it and installs the App as themselves.
+2. `autofix:read` previews a fix; `autofix:update` cancels a fix, marks or takes back its release and
+   links or unlinks its pull request.
+3. `autofix:send` sends and retries a fix (`colliedesk_fix_send`, `colliedesk_fix_retry`). A fix that
+   goes through GitHub still needs a GitHub confirmation: the agent gets an address that only the
+   person behind the token can finish, signed in to Colliedesk, and the issue is created with their
+   GitHub account.
+
+A token created before roles cannot send fixes, let notes go with them or change these settings;
+create a new token for it. See the tools in [Connect an AI agent (MCP)](mcp.md).
 
 ## Cursor
 
@@ -186,7 +185,7 @@ Cursor takes a fix through its API with the workspace's own Cursor key. It needs
 App on the repository like the other agents: Colliedesk checks the repository is private right before
 each fix leaves, and follows the pull request Cursor opens to its merge.
 
-**Set it up** (Settings → Autofix → Cursor, admins only):
+**Set it up** (Settings → Autofix → Cursor; needs `autofix_settings:update`, and `autofix_settings:manage_credentials` for the key):
 
 1. Create a Cursor API key. A [service account key](https://cursor.com/docs/account/enterprise/service-accounts)
    is advised: a user key acts with all of its owner's rights on every repository they reach.
@@ -199,9 +198,8 @@ each fix leaves, and follows the pull request Cursor opens to its merge.
    (Cursor lists repositories once a minute, and never for a service account key: then the first fix
    shows it).
 
-An agent token sets the key only with the admin tier (`autofix_settings:manage_credentials`): a lower
-tier is refused, never filed as a request, because a request keeps what was sent. Turning Cursor on
-always waits for a person to approve.
+An agent token sets the key only with `autofix_settings:manage_credentials`; turning Cursor on needs
+`autofix_settings:update`.
 
 **What happens when you send a fix to Cursor:** it shows **Sending** until Colliedesk created the Cursor
 agent (seconds), then **Sent** with a link to the agent on Cursor, **Agent running** while it works and

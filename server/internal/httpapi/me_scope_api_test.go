@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func TestMeNamesTheTierOfAnAgentTokenAndIsNullForAPerson(t *testing.T) {
+func TestMeSaysWhatAnAgentTokenWasGivenAndIsNullForAPerson(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Me Desk", "admin@me.example.com")
 
-	scopeOf := func(token string) any {
+	tokenOf := func(token string) (map[string]any, []any) {
 		t.Helper()
 		response := request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil)
 		if response.Code != http.StatusOK {
@@ -17,20 +17,27 @@ func TestMeNamesTheTierOfAnAgentTokenAndIsNullForAPerson(t *testing.T) {
 		}
 		var me map[string]any
 		decode(t, response, &me)
-		value, present := me["scope"]
+		value, present := me["token"]
 		if !present {
-			t.Fatalf("GET /auth/me has no scope field: %s", response.Body.String())
+			t.Fatalf("GET /auth/me has no token field: %s", response.Body.String())
 		}
-		return value
+		grant, _ := value.(map[string]any)
+		permissions, _ := me["permissions"].([]any)
+		return grant, permissions
 	}
 
-	if got := scopeOf(admin); got != nil {
-		t.Errorf("person session scope=%v, want null", got)
+	if grant, permissions := tokenOf(admin); grant != nil || len(permissions) == 0 {
+		t.Errorf("a person's session: token=%v permissions=%v, want null and the person's permissions", grant, permissions)
 	}
-	for _, tier := range []string{"read", "draft", "send"} {
+	for _, tier := range []string{"read", "send", "admin"} {
 		token := issueToken(t, api, admin, "me "+tier, tier).Token
-		if got := scopeOf(token); got != tier {
-			t.Errorf("%s token scope=%v, want %q", tier, got, tier)
+		grant, permissions := tokenOf(token)
+		want := "custom"
+		if tier == "admin" {
+			want = "role"
+		}
+		if grant == nil || grant["kind"] != want || len(permissions) == 0 {
+			t.Errorf("%s token: token=%v permissions=%d, want kind %s and its permissions", tier, grant, len(permissions), want)
 		}
 	}
 }

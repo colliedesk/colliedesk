@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { InvalidRequestError, PlanLimitError, UnauthorizedError, WorkspaceLockedError } from '../../api/client';
-import { AgentTokensSection } from './agent-tokens-section';
+import { AgentTokensSection, followableRoles } from './agent-tokens-section';
+import { permissionsOf, roleOf, rolesOf } from '../../test-roles';
 
 const origin = 'https://acme.example.com';
 const token = 'cdk_agent_7Qm2vK9xT4pLw8RzN1cY5bH3sJ6dF0aE';
-const created = (scope: string) => ({ token, session: { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555',
-  agent_email: 'sam@example.com', label: 'Claude Code', scope, current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z',
+const created = (_kind: string) => ({ token, session: { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555',
+  agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Claude Code', token: null, role: null, permissions: [], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z',
   expires_at: '2026-11-22T00:00:00Z', revoked_at: null } } as const);
 
 const writeText = vi.fn();
@@ -15,22 +16,35 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 });
 
-function show(canCreateAdmin = true, onCreate = vi.fn().mockResolvedValue(created('draft'))) {
-  render(<AgentTokensSection canCreateAdmin={canCreateAdmin} origin={origin} onCreate={onCreate} />);
+const editor = { id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null };
+// admin: the person holds Admin and Editor; otherwise Agent and Editor.
+function show(admin = true, onCreate = vi.fn().mockResolvedValue(created('draft'))) {
+  const roles = [...rolesOf(admin ? 'admin' : 'agent'), editor];
+  const rolePermissions = new Map<string, readonly string[]>([[roles[0].id, permissionsOf(admin ? 'admin' : 'agent')], [editor.id, ['kb_articles:read', 'kb_articles:update']]]);
+  render(<AgentTokensSection roles={roles} rolePermissions={rolePermissions} held={permissionsOf(admin ? 'admin' : 'agent')} origin={origin} onCreate={onCreate} />);
   return onCreate;
 }
 
 const nameField = () => screen.getByRole('textbox', { name: 'Name' });
 
-test('a token is created with its name and tier, shown once, copied, then hidden for good', async () => {
-  const onCreate = show();
-  expect(screen.getByRole('radio', { name: 'Draft' })).toBeChecked();
-  expect(screen.getByText(/Recommended/)).toBeInTheDocument();
-  fireEvent.change(nameField(), { target: { value: '  Claude Code  ' } });
-  fireEvent.click(screen.getByRole('radio', { name: 'Send' }));
-  expect(screen.getByText('Also sends replies to customers on its own.')).toBeInTheDocument();
+test('a person with one role sees it named, not a list with one choice, and the token follows it', () => {
+  const onCreate = vi.fn().mockResolvedValue(created('draft'));
+  render(<AgentTokensSection roles={rolesOf('agent')} rolePermissions={new Map([[rolesOf('agent')[0].id, permissionsOf('agent')]])} held={permissionsOf('agent')} origin={origin} onCreate={onCreate} />);
+  expect(screen.queryByRole('combobox', { name: 'Role' })).not.toBeInTheDocument();
+  expect(screen.getByText('Agent', { selector: 'strong' })).toBeInTheDocument();
+  fireEvent.change(nameField(), { target: { value: 'Claude' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
-  expect(onCreate).toHaveBeenCalledWith('Claude Code', { scope: 'send' });
+  expect(onCreate).toHaveBeenCalledWith('Claude', { role_id: rolesOf('agent')[0].id });
+});
+
+test('a token follows the role with the fewest permissions by default, is shown once, copied, then hidden for good', async () => {
+  const onCreate = show();
+  expect(screen.getByRole('radio', { name: 'Follow a role' })).toBeChecked();
+  expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue(editor.id);
+  expect(screen.getByText(/2 permissions/)).toBeInTheDocument();
+  fireEvent.change(nameField(), { target: { value: '  Claude Code  ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+  expect(onCreate).toHaveBeenCalledWith('Claude Code', { role_id: editor.id });
 
   const field = await screen.findByRole('textbox', { name: 'Your token: Claude Code' });
   expect(field).toHaveValue(token);
@@ -87,10 +101,10 @@ test.each([
 });
 
 test('a refusal shows the server reason', async () => {
-  show(true, vi.fn().mockRejectedValue(new InvalidRequestError('Only a workspace admin can create an admin token. Choose read, draft or send.')));
+  show(true, vi.fn().mockRejectedValue(new InvalidRequestError('You can only give permissions you hold yourself; you do not hold kb_media:purge.')));
   fireEvent.change(nameField(), { target: { value: 'Ops' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Only a workspace admin can create an admin token.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('permissions you hold yourself');
 });
 
 test('the button cannot create two tokens from one press', async () => {
@@ -105,17 +119,10 @@ test('the button cannot create two tokens from one press', async () => {
   await act(async () => finish(created('draft')));
 });
 
-test('an agent sees Admin but cannot pick it, and is told why', () => {
-  show(false);
-  expect(screen.getByRole('radio', { name: 'Admin' })).toBeDisabled();
-  expect(screen.getByText('Only an admin can create an Admin token.')).toBeInTheDocument();
-  expect(screen.getByRole('radio', { name: 'Draft' })).toBeChecked();
-});
-
-test('an admin may pick Admin', () => {
+test('a role that reaches outside or changes the team is pointed out, with a way to leave some out', () => {
   show(true);
-  expect(screen.getByRole('radio', { name: 'Admin' })).toBeEnabled();
-  expect(screen.queryByText('Only an admin can create an Admin token.')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Role' }), { target: { value: rolesOf('admin')[0].id } });
+  expect(screen.getByText(/Pick permissions to leave some out/)).toBeInTheDocument();
 });
 
 test('each agent app has its steps with this address, a copy button, a guide and a way out', async () => {
@@ -123,14 +130,16 @@ test('each agent app has its steps with this address, a copy button, a guide and
   const hosts = screen.getByRole('radiogroup', { name: 'Agent app' });
   expect(within(hosts).getAllByRole('radio').map((radio) => radio.parentElement?.textContent)).toEqual(['Claude Code', 'Codex', 'Cursor', 'VS Code', 'Claude Desktop']);
   expect(screen.getByRole('radio', { name: 'Claude Code' })).toBeChecked();
+  // A self-hosted server: Claude Code adds this server's address and signs in with OAuth, no token.
   let panel = screen.getByRole('group', { name: 'Claude Code' });
-  expect(within(panel).getByText(/claude plugin install colliedesk/)).toHaveTextContent(`--config url=${origin}/mcp`);
+  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent(`claude mcp add --transport http colliedesk ${origin}/mcp`);
+  expect(within(panel).getByRole('group', { name: 'Then sign in' })).toHaveTextContent('claude mcp login colliedesk');
+  expect(panel).toHaveTextContent('needs no token');
+  expect(panel).not.toHaveTextContent('Authorization');
   expect(within(panel).getByRole('link', { name: 'Full guide' })).toHaveAttribute('href', 'https://colliedesk.com/docs/connect-claude-code');
-  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk');
+  expect(panel).toHaveTextContent('claude mcp remove colliedesk, then Disconnect it in Connected AI apps above.');
   expect(document.body.innerHTML).not.toContain('desk.example.com');
   expect(screen.getByRole('heading', { level: 3, name: 'Connect your agent' })).toBeInTheDocument();
-  // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
-  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent('claude plugin install colliedesk');
 
   fireEvent.click(screen.getByRole('radio', { name: 'Codex' }));
   expect(screen.queryByRole('group', { name: 'Claude Code' })).not.toBeInTheDocument();
@@ -178,34 +187,67 @@ test('Add to Cursor works only while the token is shown, and carries it to Curso
   expect(screen.queryByText(/Create a token above first/)).not.toBeInTheDocument();
 });
 
-test('a tier ticks its permissions; changing one makes the token custom with exactly what is ticked', async () => {
-  const onCreate = show();
-  fireEvent.change(nameField(), { target: { value: 'KB writer' } });
-  fireEvent.click(screen.getByRole('button', { name: /Show its \d+ permissions/ }));
-  const articles = screen.getByRole('group', { name: 'Knowledge base articles' });
-  // Draft holds no knowledge base writing; Send does.
-  expect(within(articles).getByRole('checkbox', { name: /Edit/ })).not.toBeChecked();
-  fireEvent.click(screen.getByRole('radio', { name: 'Send' }));
-  expect(within(articles).getByRole('checkbox', { name: /Publish/ })).toBeChecked();
-  expect(within(articles).getByRole('checkbox', { name: /Publish/ })).toHaveAccessibleDescription('Reaches outside the workspace');
-  fireEvent.click(screen.getByRole('radio', { name: 'Read' }));
-  fireEvent.click(within(articles).getByRole('checkbox', { name: /Edit/ }));
-  expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked();
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create token' })); });
-  const [, choice] = onCreate.mock.calls[0] as [string, { permissions: string[] }];
-  expect(choice.permissions).toContain('kb_articles:update');
-  expect(choice.permissions).toContain('conversations:read');
-  expect(choice.permissions).not.toContain('messages:note');
+test('picking permissions starts from the chosen role and sends exactly what is ticked', async () => {
+  const onCreate = show(false);
+  fireEvent.change(nameField(), { target: { value: 'Writer' } });
+  fireEvent.click(screen.getByRole('radio', { name: 'Pick permissions (fixed)' }));
+  const update = screen.getByRole('checkbox', { name: 'Knowledge base articles: Edit' });
+  expect(update).toBeChecked();
+  fireEvent.click(update);
+  fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Writer', { permissions: ['kb_articles:read'] }));
 });
 
-test('a custom token needs one permission, and an agent cannot give an admin-only one', async () => {
+test('a permission the person does not hold is listed, locked, and cannot be ticked', () => {
+  show(false);
+  fireEvent.click(screen.getByRole('radio', { name: 'Pick permissions (fixed)' }));
+  const purge = screen.getByRole('checkbox', { name: 'Knowledge base media: Delete for good' });
+  expect(purge).toHaveAttribute('aria-disabled', 'true');
+  fireEvent.click(purge);
+  expect(purge).not.toBeChecked();
+});
+
+test('a fixed token needs one permission', () => {
   const onCreate = show(false);
-  fireEvent.change(nameField(), { target: { value: 'Nothing' } });
-  fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
-  const media = screen.getByRole('group', { name: 'Knowledge base media' });
-  expect(within(media).getByRole('checkbox', { name: /Delete for good/ })).toBeDisabled();
-  for (const box of screen.getAllByRole('checkbox')) if ((box as HTMLInputElement).checked) fireEvent.click(box);
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create token' })); });
+  fireEvent.change(nameField(), { target: { value: 'Empty' } });
+  fireEvent.click(screen.getByRole('radio', { name: 'Pick permissions (fixed)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
   expect(onCreate).not.toHaveBeenCalled();
   expect(screen.getByRole('alert')).toHaveTextContent('Tick at least one permission');
+});
+
+// The role a token follows by default is the one with the fewest permissions among the person's roles now,
+// also when those roles arrive or change after the form opened.
+test('the default role follows the person\'s roles as they change', () => {
+  const admin = rolesOf('admin')[0];
+  const permissions = new Map<string, readonly string[]>([[admin.id, permissionsOf('admin')], [editor.id, ['kb_articles:read', 'kb_articles:update']]]);
+  const { rerender } = render(<AgentTokensSection roles={[admin]} rolePermissions={permissions} held={permissionsOf('admin')} origin={origin} onCreate={vi.fn()} />);
+  expect(screen.getByText('Admin', { selector: 'strong' })).toBeInTheDocument();
+  rerender(<AgentTokensSection roles={[admin, editor]} rolePermissions={permissions} held={permissionsOf('admin')} origin={origin} onCreate={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue(editor.id);
+});
+
+test('a token may follow any role whose permissions the person all holds: every role for an admin', () => {
+  const admin = roleOf(rolesOf('admin')[0], permissionsOf('admin'));
+  const agent = roleOf(rolesOf('agent')[0], permissionsOf('agent'));
+  const exporter = roleOf({ id: '88888888-8888-4888-8888-888888888888', name: 'Exporter', system: null }, ['conversations:read', 'workspace:export']);
+  const gone = { ...roleOf({ id: '77777777-7777-4777-8777-777777777777', name: 'Old', system: null }, ['tags:read']), deleted_at: '2026-10-01T00:00:00Z' };
+  const all = [admin, agent, exporter, gone];
+  expect(followableRoles(rolesOf('admin'), all, permissionsOf('admin')).map((role) => role.name)).toEqual(['Admin', 'Agent', 'Exporter']);
+  expect(followableRoles(rolesOf('agent'), all, permissionsOf('agent')).map((role) => role.name)).toEqual(['Agent']);
+  // Without the workspace's roles (no team:read), only the person's own.
+  expect(followableRoles(rolesOf('agent'), undefined, permissionsOf('agent'))).toEqual(rolesOf('agent'));
+});
+
+test('on Colliedesk Cloud, Claude Code installs the plugin and signs in with OAuth, with no token', () => {
+  const roles = rolesOf('agent');
+  render(<AgentTokensSection roles={roles} rolePermissions={new Map([[roles[0].id, permissionsOf('agent')]])} held={permissionsOf('agent')}
+    origin="https://acme.colliedesk.com" mcpAddress="https://app.colliedesk.com/mcp" onCreate={vi.fn()} />);
+  const panel = screen.getByRole('group', { name: 'Claude Code' });
+  // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
+  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent(/^claude plugin install colliedesk --marketplace colliedesk\/colliedesk$/);
+  expect(within(panel).getByRole('group', { name: 'Then sign in' })).toHaveTextContent('claude mcp login plugin:colliedesk:colliedesk');
+  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk, then Disconnect it in Connected AI apps above.');
+  expect(panel).not.toHaveTextContent('acme.colliedesk.com');
 });

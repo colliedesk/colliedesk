@@ -8,10 +8,11 @@ import type { FixGroupRows } from './fixes-page';
 const rows = (items: Fix[], more = false): FixGroupRows => ({ items, load: 'ready', more, loadingMore: false, onMore: vi.fn() });
 const link = (id: string, label: string) => <a href={`/conversations/${id}`}>{label}</a>;
 const named = (label: string) => <a href="/x">{label}</a>;
+const apiRepo = repoOf({ id: '33333333-3333-4333-8333-333333333333', github_repo_id: 902, full_name: 'northwind/api' });
 
 function show(groups: Record<FixGroup, FixGroupRows>, props: Partial<Parameters<typeof FixesPage>[0]> = {}) {
   const onFilter = vi.fn();
-  render(<FixesPage groups={groups} counts={{ needs_person: 2, running: 1 }} repos={[repoOf()]} onFilter={onFilter} timezone="UTC" now={now} onRetry={vi.fn()}
+  render(<FixesPage groups={groups} counts={{ needs_person: 2, running: 1 }} repos={[repoOf()]} agents={['claude_issue']} onFilter={onFilter} timezone="UTC" now={now} onRetry={vi.fn()}
     conversationLink={link} settingsLink={named} inboxLink={named} {...props} />);
   return { onFilter };
 }
@@ -36,16 +37,31 @@ describe('FixesPage', () => {
   });
 
   it('filters by repository and agent on the server', () => {
-    const { onFilter } = show({ needs_person: rows([fixOf()]), running: rows([]), done: rows([]) });
+    const { onFilter } = show({ needs_person: rows([fixOf()]), running: rows([]), done: rows([]) }, { repos: [repoOf(), apiRepo], agents: ['claude_issue', 'cursor_api'] });
+    expect(within(screen.getByLabelText('Agent')).getAllByRole('option').map((option) => option.textContent)).toEqual(['All agents', 'Claude', 'Cursor']);
     fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'cursor_api' } });
     expect(onFilter).toHaveBeenCalledWith(undefined, 'cursor_api');
     fireEvent.change(screen.getByLabelText('Repository'), { target: { value: repoOf().id } });
     expect(onFilter).toHaveBeenCalledWith(repoOf().id, undefined);
   });
 
+  it('offers a repository or agent filter only when there are two to choose from', () => {
+    show({ needs_person: rows([fixOf()]), running: rows([]), done: rows([]) }, { repos: [repoOf()], agents: ['claude_issue'] });
+    expect(screen.queryByLabelText('Repository')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Agent')).not.toBeInTheDocument();
+  });
+
+  it('keeps a filter from the address on screen, so it can be cleared, even with one choice', () => {
+    const { onFilter } = show({ needs_person: rows([]), running: rows([]), done: rows([]) }, { repos: [repoOf()], agents: ['claude_issue'], connector: 'cursor_api', repoId: repoOf().id });
+    expect(screen.getByLabelText('Agent')).toHaveValue('cursor_api');
+    expect(screen.getByLabelText('Repository')).toHaveValue(repoOf().id);
+    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: '' } });
+    expect(onFilter).toHaveBeenCalledWith(repoOf().id, undefined);
+  });
+
   it('says what to do when nothing was sent, and when a filter finds nothing', () => {
     const empty = { needs_person: rows([]), running: rows([]), done: rows([]) };
-    const first = render(<FixesPage groups={empty} repos={[repoOf()]} onFilter={vi.fn()} timezone="UTC" now={now} onRetry={vi.fn()} conversationLink={link} settingsLink={named} inboxLink={named} />);
+    const first = render(<FixesPage groups={empty} repos={[repoOf()]} agents={['claude_issue']} onFilter={vi.fn()} timezone="UTC" now={now} onRetry={vi.fn()} conversationLink={link} settingsLink={named} inboxLink={named} />);
     expect(screen.getByText('No fix sent yet')).toBeInTheDocument();
     first.unmount();
     const { onFilter } = show(empty, { connector: 'cursor_api', repoId: repoOf().id });
@@ -63,7 +79,7 @@ describe('FixesPage', () => {
 
   it('says when the list did not load', () => {
     const onRetry = vi.fn();
-    render(<FixesPage groups={{ needs_person: { ...rows([]), load: 'error' }, running: rows([]), done: rows([]) }} repos={[]} onFilter={vi.fn()} timezone="UTC" now={now}
+    render(<FixesPage groups={{ needs_person: { ...rows([]), load: 'error' }, running: rows([]), done: rows([]) }} repos={[]} agents={[]} onFilter={vi.fn()} timezone="UTC" now={now}
       onRetry={onRetry} conversationLink={link} settingsLink={named} inboxLink={named} />);
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalled();

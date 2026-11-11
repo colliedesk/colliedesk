@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
@@ -34,6 +35,10 @@ const views = vi.hoisted(() => ({
 }));
 vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
+// The drafts of the open conversation; a test sets what the server holds.
+const drafts = vi.hoisted(() => ({ list: vi.fn(async (_conversation: string, _before?: string): Promise<unknown> => ({ items: [], next_before: null })) }));
+vi.mock('./ai-draft-api', async (original) => ({ ...(await original<typeof import('./ai-draft-api')>()),
+  aiDraftApi: { list: drafts.list, get: vi.fn(), create: vi.fn(), discard: vi.fn(), restore: vi.fn() } }));
 beforeEach(() => testRouter.reset());
 
 const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
@@ -56,7 +61,7 @@ test('a ticket opened by its address asks for its messages and time entries at o
   const id = '11111111-1111-4111-8111-111111111111';
   testRouter.params = { conversationId: id };
   try {
-    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
     api.conversations.mockReset();
     api.conversations.mockReturnValue(new Promise(() => {})); // the list never answers in this test
     api.conversation.mockReturnValue(new Promise(() => {})); // nor does the detail
@@ -70,6 +75,8 @@ test('a ticket opened by its address asks for its messages and time entries at o
     render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
     await waitFor(() => expect(api.messages).toHaveBeenCalledWith(id));
     expect(api.timeEntries).toHaveBeenCalledWith(id);
+    // The side lists wait for the session (they ask only for what its roles may read); they still go out.
+    await waitFor(() => { for (const side of [api.agents, api.tags, api.savedReplies, api.emailChannel]) expect(side).toHaveBeenCalled(); });
     expect(api.conversations).toHaveBeenCalled();
     expect(api.conversation).toHaveBeenCalledWith(id);
     // What the open ticket needs goes out before the side lists (agents, tags, saved replies, channel): a
@@ -94,7 +101,7 @@ test('a ticket opened by address that is not in the list never shows another tic
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
   testRouter.params = { conversationId: bravo.id };
   try {
-    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
     api.conversations.mockReset();
     api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
     let resolveDetail!: (value: typeof bravo) => void;
@@ -125,7 +132,7 @@ test('a ticket whose detail fails to load never gets a usable composer, and noth
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
   testRouter.params = { conversationId: bravo.id };
   try {
-    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
     api.conversations.mockReset();
     api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
     api.conversation.mockReset();
@@ -153,7 +160,7 @@ test('a ticket whose detail fails to load never gets a usable composer, and noth
 test('opening a listed ticket renders its header and asks for its messages without any detail request', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha, bravo], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -177,7 +184,7 @@ test('a ticket opened by an address that is in the list renders from its row whi
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
   testRouter.params = { conversationId: bravo.id };
   try {
-    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
     api.conversations.mockReset();
     api.conversations.mockResolvedValue({ items: [alpha, bravo], page: 1, page_size: 50 });
     api.conversation.mockReset();
@@ -202,7 +209,7 @@ test('a ticket whose detail fails to load says so and Retry asks for it again', 
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
   testRouter.params = { conversationId: bravo.id };
   try {
-    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
     api.conversations.mockReset();
     api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
     api.conversation.mockReset();
@@ -231,7 +238,7 @@ test('inline tag creation stays bound to the conversation selected at call time'
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
   const tag = { id: '44444444-4444-4444-8444-444444444444', name: 'Escalated', color: '#64748b' };
   let resolveTag!: (value: typeof tag) => void;
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -255,7 +262,7 @@ test('inline tag creation stays bound to the conversation selected at call time'
 
 test('loads the time entries of the selected conversation', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -270,7 +277,7 @@ test('loads the time entries of the selected conversation', async () => {
 
 test('coming back to the inbox shows mail that arrived meanwhile, even within the cache window', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValueOnce({ items: [], page: 1, page_size: 50 }).mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -288,7 +295,7 @@ test('coming back to the inbox shows mail that arrived meanwhile, even within th
 
 test('a reply the trial refuses stays in the composer with the reason', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -309,7 +316,7 @@ test('a reply the trial refuses stays in the composer with the reason', async ()
 // without a reload.
 test('a failed delivery on the open conversation reloads the email channel', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -328,7 +335,7 @@ test('a failed delivery on the open conversation reloads the email channel', asy
 
 test('a retry the trial refuses says why instead of doing nothing', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -349,7 +356,7 @@ test('typing in search keeps the previous rows until the new response arrives', 
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
   let resolveSearch!: (value: unknown) => void;
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValueOnce({ items: [alpha, beta], page: 1, page_size: 50 })
     .mockReturnValue(new Promise((resolve) => { resolveSearch = resolve; }));
@@ -370,7 +377,7 @@ test('typing in search keeps the previous rows until the new response arrives', 
 
 test('opening a conversation shows the loading status in its timeline until the messages arrive', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -386,7 +393,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
   const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha, beta, gamma], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -401,7 +408,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   fireEvent.click(screen.getByRole('checkbox', { name: /gamma conversation/i }));
   const loadsBefore = api.conversations.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Resolved' }));
 
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' }));
   expect(await screen.findByText('Updated 2 conversations')).toHaveAttribute('aria-live', 'polite');
@@ -411,7 +418,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
 
 test('a refused bulk change reloads the list, so a conversation that is gone stops being selectable', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -424,13 +431,13 @@ test('a refused bulk change reloads the list, so a conversation that is gone sto
   await screen.findByRole('button', { name: /alpha conversation/i });
   fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
   const loadsBefore = api.conversations.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
 });
 
 const quietApis = () => {
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
   api.messages.mockResolvedValue({ items: [] });
@@ -480,7 +487,7 @@ test('resolving the open conversation keeps it on screen although it left the Op
   api.updateConversation.mockImplementation(async () => { isResolved = true; return resolved; });
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(alpha.id));
   expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
 });
@@ -498,11 +505,72 @@ test('resolving the open conversation never swaps the screen to another one, so 
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer' } });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Resolved' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
   expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
+});
+
+test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo }], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue({ ...alpha, channel_ref: zalo, status_notices: ['resolved'] });
+  api.updateConversation.mockResolvedValue({ ...alpha, channel_ref: zalo });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const more = within(await screen.findByRole('group', { name: 'More ways to resolve' }));
+  fireEvent.click(more.getByRole('button', { name: 'Resolve without telling the customer' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved', notify: false }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenLastCalledWith(alpha.id, { status: 'resolved' }));
+});
+
+test('a listed chat conversation cannot be resolved from the header until the server says whether it tells', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo }], page: 1, page_size: 50 });
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  api.updateConversation.mockClear();
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const resolve = await screen.findByRole('button', { name: 'Resolve' });
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  fireEvent.click(resolve);
+  expect(api.updateConversation).not.toHaveBeenCalled();
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+});
+
+test('the first row shown with nothing picked is read for its notices too, so its Resolve is not stuck', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const zalo = { id: '12121212-1212-4212-8212-121212121212', type: 'zalo', name: 'Hảo Đạt OA', enabled: true, deleted: false, replies_via: null };
+  api.conversations.mockResolvedValue({ items: [{ ...alpha, channel_ref: zalo, may_tell_customer: true }], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue({ ...alpha, channel_ref: zalo, may_tell_customer: true, status_notices: ['resolved'] });
+  renderRoute();
+  const resolve = await screen.findByRole('button', { name: 'Resolve and tell the customer on Hảo Đạt OA' });
+  expect(resolve).not.toHaveAttribute('aria-disabled');
+  expect(api.conversation).toHaveBeenCalledWith(alpha.id);
+});
+
+test('an email conversation in the list is not read again to open it', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(api.conversation).not.toHaveBeenCalled();
 });
 
 test('when the caught-up check fails, the inbox does not pretend the workspace is new', async () => {
@@ -519,7 +587,7 @@ test('when the caught-up check fails, the inbox does not pretend the workspace i
 
 test('the server limit from the config warns about oversized files before anything is uploaded', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.config.mockResolvedValue({ cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
     limits: { outgoing_attachments_bytes: 1024, outgoing_attachments_files: 2 } });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
@@ -542,7 +610,7 @@ test('the server limit from the config warns about oversized files before anythi
 test('a saved reply inserted the moment a conversation is selected already has the customer name, with no extra request', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   api.contact.mockReset();
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -561,7 +629,7 @@ test('a saved reply inserted the moment a conversation is selected already has t
 
 test('a saved reply signs with the email name of an agent who has no display name', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'qa-b@hclabs.colliedesk.com', display_name: '', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'qa-b@hclabs.colliedesk.com', display_name: '', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -580,7 +648,7 @@ test('a saved reply signs with the email name of an agent who has no display nam
 test('Manage saved replies opens Settings in a new tab, so a draft is not lost', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const open = vi.spyOn(window, 'open').mockReturnValue(null);
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', roles: rolesOf('agent') }, permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -601,7 +669,7 @@ test('the filters in the address are the list, and changing one keeps the open c
   testRouter.params = { conversationId: alpha.id };
   testRouter.search = { priority: 'high,urgent', has_pending_draft: true, sort: 'waiting_longest' };
   const navigate = vi.spyOn(testRouter, 'navigate');
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockResolvedValue(alpha);
@@ -611,7 +679,7 @@ test('the filters in the address are the list, and changing one keeps the open c
   api.timeEntries.mockResolvedValue({ items: [] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
-  expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting for approval');
+  expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting to be sent');
   fireEvent.click(screen.getByRole('button', { name: 'Remove filter Priority: High' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
     search: { priority: 'urgent', has_pending_draft: true, sort: 'waiting_longest' }, replace: false });
@@ -624,7 +692,7 @@ test('the filters in the address are the list, and changing one keeps the open c
 
 test('a saved view is saved from the filters on screen and opens them again', async () => {
   testRouter.search = { status: 'pending', awaiting: 'team' };
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -648,7 +716,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const pat = { id: '77777777-7777-4777-8777-777777777777', name: 'Pat', email: 'pat@prospect.example', organization: null, merged_into_id: null,
     created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z' };
-  api.me.mockResolvedValue({ timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-11-01T00:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false } });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent'), plan: { plan: 'trial', trial_ends_at: '2026-11-01T00:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false } });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -712,7 +780,7 @@ test('the open ticket is announced only after its own requests and the side list
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   testRouter.params = { conversationId: alpha.id };
   try {
-    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
     api.conversations.mockReset();
     api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
     api.conversation.mockReset();
@@ -801,7 +869,7 @@ test('Resolve and Reopen in the thread header change the status through the conv
 // On a phone the list and the open conversation take turns on the screen; the layout reads which one from
 // data-view (layout.css), and the thread offers the way back to the list.
 const phoneInbox = (alpha: ReturnType<typeof conversation>) => {
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockResolvedValue(alpha);
@@ -855,7 +923,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
     replies_via: { id: '55555555-5555-4555-8555-555555555555', name: 'Email', enabled: false } };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -867,7 +935,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   api.timeEntries.mockResolvedValue({ items: [] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
+  const notice = (await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/)).closest('p')!;
   // One channel of a type: no mailbox name on the rows or the thread.
   expect(document.querySelector('.channel-pill')).toBeNull();
   expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/55555555-5555-4555-8555-555555555555');
@@ -879,7 +947,7 @@ test('a web form conversation with no email connected can still be answered, and
   const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
     replies_via: null };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -891,7 +959,7 @@ test('a web form conversation with no email connected can still be answered, and
   api.timeEntries.mockResolvedValue({ items: [] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const notice = await screen.findByText('Replies to this conversation are not emailed until you connect your support email.');
+  const notice = (await screen.findByText('Replies to this conversation are not emailed until you connect your support email.')).closest('p')!;
   expect(screen.queryByText(/was removed/)).toBeNull();
   fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
   expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
@@ -904,7 +972,7 @@ test('a conversation whose channel was removed takes private notes but no reply'
   const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'email', name: 'Email', enabled: false, deleted: true,
     replies_via: null };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'email' as const, channel_ref: ref };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.conversation.mockReset();
@@ -935,7 +1003,7 @@ test('with two mailboxes the composer names the one a reply leaves from', async 
   const beta = { ...conversation('22222222-2222-4222-8222-222222222223', 'Beta conversation'),
     channel_ref: { ...ref, id: '33333333-3333-4333-8333-333333333334', name: 'Careers', enabled: false, deleted: true,
       replies_via: { id: '44444444-4444-4444-8444-444444444445', name: 'Support', enabled: true, instead_of: { id: '33333333-3333-4333-8333-333333333334', name: 'Careers' } } } };
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.emailChannel.mockResolvedValue({ channel: { support_address: 'support@desk.example', domain_verified_at: '2026-10-01T00:00:00Z' }, inbound_url: 'https://desk.example.com/x',
     smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
   api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
@@ -966,14 +1034,14 @@ test('with two mailboxes the composer names the one a reply leaves from', async 
 // The composer speaks of the mailbox the conversation's replies leave from, not of the default one.
 test('the composer warns about the mailbox a reply leaves from, and leads to that mailbox', async () => {
   const navigate = vi.spyOn(testRouter, 'navigate');
-  const sales = { id: '55555555-5555-4555-8555-555555555555', name: 'Sales', enabled: true };
+  const sales = { id: '55555555-5555-4555-8555-555555555555', type: 'email', name: 'Sales', enabled: true };
   const ref = { id: sales.id, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { ...sales, instead_of: null } };
   const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
   const settings = (address: string, gmail: 'connected' | 'failed') => ({ channel: { support_address: address, domain_verified_at: null }, inbound_url: 'https://desk.example.com/x',
     smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: gmail === 'connected' ? address : null,
     gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/cb', connection: { provider: 'google', address, status: gmail, error_code: gmail === 'failed' ? 'revoked' : null,
       error: null, failed_at: null, connected_at: '2026-09-01T00:00:00Z' } } });
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null }, permissions: permissionsOf('admin'), workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
   api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
@@ -999,7 +1067,7 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'connected') as never);
     api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
-    const notice = await screen.findByText(/Gmail stopped sending/);
+    const notice = (await screen.findByText(/Gmail stopped sending/)).closest('p')!;
     expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', `/settings/channels/${sales.id}?tab=replies`);
   } finally {
     api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
@@ -1035,7 +1103,7 @@ test('a reply that lands after the person opened another conversation reloads th
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
   let land!: (value: unknown) => void;
-  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
   api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -1062,7 +1130,7 @@ const unfinished = { steps: [
   { key: 'email', state: 'none', detail: null }, { key: 'import', state: 'none', detail: null },
   { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null },
 ], complete: false, recommended: null };
-const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', role: 'admin', email: 'ann@example.com', display_name: 'Ann' }, onboarding_goal: null, setup_guide_hidden: hidden });
+const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', roles: rolesOf('admin'), email: 'ann@example.com', display_name: 'Ann' }, permissions: permissionsOf('admin'), onboarding_goal: null, setup_guide_hidden: hidden });
 
 test('a workspace with conversations keeps the setup guide folded in the corner until the agent opens it', async () => {
   localStorage.clear();
@@ -1135,4 +1203,101 @@ test('a hidden guide shows nothing, even though its data left with the session',
   await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
+});
+
+// A chat conversation's replies leave through its chat channel: no email settings are asked for it.
+test('a conversation whose replies leave through a chat channel asks for no email settings', async () => {
+  const chat = { id: '88888888-8888-4888-8888-888888888888', type: 'zalo', name: 'Zalo HC Labs', enabled: true };
+  const ref = { id: chat.id, type: 'zalo', name: chat.name, enabled: true, deleted: false, replies_via: { ...chat, instead_of: null } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'zalo', channel_ref: ref };
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.emailChannelOf.mockClear();
+  testRouter.params = { conversationId: alpha.id };
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  await waitFor(() => expect(api.messages).toHaveBeenCalled());
+  // A chat channel has no email settings: asking for them would be refused (404).
+  expect(api.emailChannelOf).not.toHaveBeenCalled();
+});
+
+// A role that reads conversations and writes notes, and nothing more, is asked for nothing else and offered
+// nothing else: no team, tag, saved reply, channel or AI draft list, no Reply and no New conversation.
+test('a role that reads only conversations asks for nothing else and is offered only a note', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: ['conversations:read', 'conversations:update', 'messages:read', 'messages:note'] });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  for (const call of [api.agents, api.tags, api.savedReplies, api.emailChannel]) call.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Reply/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: /new tag name/i })).not.toBeInTheDocument();
+  for (const call of [api.agents, api.tags, api.savedReplies, api.emailChannel]) expect(call).not.toHaveBeenCalled();
+});
+
+// A role that reads conversations but not their messages, saved views, channels or contacts opens a
+// conversation that says why its messages are not shown, with no Views menu and no New conversation.
+test('a role without messages:read is told why the messages are not shown, and nothing it cannot use is offered', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: ['conversations:read', 'messages:send'] });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.messages.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByText('Your roles do not let you read the messages of a conversation (messages:read).')).toBeInTheDocument();
+  expect(api.messages).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /Views/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+});
+
+// A written draft waiting on a conversation; outcome discarded is what resolving or closing makes of it.
+const writtenDraft = (conversationId: string, outcome: 'discarded' | null) => ({ id: '77777777-7777-4777-8777-777777777777', conversation_id: conversationId,
+  status: 'ready', source: 'written', cc: null, written_by: { token_label: 'Claude', agent_name: 'Alice' }, files: [], error_code: null, prompt: '',
+  text: 'Your refund is on its way.', missing_info: null, sources: [], warnings: [], model: null, outcome, similarity: null, sent_message_id: null,
+  requested_by_agent_id: null, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-14T00:00:00Z', ready_at: '2026-10-14T00:00:00Z',
+  decided_at: outcome ? '2026-10-14T01:00:00Z' : null, decided_by_name: null, restored_at: null });
+
+test('resolving a conversation takes its waiting draft away at once: it moves to Earlier drafts', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.updateConversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let resolved = false;
+  api.conversations.mockImplementation(async () => ({ items: [{ ...alpha, status: resolved ? 'resolved' : 'open' }], page: 1, page_size: 50 }));
+  api.updateConversation.mockImplementation(async () => { resolved = true; return { ...alpha, status: 'resolved' }; });
+  // The server discards the waiting draft when the conversation is resolved.
+  drafts.list.mockImplementation(async () => ({ items: [writtenDraft(alpha.id, resolved ? 'discarded' : null)], next_before: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('region', { name: /draft from claude/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
+  expect(await screen.findByText('Earlier drafts (1)')).toBeInTheDocument();
+});
+
+test('a bulk close takes the waiting draft of the open conversation away at once', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let closed = false;
+  api.conversations.mockImplementation(async () => ({ items: [{ ...alpha, status: closed ? 'closed' : 'open' }], page: 1, page_size: 50 }));
+  api.bulkUpdateConversations.mockReset();
+  api.bulkUpdateConversations.mockImplementation(async () => { closed = true; return { updated: 1 }; });
+  drafts.list.mockImplementation(async () => ({ items: [writtenDraft(alpha.id, closed ? 'discarded' : null)], next_before: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('region', { name: /draft from claude/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
 });

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
@@ -15,14 +15,20 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { useSettleTargets, useSLARefresh } from './sla-refresh';
+import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
-import { usePendingRequests } from '../requests/use-pending-requests';
+import { aiDraftApi, earlierWritten, waitingWritten } from './ai-draft-api';
+import { can } from '../../lib/can';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
 import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
+import { mayTell, noticesOf } from './status-tell';
+import { PermissionsContext } from '../../lib/permissions-context';
+import type { TokenPermission } from '../../api/schemas';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -136,53 +142,68 @@ export function InboxRoute() {
   useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
   const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
-  const isAdmin = me.data?.agent?.role === 'admin';
+  const isAdmin = can(me.data, 'channels:update');
   const activeID = selectedId ?? params.conversationId;
-  const listed = conversations.data?.items.find((item) => item.id === activeID);
+  // With no conversation picked, the first row is the one on screen.
+  const shownID = activeID ?? conversations.data?.items[0]?.id;
+  const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
-  const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
-    enabled: Boolean(activeID && !listed) });
+  // A chat conversation is read too when listed: only the conversation itself says which statuses would tell
+  // its customer (status_notices), which the header and the details offer a quiet way for.
+  const opened = useQuery({ queryKey: ['conversations', 'one', shownID], queryFn: () => api.conversation(shownID!),
+    enabled: Boolean(shownID && (!listed || (mayTell(listed) && listed.status_notices === undefined))) });
   // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
   // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
   // row of the list, whose composer would send a reply to the wrong customer.
-  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
+  const detail = opened.data?.id === shownID ? opened.data : undefined;
+  // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
+  const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
+  const selected = withNotices ?? detail ?? (activeID ? undefined : conversations.data?.items[0]);
+  // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
+  // The Markdown of replies loads while the list does, before a conversation opens.
+  useEffect(() => markdownPart.preload(), []);
+  const refreshTargets = useCallback(() => void client.invalidateQueries({ queryKey: ['conversations'] }), [client]);
+  useSLARefresh([...(conversations.data?.items ?? []), ...(opened.data ? [opened.data] : [])], refreshTargets);
+  // A reply or a status change meets or stops a clock: the marks follow once the server has counted it.
+  const settleTargets = useSettleTargets(refreshTargets);
   // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
   // they go out together with the list and the detail instead of after one of them. Without an address the id
   // is the first row of the list, which is the one thing that has to be waited for.
   const openID = activeID ?? selected?.id;
-  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID),
+  // What the session may read decides what the page asks for: a list it may not read is not asked for.
+  const reads = (permission: TokenPermission) => can(me.data, permission);
+  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID) && reads('messages:read'),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
-  // Reply drafts AI agents left: the list marks their conversations, the open one shows them above the composer.
-  const pending = usePendingRequests().data?.items;
-  const drafts = useMemo(() => (pending ?? []).filter((item) => item.kind === 'reply_draft' && item.conversation_id), [pending]);
-  const draftConversationIds = useMemo(() => new Set(drafts.map((item) => item.conversation_id!)), [drafts]);
   // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
   const viewing = useInboxViewing();
-  // The poll carries no body, so the open conversation reads its drafts in full.
-  const draftDetails = useQueries({ queries: drafts.filter((item) => item.conversation_id === selected?.id)
-    .map((item) => ({ queryKey: ['agent-requests', 'one', item.id], queryFn: () => api.agentRequest(item.id) })) });
-  const selectedDrafts = draftDetails.flatMap((query) => (query.data?.status === 'pending' ? [query.data] : []));
+  // Replies an AI agent left for a person to send (written drafts), shown above the composer of the open
+  // conversation whether or not AI drafts are on. The inbox filter "has a draft waiting" finds the others.
+  const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
+  const selectedDrafts = waitingWritten(drafts.data?.items);
+  const earlierDrafts = earlierWritten(drafts.data?.items);
   const [draftNotice, setDraftNotice] = useState<string>();
-  const afterDraft = (conversationId: string | null) => {
-    void client.invalidateQueries({ queryKey: ['agent-requests'] });
-    if (conversationId) void client.invalidateQueries({ queryKey: ['messages', conversationId] });
+  const afterDraft = (conversationId: string) => {
+    void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+    void client.invalidateQueries({ queryKey: ['messages', conversationId] });
     return refresh();
   };
   const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
   // The side lists come after everything the open ticket needs: a browser allows six HTTP/1.1 connections per
   // host, and a request that waits for one is a request the person waits for.
-  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
-  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents, enabled: reads('team:read') });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags, enabled: reads('tags:read') });
   // Fetched once and shared with Settings, so the picker opens from memory.
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies, enabled: reads('saved_replies:read') });
   // How replies leave is read for the mailbox the open conversation's replies leave from; the default
-  // one for a conversation no channel carries yet.
-  const senderID = selected?.channel_ref?.replies_via?.id;
+  // one for a conversation no channel carries yet. Replies that leave through another type (a chat
+  // channel) have no mailbox to read.
+  const repliesVia = selected?.channel_ref?.replies_via;
+  const senderID = repliesVia?.id;
   const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
-    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()) });
-  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types;
+    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()), enabled: reads('channels:read') && (!repliesVia || repliesVia.type === 'email') });
+  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
   // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
   // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
@@ -205,7 +226,7 @@ export function InboxRoute() {
   const removed = via?.deleted === true && via.replies_via === null;
   const channelNotice = via && (removed ? messages.channelRemoved(via.name) : via.replies_via === null ? messages.repliesNotConnected
     : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
-  const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  const outbound = channelNotice ?? outboundNotice(emailChannel.data, can(me.data, 'channels:update'));
   // Which mailbox a reply leaves from, once there are two; and why, when the one it was pinned to is gone.
   const sender = via?.replies_via;
   const sendsFrom = !sender || outbound ? undefined : sender.instead_of ? messages.sendsInsteadOf(sender.instead_of.name, sender.name)
@@ -234,11 +255,18 @@ export function InboxRoute() {
     else void navigate({ to: '/', search: filters });
   };
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
-  const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
+  // A change answers without status_notices (only GET has them): keep the ones known while the status is the
+  // same; after a status change they wait for the refetch, since they depend on the status.
+  const keepOpened = (changed: Conversation) => {
+    client.setQueryData<Conversation>(['conversations', 'one', changed.id], (now) =>
+      changed.status_notices === undefined && now?.status === changed.status && now.status_notices ? { ...changed, status_notices: now.status_notices } : changed);
+    return refresh();
+  };
   const agentId = me.data?.agent?.id;
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
-    onSuccess: (changed, { changes }) => {
-      if (changes.status) track('conversation_status_changed', { to: changes.status });
+    onSuccess: (changed, { conversationId, changes }) => {
+      // Resolving or closing discards the drafts that wait (a trigger on the server): read them again.
+      if (changes.status) { track('conversation_status_changed', { to: changes.status }); settleTargets(); void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] }); }
       if (changes.assignee_id) track('conversation_assigned', { to_self: changes.assignee_id === agentId });
       return keepOpened(changed);
     } });
@@ -246,6 +274,7 @@ export function InboxRoute() {
     onSuccess: (_result, { ids, changes }) => {
       const action = bulkActionOf(changes);
       if (action) track('bulk_action_applied', { action, count: ids.length });
+      if (changes.status) for (const id of ids) void client.invalidateQueries({ queryKey: ['ai-drafts', id] });
     },
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
@@ -264,8 +293,9 @@ export function InboxRoute() {
   const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
   const sent = useMutation({ mutationFn: message.run,
     // The conversation the message went to, which the person may have left while it was sending.
-    onSuccess: (_sent, { conversationId, aiDraft }) => {
+    onSuccess: (_sent, { conversationId, aiDraft, kind }) => {
       if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+      if (kind === 'outgoing') settleTargets();
       return client.invalidateQueries({ queryKey: ['messages', conversationId] });
     },
     // A reply refused for a newer one: the timeline shows it at once.
@@ -286,7 +316,7 @@ export function InboxRoute() {
     const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
-  return <><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
+  return <PermissionsContext.Provider value={me.data?.permissions}><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} guide={guide}
     onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
       void client.invalidateQueries({ queryKey: ['conversations'] });
@@ -296,14 +326,15 @@ export function InboxRoute() {
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}
-    viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
+    viewsMenu={(!me.data || reads('saved_views:read')) && <SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
-    onSetStatus={(conversationId, status) => update.mutateAsync({ conversationId, changes: { status } })}
+    noticesFailed={Boolean(selected && opened.isError && mayTell(selected) && noticesOf(selected) === undefined)}
+    onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
-    onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={me.data?.ai_features?.draft}
+    onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={reads('ai_assist:read') ? me.data?.ai_features?.draft : undefined}
     autofix={autofixPreviewOn() && config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
@@ -311,37 +342,48 @@ export function InboxRoute() {
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
-    timelineLoading={Boolean(selected) && timeline.isPending}
+    timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'}
+    canManage={can(me.data, 'ai_settings:update')}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
-    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
+    replyDrafts={selectedDrafts} viewers={viewing}
     openViewers={presence.viewers} onReplyDraft={setWritingReply} onReplyEdited={presence.markEdited}
     onSendDraft={async (draft, edit) => {
-      // The draft goes only if no reply came after the newest one on the approver's screen; one that did
-      // leaves the draft waiting, shown in the timeline, to be read before sending again.
+      // The draft goes as a reply only if no reply came after the newest one on screen; one that did leaves
+      // the draft waiting, shown in the timeline, to be read before sending again.
       const seen = timeline.data?.items.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0);
-      let outcome;
       try {
-        outcome = await api.approveAgentRequest(draft.id, seen === undefined ? edit : { ...edit, seen_reply_number: seen });
+        // The draft's files go with it; edit.files names the ones the person kept when they dropped some.
+        await api.createMessage(draft.conversation_id, 'outgoing', edit?.body ?? draft.text ?? '', [], edit?.cc ?? draft.cc ?? [], seen, draft.id, undefined,
+          edit?.files);
       } catch (error) {
-        if (!(error instanceof ReplyConflictError)) throw error;
+        if (!(error instanceof ReplyConflictError)) {
+          setDraftNotice(messages.draftRefused(error instanceof Error ? error.message : undefined));
+          throw error;
+        }
         await afterDraft(draft.conversation_id);
         setDraftNotice(error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply);
         return;
       }
-      track('agent_request_decided', { decision: 'approved' });
+      track('reply_draft_decided', { decision: 'sent' });
+      setDraftNotice(undefined);
       await afterDraft(draft.conversation_id);
-      // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
-      setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
-    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }}
+    onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
+    earlierDrafts={earlierDrafts}
+    earlierDraftsNext={drafts.data?.next_before}
+    onLoadOlderDrafts={openID ? async (before) => {
+      const page = await aiDraftApi.list(openID, before);
+      return { drafts: earlierWritten(page.items), next: page.next_before };
+    } : undefined}
+    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); await afterDraft(draft.conversation_id); } : undefined}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
-    onNewConversation={() => setStarting(true)} />
+    // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
+    onNewConversation={me.data && !(['messages:send', 'channels:read', 'contacts:read'] as const).every(reads) ? undefined : () => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
-  </>;
+  </PermissionsContext.Provider>;
 }

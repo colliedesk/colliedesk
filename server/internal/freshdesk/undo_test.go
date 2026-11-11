@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 func storedFiles(t *testing.T, root string) int {
@@ -74,5 +77,75 @@ func TestUndoWithoutAnImportFails(t *testing.T) {
 	_, err := freshdesk.Undo(context.Background(), env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"})
 	if !errors.Is(err, freshdesk.ErrNoImport) {
 		t.Fatalf("error = %v, want ErrNoImport", err)
+	}
+}
+
+// A reply draft left on an imported ticket goes with the undo, and so do the bytes of its files.
+func TestUndoRemovesTheFilesOfDraftsOnUndoneTickets(t *testing.T) {
+	env := newImportEnv(t)
+	ctx := context.Background()
+	env.mustRun(t)
+	conversation := env.target(t, "ticket", "1")
+	object, err := env.storage.Put(ctx, env.workspaceID, strings.NewReader("draft-only bytes"), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var draft string
+	if err := env.pool.QueryRow(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,status,source,text,ready_at) VALUES($1,$2,'ready','written','Draft',now()) RETURNING id::text`,
+		env.workspaceID, conversation).Scan(&draft); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.pool.Exec(ctx, `INSERT INTO ai_draft_files(workspace_id,draft_id,filename,content_type,size,sha256,storage_key) VALUES($1,$2,'plan.txt','text/plain',$3,$4,$5)`,
+		env.workspaceID, draft, object.Size, object.SHA256, object.Key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := freshdesk.Undo(ctx, env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := env.count(t, "ai_draft_files"); n != 0 {
+		t.Fatalf("draft files left after undo = %d", n)
+	}
+	if err := attachments.Exists(ctx, env.storage, object.Key); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the draft's stored file after undo: %v, want it gone", err)
+	}
+}
+
+// A thumbnail the web app asked for belongs to its attachment: undo removes it with the file, so nothing the
+// import brought stays on disk.
+func TestUndoRemovesTheThumbnailsOfTheFilesItRemoves(t *testing.T) {
+	env := newImportEnv(t)
+	ctx := context.Background()
+	env.mustRun(t)
+	rows, err := env.pool.Query(ctx, `SELECT id::text FROM attachments WHERE workspace_id=$1`, env.workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil || len(ids) == 0 {
+		t.Fatalf("attachments = %v, %v", ids, err)
+	}
+	data := store.New(env.pool).WithObjects(env.storage)
+	for index, id := range ids {
+		thumb := "thumbnail " + strings.Repeat("x", index+1)
+		object, err := env.storage.Put(ctx, env.workspaceID, strings.NewReader(thumb), int64(len(thumb)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var source string
+		if err := env.pool.QueryRow(ctx, `SELECT storage_key FROM attachments WHERE id=$1`, id).Scan(&source); err != nil {
+			t.Fatal(err)
+		}
+		if err := data.SetAttachmentThumbnail(ctx, env.workspaceID, id, source, object.Key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if files := storedFiles(t, env.storageRoot); files != 2*len(ids) {
+		t.Fatalf("stored files before undo = %d, want %d", files, 2*len(ids))
+	}
+	if _, err := freshdesk.Undo(ctx, env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"}); err != nil {
+		t.Fatal(err)
+	}
+	if files := storedFiles(t, env.storageRoot); files != 0 {
+		t.Fatalf("stored files after undo = %d, want 0: a thumbnail was left behind", files)
 	}
 }

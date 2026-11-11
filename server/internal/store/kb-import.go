@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -158,12 +159,20 @@ func ReimportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, i
 	if err := checkKBCollection(ctx, tx, workspaceID, input.CollectionID); err != nil {
 		return "", err
 	}
+	var wasTitle, wasBody string
+	if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
+		return "", err
+	}
 	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET position=CASE WHEN collection_id<>$3::uuid THEN `+kbArticleEnd(`$3::uuid`)+` ELSE position END,
 			collection_id=$3,title=$4,slug=$5,body_md=$6,status=$7,published_at=$8,author_agent_id=$9,
 			source_meta=$10,source_html=$11,created_at=$12,updated_at=$13 WHERE workspace_id=$1 AND id=$2`,
 		workspaceID, id, input.CollectionID, input.Title, domain.Slugify(input.Title, "article"), input.BodyMD, input.Status, publishedAt(input),
 		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt); err != nil {
 		return "", fmt.Errorf("import knowledge base article: %w", err)
+	}
+	// The source's newer article leaves its translations behind until their own newer versions come.
+	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
+		return "", err
 	}
 	return KBReimported, addKBArticleVersion(ctx, tx, workspaceID, id, Actor{}, domain.KBArticleImported, nil)
 }
@@ -195,38 +204,186 @@ func UnpublishImportedKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id 
 	return KBReimported, addKBArticleVersion(ctx, tx, workspaceID, id, Actor{}, domain.KBArticleImported, nil)
 }
 
-// KBImportTranslation is one language of an article as an import reads it.
+// KBImportTranslation is one language of an article as an import reads it. Status is draft or
+// published (published shows only while the article is published and the language is shown).
 type KBImportTranslation struct {
-	Locale, Title, BodyMD string
-	SourceMeta            []byte
-	SourceHTML            string
-	CreatedAt, UpdatedAt  time.Time
+	Locale, Title, BodyMD, Status string
+	SEOTitle, SEODescription      string
+	SourceMeta                    []byte
+	SourceHTML                    string
+	CreatedAt, UpdatedAt          time.Time
 }
 
-// PutKBArticleTranslation adds or replaces a translation of an article and links the images its text
-// points at to the article, so the purge keeps them.
-func PutKBArticleTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, input KBImportTranslation) error {
+// KBTranslationImportedLast tells whether a translation exists and whether its newest version is an import.
+func KBTranslationImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string) (exists, imported bool, err error) {
+	var kind string
+	err = tx.QueryRow(ctx, `SELECT kind FROM kb_article_translation_versions WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 ORDER BY version DESC LIMIT 1`,
+		workspaceID, articleID, locale).Scan(&kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var found bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 AND locale=$3)`,
+			workspaceID, articleID, locale).Scan(&found); err != nil {
+			return false, false, err
+		}
+		// A translation with no version at all was written before versions existed: the import's.
+		return found, found, nil
+	}
+	return err == nil, kind == domain.KBArticleImported, err
+}
+
+// PutKBArticleTranslation adds a translation of an article, or writes the source's newer one over it
+// while nobody changed it in Colliedesk since the last import (its newest version is the import's), as
+// a version of kind import, up to date with the article. It returns KBReimported when it wrote and
+// KBKept when someone changed it (an edit, a restore, a delete): that version stays. The article row is
+// locked first, as on every path that writes a translation, and the images its text points at are
+// linked to the article, so the purge keeps them.
+func PutKBArticleTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, input KBImportTranslation) (string, error) {
 	if err := domain.CheckLocale(input.Locale); err != nil {
-		return err
+		return "", err
 	}
 	title, err := domain.CleanKBText("title", input.Title, domain.MaxKBArticleTitle)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := domain.CheckKBBody(input.BodyMD); err != nil {
-		return err
+		return "", err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,source_meta,source_html,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workspace_id,article_id,locale) DO UPDATE SET
-		title=EXCLUDED.title,body_md=EXCLUDED.body_md,source_meta=EXCLUDED.source_meta,source_html=EXCLUDED.source_html,
-		created_at=EXCLUDED.created_at,updated_at=EXCLUDED.updated_at`,
-		workspaceID, articleID, input.Locale, title, input.BodyMD, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt); err != nil {
-		return fmt.Errorf("import knowledge base translation: %w", err)
+	if input.Status == "" {
+		input.Status = domain.KBDraft
 	}
-	if _, err := linkKBMedia(ctx, tx, workspaceID, articleID); err != nil {
-		return err
+	if err := domain.CheckKBStatus(input.Status); err != nil {
+		return "", err
 	}
-	return bumpKB(ctx, tx, workspaceID)
+	// Search fields that do not fit are left empty (the defaults), never cut; the source keeps them.
+	if input.SEOTitle, err = domain.CleanKBSEO("search title", input.SEOTitle, domain.MaxKBSEOTitle); err != nil {
+		input.SEOTitle = ""
+	}
+	if input.SEODescription, err = domain.CleanKBSEO("meta description", input.SEODescription, domain.MaxKBSEODescription); err != nil {
+		input.SEODescription = ""
+	}
+	if err := lockKBArticleRow(ctx, tx, workspaceID, articleID); err != nil {
+		return "", err
+	}
+	exists, imported, err := KBTranslationImportedLast(ctx, tx, workspaceID, articleID, input.Locale)
+	if err != nil {
+		return "", err
+	}
+	if exists && !imported {
+		return KBKept, nil
+	}
+	var published *time.Time
+	if input.Status == domain.KBPublished {
+		published = &input.UpdatedAt
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,slug,body_md,status,published_at,seo_title,seo_description,
+			source_meta,source_html,created_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (workspace_id,article_id,locale) DO UPDATE SET
+		title=EXCLUDED.title,slug=EXCLUDED.slug,body_md=EXCLUDED.body_md,status=EXCLUDED.status,published_at=EXCLUDED.published_at,
+		seo_title=EXCLUDED.seo_title,seo_description=EXCLUDED.seo_description,source_meta=EXCLUDED.source_meta,source_html=EXCLUDED.source_html,
+		outdated=false,outdated_at=NULL,deleted_at=NULL,deleted_by_agent_id=NULL,created_at=EXCLUDED.created_at,updated_at=EXCLUDED.updated_at`,
+		workspaceID, articleID, input.Locale, title, domain.Slugify(title, "article"), input.BodyMD, input.Status, published, input.SEOTitle, input.SEODescription,
+		input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt); err != nil {
+		return "", fmt.Errorf("import knowledge base translation: %w", err)
+	}
+	return KBReimported, addKBTranslationVersion(ctx, tx, workspaceID, articleID, input.Locale, Actor{}, domain.KBArticleImported, nil)
+}
+
+// ImportKBCollectionTranslation writes a collection's name and description in one language as the
+// source has it: added when absent (a person who removed it gets it back from the next run, which is
+// how an imported name is never lost), replaced while it is still as an import wrote it, and left as
+// it is once a person set it. It reports whether it wrote.
+func ImportKBCollectionTranslation(ctx context.Context, tx pgx.Tx, workspaceID, collectionID, locale, name, description string, sourceMeta []byte) (bool, error) {
+	if err := domain.CheckLocale(locale); err != nil {
+		return false, err
+	}
+	name, err := domain.CleanKBText("name", name, domain.MaxKBCollectionName)
+	if err != nil {
+		return false, err
+	}
+	if err := domain.CheckKBDescription(description); err != nil {
+		return false, err
+	}
+	tag, err := tx.Exec(ctx, `INSERT INTO kb_collection_translations(workspace_id,collection_id,locale,name,description,source_meta,created_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,clock_timestamp(),clock_timestamp())
+		ON CONFLICT (workspace_id,collection_id,locale) DO UPDATE SET name=EXCLUDED.name, description=EXCLUDED.description, source_meta=EXCLUDED.source_meta,
+			updated_at=clock_timestamp()
+		WHERE kb_collection_translations.source_meta IS NOT NULL
+			AND (kb_collection_translations.name, kb_collection_translations.description, kb_collection_translations.source_meta) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.description, EXCLUDED.source_meta)`,
+		workspaceID, collectionID, locale, name, description, sourceMeta)
+	if err != nil {
+		return false, fmt.Errorf("import knowledge base collection translation: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+	return true, bumpKB(ctx, tx, workspaceID)
+}
+
+// ImportHelpCenterLanguages adds the languages an import reads to the help center, each shown when
+// the source showed it: only languages the help center does not list yet, so a run never undoes what
+// an admin set. It returns the locales it added. The primary language is never added.
+func ImportHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID string, locales []string, visible map[string]bool) ([]string, error) {
+	var primary string
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID).Scan(&primary); err != nil {
+		return nil, err
+	}
+	shown := make([]bool, 0, len(locales))
+	keep := make([]string, 0, len(locales))
+	for _, locale := range locales {
+		if domain.CheckLocale(locale) != nil || strings.EqualFold(locale, primary) {
+			continue
+		}
+		keep, shown = append(keep, locale), append(shown, visible[locale])
+	}
+	rows, err := tx.Query(ctx, `INSERT INTO help_center_languages(workspace_id,locale,visible,position)
+		SELECT $1, x.locale, x.visible, (SELECT COALESCE(max(position),0) FROM help_center_languages WHERE workspace_id=$1) + x.n
+		FROM unnest($2::text[], $3::boolean[]) WITH ORDINALITY AS x(locale, visible, n)
+		ON CONFLICT (workspace_id, locale) DO NOTHING RETURNING locale`, workspaceID, keep, shown)
+	if err != nil {
+		return nil, fmt.Errorf("import help center languages: %w", err)
+	}
+	added, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("import help center languages: %w", err)
+	}
+	if len(added) > 0 {
+		if err := bumpKB(ctx, tx, workspaceID); err != nil {
+			return nil, err
+		}
+	}
+	return added, nil
+}
+
+// AdoptImportedPrimaryLanguage makes locale the help center's primary language when it is safe: the
+// help center lists no other language and the knowledge base holds no article an import did not
+// bring (articles are written in the source's primary language). It reports whether the primary
+// language is locale afterwards and, when this call changed it, the language it replaced (previous ""
+// when it changed nothing), which undo gives back.
+func AdoptImportedPrimaryLanguage(ctx context.Context, tx pgx.Tx, workspaceID, locale string) (adopted bool, previous string, err error) {
+	if domain.CheckLocale(locale) != nil {
+		return false, "", nil
+	}
+	var current string
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID).Scan(&current); err != nil {
+		return false, "", err
+	}
+	if strings.EqualFold(current, locale) {
+		return true, "", nil
+	}
+	var blocked bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1)
+		OR EXISTS(SELECT 1 FROM kb_articles a WHERE a.workspace_id=$1 AND a.source_meta IS NULL)
+		OR EXISTS(SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.locale=$2)`, workspaceID, locale).Scan(&blocked); err != nil {
+		return false, "", err
+	}
+	if blocked {
+		return false, "", nil
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,locale,content_version,updated_at) VALUES($1,$2,1,clock_timestamp())
+		ON CONFLICT (workspace_id) DO UPDATE SET locale=EXCLUDED.locale, content_version=help_centers.content_version+1, updated_at=clock_timestamp()`, workspaceID, locale); err != nil {
+		return false, "", fmt.Errorf("set the help center's primary language: %w", err)
+	}
+	return true, current, nil
 }
 
 // ImportKBImage records stored image bytes an import brought in, with the name and alt text the import

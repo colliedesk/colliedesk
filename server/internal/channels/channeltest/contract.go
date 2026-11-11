@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -47,6 +48,9 @@ type Harness struct {
 	Sender channels.OutboundPart
 	// Secret is a value the type keeps sealed, to check it never shows; empty skips the check.
 	Secret string
+	// FetchClient fetches the files a type serves by link (a stand-in server of the test); nil keeps
+	// the pipeline's own.
+	FetchClient *http.Client
 }
 
 // Run runs the contract against the harness: what every channel type must do the same way.
@@ -58,13 +62,17 @@ func Run(t *testing.T, h Harness) {
 		t.Fatalf("the store's registry has no %s type", h.Type)
 	}
 	definition := adapter.Definition()
-	c := &contract{h: h, definition: definition, pipeline: pipeline.New(h.Store, nil), async: adapter.Inbound().Mode() == channels.Async}
+	journal := pipeline.New(h.Store, nil)
+	if h.FetchClient != nil {
+		journal = journal.WithFetchClient(h.FetchClient)
+	}
+	c := &contract{h: h, definition: definition, pipeline: journal, async: adapter.Inbound().Mode() == channels.Async}
 
 	t.Run("a new message opens one conversation with its contact and files", c.newMessage)
 	if definition.Identified {
 		t.Run("the same message twice is stored once", c.duplicate)
 	}
-	t.Run("an answer joins its conversation and reopens it", c.answer)
+	t.Run("an answer joins its conversation: reopens it, or opens a new one where the type joins only open ones", c.answer)
 	t.Run("what arrives while the channel is off follows its type's rule", c.off)
 	t.Run("a channel's messages never reach another workspace", c.crossWorkspace)
 	if definition.Defaults.RateLimits.PerSender > 0 {
@@ -232,6 +240,18 @@ func (c *contract) answer(t *testing.T) {
 	conversationID := *first[0].ConversationID
 	if _, err := c.h.Pool.Exec(context.Background(), `UPDATE conversations SET status='resolved' WHERE workspace_id=$1 AND id=$2`, d.workspaceID, conversationID); err != nil {
 		t.Fatal(err)
+	}
+	if c.definition.Defaults.JoinPolicy.JoinsOnlyOpen() {
+		// A type that joins only open conversations starts a new one, and the resolved one gets nothing.
+		next := c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: "q2", From: "cy", Text: "One more thing.", Answers: "q1"}))
+		if next[0].ConversationID == nil || *next[0].ConversationID == conversationID {
+			t.Fatalf("answer to a resolved conversation landed in %v, want a new one", next[0].ConversationID)
+		}
+		var status string
+		if err := c.h.Pool.QueryRow(context.Background(), `SELECT status FROM conversations WHERE id=$1`, conversationID).Scan(&status); err != nil || status != "resolved" {
+			t.Fatalf("status=%q (%v), want the resolved conversation left resolved", status, err)
+		}
+		return
 	}
 	next := c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: "q2", From: "cy", Text: "One more thing.", Answers: "q1"}))
 	if next[0].ConversationID == nil || *next[0].ConversationID != conversationID {

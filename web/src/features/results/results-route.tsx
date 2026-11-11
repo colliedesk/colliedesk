@@ -8,6 +8,7 @@ import { resultsMessages as m } from './results-messages';
 import { ResultsAdmin } from './results-admin';
 import { ResultsPage } from './results-page';
 import type { NumberLink } from './results-page';
+import { can } from '../../lib/can';
 import './results.css';
 
 // A number opens the inbox on the conversations it counts, in any status.
@@ -29,7 +30,7 @@ export function ResultsRoute({ window = '30d', onWindow }: { window?: WindowKey;
     const timer = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const isAdmin = me.data?.agent.role === 'admin';
+  const isAdmin = can(me.data, 'results:share');
   const client = useQueryClient();
   const shareLink = useQuery({ queryKey: ['results-share-link'], queryFn: resultsApi.shareLink, enabled: isAdmin });
   // The address of a link made now: it is shown once and never stored.

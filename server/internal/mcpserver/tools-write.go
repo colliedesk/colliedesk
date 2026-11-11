@@ -14,6 +14,7 @@ type updateArgs struct {
 	Assignee       string   `json:"assignee"`
 	AddTags        []string `json:"add_tags"`
 	RemoveTags     []string `json:"remove_tags"`
+	Notify         *bool    `json:"notify"`
 }
 
 type updateOut struct {
@@ -34,6 +35,9 @@ func conversationUpdate(c *call, arguments map[string]any) (any, error) {
 	changes := map[string]any{}
 	if args.Status != "" {
 		changes["status"] = args.Status
+		if args.Notify != nil {
+			changes["notify"] = *args.Notify
+		}
 	}
 	if args.Priority != "" {
 		changes["priority"] = args.Priority

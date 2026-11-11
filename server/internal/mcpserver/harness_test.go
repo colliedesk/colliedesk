@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,15 +26,49 @@ const (
 	testVersion = "9.8.7-test"
 )
 
-// workspace is one signed-in workspace: the admin's own session and one token per tier.
+// workspace is one signed-in workspace: the admin's own session and four agent tokens of that admin.
+// read, draft and send hold a fixed list of permissions (what the tiers before roles gave);
+// adminTier follows the Admin role. admin is the admin person's own session.
 type workspace struct {
-	id    string
-	admin string
-	read  string
-	draft string
-	send  string
-	// adminTier is an agent token of the admin tier; admin is the admin person's own session.
+	id        string
+	admin     string
+	read      string
+	draft     string
+	send      string
 	adminTier string
+}
+
+// The permission lists of the read, draft and send tokens: what the tiers read, draft and send gave
+// before roles, so a test says what a narrow token may and may not do.
+var (
+	readPermissions = []string{"conversations:read", "messages:read", "ai_assist:read", "contacts:read", "tags:read", "saved_replies:read", "saved_views:read",
+		"kb_articles:read", "kb_media:read", "help_center:read", "results:read", "team:read", "channels:read", "ai_settings:read", "autofix:read", "autofix_settings:read"}
+	draftPermissions = append(slices.Clone(readPermissions), "conversations:update", "messages:note", "ai_assist:create", "tags:create",
+		"saved_views:create", "saved_views:update", "saved_views:delete", "profile:update", "autofix:update")
+	sendPermissions = append(slices.Clone(draftPermissions), "messages:send", "contacts:create", "contacts:update", "tags:update", "tags:delete",
+		"saved_replies:create", "saved_replies:update", "saved_replies:delete", "kb_articles:create", "kb_articles:update", "kb_articles:delete",
+		"kb_articles:publish", "kb_media:create", "kb_media:update", "kb_media:delete", "autofix:send")
+)
+
+// token makes an agent token of the person signed in with session: with permissions, or following the
+// role named by role.
+func (e *env) token(session, label, role string, permissions []string) string {
+	e.t.Helper()
+	body := map[string]any{"label": label}
+	if role != "" {
+		status, found := e.rest(http.MethodGet, "/api/v1/roles/"+url.PathEscape(role), nil, session)
+		if status != http.StatusOK {
+			e.t.Fatalf("GET role %s status=%d body=%v", role, status, found)
+		}
+		body["role_id"] = found["id"]
+	} else {
+		body["permissions"] = permissions
+	}
+	status, issued := e.rest(http.MethodPost, "/api/v1/auth/tokens", body, session)
+	if status != http.StatusCreated {
+		e.t.Fatalf("create token %s status=%d body=%v", label, status, issued)
+	}
+	return issued["token"].(string)
 }
 
 type env struct {
@@ -74,7 +109,7 @@ func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real htt
 	if front != nil {
 		toolAPI = front(api)
 	}
-	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion, Operators: api.Operators()}, api))
+	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion, Operators: api.Operators(), Origin: testOrigin}, api))
 	t.Cleanup(server.Close)
 	return &env{t: t, api: api, pool: pool, service: service, server: server, files: files}
 }
@@ -138,13 +173,10 @@ func (e *env) newWorkspace(name, adminEmail string) workspace {
 	}
 	w := workspace{admin: redeemed["token"].(string)}
 	w.id = redeemed["workspace"].(map[string]any)["id"].(string)
-	for tier, target := range map[string]*string{"read": &w.read, "draft": &w.draft, "send": &w.send, "admin": &w.adminTier} {
-		status, issued := e.rest(http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "test " + tier, "scope": tier}, w.admin)
-		if status != http.StatusCreated {
-			e.t.Fatalf("create %s token status=%d body=%v", tier, status, issued)
-		}
-		*target = issued["token"].(string)
-	}
+	w.read = e.token(w.admin, "test read", "", readPermissions)
+	w.draft = e.token(w.admin, "test draft", "", draftPermissions)
+	w.send = e.token(w.admin, "test send", "", sendPermissions)
+	w.adminTier = e.token(w.admin, "test admin", "Admin", nil)
 	return w
 }
 

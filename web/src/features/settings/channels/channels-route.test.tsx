@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ChannelsRoute } from './channels-route';
+import { permissionsOf, rolesOf } from '../../../test-roles';
 import type { ChannelsSearch } from './channels-route';
 
 const mocks = vi.hoisted(() => {
@@ -19,16 +20,18 @@ const mocks = vi.hoisted(() => {
   const channelsApi = { list: vi.fn(), listAll: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn(),
     email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn(),
     emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn(), emailTestMessage: vi.fn() };
-  return { api, channelsApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
+  const aiApi = { channel: vi.fn(), setChannel: vi.fn(), settings: vi.fn() };
+  return { api, channelsApi, aiApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
 });
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
 vi.mock('../../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
-const { api, channelsApi } = mocks;
+vi.mock('../../../api/ai', () => ({ aiApi: mocks.aiApi }));
+const { api, channelsApi, aiApi } = mocks;
 
 const EMAIL = '44444444-4444-4444-8444-444444444444';
 const FORM = '55555555-5555-4555-8555-555555555555';
 const me = (role: 'admin' | 'agent') => ({
-  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
+  agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', plan: null,
 });
 const channel = (type: 'email' | 'web_form', change: Record<string, unknown> = {}) => ({
@@ -84,7 +87,8 @@ test('an empty workspace offers each type to connect, email first, and Live chat
   expect(links[0]).toHaveAttribute('href', '/settings/channels/new/email');
   expect(within(empty).getByRole('link', { name: /Add a web form/ })).toHaveAttribute('href', '/settings/channels/new/web_form');
   expect(within(empty).getByText('Live chat').closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
-  expect(screen.queryByText(/Zalo/)).toBeNull();
+  // A type this server does not list as available (here Zalo OA) is not offered.
+  expect(within(empty).queryByText(/Zalo/)).toBeNull();
 });
 
 test('the list says when it is loading and when it failed, with a way to try again', async () => {
@@ -303,7 +307,7 @@ test('a channel page shows the type tabs then History, and opens a tab from the 
   const navigate = show(EMAIL, { tab: 'replies' });
   expect(await screen.findByRole('heading', { name: 'Email' })).toBeInTheDocument();
   const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
-  expect(tabs).toEqual(['Connection', 'Replies', 'History']);
+  expect(tabs).toEqual(['Connection', 'Replies', 'AI', 'History']);
   expect(screen.getByRole('tab', { name: 'Replies' })).toHaveAttribute('aria-selected', 'true');
   expect(await screen.findByRole('textbox', { name: 'Sender name' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Connection' }));
@@ -767,4 +771,163 @@ test('the Connection tab opens the conversation its test message started, as the
   const navigate = show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversations/66666666-6666-4666-8666-666666666666'));
+});
+
+const aiSlot = (slot: 'triage' | 'draft' | 'intake', change: Record<string, unknown> = {}) => ({ slot, source: 'server', provider_id: null, model: 'claude-haiku-5-5', fallback_model: null, effort: 'low',
+  enabled: true, default_level: slot === 'triage' ? 'suggest' : 'off', automatic: false, auto_parts: [], active: true, off_reason: null, consented_by: null,
+  consented_at: null, updated_by: null, updated_at: null, ...change });
+const aiSettings = (slots = [aiSlot('triage'), aiSlot('draft')]) => ({ server: null, server_off: null, providers: [], slots, events: [], provider_limit: 5, can_store_keys: true,
+  allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null, intake_per_day: 300, intake_today: 0, intake_paused_until: null },
+  allowance: null, auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 12, draft_cost_micro_usd: null }, channels: [], source_consents: [] });
+const levelItem = (slot: 'triage' | 'draft', change: Record<string, unknown> = {}) => ({ slot, level: null, effective_level: slot === 'triage' ? 'suggest' : 'off',
+  source: 'workspace', off_reason: null, options: null, ...change });
+const formLevels = (triage = {}, draft = {}) => ({ channel_id: FORM, scopes: [{ scope: '', slots: [levelItem('triage', triage), levelItem('draft', draft)] }] });
+
+test('the AI tab of a channel sets what each feature does by itself there, over the workspace default', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings());
+  aiApi.channel.mockResolvedValue(formLevels());
+  aiApi.setChannel.mockResolvedValue(formLevels({ level: 'off', effective_level: 'off', source: 'channel' }));
+  show(FORM, { tab: 'ai' });
+  const triage = await screen.findByRole('combobox', { name: 'Triage · Whole channel' });
+  await waitFor(() => expect(within(triage).getByRole('option', { name: 'Workspace default (Suggest)' })).toBeInTheDocument());
+  expect(within(screen.getByRole('combobox', { name: 'Reply drafts · Whole channel' })).queryByRole('option', { name: 'Auto' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: /Intake/ })).toBeNull();
+  fireEvent.change(triage, { target: { value: 'off' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'triage', { scope: '', level: 'off' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+test('raising drafts on a channel asks first with what it costs, as Built-in AI does', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings());
+  aiApi.channel.mockResolvedValue(formLevels());
+  aiApi.setChannel.mockResolvedValue(formLevels({}, { level: 'suggest', effective_level: 'suggest', source: 'channel' }));
+  show(FORM, { tab: 'ai' });
+  const drafts = await screen.findByRole('combobox', { name: 'Reply drafts · Whole channel' });
+  await waitFor(() => expect(aiApi.settings).toHaveBeenCalled());
+  await screen.findByRole('option', { name: 'Workspace default (Off)' });
+  fireEvent.change(drafts, { target: { value: 'suggest' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Write a draft for every customer message?' });
+  expect(aiApi.setChannel).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'draft', { scope: '', level: 'suggest' }));
+});
+
+test('a feature the workspace has off is off on the channel and says so; an agent reads without changing', async () => {
+  api.me.mockResolvedValue(me('agent'));
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings([aiSlot('triage', { enabled: false, default_level: 'off' }), aiSlot('draft')]));
+  aiApi.channel.mockResolvedValue(formLevels({ level: 'auto', effective_level: 'off', source: 'channel', off_reason: 'workspace_off' }));
+  show(FORM, { tab: 'ai' });
+  expect(await screen.findByText('Off: Triage is off for the workspace.')).toBeInTheDocument();
+  expect(screen.getByText('Only admins can change this.')).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Triage · Whole channel' })).toBeDisabled();
+  expect(screen.queryByRole('link', { name: 'Turn on' })).toBeNull();
+});
+
+test('following a workspace default that applies by itself asks first, as picking Auto does', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings([aiSlot('triage', { default_level: 'auto', auto_parts: ['tags', 'priority'] }), aiSlot('draft')]));
+  aiApi.channel.mockResolvedValue(formLevels({ level: 'off', effective_level: 'off', source: 'channel' }));
+  aiApi.setChannel.mockResolvedValue(formLevels({ effective_level: 'auto' }));
+  show(FORM, { tab: 'ai' });
+  const triage = await screen.findByRole('combobox', { name: 'Triage · Whole channel' });
+  await screen.findByRole('option', { name: 'Workspace default (Auto)' });
+  fireEvent.change(triage, { target: { value: '' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Apply triage suggestions automatically?' });
+  expect(aiApi.setChannel).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'triage', { scope: '', level: null }));
+});
+
+test('a channel of a type the web app has no screens for still opens: its name and state, AI and History, and Remove', async () => {
+  const CHAT = '66666666-6666-4666-8666-666666666666';
+  channelsApi.get.mockResolvedValue({ ...channel('email', { id: CHAT, type: 'line_oa', name: 'Line Shop', summary: '', capabilities: [] }), config: { account: 'shop' } });
+  show(CHAT, {});
+  expect(await screen.findByRole('heading', { name: 'Line Shop' })).toBeInTheDocument();
+  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['AI', 'History']);
+  expect(screen.getByRole('tab', { name: 'AI' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('button', { name: 'Remove channel' })).toBeInTheDocument();
+  expect(screen.queryByText(/not supported|unknown/i)).not.toBeInTheDocument();
+});
+
+const ZALO = '77777777-7777-4777-8777-777777777777';
+const zaloConfig = { oa_id: '4318002291772207', app_id: '1188200455', staff_user_ids: [], groups: {}, webhook_path: '/api/v1/channels/zalo/webhook', site_verification: null, verification_prefix_path: '/api/v1/channels/zalo/', verification_prefix_url: null, webhook_url: null,
+  credentials: ['app_secret', 'oa_secret_key', 'access_token', 'refresh_token'].map((name) => ({ name, hint: null, set_at: null })) };
+const zalo = (change: Record<string, unknown> = {}) => ({ ...channel('email', { id: ZALO, type: 'zalo', name: 'Hảo Đạt OA', summary: 'OA 4318…2207 · 0 groups linked', capabilities: ['threads'], is_default: true, processing_paused_at: null, ...change }),
+  config: zaloConfig, settings: {}, effective_settings: {} });
+
+test('a channel that can pause is paused from its page after a question, and only then', async () => {
+  // Running when the page opens; paused once Pause reloads it.
+  channelsApi.get.mockResolvedValueOnce(zalo()).mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 0 }));
+  channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  channelsApi.update.mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z' }));
+  show(ZALO);
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause processing' }));
+  const ask = screen.getByRole('alertdialog', { name: 'Pause processing on Hảo Đạt OA?' });
+  expect(within(ask).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+  expect(channelsApi.update).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Pause processing' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Pause processing' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ZALO, { processing_paused: true }));
+  // The button that did it is gone (it reads Resume now): focus goes to what it did.
+  const note = (await screen.findByText(/Processing is paused since/)).closest('p');
+  await waitFor(() => expect(note).toHaveFocus());
+});
+
+test('a paused channel says so, since when, and resumes without a question', async () => {
+  // Paused when the page opens; running once Resume reloads it.
+  channelsApi.get.mockResolvedValueOnce(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 12 })).mockResolvedValue(zalo());
+  channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  channelsApi.update.mockResolvedValue(zalo());
+  show(ZALO);
+  expect(await screen.findByText('Processing paused')).toBeInTheDocument();
+  expect(screen.getByText(/Processing is paused since/)).toBeInTheDocument();
+  expect(screen.getByText(/12 messages are kept and handled in the order they came/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Pause processing' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Resume processing' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ZALO, { processing_paused: false }));
+  const note = (await screen.findByText(/Processing resumed/)).closest('p');
+  await waitFor(() => expect(note).toHaveFocus());
+});
+
+test('a paused channel that is also off says to turn it on first, and offers no Resume', async () => {
+  channelsApi.get.mockResolvedValue(zalo({ enabled: false, status: { state: 'off', reason_code: null, message: null }, processing_paused_at: '2026-10-31T07:05:00Z' }));
+  channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  show(ZALO);
+  expect(await screen.findByText(/and the channel is also off\. Turn the channel on first/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Resume processing|Pause processing/ })).toBeNull();
+});
+
+test('the list shows a paused channel as paused; a channel that cannot pause offers no Pause', async () => {
+  channelsApi.list.mockResolvedValue({ items: [zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 3 }), channel('email')], types: [...types(1, 0), { type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+  show('');
+  expect(await screen.findByText('Processing paused')).toBeInTheDocument();
+  expect(screen.getByText('3 messages waiting')).toBeInTheDocument();
+  cleanupAndShowEmail();
+  expect(await screen.findByRole('heading', { name: 'Email' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Pause processing' })).toBeNull();
+});
+
+function cleanupAndShowEmail() {
+  document.body.innerHTML = '';
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL);
+}
+
+test('a paused channel counts what it keeps again while its page is open, and an agent is told an admin resumes it', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    api.me.mockResolvedValue(me('agent'));
+    channelsApi.get.mockResolvedValueOnce(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 1 })).mockResolvedValue(zalo({ processing_paused_at: '2026-10-31T07:05:00Z', paused_count: 5 }));
+    channelsApi.list.mockResolvedValue({ items: [zalo()], types: [{ type: 'zalo', available: true, count: 1, default_channel_id: ZALO }] });
+    show(ZALO);
+    expect(await screen.findByText(/1 message is kept and handled in the order they came when an admin resumes processing/)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await screen.findByText(/5 messages are kept/)).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -102,14 +102,14 @@ func seedFilterDesk(t *testing.T, api http.Handler, token string, pool *pgxpool.
 	if _, err := pool.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,channel_type,channel_id,status,sent_at) VALUES($1,$2,'email',(SELECT id FROM channels WHERE workspace_id=$1 AND type='email' LIMIT 1),'sent',now())`, desk.workspace, sent); err != nil {
 		t.Fatal(err)
 	}
-	// form has a reply draft waiting; imported has one that expired before anyone looked.
+	// form has a written reply draft waiting; imported has one that expired before anyone used it.
 	for _, draft := range []struct {
 		name    string
-		expires string
-	}{{"form", "1 day"}, {"imported", "-1 minute"}} {
-		if _, err := pool.Exec(ctx, `INSERT INTO agent_requests(workspace_id,token_label,token_scope,kind,method,route,path,summary,conversation_id,expires_at)
-			VALUES($1,'Claude','read','reply_draft','POST','POST /api/v1/conversations/{id}/messages','/api/v1/conversations/'||$2::text||'/messages','Reply',$2::uuid,now()+$3::interval)`,
-			desk.workspace, desk.ids[draft.name], draft.expires); err != nil {
+		outcome *string
+	}{{"form", nil}, {"imported", ptr("expired")}} {
+		if _, err := pool.Exec(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,status,source,text,ready_at,outcome,decided_at)
+			VALUES($1,$2::uuid,'ready','written','Reply',now(),$3,CASE WHEN $3::text IS NULL THEN NULL ELSE now() END)`,
+			desk.workspace, desk.ids[draft.name], draft.outcome); err != nil {
 			t.Fatal(err)
 		}
 	}

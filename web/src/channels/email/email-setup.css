@@ -1,32 +1,39 @@
 /* Settings → Email: the four setup steps beside what customers see, and the table of support addresses. */
 .setup-layout { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: var(--space-4); align-items: start; min-width: 0; }
 .setup-card { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-.setup-steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.setup-step { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-3) var(--space-4); min-width: 0; }
-.setup-open { border-color: var(--line-strong); padding-bottom: var(--space-4); }
-.setup-step[aria-disabled="true"] { background: var(--surface-0); }
-.setup-step[aria-disabled="true"] .setup-step-head { color: var(--text-3); }
-.setup-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: 28px; }
-.setup-step-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.setup-num { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--fs-label); font-weight: 600; }
-.setup-open .setup-num { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
-.setup-done .setup-num { border-color: var(--ok); color: var(--ok); }
+/* The steps (S11-d): one card, a row per step split by hairlines; the step's mark is a 20px circle:
+   filled green with a tick when done, ringed in text-1 when open, a thin ring when still to do. */
+.setup-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+:where(.setup-steps) > .setup-step { display: grid; gap: var(--space-3); border: 0; border-radius: 0; background: none; padding: var(--space-4); min-width: 0; }
+:where(.setup-steps) > .setup-step + .setup-step { border-top: 1px solid var(--line); }
+.setup-open { padding-bottom: var(--space-4); }
+:where(.setup-steps) > .setup-step[aria-disabled="true"] { background: none; }
+:where(.setup-steps) > .setup-step[aria-disabled="true"] .setup-step-head { color: var(--text-3); }
+:where(.setup-steps) > .setup-step[aria-disabled="true"] .setup-step-head h3 { font-weight: 500; }
+.setup-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: 20px; }
+.setup-step-head h3 { margin: 0; font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.setup-done:not(.setup-open) .setup-step-head h3 { color: var(--text-2); font-weight: 500; }
+.setup-num { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border: 0; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line-control); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; line-height: 16px; }
+.setup-open .setup-num { background: none; box-shadow: inset 0 0 0 2px var(--text-1); color: var(--text-1); font-weight: 600; }
+.setup-done .setup-num { background: var(--ok); box-shadow: none; color: var(--on-accent); font-weight: 700; }
+.setup-done.setup-open .setup-num { background: none; box-shadow: inset 0 0 0 2px var(--text-1); color: var(--text-1); }
 .setup-value { font-family: var(--font-mono); font-size: var(--fs-small); color: var(--text-2); overflow-wrap: anywhere; }
-.setup-of { margin-left: auto; color: var(--text-3); font-size: var(--fs-label); }
+.setup-of { margin-left: auto; color: var(--text-3); font-size: var(--fs-small); }
 .setup-change { margin-left: auto; }
 .setup-pill { display: inline-flex; align-items: center; gap: var(--space-1); border-radius: 999px; padding: 0 var(--space-2); background: var(--ok-soft, var(--surface-2)); color: var(--text-1); font-size: var(--fs-label); line-height: 1.8; }
 .setup-pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--ok); }
 .setup-pill-muted::before { background: var(--line-control, var(--line-strong)); }
-.setup-body { display: grid; gap: var(--space-3); min-width: 0; padding-left: calc(24px + var(--space-3)); }
+.setup-body { display: grid; gap: var(--space-3); min-width: 0; padding-left: calc(20px + var(--space-3)); }
 .setup-body > .settings-body { padding: 0; }
-.setup-copy input { font-family: var(--font-mono); }
+.setup-copy input { font-family: var(--font-mono); font-size: var(--fs-small); background: var(--surface-2); }
 .setup-instructions { margin: 0; padding-left: var(--space-5); list-style: decimal; }
 .setup-instructions li + li { margin-top: var(--space-2); }
 .setup-instructions li > .warning-note { margin: 0 0 var(--space-2); }
 .setup-provider { display: grid; gap: var(--space-3); min-width: 0; }
-.setup-live { display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; margin: 0; border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: var(--space-1) var(--space-3); color: var(--text-2); font-size: var(--fs-small); }
+/* Waiting reads as a dot and words (the words stay text-2: the amber dot alone would fail contrast as text). */
+.setup-live { display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; margin: 0; border: 0; padding: 0; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; line-height: 20px; }
 .setup-live::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--pending); }
-.setup-live-ok { border-style: solid; border-color: var(--ok); color: var(--text-1); }
+.setup-live-ok { color: var(--ok); }
 .setup-live-ok::before { background: var(--ok); }
 /* Gmail's confirmation email: dashed while it is awaited, solid once it arrived. */
 .setup-confirmation { display: flex; gap: var(--space-3); align-items: flex-start; border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); padding: var(--space-3); }
@@ -51,7 +58,7 @@
 .setup-choice small { color: var(--text-3); font-size: var(--fs-small); }
 .setup-badge { justify-self: start; border-radius: var(--radius-sm); background: var(--accent); color: var(--on-accent); padding: 0 var(--space-1); font-size: var(--fs-label); font-weight: 600; }
 .setup-choice-body { display: grid; gap: var(--space-3); min-width: 0; }
-.setup-preview { position: sticky; top: var(--space-4); display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-4); }
+.setup-preview { position: sticky; top: var(--space-4); display: grid; gap: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
 .setup-preview h3 { margin: 0; font-size: var(--fs-small); font-weight: 600; }
 .setup-preview-lines { display: grid; gap: 2px; margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); overflow-wrap: anywhere; }
 
@@ -71,8 +78,7 @@
 .email-home-fold[open] { padding-bottom: var(--space-4); }
 .email-home-fold > :not(summary) { margin-top: var(--space-2); }
 .email-home-danger summary { color: var(--danger, var(--text-1)); }
-.email-home-manage { margin: 0; padding-left: var(--space-5); }
-.email-home-manage a { display: inline-flex; align-items: center; min-height: var(--touch); }
+.email-home-disconnect { margin: var(--space-2) 0 0; }
 
 /* Links inside the steps are fingertip-sized on a phone. */
 @media (pointer: coarse), (max-width: 30rem) { .setup-body a, .setup-body .link-action { display: inline-flex; align-items: center; min-height: var(--touch); } }
@@ -89,7 +95,7 @@
   .email-home-table td[data-label]::before { content: attr(data-label); display: block; color: var(--text-3); font-size: var(--fs-label); }
   .email-home-action { text-align: left; }
   .email-home .scroll-x-fade { overflow: visible; -webkit-mask-image: none; mask-image: none; }
-  .setup-step { padding: var(--space-3); }
+  :where(.setup-steps) > .setup-step { padding: var(--space-3); }
   .setup-body { padding-left: 0; }
   .setup-choices { grid-template-columns: minmax(0, 1fr); }
   .setup-of, .setup-change { margin-left: 0; }

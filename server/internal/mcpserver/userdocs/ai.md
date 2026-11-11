@@ -19,14 +19,16 @@ and asks again whenever the feature moves to another provider. Turn a feature of
 
 ## Where a feature runs
 
-Each feature (**Triage suggestions**, **Reply drafts**) picks one of:
+Each feature (**Triage suggestions**, **Reply drafts**, and **Chat intake** for chat channels) picks one of:
 
 1. **The server's provider.** Set by the server operator for every workspace. On Colliedesk Cloud it
    is **Colliedesk AI**: Anthropic's Claude models, run for HC Labs and included in your plan. On your
    own server it is whatever the operator configured (see
    [environment variables](../self-host/environment-variables.md#ai-provider)); without one, Settings
-   explains the two ways to get started. If the operator switches the server's provider off, the features
-   set to it stop and Settings says so; they run again once it is on, or pick another provider.
+   explains the two ways to get started. You pick only the provider: the operator picks the model each
+   feature runs on it, Settings shows it, and when the operator changes it your features follow. If the operator switches the server's provider off, nobody can pick
+   it, and the features set to it stop: Settings shows it greyed, and says why when you point at it or tab to it.
+   They run again once it is on, or pick another provider.
 2. **A provider you add.** Your workspace pays that provider directly.
 3. **None.** The feature stays off.
 
@@ -81,6 +83,22 @@ policy; read it before you add one, for example [Anthropic's](https://www.anthro
 To keep data on your own servers, add an OpenAI-compatible provider on your network (vLLM, Ollama)
 and use it for every feature.
 
+### OpenRouter: which providers serve your requests
+
+OpenRouter sends each request to one of the companies that serve the model. Its **routing** keeps your
+requests on some of them: `data_collection: deny` only on providers that do not store or train on what
+they are sent, `zdr: true` only on providers with zero data retention
+([OpenRouter's provider routing](https://openrouter.ai/docs/features/provider-routing)). Set it with the
+provider (`routing` on `POST /api/v1/ai/providers` and `PATCH /api/v1/ai/providers/{id}`, or the MCP
+tools `colliedesk_ai_provider_add` and `colliedesk_ai_provider_update`); Settings does not show it yet.
+A model that no such provider serves fails its check, so you know before a feature uses it. Tightening
+the routing takes effect at once. Loosening it (deny to allow, zero retention off) lets customers' data
+reach more providers; an AI agent does it only with `ai_settings:update`, like any other change to it.
+Other servers have no routing, and refuse it.
+
+On OpenRouter, a feature's **effort** goes to the models OpenRouter lists as reasoning at that effort;
+another model answers without one, as before.
+
 ## Work runs in the background
 
 Suggestions and drafts run as background tasks, so no screen waits for a model: a task that hits a
@@ -90,7 +108,7 @@ meanwhile is dropped without calling anyone. A locked workspace runs none.
 ## Reply drafts
 
 With **Reply drafts** on, the reply box of a conversation has **Draft with AI**; while they are off it
-says **Off**, and takes an admin to **Settings → Built-in AI** (others are told to ask an admin). Say what the reply
+shows **Off** to admins only, as a link to **Settings → Built-in AI**; agents see no AI tool until it is on. Say what the reply
 should say (optional, up to 2,000 characters: "offer a refund", "ask for the order number"), or leave
 it empty for a reply to the customer's newest message. You keep working while it is written; the
 conversation never waits for the model.
@@ -123,11 +141,12 @@ minute are asked for in a workspace.
 
 ### Write a draft when a customer writes
 
-Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, turn on **Write a
-draft when a customer writes**. A dialog says first what it would have meant in the last 30 days (how
-many customer messages, about what a draft costs, and how much of the included AI it may use, or that
-your own key is billed). It is off until an admin turns it on, and it turns off when drafts turn off
-or move to another provider; it stays off until an admin turns it on again.
+Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, set **Default
+for channels** to **Suggest** (or do it on one channel, in its **AI** tab). A dialog says first what it
+would have meant in the last 30 days (how many customer messages, about what a draft costs, and how
+much of the included AI it may use, or that your own key is billed). It is **Off** until an admin
+picks Suggest, and goes back to Off when drafts turn off or move to another provider; it stays Off until
+an admin picks Suggest again.
 
 Each new customer message (by email, the web form or a problem report) then gets a draft. It waits a
 minute for more messages from the customer, so several in a row get one draft, which answers them
@@ -177,10 +196,10 @@ Imported tickets get no suggestion. A suggestion nobody used for 7 days expires;
 
 ### Apply suggestions automatically
 
-Admins can let suggestions apply by themselves: **Settings → Built-in AI**, under **Triage suggestions**, turn on
-**Apply suggestions automatically** (a dialog says what it does first). It is off until an admin turns
-it on, and it turns off when triage turns off or moves to another provider; it stays off until an admin
-turns it on again. Pick what applies by itself: **Tags** and **Priority** (the default) and
+Admins can let suggestions apply by themselves: **Settings → Built-in AI**, under **Triage suggestions**, set
+**Default for channels** to **Auto** (or do it on one channel, in its **AI** tab; a dialog says what it does
+first). Turning triage on starts at **Suggest**; moving it to another provider goes back to Suggest, and
+it stays there until an admin picks Auto again. **Off** makes suggestions only when someone asks. Pick what applies by itself: **Tags** and **Priority** (the default) and
 **Assignee**. A part not picked waits for someone to accept it, as above.
 
 It only fills what nobody set: tags are added, never removed; the priority is set only while it is
@@ -196,13 +215,129 @@ empty. A teammate AI assigns gets the "Assigned to you by AI" notification. It c
 uses the suggestion already made. Settings shows how many suggestions AI applied and how many were
 undone in the last 30 days. Restoring a workspace from a backup turns the automatic mode off.
 
+## What AI does by itself, per channel
+
+Each feature has a level: what it does without anyone asking.
+
+| Feature | Off | Suggest | Auto |
+|---|---|---|---|
+| Triage | Only when someone presses **Suggest** | Suggests for every new conversation | Applies the picked parts by itself (above), with **Undo** |
+| Reply drafts | Only **Draft with AI** | Writes a draft when a customer writes | Never: AI never sends |
+| Intake (chat channels only) | The channel's rules decide | Every message a customer wrote waits in Review with AI's suggestion; a person decides | AI applies what it is sure enough of (the scope's threshold); everything else waits in Review with its suggestion. Until a channel's own decisions show AI is ready for an action, that action waits in Review too |
+
+The workspace's level is **Default for channels** under each feature in **Settings → Built-in AI**. A
+channel can set its own level for a feature, and a chat channel for each of its scopes (one-to-one
+messages, groups), for example triage Auto on the support mailbox and Off on the sales one. A scope
+without its own level follows the channel, and the channel follows the workspace. A level never goes
+past what the workspace allows: while a feature is off for the workspace, it is off on every channel,
+whatever the channel says. People can always ask by hand (**Suggest**, **Draft with AI**) while the
+feature is on.
+
+Email and web forms have no intake: every message or form sent is a conversation, as the channel's
+rules always made it, and triage and drafts run after it is created. Intake is for chat channels,
+where many short messages arrive and some are not requests. **Chat intake** has its row in Built-in AI
+only once the workspace has a chat channel, and its default for channels is Off or Suggest: Auto is set
+on each chat channel's scope, where its readiness is known.
+
+When a feature moves to another provider, or is turned on again, its consent is new: every channel
+that ran it by itself goes a step down (Auto to Suggest; drafts written by themselves to drafts asked
+for), and the history says why. Another model of the same provider changes nothing else: levels stay,
+and intake's labels keep counting. Restoring a workspace from a backup lowers levels as a new provider does.
+
+People with `ai_settings:update` (the Admin role has it) set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
+column per scope, each set to the default it follows or to Off, Suggest or Auto; under it, what the level
+does, or "Off: Triage is off for the workspace" with **Turn on**. Raising triage to Auto or drafts to
+Suggest asks with the same dialog as Built-in AI. Under each feature, **Built-in AI** lists the
+channels that differ ("Support · Auto"), each a link to its AI tab, or says that every channel follows
+the default. The same is `PUT /api/v1/channels/{id}/ai/{slot}` and the MCP tools
+`colliedesk_channel_ai_set` and `colliedesk_channel_ai_get`. Every change is in the AI history and in
+the channel's history. An AI agent raises or lowers a level, and changes intake's settings, with
+`ai_settings:update`; it happens at once, as when a person does it.
+
+On a chat channel, the AI tab has an **Intake** row for each scope that collects messages, and under the
+table, for each scope where intake does more than the rules, its **Intake settings**: how sure AI must be
+to open, add or set aside on its own (each with its default shown), whether it may add alone while the
+customer has two or more open conversations (it may by default: sure enough, it adds to the one it names;
+ticked, every such card waits for a person however sure AI is), how long a resolved conversation can be reopened, when a card is too
+old to decide alone, what AI reads besides the messages (a source that needs a consent says so, with a link
+to Built-in AI), the words and patterns to hide or mask (below) and the channel's own instructions. A
+**Last 7 days** line says how many cards came, how many AI decided by itself, how many of its decisions
+people changed and how many wait, with a link to them in [Review](review.md).
+
+Before intake's AI reads a chat, names become "Customer A" or "Team 1", passwords and codes are hidden,
+and phone numbers, email addresses, IBANs and the numbers after an English account or ID word ("account
+number", "passport") are masked. A channel in another language adds its own words in intake's settings:
+`redact_keywords` for the words that come before a password or a code, `contact_labels` (`account`, `id`)
+for those before a bank account or an identity document number, and `redact_patterns` for the shapes of
+an identifier no word names (a national ID number, a phone number written without its prefix): each a
+pattern in RE2 syntax with what it masks (`phone`, `id_number`, `account_number` or `hidden`), at most 20
+of 200 characters; a pattern that can match no character at all (an empty string, a word boundary alone), is too large or does not compile is refused.
+Taking a word or a pattern out masks less; like any change to intake's settings, it needs `ai_settings:update`.
+
+Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
+once an admin agreed to each: in **Settings → Built-in AI** under Chat intake (**Images customers sent**,
+**The customer's profile**, each a switch that gives or takes back the consent), or with
+`colliedesk_ai_source_consent_set` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
+on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
+on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at
+most 5 MB, never with messages that talk about a password or a code. A card that is only pictures is then
+decided like any other.
+
+## When AI acts on its own
+
+At **Auto**, intake's AI opens, joins or sets aside a card by itself only for an action its labels show it
+gets right on that channel's scope (it never writes to the customer: a conversation it opens sends the
+channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card, which waits
+for a person in Review. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
+otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
+this server's prompt version, on whichever model they ran (`collie intake-eval`, see
+[Score AI intake on your own cases](../self-host/intake-eval.md)). A decision nobody looked at counts for nothing: silence
+is not a label.
+
+| Action | Opens with | Never with |
+|---|---|---|
+| Open a conversation | 30 labels, 90 % right | more than one conversation opened for chatter in a week |
+| Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (by people's labels in the last 30 days, or in an evaluation) |
+| Set aside | 30 labels, 95 % right | a request set aside (by people's labels in the last 30 days, or in an evaluation) |
+
+People's labels count for 30 days, and an evaluation for the prompt version it ran; both keep counting when
+intake moves to another model. A newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
+never reach a person: in practice a gate opens with an evaluation, or with an admin's override.
+An admin may open an action by hand before its labels do (`gate_override` with a `gate_override_reason`,
+which needs `ai_settings:update`). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
+(each action's gate, labels, what it misses, what AI did on its own and how much people corrected, and what
+a month costs) and the MCP tool `colliedesk_channel_ai_intake_readiness_get`; evaluations are
+`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record`,
+which needs `ai_settings:update`, and `colliedesk_channel_ai_intake_evaluations_list`, which needs `channels:read`).
+
+Raising intake to **Auto** on a scope opens a dialog first: each action with whether it is ready ("ready ·
+38 of 40 right") or stays a suggestion and why ("until 30 decisions are labelled (12 of 30)", "7 wrong of 40
+(needs 95 % right)"), an estimate of the AI calls and their cost over 30 days from the messages that came,
+and for an admin, **Let it … alone anyway** with the reason the history keeps. The level and the override
+are saved together. Lowering a level never asks.
+
+When intake moves to another provider, a scope at Auto goes back to Suggest and the AI tab says so
+("Groups: Auto was lowered to Suggest on Oct 24, 2026: intake moved to another provider, which needs
+consent again") with **Turn Auto back on**, which asks with the same dialog. Another model keeps the level.
+
+## When intake's model fails
+
+Intake can have a **fallback model**: another of its provider's models, tried once when its model
+times out, is busy, refuses for its rate, is gone, or answers what Colliedesk cannot read. A refused key
+or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
+with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set` (an empty string
+removes it); Settings does not show it yet. The provider cannot
+drop a model intake uses this way. A new fallback model keeps intake's levels, as another model does.
+
 ## Limits
 
 1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket, a
    draft for each customer message when that is on) stops at 300 a day (UTC) and 30 a minute in a
    workspace, of which 100 a day may be drafts, whichever provider runs it, so a flood of
-   tickets cannot run up a bill. Past the daily limit automatic suggestions wait until 00:00 UTC; what
-   an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
+   tickets cannot run up a bill. Intake's decisions on chat channels count too, at most 300 a day of
+   them (`intake_per_day`), so a busy group cannot spend the day's triage and drafts. Past the daily
+   limit automatic suggestions wait until 00:00 UTC; what an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
    (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.
 2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
    included in your plan). When it is used up, features on the server's provider stop until the first
@@ -225,21 +360,30 @@ channel too. Its use, its chats and their transcripts are on the **AI chat** tab
 **Settings → Built-in AI → History** lists who added, changed or deleted a provider or a key, and who turned a
 feature on, off or elsewhere, with keys shown only by their last 4 characters. Every call to a provider
 leaves one usage record (the feature, the model, tokens in and out, whether it failed, and for the
-server's provider its cost at that day's prices), never the text sent or received. **Settings → Built-in AI →
+server's provider its cost at that day's prices), never the text sent or received. When the provider
+reports what a call cost (OpenRouter does with every answer), that is kept too, in the provider's own
+unit: OpenRouter's credits, never converted to dollars. **Settings → Built-in AI →
 Usage** sums a month per feature and provider. Both are in the [export](export.md).
 
 ## Agents and external AI agents
 
-Agents see these settings but only admins change them. An AI agent with a draft token asks for a
-reply draft, reads it and discards it like a person (`colliedesk_ai_draft_create`,
-`colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`, `colliedesk_ai_draft_discard`); sending a
-reply still needs the send tier or a person's approval. A send token that replies from a draft passes
-its id (`ai_draft_id` on `colliedesk_reply_send`), so the draft records how close the reply stayed to
-it, as when a person sends it. With a draft token it reads, asks for, applies
-and dismisses triage suggestions too (`colliedesk_ai_triage_get`, `_create`, `_accept`, `_dismiss`). Through [MCP](mcp.md), an AI agent with a read
-token can read them, and one with an admin token can add, check, change and delete providers (a token
-below admin is refused outright on the two calls that carry a key, so a key never waits in a request).
-Turning a feature on or moving it always becomes a [request a person approves](agent-requests.md).
+Everyone with `ai_settings:read` sees these settings; changing them needs `ai_settings:update`, and
+adding a provider or replacing its key `ai_settings:manage_credentials` (the Admin role holds both).
+An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once:
+
+1. With `ai_assist:create` it asks for a reply draft, reads it and discards it like a person
+   (`colliedesk_ai_draft_create`, `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`,
+   `colliedesk_ai_draft_discard`), and reads, asks for, applies and dismisses triage suggestions
+   (`colliedesk_ai_triage_get`, `_create`, `_accept`, `_dismiss`). It can also leave its own written
+   reply as a draft for a person to send (`colliedesk_reply_draft`).
+2. Sending a reply needs `messages:send`. A token that replies from a draft passes its id
+   (`ai_draft_id` on `colliedesk_reply_send`), so the draft records how close the reply stayed to it,
+   as when a person sends it.
+3. Through [MCP](mcp.md), `ai_settings:read` reads the settings, `ai_settings:update` changes
+   features, levels and providers, and `ai_settings:manage_credentials` is needed on the two calls that
+   carry a key.
+
+A call without the permission is refused and says which one is missing.
 
 ## Sign in with a subscription
 

@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 // The operator tools run the whole server, not a workspace (docs/internals/operator-console.md). They are
@@ -21,7 +19,7 @@ func operatorWhoamiSpec() Spec {
 		Title: "Show which operator this token acts as",
 		Description: `Show the operator this token acts as, what the token may ask for, and where the operator console is. Call it first.` +
 			operatorToolNote,
-		Tier: auth.ScopeOperator, ReadOnly: true,
+		Operator: true, ReadOnly: true,
 		REST:   []string{"GET /api/v1/operator/auth/me"},
 		Input:  noArguments,
 		Output: `{"type":"object","required":["operator","session","console"],"properties":{"operator":{"type":"object"},"session":{"type":"object"},"console":{"type":"object"}}}`,
@@ -38,7 +36,7 @@ func operatorSignOutSpec() Spec {
 		Name:        "colliedesk_operator_sign_out",
 		Title:       "End this operator token",
 		Description: `End this operator token at once. Nothing else changes; an operator makes a new token in the console.` + operatorToolNote,
-		Tier:        auth.ScopeOperator, Destructive: true,
+		Operator:    true, Destructive: true,
 		REST:   []string{"POST /api/v1/operator/auth/logout"},
 		Input:  noArguments,
 		Output: `{"type":"object","required":["signed_out"],"properties":{"signed_out":{"type":"boolean"}}}`,
@@ -57,8 +55,8 @@ func operatorTokenCreateSpec() Spec {
 		Title: "Ask for another operator token",
 		Description: `Ask an operator for another operator token (for another AI client). It always becomes a request: an operator approves it ` +
 			`in the console with their authenticator code and sees the token once; you never receive it. Say why in note.` + operatorToolNote,
-		Tier: auth.ScopeOperator,
-		REST: []string{"POST /api/v1/operator/tokens"},
+		Operator: true,
+		REST:     []string{"POST /api/v1/operator/tokens"},
 		Input: `{"type":"object","additionalProperties":false,"required":["label"],"properties":{` +
 			`"label":{"type":"string","minLength":1,"maxLength":100,"description":"What the token is for."},` +
 			`"permissions":{"type":"array","items":{"type":"string","enum":["operator_requests:cancel","operator_config:write","operator:manage"]},"description":"Besides reading, which it always has."},` +
@@ -104,7 +102,7 @@ func operatorRead(name, title, description, path string, query []string) Spec {
 	}
 	return Spec{
 		Name: name, Title: title, Description: description + operatorToolNote,
-		Tier: auth.ScopeOperator, ReadOnly: true,
+		Operator: true, ReadOnly: true,
 		REST:   []string{"GET " + path},
 		Input:  input,
 		Output: `{"type":"object"}`,
@@ -130,7 +128,7 @@ func operatorCheckSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_config_check", Title: "Check a settings change",
 		Description: `Check a change of the server's settings without saving it: whether it builds, and what saving it would ask (guards). Nothing is saved. A token never runs a live test (it would send the server's secrets): an operator does that in the console.` + operatorToolNote,
-		Tier:        auth.ScopeOperator, ReadOnly: true,
+		Operator:    true, ReadOnly: true,
 		REST:   []string{"POST /api/v1/operator/config/check"},
 		Input:  `{"type":"object","additionalProperties":false,"properties":{` + changeProperties + `}}`,
 		Output: `{"type":"object","required":["ok","errors"],"properties":{"ok":{"type":"boolean"},"errors":{"type":"object"},"guards":{"type":"array"}}}`,
@@ -147,8 +145,8 @@ func operatorConfigChangeSpec() Spec {
 		Name: "colliedesk_operator_config_change", Title: "Ask to change the server's settings",
 		Description: `Ask an operator to change the server's settings. It always becomes a request an operator approves with their code. ` +
 			`base_version is the version you read (colliedesk_operator_config_get). Name a secret the change needs with null; never send its value. Say why in note.` + operatorToolNote,
-		Tier: auth.ScopeOperator,
-		REST: []string{"PATCH /api/v1/operator/config"},
+		Operator: true,
+		REST:     []string{"PATCH /api/v1/operator/config"},
 		Input: `{"type":"object","additionalProperties":false,"required":["base_version"],"properties":{"base_version":{"type":"integer","minimum":0},` + changeProperties +
 			`,"note":{"type":"string","maxLength":500}}}`,
 		Output: `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
@@ -162,7 +160,7 @@ func operatorRestoreSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_config_restore", Title: "Ask to restore a configuration version",
 		Description: `Ask an operator to save an older configuration version again as the newest one. It always becomes a request an operator approves.` + operatorToolNote,
-		Tier:        auth.ScopeOperator,
+		Operator:    true,
 		REST:        []string{"POST /api/v1/operator/config/versions/{id}/restore"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["version","base_version"],"properties":{"version":{"type":"integer","minimum":1},"base_version":{"type":"integer","minimum":0},"note":{"type":"string","maxLength":500}}}`,
 		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
@@ -180,7 +178,7 @@ func operatorRequestGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_request_get", Title: "Show one of your operator requests",
 		Description: `Show one operator request this token made: whether it waits, was approved (and the call's answer) or was refused.` + operatorToolNote,
-		Tier:        auth.ScopeOperator, ReadOnly: true,
+		Operator:    true, ReadOnly: true,
 		REST:   []string{"GET /api/v1/operator/requests/{id}"},
 		Input:  operatorRequestIDInput,
 		Output: `{"type":"object"}`,
@@ -196,7 +194,7 @@ func operatorRequestCancelSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_request_cancel", Title: "Withdraw one of your operator requests",
 		Description: `Withdraw an operator request this token made that still waits.` + operatorToolNote,
-		Tier:        auth.ScopeOperator, Idempotent: true,
+		Operator:    true, Idempotent: true,
 		REST:   []string{"POST /api/v1/operator/requests/{id}/cancel"},
 		Input:  operatorRequestIDInput,
 		Output: `{"type":"object"}`,
@@ -212,7 +210,7 @@ func operatorInviteSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_invite", Title: "Ask to invite an operator",
 		Description: `Ask an operator to invite another operator by email. It always becomes a request; the approver sees the one-time link, you never do.` + operatorToolNote,
-		Tier:        auth.ScopeOperator,
+		Operator:    true,
 		REST:        []string{"POST /api/v1/operator/operators"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["email"],"properties":{"email":{"type":"string","minLength":3,"maxLength":320},"note":{"type":"string","maxLength":500}}}`,
 		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
@@ -226,7 +224,7 @@ func operatorRevokeSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_revoke", Title: "Ask to revoke an operator",
 		Description: `Ask an operator to revoke another operator: every session and token of theirs would stop at once (inviting them again lets them back in). It always becomes a request.` + operatorToolNote,
-		Tier:        auth.ScopeOperator,
+		Operator:    true,
 		REST:        []string{"DELETE /api/v1/operator/operators/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["operator_id"],"properties":{"operator_id":{"type":"string",` + uuid + `}}}`,
 		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
@@ -240,7 +238,7 @@ func operatorSessionRevokeSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_session_revoke", Title: "Ask to end an operator session or token",
 		Description: `Ask an operator to end one operator session or token. It always becomes a request.` + operatorToolNote,
-		Tier:        auth.ScopeOperator,
+		Operator:    true,
 		REST:        []string{"DELETE /api/v1/operator/sessions/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["session_id"],"properties":{"session_id":{"type":"string",` + uuid + `}}}`,
 		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
@@ -260,10 +258,10 @@ func operatorTrialSpec(confirm bool) Spec {
 	}
 	return Spec{
 		Name: name, Title: title, Description: description + ` It always becomes a request an operator approves.` + operatorToolNote,
-		Tier:   auth.ScopeOperator,
-		REST:   []string{"POST " + path},
-		Input:  `{"type":"object","additionalProperties":false,"required":["version"],"properties":{"version":{"type":"integer","minimum":1},"note":{"type":"string","maxLength":500}}}`,
-		Output: `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
+		Operator: true,
+		REST:     []string{"POST " + path},
+		Input:    `{"type":"object","additionalProperties":false,"required":["version"],"properties":{"version":{"type":"integer","minimum":1},"note":{"type":"string","maxLength":500}}}`,
+		Output:   `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
 		run: func(c *call, arguments map[string]any) (any, error) {
 			return ask(c, http.MethodPost, path, arguments)
 		},
@@ -274,7 +272,7 @@ func operatorProductAddSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_product_add", Title: "Ask to add a Polar product",
 		Description: `Ask an operator to add a Polar product the server sells. On sale, it takes the product of the same plan and period off sale. Products are never removed or changed, only taken off sale. It always becomes a request.` + operatorToolNote,
-		Tier:        auth.ScopeOperator,
+		Operator:    true,
 		REST:        []string{"POST /api/v1/operator/billing/products"},
 		Input: `{"type":"object","additionalProperties":false,"required":["product_id","plan","period"],"properties":{"product_id":{"type":"string","minLength":1,"maxLength":200},` +
 			`"plan":{"type":"string","enum":["team","founding","solo","small","team25"]},"period":{"type":"string","enum":["monthly","yearly","single"]},"on_sale":{"type":"boolean"},"note":{"type":"string","maxLength":500}}}`,
@@ -289,7 +287,7 @@ func operatorProductOnSaleSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_product_on_sale", Title: "Ask to put a Polar product on or off sale",
 		Description: `Ask an operator to put a Polar product on sale (taking the other of its plan and period off) or off sale. Nothing else of a product changes. It always becomes a request.` + operatorToolNote,
-		Tier:        auth.ScopeOperator,
+		Operator:    true,
 		REST:        []string{"PATCH /api/v1/operator/billing/products/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["product_id","on_sale"],"properties":{"product_id":{"type":"string","minLength":1,"maxLength":200},"on_sale":{"type":"boolean"},"note":{"type":"string","maxLength":500}}}`,
 		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,

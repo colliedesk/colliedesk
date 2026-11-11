@@ -4,12 +4,15 @@ import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
+import type { Role } from '../../api/schemas';
 import { NameForm } from './name-form';
 import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
+import { ConnectedAppsSection } from './connected-apps-section';
 import { SessionsSection } from './sessions-section';
 import { SettingsNav } from './settings-nav';
 import { TimezoneSelect } from './timezone-select';
+import './settings-v2.css';
 
 interface SettingsPageProps {
   sessions: Session[];
@@ -33,7 +36,11 @@ interface SettingsPageProps {
   // The invite just created: its one-time link, or none when a repeat of the press came back without it.
   createdInvite?: { url?: string };
   creatingInvite?: boolean;
-  onCreateInvite?: (email: string, role: 'admin' | 'agent') => void;
+  onCreateInvite?: (email: string, roleIds: string[]) => void;
+  // The roles an invite may give.
+  inviteRoles?: Role[];
+  // Revoking needs team:revoke.
+  canRevokeInvites?: boolean;
   onRevokeSession?: (id: string) => void;
   onRevokeInvite?: (id: string) => void;
   onSetWorkspaceTimezone?: (timezone: string) => void;
@@ -48,8 +55,12 @@ interface SettingsPageProps {
   teamSection?: ReactNode;
   // savedRepliesSection is for every agent, not only admins.
   savedRepliesSection?: ReactNode;
+  // showInvites is false for a person whose roles may not read the team (team:read).
+  showInvites?: boolean;
   // agentsSection creates agent tokens for AI hosts; every signed-in person sees it, just above the sessions it adds to.
   agentsSection?: ReactNode;
+  // mcpAddress is this server's MCP address, which Connected AI apps tells a person to add in their app.
+  mcpAddress?: string;
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
   // helpCenterSection turns the public help center on or off; every agent sees it, admins change it.
@@ -62,20 +73,20 @@ interface SettingsPageProps {
 // workspace shares. A section nav jumps to each; it lists only the sections this person can see,
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
-  workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, savedRepliesSection, helpCenterSection, exportSection, showBilling = false }: SettingsPageProps) {
+  workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite, inviteRoles,
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, mcpAddress = `${window.location.origin}/mcp`, savedRepliesSection, helpCenterSection, exportSection, showBilling = false, showInvites = true }: SettingsPageProps) {
   return (
-    <main className="settings-page panel">
+    <main className="settings-page panel settings-v2">
       <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
       {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className="settings-layout">
         <SettingsNav page="/settings" shown={{ general: canManageWorkspace, team: Boolean(teamSection), channels: true,
-          savedReplies: Boolean(savedRepliesSection), helpCenter: Boolean(helpCenterSection), exportData: Boolean(exportSection), billing: showBilling, importData: canManageWorkspace, ai: true, agents: Boolean(agentsSection) }} />
+          savedReplies: Boolean(savedRepliesSection), helpCenter: Boolean(helpCenterSection), exportData: Boolean(exportSection), billing: showBilling, importData: canManageWorkspace, ai: true, agents: Boolean(agentsSection), invites: showInvites }} />
         <div className="settings-sections">
           {error && <p role="alert" className="error-copy">{error}</p>}
           <p className="settings-group-label">{messages.settingsYourAccount}</p>
           <section className="settings-card" aria-labelledby="profile-heading">
             <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{settingsMessages.profileDescription}</p></div>
-            <div className="settings-body">
+            <div className="settings-body settings-rows">
               <DisplayNameField value={displayName} email={email} save={displayNameSave} onSave={onSetDisplayName} />
               <TimezoneSelect label={settingsMessages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={settingsMessages.sameAsWorkspace(workspaceTimezone)}
                 save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
@@ -85,22 +96,23 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           <p className="settings-group-label">{messages.settingsWorkspace}</p>
           {canManageWorkspace && <section className="settings-card" aria-labelledby="general-heading">
             <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
-            <div className="settings-body">
+            <div className="settings-body settings-rows">
               <NameForm label={messages.workspaceName} saveLabel={settingsMessages.saveWorkspaceName} hint={settingsMessages.workspaceNameHelp}
                 value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
               <TimezoneSelect label={settingsMessages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
             </div>
           </section>}
           {teamSection}
-          <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInvite={createdInvite} creatingInvite={creatingInvite}
-            inviteError={inviteError} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />
+          {showInvites && <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInvite={createdInvite} creatingInvite={creatingInvite}
+            inviteError={inviteError} roles={inviteRoles} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />}
+          <ConnectedAppsSection sessions={sessions} timezone={timezone} mcpAddress={mcpAddress} onDisconnect={onRevokeSession} />
           {agentsSection}
           <SessionsSection sessions={sessions} timezone={timezone} onRevokeSession={onRevokeSession} />
           {savedRepliesSection}
           {helpCenterSection}
           {exportSection && <section className="settings-card" aria-labelledby="export-heading">
             <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
-            <div className="settings-body">{exportSection}</div>
+            <div className="settings-body settings-rows">{exportSection}</div>
           </section>}
         </div>
       </div>}

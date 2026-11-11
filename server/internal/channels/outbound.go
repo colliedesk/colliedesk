@@ -11,7 +11,9 @@ import (
 
 // OutMessage is the reply being sent.
 type OutMessage struct {
-	ID, Body  string
+	ID, Body string
+	// Notice is the kind of notice the channel sends by itself (NoticeReceived, ...); empty for the team's reply.
+	Notice    string
 	CC        []string
 	Files     []OutFile
 	CreatedAt time.Time
@@ -51,6 +53,8 @@ type Outbound struct {
 	// earlier messages, oldest first; LastIncoming is the customer's newest of them.
 	References   []string
 	LastIncoming string
+	// Place is the chat place a notice goes to when no conversation is (Conversation is then empty).
+	Place *Place
 	// Prepared is what Prepare returned when the reply was queued.
 	Prepared json.RawMessage
 	Attempt  int
@@ -110,6 +114,9 @@ type SendResult struct {
 	Code, Reason string
 	// Retryable makes a failure try again after a backoff; otherwise it waits for a person.
 	Retryable bool
+	// Final marks a failure the same reply meets however often it is tried (a file the channel cannot
+	// carry): a person's retry is refused, and the reply is written again instead.
+	Final bool
 	// RetryAt is when a deferred delivery is due again; deferring spends no attempt.
 	RetryAt time.Time
 	// HeldByPause marks a deferral because the workspace's sending is paused.

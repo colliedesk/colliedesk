@@ -25,7 +25,6 @@ func (a *API) getHelpCenterSearchConsole(response http.ResponseWriter, request *
 // so a client that knows only one token never removes the other; null or an empty string removes one.
 // The tags appear on every public page, so settings access alone cannot publish them.
 func (a *API) putHelpCenterSearchConsole(response http.ResponseWriter, request *http.Request) {
-	raw := keepBody(request)
 	var input struct {
 		Google sentText `json:"google_site_verification"`
 		Bing   sentText `json:"bing_site_verification"`
@@ -45,7 +44,7 @@ func (a *API) putHelpCenterSearchConsole(response http.ResponseWriter, request *
 		writeThemeError(response, err)
 		return
 	}
-	if a.askUnlessHeld(response, request, Route{http.MethodPut, "/api/v1/help-center/search-console", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, raw, nil) {
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
 	view, err := a.store.PutHelpCenterSearchConsole(request.Context(), principal(request).Workspace.ID, change)

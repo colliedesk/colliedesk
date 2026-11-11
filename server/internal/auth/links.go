@@ -45,7 +45,12 @@ func (s *Service) Handoff(ctx context.Context, principal Principal) (string, err
 			return fmt.Errorf("delete expired hand-offs: %w", err)
 		}
 		var err error
-		link, err = s.createLinkFor(ctx, tx, principal.Workspace.ID, principal.Agent.ID, principal.Agent.Email, "handoff", principal.Agent.Role, nil, handoffLifetime)
+		// A session limited to the Agent role hands that limit on (role ceiling agent); any other is whole.
+		ceiling := "admin"
+		if principal.LimitedTo != nil {
+			ceiling = "agent"
+		}
+		link, err = s.createLinkFor(ctx, tx, principal.Workspace.ID, principal.Agent.ID, principal.Agent.Email, "handoff", ceiling, nil, handoffLifetime)
 		return err
 	})
 	if err != nil {
@@ -118,15 +123,17 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 	if kind == "handoff" && (!onWorkspaceHost || !cookie) {
 		return Redeemed{}, fmt.Errorf("redeem link: %w", ErrHandoffOffItsHost)
 	}
-	role := ceiling
+	// A pairing or hand-off link with the agent ceiling, or a sign-in that asks for the agent role (older
+	// clients), limits the session to the Agent role; an invite's ceiling only records its roles.
+	limited := kind != "invite" && ceiling == "agent"
 	if requestedRole != "" {
 		if requestedRole != "agent" && requestedRole != "admin" {
 			return Redeemed{}, fmt.Errorf("invalid requested role")
 		}
-		if ceiling == "agent" && requestedRole == "admin" {
+		if limited && requestedRole == "admin" {
 			return Redeemed{}, fmt.Errorf("requested role exceeds invite ceiling")
 		}
-		role = requestedRole
+		limited = limited || requestedRole == "agent"
 	}
 	if err := requireActiveAgent(ctx, tx, workspaceID, agentID, email); err != nil {
 		return Redeemed{}, err
@@ -137,16 +144,58 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 				return Redeemed{}, err
 			}
 		}
+		// The invited person gets the invite's roles, added to any they hold; someone new holds only them.
 		var created string
+		var inserted bool
 		if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),$3)
-			ON CONFLICT(workspace_id,email) DO UPDATE SET role=CASE WHEN agents.role='admin' THEN agents.role ELSE EXCLUDED.role END
-			RETURNING id::text`, workspaceID, email, role).Scan(&created); err != nil {
+			ON CONFLICT(workspace_id,email) DO UPDATE SET email=EXCLUDED.email
+			RETURNING id::text,(xmax=0)`, workspaceID, email, ceiling).Scan(&created, &inserted); err != nil {
 			return Redeemed{}, fmt.Errorf("create invited agent: %w", err)
+		}
+		var invitedBy *string
+		if err := tx.QueryRow(ctx, `SELECT created_by_agent_id::text FROM pairing_links WHERE workspace_id=$1 AND id=$2`, workspaceID, linkID).Scan(&invitedBy); err != nil {
+			return Redeemed{}, fmt.Errorf("invite creator: %w", err)
+		}
+		// An invite signs in as an existing member only when it was made for that member, and only while
+		// its creator may still change their roles; a link made for someone new signs in no one who
+		// joined since.
+		if !inserted {
+			if agentRef(agentID) != created {
+				return Redeemed{}, fmt.Errorf("redeem link: %w", domain.ErrAlreadyMember)
+			}
+			inviter, err := store.MemberCallerTx(ctx, tx, workspaceID, invitedBy)
+			if err != nil {
+				return Redeemed{}, err
+			}
+			if err := store.RequireMayReinviteTx(ctx, tx, workspaceID, inviter, created); err != nil {
+				return Redeemed{}, fmt.Errorf("redeem link: %w", err)
+			}
+		}
+		var roleIDs []string
+		rows, err := tx.Query(ctx, `SELECT i.role_id::text FROM invite_roles i WHERE i.workspace_id=$1 AND i.link_id=$2`, workspaceID, linkID)
+		if err != nil {
+			return Redeemed{}, fmt.Errorf("invite roles: %w", err)
+		}
+		if roleIDs, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+			return Redeemed{}, fmt.Errorf("invite roles: %w", err)
+		}
+		if err := store.GiveRolesOnJoin(ctx, tx, workspaceID, created, roleIDs, inserted, invitedBy); err != nil {
+			return Redeemed{}, err
 		}
 		agentID = &created
 	}
 	if agentID == nil {
 		return Redeemed{}, fmt.Errorf("pairing link has no agent")
+	}
+	// Older clients may ask for admin: only a person who holds the Admin role gets it.
+	if requestedRole == "admin" {
+		var admin bool
+		if err := tx.QueryRow(ctx, `SELECT `+store.HoldsAdminRole+` FROM agents a WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, *agentID).Scan(&admin); err != nil {
+			return Redeemed{}, fmt.Errorf("requested role: %w", err)
+		}
+		if !admin {
+			return Redeemed{}, fmt.Errorf("requested role admin: the person does not hold the Admin role")
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE pairing_links SET used_at=$2 WHERE id=$1`, linkID, now); err != nil {
 		return Redeemed{}, fmt.Errorf("consume link: %w", err)
@@ -158,14 +207,17 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 	if label == "" {
 		label = "Browser session"
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,label,expires_at) VALUES($1,$2,$3,$4,$5,$6)`, workspaceID, *agentID, sessionHash, role, label, now.Add(sessionLifetime)); err != nil {
+	// role_ceiling is kept for a rollback; role_id is what limits the session now.
+	if _, err := tx.Exec(ctx, `INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,label,expires_at,role_id)
+		SELECT $1,a.id,$3,CASE WHEN NOT $6 AND `+store.HoldsAdminRole+` THEN 'admin' ELSE 'agent' END,$4,$5,
+			CASE WHEN $6 THEN (SELECT r.id FROM roles r WHERE r.workspace_id=$1 AND r.system='agent') END
+		FROM agents a WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, *agentID, sessionHash, label, now.Add(sessionLifetime), limited); err != nil {
 		return Redeemed{}, fmt.Errorf("create session: %w", err)
 	}
 	result, err := scanRedeemed(ctx, tx, workspaceID, *agentID)
 	if err != nil {
 		return Redeemed{}, err
 	}
-	result.Agent.Role = effectiveRole(result.Agent.Role, role)
 	result.Token = sessionToken
 	if err := tx.Commit(ctx); err != nil {
 		return Redeemed{}, fmt.Errorf("commit redeem: %w", err)
@@ -175,10 +227,10 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 
 func scanRedeemed(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (Redeemed, error) {
 	var result Redeemed
-	err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,a.role,a.timezone_override
+	err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,`+store.AgentRolesColumn+`,a.timezone_override
 		FROM workspaces w JOIN agents a ON a.workspace_id=w.id WHERE w.id=$1 AND a.id=$2`, workspaceID, agentID).
 		Scan(&result.Workspace.ID, &result.Workspace.Slug, &result.Workspace.Name, &result.Workspace.Timezone,
-			&result.Agent.ID, &result.Agent.Email, &result.Agent.DisplayName, &result.Agent.Role, &result.Agent.TimezoneOverride)
+			&result.Agent.ID, &result.Agent.Email, &result.Agent.DisplayName, &result.Agent.Roles, &result.Agent.TimezoneOverride)
 	if err != nil {
 		return Redeemed{}, fmt.Errorf("load redeemed identity: %w", err)
 	}

@@ -40,11 +40,34 @@ type Provider struct {
 	CheckStatus    string    `json:"check_status"`
 	CheckErrorCode *string   `json:"check_error_code"`
 	CheckedAt      time.Time `json:"checked_at"`
-	CreatedBy      *string   `json:"created_by"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// Routing is how OpenRouter picks who serves the provider's requests; nil on another server.
+	Routing   *ProviderRouting `json:"routing"`
+	CreatedBy *string          `json:"created_by"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 	// UsedBy lists the slots set to this provider, on or off.
 	UsedBy []string `json:"used_by"`
+}
+
+// ProviderRouting is OpenRouter's provider routing by data policy: DataCollection "deny" keeps the
+// requests off the providers that store or train on what they are sent, ZDR on those that keep
+// nothing (zero data retention).
+type ProviderRouting struct {
+	DataCollection string `json:"data_collection"`
+	ZDR            bool   `json:"zdr"`
+}
+
+// loosens says whether a change of routing lets requests reach providers they could not reach.
+func (r ProviderRouting) loosens(to ProviderRouting) bool {
+	return r.DataCollection == "deny" && to.DataCollection != "deny" || r.ZDR && !to.ZDR
+}
+
+func (r ProviderRouting) adapter() aiprovider.Routing {
+	routing := aiprovider.Routing{ZDR: r.ZDR}
+	if r.DataCollection == "deny" {
+		routing.DataCollection = "deny"
+	}
+	return routing
 }
 
 // Server describes the server's provider without its key.
@@ -54,6 +77,12 @@ type Server struct {
 	Models map[string][]string `json:"models"`
 }
 
+// ServerOff is the server's provider while its operator switched it off: no workspace can pick it, and
+// the features set to it say so.
+type ServerOff struct {
+	Label string `json:"label"`
+}
+
 // Slot is one feature's setting. Active is whether it runs now: on, and its provider and model are
 // still there. A slot that is on but cannot run says why in OffReason.
 type Slot struct {
@@ -61,9 +90,16 @@ type Slot struct {
 	Source     string  `json:"source"`
 	ProviderID *string `json:"provider_id"`
 	Model      *string `json:"model"`
-	Effort     string  `json:"effort"`
-	Enabled    bool    `json:"enabled"`
-	// Automatic: triage suggestions apply by themselves (the AutoParts of them) as they come.
+	// FallbackModel is intake's: the provider's model it tries when Model fails or answers what
+	// cannot be read.
+	FallbackModel *string `json:"fallback_model"`
+	Effort        string  `json:"effort"`
+	Enabled       bool    `json:"enabled"`
+	// DefaultLevel is what the feature does by itself where no channel sets a level, and on
+	// conversations of no channel: off, suggest or auto (triage only).
+	DefaultLevel string `json:"default_level"`
+	// Automatic is the older switch, read from DefaultLevel for clients that still read it: triage
+	// applying by itself (auto), drafts written when a customer writes (suggest).
 	Automatic bool     `json:"automatic"`
 	AutoParts []string `json:"auto_parts"`
 	// MonthlyCap is the chat slot's own monthly limit in micro-dollars; nil is none.
@@ -92,7 +128,9 @@ type Event struct {
 
 // Settings is everything Settings → Built-in AI shows.
 type Settings struct {
-	Server    *Server    `json:"server"`
+	Server *Server `json:"server"`
+	// ServerOff is set while the operator switched the server's provider off; null otherwise.
+	ServerOff *ServerOff `json:"server_off"`
 	Providers []Provider `json:"providers"`
 	Slots     []Slot     `json:"slots"`
 	// Events are the newest changes, newest first.
@@ -111,6 +149,10 @@ type Settings struct {
 	// AutoDraftEstimate is what writing a draft for every customer message would have meant in the last
 	// 30 days, shown before an admin turns it on.
 	AutoDraftEstimate AutoDraftEstimate `json:"auto_draft_estimate"`
+	// Channels are the levels channels set apart from the default, with what each means now.
+	Channels []ChannelLevel `json:"channels"`
+	// SourceConsents are the kinds of context an admin agreed intake may send besides the conversation.
+	SourceConsents []SourceConsent `json:"source_consents"`
 }
 
 // AutoDraftEstimate: CustomerMessages came in the last 30 days (imports left out); DraftCostMicroUSD
