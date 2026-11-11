@@ -8,7 +8,9 @@
 .role-checkboxes { display: grid; gap: var(--space-2); }
 .role-checkbox label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .role-checkbox[data-locked] label { color: var(--text-3); }
-.role-checkbox p { margin: 0 0 0 var(--space-6); }
+/* A locked role's lock (LockedReason) follows its label on the same line; a note under a role takes the next line. */
+.role-checkbox { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2); }
+.role-checkbox p { flex-basis: calc(100% - var(--space-6)); margin: 0 0 0 var(--space-6); }
 .role-lock svg { width: 12px; height: 12px; }
 .role-checkbox-name { font-weight: 500; }
 .badge-warn { display: inline-flex; align-items: center; gap: var(--space-1); }

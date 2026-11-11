@@ -333,7 +333,7 @@ test('agent tokens are listed in AI & agents, browser sessions in Account', asyn
   expect(await within(tokens).findByTitle('Claude Code')).toBeInTheDocument();
   expect(within(tokens).queryByTitle('Firefox')).not.toBeInTheDocument();
   // Revoking a token stops an AI agent; it signs no browser out, so the card says so instead of the devices' line.
-  expect(tokens).toHaveTextContent('AI agents working with a token. Revoke one to stop that agent at once; no browser is signed out.');
+  expect(tokens).toHaveTextContent('AI agents working with a token. Revoke one to stop it.');
   expect(tokens).not.toHaveTextContent('on this device that signs you out');
 });
 

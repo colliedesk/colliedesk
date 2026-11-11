@@ -243,6 +243,7 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
   (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
+  Text that explains a row (more than a name) is a HelpTip instead, which also opens by tap (see Quiet by default).
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
   only what the API returns. A conversation numbered in a series of its own (a channel's, such as
   `CHD-2026-0142`) shows its code first in the row's meta and in the header with a copy button; the default
@@ -267,6 +268,44 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Every empty list says which kind of empty it is and gives the next step: a new workspace gets
   **Get started** links, a filtered list with no match gets **Clear filters**, a failed load gets
   **Try again**.
+
+## Quiet by default
+
+A screen reads as controls, not as a manual (#527). Screens explained themselves in
+always-visible paragraphs; people scanned past the controls.
+
+- A row shows its label and at most one short line: 60 characters or less, one line at desktop width.
+- These stay visible, whatever their length: an error, a state the person must act on, the consequence right before
+  an irreversible action, and a value to copy. An error is `.error-copy` or `role="alert"` and a warning
+  `.warning-note`; any other such line says so on its element with `data-quiet="state"`, `data-quiet="consequence"`
+  or `data-quiet="value"`. Never mark a line to get it past the gate: an explanation is not a state.
+- How, why and definitions go into a **HelpTip** (`web/src/ui/help-tip.tsx`): an ⓘ button after the label, named
+  "About {label}". Its text opens on hover, on keyboard focus and on tap or click, stays open on a press on its own
+  text, and closes with Escape, a press outside or when focus leaves. Escape closes the tip only: it is caught in the
+  capture phase, so an editor or dialog around the tip does not cancel, and focus inside the tip goes back to its
+  button. The text is the button's accessible description (`aria-describedby`). A text-only tip is `role="tooltip"`
+  and its button has no `aria-expanded`. It may hold one link, such as **Learn more**; a tooltip may not hold a link,
+  so that tip is a disclosure instead (the button has `aria-expanded` and `aria-controls`), and it stays open while
+  the pointer or focus is inside it. It looks like the icon tooltips (`--surface-inverse`, `--text-inverse`), is
+  positioned by Floating UI 8 px inside the screen at any width and hides while its button is scrolled out of sight
+  (`web/e2e/help-tip.spec.ts` checks both at 390 px), and fades in only without `prefers-reduced-motion`. The 16 px icon has a 32 px target with a mouse and 44 px by touch, from padding with an
+  equal negative margin, so the row keeps its height.
+- A procedure (several steps) becomes a **Learn more** link to its page in the docs, not a paragraph.
+- A locked control says why in the tip of its lock: **LockedReason** (the same component with a lock, named
+  "Why {label} is locked"). Pass the tip's `id` to the control's `aria-describedby`, so the control is described too.
+  The last admin's Admin role in Settings → Team is the first one.
+- Gate: `web/scripts/quiet-copy.test.mjs` reads every always-visible helper line of the web app and fails on one longer
+  than 60 characters. A helper is an element with the class `help`, `field-note`, `lead`, `section-lead`, `kb-hint`,
+  `af-help`, `muted-copy` or any class ending in `-lead`, `-help` or `-hint`; a `p` in `.section-heading` (a section's
+  description); and a component's `hint`, `help`, `lead`, `description`, `note`, `detail` or `summary` prop.
+  `.error-copy`, `role="alert"`, `.warning-note`, `.sr-only` and a `data-quiet` line are left out. Each branch of a
+  conditional `className` or `role` counts on its own, so `failed ? 'error-copy' : 'help'` is a helper. It reads the TSX
+  rather than a rendered page, because many helpers show in one state only (a wizard step, a locked role), and follows
+  each line to its message entry (a parameter hides an outer name; its default counts); a value known only at run time
+  counts as no characters. The lines that were there when the gate came in are listed in
+  `web/scripts/quiet-copy-ceiling.txt` with their length, and the test pins how many lines it holds. That list only
+  shrinks: the gate fails on a new line, on a listed line longer than its recorded length, on one that got shorter
+  until its length is lowered, and on one that got short or went away until it is deleted.
 
 ## Review checklists
 
