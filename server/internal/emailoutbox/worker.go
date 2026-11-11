@@ -56,6 +56,9 @@ type Options struct {
 	// FromPolicy and MailFromDomain choose the sending identity (see email.FromPolicyVerified).
 	FromPolicy     string
 	MailFromDomain string
+	// ReceivesPlatformReplies is set when this server takes mail for MailFromDomain (its forwarder has
+	// MAIL_FROM_INBOUND_SECRET). Only then may Reply-To name a platform reply address.
+	ReceivesPlatformReplies bool
 	// Storage holds the files attached to replies; without it a reply with files fails permanently.
 	Storage attachments.Storage
 	// HourlyLimit caps replies sent per workspace per hour; zero uses the default.
@@ -197,16 +200,26 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) channels.Send
 	}
 }
 
-// compose renders the reply from the given identity. Reply-To stays the support address with the
-// conversation token on every transport, so the customer's answer threads even when a relay or Gmail
-// rewrites our Message-ID.
+// compose renders the reply from the given identity. Reply-To carries the conversation token on every
+// transport, so the customer's answer threads even when a relay or Gmail rewrites our Message-ID.
 func (w *Worker) compose(item store.Delivery, from mail.Address, copies []string, files []email.File) ([]byte, error) {
 	return email.Compose(email.Outgoing{Files: files,
-		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
+		FromName: from.Name, FromAddress: from.Address, ReplyTo: w.replyTo(item),
 		ReplyToName: item.SenderName,
 		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
 		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(), Opening: item.Opening,
 	})
+}
+
+// replyTo is where the customer's answer goes: the support address with the conversation token. Until
+// mail has reached the channel through the support mailbox, that mailbox may still forward to the old
+// help desk, so a server that receives mail for its platform mail domain asks for the answer at the
+// conversation's platform reply address instead, which always reaches Colliedesk.
+func (w *Worker) replyTo(item store.Delivery) string {
+	if !item.Forwarded && w.options.ReceivesPlatformReplies && w.options.MailFromDomain != "" && item.ReplyToken != "" {
+		return email.PlatformReplyTo(item.ReplyToken, w.options.MailFromDomain)
+	}
+	return email.PlusAddress(item.SupportAddress, item.ReplyToken)
 }
 
 // usableCopies splits a stored Cc list into the addresses a message can carry and the rest, which are
