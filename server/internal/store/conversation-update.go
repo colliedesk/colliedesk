@@ -71,6 +71,9 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 		}
 	}
 	if update.Status != nil {
+		if err := refuseSpamStatus(ctx, tx, workspaceID, []string{id}); err != nil {
+			return domain.Conversation{}, err
+		}
 		if err := setStatusCause(ctx, tx, statusChange{ActorID: update.ActorID, TokenID: update.TokenID, Cause: tokenCause(update.TokenID), Quiet: update.Quiet}); err != nil {
 			return domain.Conversation{}, err
 		}

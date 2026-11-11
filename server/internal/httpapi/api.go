@@ -563,6 +563,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/conversations", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/conversations/{id}", auth.PermissionSession},
 		{http.MethodPatch, "/api/v1/conversations/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/conversations/spam", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionSession},

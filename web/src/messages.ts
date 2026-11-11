@@ -122,6 +122,19 @@ export const messages = {
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
+  // Spam: out of the inbox and every view, no clock, not in Results; the sender's later mail goes there too.
+  spam: 'Spam',
+  notSpam: 'Not spam',
+  spamTip: 'Move to Spam: out of the inbox, no clock, not in Results. Later mail from this sender goes there too.',
+  notSpamTip: 'Put it back where it was and let mail from this sender reach the inbox again',
+  spamNote: 'Mail from these senders lands here: no notification, no clock, not in Results. Not spam puts a conversation back where it was.',
+  movedToSpam: (count: number, senders: string[]) => `${count === 1 ? 'Moved to Spam' : `Moved ${count} conversations to Spam`}. Later mail from ${
+    senders.length === 1 ? senders[0] : 'their senders'} goes there too.`,
+  movedOutOfSpam: (count: number, senders: string[]) => `${count === 1 ? 'Back where it was' : `${count} conversations back where they were`}. Mail from ${
+    senders.length === 1 ? senders[0] : 'their senders'} reaches the inbox again.`,
+  spamFailed: 'Spam could not be changed. Nothing was changed; try again.',
+  undo: 'Undo',
+  dismiss: 'Dismiss',
   // The header's Resolve / Reopen when the change would tell the customer in their chat.
   resolveAndTell: 'Resolve and tell',
   reopenAndTell: 'Reopen and tell',
@@ -134,10 +147,12 @@ export const messages = {
   reopenQuietlyUse: 'To add a note or fix a detail',
   // The timeline's line for the last status change not made by a person on the team.
   statusEvent: {
-    token: (name: string, to: 'open' | 'pending' | 'resolved' | 'closed') =>
-      `${name} ${to === 'resolved' ? 'resolved it' : to === 'closed' ? 'closed it' : to === 'open' ? 'reopened it' : 'set it to Pending'}`,
+    token: (name: string, to: 'open' | 'pending' | 'resolved' | 'closed' | 'spam') =>
+      `${name} ${to === 'resolved' ? 'resolved it' : to === 'closed' ? 'closed it' : to === 'open' ? 'reopened it' : to === 'spam' ? 'moved it to Spam' : 'set it to Pending'}`,
     aiAgent: 'An AI agent',
     customer: 'Reopened when the customer wrote',
+    // A sender marked as spam wrote again into a conversation that was not in Spam.
+    spamSender: 'Moved to Spam: its sender is marked as spam',
     command: 'Reopened by the customer’s Reopen command',
     autoClose: 'Closed by itself after staying resolved',
     setting: 'setting',
@@ -361,7 +376,7 @@ export const messages = {
   manageBilling: 'Manage billing',
   billingActionFailed: 'The billing action failed. Try again.',
   roles: 'Roles',
-  statuses: { open: 'Open', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
+  statuses: { open: 'Open', pending: 'Pending', resolved: 'Resolved', closed: 'Closed', spam: 'Spam' },
   // Most urgent first, the order of every list of priorities.
   priorities: { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' },
   replyNotSent: 'The reply could not be sent. Your text is still here; try again.',

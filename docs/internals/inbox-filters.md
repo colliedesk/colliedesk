@@ -86,3 +86,19 @@ the API query. The Filter and Sort menus and the chips (`filter-panel.tsx`) and 
 data (`saved-views-menu.tsx`) load as their own chunks through `ui/lazy-part.tsx`, which shows inert
 controls of the same size meanwhile and a reload link if a chunk fails; views are fetched only when the
 menu opens and the trash when its section opens.
+
+## Spam is a status, not a flag
+
+A conversation marked as spam takes the status `spam` (`PUT /api/v1/conversations/spam`). Every view,
+clock and count that reads a status already leaves it out: the status tabs filter by status,
+`conversations_sla_change` and `domain.SLAPolicy` stop every clock for a status other than open and
+pending, auto-close and the open counts read open or pending, and a customer reply reopens only
+resolved or closed. Only the readers of every status name it: the list without a status filter (`All`,
+search, a customer's conversations) adds `status<>'spam'`, the results page leaves it and its spam
+stretches out, inbox activity notifies nothing for it, and an automatic AI draft is not written for it.
+A flag beside the status would have needed that condition in every one of those readers instead.
+Not spam puts back the `from_status` of its last change into spam (the status history), or open for a
+conversation that arrived in Spam. A status change of a spam conversation is refused
+(`conversation_spam`), so the history always leaves Spam through Not spam. The sender rule is
+`contacts.spam_since`, read by `ingestInbound` with the contact it found, so it follows merges and
+never crosses a workspace.

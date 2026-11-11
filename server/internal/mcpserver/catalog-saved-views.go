@@ -13,7 +13,7 @@ var (
 	// conversationFiltersSchema is the ConversationFilters object of the REST contract. Tags,
 	// assignees and contacts are ids here (colliedesk_tags_list, colliedesk_agents_list, colliedesk_contacts_find).
 	conversationFiltersSchema = `{"type":"object","additionalProperties":false,"description":"The filters of colliedesk_inbox_search as stored: lists for several values, ids for tags, team members and the contact. {} is every conversation.","properties":{` +
-		`"status":{"type":"array","maxItems":4,"items":{"type":"string","enum":["open","pending","resolved","closed"]}},` +
+		`"status":{"type":"array","maxItems":5,"items":{"type":"string","enum":["open","pending","resolved","closed","spam"]}},` +
 		`"priority":{"type":"array","maxItems":4,"items":{"type":"string","enum":["low","normal","high","urgent"]}},` +
 		`"assignee":{"type":"array","maxItems":50,"items":{"type":"string","description":"me, unassigned, anyone or a team member id"}},` +
 		`"tag":{"type":"array","maxItems":50,"items":{"type":"string",` + uuid + `}},"tag_match":{"type":"string","enum":["any","all"]},` +

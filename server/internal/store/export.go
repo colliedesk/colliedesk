@@ -190,7 +190,7 @@ func exportRoles(ctx context.Context, tx pgx.Tx, workspaceID string, sink export
 }
 
 func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,created_at,updated_at,
+	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,spam_since,created_at,updated_at,
 		(SELECT COALESCE(json_agg(json_build_object('channel_id',i.channel_id,'kind',i.kind,'value',i.value,'display_name',i.display_name)
 			ORDER BY i.created_at,i.id),'[]') FROM contact_identities i WHERE i.workspace_id=contacts.workspace_id AND i.contact_id=contacts.id)
 		FROM contacts WHERE workspace_id=$1 ORDER BY id`, workspaceID)
@@ -201,13 +201,17 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 	for rows.Next() {
 		var record export.Contact
 		var identities []byte
-		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.CreatedAt, &record.UpdatedAt, &identities); err != nil {
+		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.SpamSince, &record.CreatedAt, &record.UpdatedAt, &identities); err != nil {
 			return fmt.Errorf("export contacts: %w", err)
 		}
 		if err := json.Unmarshal(identities, &record.Identities); err != nil {
 			return fmt.Errorf("export contact identities: %w", err)
 		}
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if record.SpamSince != nil {
+			at := domain.UTC(*record.SpamSince)
+			record.SpamSince = &at
+		}
 		if err := sink.Contact(record); err != nil {
 			return err
 		}

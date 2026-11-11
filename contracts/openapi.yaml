@@ -1395,7 +1395,7 @@ paths:
       parameters:
         - name: status
           in: query
-          description: 'One status or several, comma-separated: open,pending.'
+          description: 'One status or several, comma-separated: open,pending. Without it the list holds every status but spam; status=spam is the Spam view.'
           schema: {type: string, example: 'open,pending'}
         - name: priority
           in: query
@@ -1600,7 +1600,8 @@ paths:
       description: >
         All or nothing: one transaction. A conversation id that is missing or belongs to another
         workspace answers 404 and changes nothing; the response does not say which id. Status,
-        assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in
+        assignee and tags follow the same rules as `PATCH /conversations/{id}`: a status change that lists
+        a conversation in Spam answers 409 `conversation_spam` and changes nothing. Tags in
         `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each
         customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50
         conversations as for one; a conversation whose status changes again before then is told only the
@@ -1638,7 +1639,8 @@ paths:
         its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`,
         `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first;
         `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A
-        removed channel tells nothing. A caller without `messages:send` is refused (403
+        removed channel tells nothing. A conversation in Spam keeps its status until it is marked Not spam
+        (`PUT /api/v1/conversations/spam`): a status change answers 409 `conversation_spam`. A caller without `messages:send` is refused (403
         `permission_missing`) when the change would tell a customer; `notify: false` changes it without
         telling them. The conversation's `status_notices` says beforehand which statuses would tell.
       requestBody:
@@ -1648,13 +1650,63 @@ paths:
             schema:
               type: object
               properties:
-                status: {$ref: '#/components/schemas/ConversationStatus'}
+                status: {$ref: '#/components/schemas/SettableConversationStatus'}
                 priority: {$ref: '#/components/schemas/Priority'}
                 assignee_id: {type: [string, 'null'], format: uuid}
                 tag_ids: {type: array, items: {type: string, format: uuid}}
                 notify: {type: boolean, description: 'false sets the status without telling the customer (the channel''s status notice). true by default.'}
       responses:
         '200': {$ref: '#/components/responses/Conversation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/spam:
+    put:
+      operationId: markConversationsSpam
+      x-permission: conversations:update
+      summary: Mark up to 50 conversations as spam, or as not spam
+      description: >
+        `spam: true` files the conversations in Spam: they leave the inbox and every view but
+        `status=spam`, their response clocks stop, Results stop counting them, and nobody is told. Their
+        senders are marked too: later mail from them opens or joins a conversation straight in Spam, with
+        no notification, no clock and no received notice. `spam: false` (Not spam) puts each conversation
+        back in the status it had before Spam (open for one that arrived in Spam) and stops its sender's
+        rule, so the sender's next mail reaches the inbox. Customers are never told either way. Safe to
+        repeat: a conversation already where the call puts it is not counted in `updated`. All or nothing:
+        an id that is missing or belongs to another workspace answers 404 and changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, spam]
+              additionalProperties: false
+              properties:
+                ids: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string, format: uuid}}
+                spam: {type: boolean, description: 'true: Spam. false: Not spam.'}
+      responses:
+        '200':
+          description: What changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated, senders]
+                properties:
+                  updated: {type: integer, minimum: 0, description: How many conversations moved into Spam (or out of it).}
+                  senders:
+                    type: array
+                    description: The customers whose later mail now goes to Spam (spam true), or reaches the inbox again (spam false).
+                    items:
+                      type: object
+                      required: [id, name, email]
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
+                        email: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -10408,7 +10460,14 @@ components:
         role_held: {type: boolean, description: 'For kind role: false while its person does not hold every permission of the role (the token is stopped until they do; giving them the role does it). A token may follow a role its person does not hold, such as an admin''s token that follows Agent. True otherwise.'}
         permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'What the token was given (a role token: the role''s permissions now).'}
         legacy_tier: {type: ['string', 'null'], enum: [read, draft, send, admin, custom, null], description: 'Only for kind legacy: what it was created as.'}
-    ConversationStatus: {type: string, enum: [open, pending, resolved, closed]}
+    ConversationStatus:
+      type: string
+      enum: [open, pending, resolved, closed, spam]
+      description: 'spam: marked as spam (PUT /api/v1/conversations/spam); out of every view but status=spam, no clocks, not in Results.'
+    SettableConversationStatus:
+      type: string
+      enum: [open, pending, resolved, closed]
+      description: The statuses a status change sets; Spam is set and left with PUT /api/v1/conversations/spam.
     Priority: {type: string, enum: [low, normal, high, urgent]}
     ConversationChannel:
       type: string
@@ -10431,7 +10490,7 @@ components:
         The filters of `GET /api/v1/conversations` as one object; a list holds the values the query
         string separates with commas. An empty object is every conversation, most recently updated first.
       properties:
-        status: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/ConversationStatus'}}
+        status: {type: array, maxItems: 5, uniqueItems: true, items: {$ref: '#/components/schemas/ConversationStatus'}}
         priority: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/Priority'}}
         assignee:
           type: array
@@ -11951,7 +12010,7 @@ components:
           description: The newest change of its status and who made it; null when it never changed in Colliedesk or an import.
         status_notices:
           type: array
-          items: {$ref: '#/components/schemas/ConversationStatus'}
+          items: {$ref: '#/components/schemas/SettableConversationStatus'}
           description: >-
             The statuses that, set by the team now, would tell its customer: the ones its live chat channel has
             a notice for, other than its status. Only on GET /conversations/{id};
@@ -12061,7 +12120,7 @@ components:
           type: object
           minProperties: 1
           properties:
-            status: {$ref: '#/components/schemas/ConversationStatus'}
+            status: {$ref: '#/components/schemas/SettableConversationStatus'}
             assignee_id: {type: [string, 'null'], format: uuid}
             add_tag_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
             remove_tag_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}

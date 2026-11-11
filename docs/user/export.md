@@ -54,7 +54,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role` (`admin` when they hold the Admin role, else `agent`; their roles are in `agent-roles.ndjson`), `timezone_override`, `created_at`, `sla_alert_email` (whether they get the [response target](response-targets.md#reminder-and-overdue-emails) reminder and overdue emails), `results_email` (whether they get the weekly [results](results.md) email), `deactivated_at` (`null` for an active agent) |
 | `roles.ndjson` | One [role](roles-and-permissions.md) per line, deleted ones too: `id`, `name`, `description`, `system` (`admin` or `agent` for the two built-in roles, `null` for one you made), `permissions` (`resource:action`; `null` for Admin, which holds every permission), `created_at`, `updated_at`, `deleted_at` |
 | `agent-roles.ndjson` | One role a person holds per line: `agent_id`, `role_id`, `granted_by_agent_id` (`null` when no person gave it, such as at sign-up or the upgrade to roles), `granted_at` |
-| `contacts.ndjson` | One contact per line: `id`, `name`, `email` (`null` for a customer known only on a channel), `organization`, `merged_into_id` (the contact it was [merged](contacts.md#merge-two-contacts-of-the-same-person) into, or null), `created_at`, `updated_at`, `identities` (who the customer is on a channel: `channel_id`, `kind`, `value`, `display_name`) |
+| `contacts.ndjson` | One contact per line: `id`, `name`, `email` (`null` for a customer known only on a channel), `organization`, `merged_into_id` (the contact it was [merged](contacts.md#merge-two-contacts-of-the-same-person) into, or null), `spam_since` (when the customer was [marked as spam](inbox.md#spam), so their later mail goes to Spam, or null), `created_at`, `updated_at`, `identities` (who the customer is on a channel: `channel_id`, `kind`, `value`, `display_name`) |
 | `contact-merges.ndjson` | Every merge of two contacts, undone or not, oldest first: `id`, `contact_id` (kept), `merged_contact_id`, `conversation_ids` (the conversations it moved), `merged_by_agent_id`, `token_id`, `created_at`, `undone_at`, `undone_by_agent_id` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
 | `saved-replies.ndjson` | One saved reply per line, including the ones in the trash: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`, `deleted_at` (when it went to the trash, or `null`), `deleted_by_agent_id`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
@@ -112,7 +112,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 
 NDJSON means one JSON object per line. Read it line by line. All times are UTC (RFC 3339).
 
-A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `assignee_id`
+A conversation line has `id`, `contact_id`, `subject`, `status` (`open`, `pending`, `resolved`, `closed`, or `spam` for one [marked as spam](inbox.md#spam)), `priority`, `assignee_id`
 (an agent id or `null`), `channel` (how it started: `email`, `web_form`, `help_chat`, `zalo`, `imported`, `agent` or
 `problem_report`; see [Filter and sort](inbox.md#filter-and-sort)), `channel_id` (the channel it came
 through, or `null`), `channel_scope` (the scope of its channel's type it started in, such as a chat's

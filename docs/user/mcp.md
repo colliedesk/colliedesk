@@ -103,6 +103,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_attachment_get` | Reads an attachment, or a file of a reply draft (with `conversation_id` and `draft_id`): name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `ai_assist:read`, `messages:read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `conversations:update`, `tags:create`, `tags:read`, `team:read` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `conversations:update`, `tags:read`, `team:read` |
+| `colliedesk_conversations_spam` | Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Results), or back where they were with `spam` false; all or nothing | `conversations:update` |
 | `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call) | `messages:note` |
 | `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from; without `ai_draft_file_ids` every file of that draft is sent. Cannot be undone | `conversations:read`, `messages:note`, `messages:read`, `messages:send`, `team:read` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `messages:send` |
@@ -446,6 +447,11 @@ approves it in the console with their authenticator code.
 - `colliedesk_conversations_bulk_update` is all or nothing: if one id is not a conversation of the
   workspace, nothing changes. It takes only existing tag names and cannot set priority; use
   `colliedesk_conversation_update` for those.
+- `colliedesk_conversations_spam` with `spam: true` files junk in [Spam](inbox.md#spam) and marks its
+  senders; `spam: false` (Not spam) puts each conversation back in the status it had. A conversation in
+  Spam keeps its status: `colliedesk_conversation_update` and `colliedesk_conversations_bulk_update`
+  refuse to change it and say to take it out first. `colliedesk_inbox_search` with `status: "spam"` lists
+  them.
 - A status set with `colliedesk_conversation_update` or `colliedesk_conversations_bulk_update` on a
   conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); that
   change needs `messages:send`, and without it the call is refused and names the channel.

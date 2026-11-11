@@ -70,3 +70,25 @@ func conversationsBulkUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	return map[string]any{"updated": result.Updated, "told": result.Told, "conversation_ids": args.ConversationIDs}, nil
 }
+
+func conversationsSpam(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		ConversationIDs []string `json:"conversation_ids"`
+		Spam            bool     `json:"spam"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = "At least one of the conversations is not in this workspace, so nothing was changed. Use ids from colliedesk_inbox_search."
+	var result struct {
+		Updated int `json:"updated"`
+		Senders []struct {
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		} `json:"senders"`
+	}
+	if err := c.send(http.MethodPut, "/api/v1/conversations/spam", map[string]any{"ids": args.ConversationIDs, "spam": args.Spam}, &result); err != nil {
+		return nil, err
+	}
+	return map[string]any{"updated": result.Updated, "senders": result.Senders, "conversation_ids": args.ConversationIDs}, nil
+}

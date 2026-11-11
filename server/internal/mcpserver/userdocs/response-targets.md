@@ -41,7 +41,7 @@ read, the second is told (409 `changed_elsewhere`, with what is stored) and chan
 A conversation opened while the targets are on, on a channel they cover, carries its clocks: the first
 reply (met by the team's first reply; a note or the channel's own notice is none) and, when its priority
 has one, resolving. A clock runs only while the conversation is Open: Pending pauses it and keeps the
-business time used, Resolved or Closed stops it, and opening it again goes on from what was used.
+business time used, Resolved, Closed or [Spam](inbox.md#spam) stops it, and opening it again goes on from what was used.
 Changing the priority adds or removes the resolution clock at once.
 
 The inbox shows a conversation due soon or overdue: its row says "Due 1:15 PM" or "Overdue" after the
