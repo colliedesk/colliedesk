@@ -304,6 +304,9 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	q.and("c.workspace_id=" + q.arg(workspaceID))
 	if len(filter.Statuses) > 0 {
 		q.and("c.status=ANY(" + q.arg(filter.Statuses) + "::text[])")
+	} else {
+		// Every status is every one but spam: Spam is only its own view (status=spam).
+		q.and("c.status<>'spam'")
 	}
 	if len(filter.Priorities) > 0 {
 		q.and("c.priority=ANY(" + q.arg(filter.Priorities) + "::text[])")

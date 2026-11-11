@@ -439,7 +439,7 @@ func (s *Service) automaticDraftWanted(ctx context.Context, tx pgx.Tx, workspace
 		return "", err
 	case !on:
 		return CodeAutomationOff, nil
-	case status == "resolved" || status == "closed":
+	case status == "resolved" || status == "closed" || status == "spam":
 		return CodeConversationShut, nil
 	case answered:
 		return CodeAnswered, nil

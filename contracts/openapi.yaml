@@ -1395,7 +1395,7 @@ paths:
       parameters:
         - name: status
           in: query
-          description: 'One status or several, comma-separated: open,pending.'
+          description: 'One status or several, comma-separated: open,pending. Without it the list holds every status but spam; status=spam is the Spam view.'
           schema: {type: string, example: 'open,pending'}
         - name: priority
           in: query
@@ -1600,7 +1600,8 @@ paths:
       description: >
         All or nothing: one transaction. A conversation id that is missing or belongs to another
         workspace answers 404 and changes nothing; the response does not say which id. Status,
-        assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in
+        assignee and tags follow the same rules as `PATCH /conversations/{id}`: a status change that lists
+        a conversation in Spam answers 409 `conversation_spam` and changes nothing. Tags in
         `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each
         customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50
         conversations as for one; a conversation whose status changes again before then is told only the
@@ -1638,7 +1639,8 @@ paths:
         its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`,
         `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first;
         `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A
-        removed channel tells nothing. A caller without `messages:send` is refused (403
+        removed channel tells nothing. A conversation in Spam keeps its status until it is marked Not spam
+        (`PUT /api/v1/conversations/spam`): a status change answers 409 `conversation_spam`. A caller without `messages:send` is refused (403
         `permission_missing`) when the change would tell a customer; `notify: false` changes it without
         telling them. The conversation's `status_notices` says beforehand which statuses would tell.
       requestBody:
@@ -1648,13 +1650,63 @@ paths:
             schema:
               type: object
               properties:
-                status: {$ref: '#/components/schemas/ConversationStatus'}
+                status: {$ref: '#/components/schemas/SettableConversationStatus'}
                 priority: {$ref: '#/components/schemas/Priority'}
                 assignee_id: {type: [string, 'null'], format: uuid}
                 tag_ids: {type: array, items: {type: string, format: uuid}}
                 notify: {type: boolean, description: 'false sets the status without telling the customer (the channel''s status notice). true by default.'}
       responses:
         '200': {$ref: '#/components/responses/Conversation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/spam:
+    put:
+      operationId: markConversationsSpam
+      x-permission: conversations:update
+      summary: Mark up to 50 conversations as spam, or as not spam
+      description: >
+        `spam: true` files the conversations in Spam: they leave the inbox and every view but
+        `status=spam`, their response clocks stop, Results stop counting them, and nobody is told. Their
+        senders are marked too: later mail from them opens or joins a conversation straight in Spam, with
+        no notification, no clock and no received notice. `spam: false` (Not spam) puts each conversation
+        back in the status it had before Spam (open for one that arrived in Spam) and stops its sender's
+        rule, so the sender's next mail reaches the inbox. Customers are never told either way. Safe to
+        repeat: a conversation already where the call puts it is not counted in `updated`. All or nothing:
+        an id that is missing or belongs to another workspace answers 404 and changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, spam]
+              additionalProperties: false
+              properties:
+                ids: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string, format: uuid}}
+                spam: {type: boolean, description: 'true: Spam. false: Not spam.'}
+      responses:
+        '200':
+          description: What changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated, senders]
+                properties:
+                  updated: {type: integer, minimum: 0, description: How many conversations moved into Spam (or out of it).}
+                  senders:
+                    type: array
+                    description: The customers whose later mail now goes to Spam (spam true), or reaches the inbox again (spam false).
+                    items:
+                      type: object
+                      required: [id, name, email]
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
+                        email: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -4276,6 +4328,69 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/trial-offer:
+    get:
+      operationId: getTrialOffer
+      x-permission: authenticated
+      description: >
+        Read a trial offer link an operator sent (`collie trial offer`): the workspace it is for, its state
+        (`open`, `accepted`, `expired`, `revoked`), the workspace's trial end and plan, and whether the caller
+        can accept it now (`can_accept`, else `refusal`). Reading changes nothing: mail scanners open links too.
+        Any signed-in member of the offer's workspace may read it, also while the workspace is locked;
+        `accept_by` names the members who can accept (`billing:manage`). The token is the `token` of the link's
+        address. 404 `trial_offer_not_found` for a token no workspace has; 403 `trial_offer_other_workspace` for
+        an offer of another workspace than the session's, without naming it.
+      parameters:
+        - {name: token, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 200}, description: 'The token of the offer link.'}
+      responses:
+        '200':
+          description: The offer and what the caller can do with it
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrialOffer'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: '`trial_offer_other_workspace`: the offer is for another workspace. Sign in to the workspace that received the link.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '404': {description: '`trial_offer_not_found`: no offer has this token; check that the whole link was copied.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`validation_failed` with `fields.token` when the token is missing.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/trial-offer/accept:
+    post:
+      operationId: acceptTrialOffer
+      x-permission: billing:manage
+      description: >
+        Accept an open trial offer: the workspace's trial then ends 14 days from now, and a locked workspace opens
+        at once. A trial end already later than that is kept, never shortened (`extended` false). The offer is
+        spent either way, and the change is recorded with the offer and who accepted it. Allowed while the
+        workspace is locked. 409 `trial_offer_accepted`, `trial_offer_expired` or `trial_offer_revoked` when the
+        offer is no longer open, and 409 `trial_offer_has_plan` when the workspace has a plan; each carries
+        `trial_ends_at` and changes nothing. 403 `permission_missing` without `billing:manage`; 403
+        `trial_offer_other_workspace` and 404 `trial_offer_not_found` as for `GET /api/v1/trial-offer`.
+        A retry with the same Idempotency-Key answers the first acceptance again.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              additionalProperties: false
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200, description: 'The token of the offer link.'}
+      responses:
+        '200':
+          description: The offer was accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrialOfferAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: '`permission_missing` (needs `billing:manage`) or `trial_offer_other_workspace`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '404': {description: '`trial_offer_not_found`: no offer has this token.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '409': {description: '`trial_offer_accepted`, `trial_offer_expired`, `trial_offer_revoked` or `trial_offer_has_plan`, with `trial_ends_at`; nothing changed. `request_in_progress` while the first request with this Idempotency-Key still runs.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`validation_failed` with `fields.token` when the token is missing; or `idempotency_key_reused`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/webhooks/polar:
     post:
       operationId: receivePolarWebhook
@@ -6422,8 +6537,8 @@ paths:
       operationId: updateKBArticle
       x-permission: kb_articles:update
       description: >
-        Change the title, slug, text, collection, status (publish or unpublish), search title or meta
-        description. Send back the
+        Change the title, slug, text, collection (or the collections it is listed in), status (publish or
+        unpublish), search title or meta description. Send back the
         `updated_at` you read; when the article was saved since, nothing changes and the answer is 409
         `changed_elsewhere`. Every change adds a version to the history. An article in the trash is
         404. At most 64 KiB of JSON.
@@ -6439,7 +6554,8 @@ paths:
                 title: {type: string, minLength: 1, maxLength: 300}
                 slug: {type: string, minLength: 1, maxLength: 120}
                 body_md: {type: string, maxLength: 100000}
-                collection_id: {type: string, format: uuid}
+                collection_id: {type: string, format: uuid, description: 'A new home collection (a move). The other collections it is listed in stay, except this one.'}
+                collection_ids: {type: array, minItems: 1, maxItems: 1000, items: {type: string, format: uuid}, description: 'Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. Replaces the whole list. A collection of another workspace, in the trash or named twice is refused.'}
                 status: {type: string, enum: [draft, published]}
                 seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
                 seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
@@ -10344,7 +10460,14 @@ components:
         role_held: {type: boolean, description: 'For kind role: false while its person does not hold every permission of the role (the token is stopped until they do; giving them the role does it). A token may follow a role its person does not hold, such as an admin''s token that follows Agent. True otherwise.'}
         permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'What the token was given (a role token: the role''s permissions now).'}
         legacy_tier: {type: ['string', 'null'], enum: [read, draft, send, admin, custom, null], description: 'Only for kind legacy: what it was created as.'}
-    ConversationStatus: {type: string, enum: [open, pending, resolved, closed]}
+    ConversationStatus:
+      type: string
+      enum: [open, pending, resolved, closed, spam]
+      description: 'spam: marked as spam (PUT /api/v1/conversations/spam); out of every view but status=spam, no clocks, not in Results.'
+    SettableConversationStatus:
+      type: string
+      enum: [open, pending, resolved, closed]
+      description: The statuses a status change sets; Spam is set and left with PUT /api/v1/conversations/spam.
     Priority: {type: string, enum: [low, normal, high, urgent]}
     ConversationChannel:
       type: string
@@ -10367,7 +10490,7 @@ components:
         The filters of `GET /api/v1/conversations` as one object; a list holds the values the query
         string separates with commas. An empty object is every conversation, most recently updated first.
       properties:
-        status: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/ConversationStatus'}}
+        status: {type: array, maxItems: 5, uniqueItems: true, items: {$ref: '#/components/schemas/ConversationStatus'}}
         priority: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/Priority'}}
         assignee:
           type: array
@@ -11012,9 +11135,11 @@ components:
         purges_at: {type: string, format: date-time, description: When it is deleted for good (30 days after deleted_at).}
     KBArticleInput:
       type: object
-      required: [collection_id, title, body_md]
+      required: [title, body_md]
+      description: 'Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids.'
       properties:
-        collection_id: {type: string, format: uuid}
+        collection_id: {type: string, format: uuid, description: 'Its home collection.'}
+        collection_ids: {type: array, minItems: 1, maxItems: 1000, items: {type: string, format: uuid}, description: 'Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. A collection of another workspace, in the trash or named twice is refused.'}
         title: {type: string, minLength: 1, maxLength: 300}
         slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the title when left out.'}
         body_md: {type: string, maxLength: 100000, description: 'The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written.'}
@@ -11068,11 +11193,16 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
-        collection_id: {type: string, format: uuid}
+        collection_id: {type: string, format: uuid, description: 'Its home collection: the breadcrumb and its place among siblings.'}
+        collection_ids:
+          type: array
+          minItems: 1
+          items: {type: string, format: uuid}
+          description: 'Its home (collection_id) first, then every other collection the help center lists it in. One of those in the trash is left out until it is restored, and listed again then.'
         position: {type: integer, minimum: 0, description: 'Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number.'}
         title: {type: string}
         slug: {type: string}
@@ -11276,12 +11406,13 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
+        collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary.'}
         position: {type: integer, minimum: 0}
         title: {type: string}
         slug: {type: string}
@@ -11315,11 +11446,12 @@ components:
           items: {type: string, format: uuid}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
+        collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary.'}
         position: {type: integer, minimum: 0}
         title: {type: string}
         slug: {type: string}
@@ -11878,7 +12010,7 @@ components:
           description: The newest change of its status and who made it; null when it never changed in Colliedesk or an import.
         status_notices:
           type: array
-          items: {$ref: '#/components/schemas/ConversationStatus'}
+          items: {$ref: '#/components/schemas/SettableConversationStatus'}
           description: >-
             The statuses that, set by the team now, would tell its customer: the ones its live chat channel has
             a notice for, other than its status. Only on GET /conversations/{id};
@@ -11988,7 +12120,7 @@ components:
           type: object
           minProperties: 1
           properties:
-            status: {$ref: '#/components/schemas/ConversationStatus'}
+            status: {$ref: '#/components/schemas/SettableConversationStatus'}
             assignee_id: {type: [string, 'null'], format: uuid}
             add_tag_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
             remove_tag_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
@@ -13593,6 +13725,37 @@ components:
         revoked_at: {type: [string, 'null'], format: date-time}
         totp_enabled_at: {type: [string, 'null'], format: date-time}
         link_unused: {type: boolean}
+    TrialOffer:
+      type: object
+      required: [id, state, workspace_name, expires_at, accepted_at, accepted_by, revoked_at, trial_ends_at, plan, extends_to, can_accept, refusal, accept_by]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [open, accepted, expired, revoked]}
+        workspace_name: {type: string, description: 'The workspace the offer is for (the session''s own).'}
+        expires_at: {type: string, format: date-time, description: 'When the link stops working, at most 30 days after it was made.'}
+        accepted_at: {type: ['string', 'null'], format: date-time}
+        accepted_by: {type: ['string', 'null'], description: 'Who accepted it: display name, else email.'}
+        revoked_at: {type: ['string', 'null'], format: date-time}
+        trial_ends_at: {type: string, format: date-time, description: 'When the workspace''s trial ends or ended now.'}
+        plan:
+          type: string
+          enum: [trial, solo, small, team, team25, founding, none]
+          description: 'The plan in effect now, as in `GET /api/v1/billing`.'
+        extends_to: {type: string, format: date-time, description: 'The trial end accepting now would give: 14 days from now, or trial_ends_at when that is later.'}
+        can_accept: {type: boolean, description: 'True when the caller can accept the offer now.'}
+        refusal:
+          type: ['string', 'null']
+          enum: [accepted, expired, revoked, has_plan, not_admin, null]
+          description: 'Why the caller cannot accept: the offer is no longer open, the workspace has a plan, or the caller lacks billing:manage. Null when can_accept.'
+        accept_by: {type: array, items: {type: string}, description: 'Active members who can accept (billing:manage), by display name or email.'}
+    TrialOfferAccepted:
+      type: object
+      required: [offer, previous_trial_ends_at, trial_ends_at, extended]
+      properties:
+        offer: {$ref: '#/components/schemas/TrialOffer'}
+        previous_trial_ends_at: {type: string, format: date-time}
+        trial_ends_at: {type: string, format: date-time, description: 'The trial end now.'}
+        extended: {type: boolean, description: 'False when the trial already ended later than 14 days from now and was kept.'}
     Error:
       type: object
       required: [error]
@@ -13618,6 +13781,7 @@ components:
             missing_permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks.'}
             missing_from: {type: string, enum: [token, person], description: 'Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.'}
             ask: {type: array, items: {type: string}, description: 'Only on permission_missing from the person: names of active members who can change roles (team:manage_roles).'}
+            trial_ends_at: {type: string, format: date-time, description: 'Only on trial_offer_accepted, trial_offer_expired, trial_offer_revoked and trial_offer_has_plan: when the workspace''s trial ends or ended.'}
             where: {type: string, description: 'Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading.'}
             in_use:
               type: object

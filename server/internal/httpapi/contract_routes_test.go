@@ -218,6 +218,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/conversations":                                {"/api/v1/conversations", map[string]any{"ids": []string{f.conversationID}, "changes": map[string]any{"status": "open"}}, admin, 200, ""},
 		"GET /api/v1/conversations/{id}":                             {"/api/v1/conversations/" + f.conversationID, nil, admin, 200, ""},
 		"PATCH /api/v1/conversations/{id}":                           {"/api/v1/conversations/" + f.conversationID, map[string]any{"priority": "high"}, admin, 200, ""},
+		"PUT /api/v1/conversations/spam":                             {"/api/v1/conversations/spam", map[string]any{"ids": []string{f.conversationID}, "spam": false}, admin, 200, ""},
 		"PUT /api/v1/conversations/{id}/tags/{tagId}":                {"/api/v1/conversations/" + f.conversationID + "/tags/" + f.updateTagID, nil, admin, 200, ""},
 		"DELETE /api/v1/conversations/{id}/tags/{tagId}":             {"/api/v1/conversations/" + f.conversationID + "/tags/" + f.updateTagID, nil, admin, 200, ""},
 		"GET /api/v1/conversations/{id}/messages":                    {"/api/v1/conversations/" + f.conversationID + "/messages", nil, admin, 200, ""},
@@ -318,6 +319,8 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		// Routes run in order; PATCH /workspace/slug above renamed the workspace to contract-desk.
 		"POST /api/v1/channels/email/inbound/recipient": {path: recipientPath, body: map[string]any{"recipient": "support@contract-desk." + hostedDomain}, status: 204},
 		"GET /api/v1/billing":                           {path: "/api/v1/billing", token: admin, status: 200},
+		"GET /api/v1/trial-offer":                       {path: "/api/v1/trial-offer?token=" + url.QueryEscape(f.trialOfferToken), token: admin, status: 200},
+		"POST /api/v1/trial-offer/accept":               {path: "/api/v1/trial-offer/accept", body: map[string]any{"token": f.trialAcceptToken}, token: admin, status: 200},
 		"POST /api/v1/billing/checkout":                 {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
 		"POST /api/v1/billing/portal":                   {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
 		"POST " + webhookPath:                           {path: webhookPath, raw: f.webhookBody, status: 200},

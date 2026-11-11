@@ -917,7 +917,7 @@ export interface paths {
         head?: never;
         /**
          * Change up to 50 conversations at once
-         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50 conversations as for one; a conversation whose status changes again before then is told only the later change.
+         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`: a status change that lists a conversation in Spam answers 409 `conversation_spam` and changes nothing. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added. A status change is told to each customer in their chat a few seconds after it commits, not inside it, so it costs the same for 50 conversations as for one; a conversation whose status changes again before then is told only the later change.
          */
         patch: operations["bulkUpdateConversations"];
         trace?: never;
@@ -937,8 +937,28 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A caller without `messages:send` is refused (403 `permission_missing`) when the change would tell a customer; `notify: false` changes it without telling them. The conversation's `status_notices` says beforehand which statuses would tell. */
+        /** @description Changes a conversation. A status the team sets is told to the customer in the conversation's chat when its chat channel has words for that status (`settings.notices.status_pending`, `status_resolved`, `status_closed`, and `reopened` for open), as the channel's own message quoting what they wrote first; `notify: false` changes it quietly (and a conversation resolved quietly closes by itself quietly). A removed channel tells nothing. A conversation in Spam keeps its status until it is marked Not spam (`PUT /api/v1/conversations/spam`): a status change answers 409 `conversation_spam`. A caller without `messages:send` is refused (403 `permission_missing`) when the change would tell a customer; `notify: false` changes it without telling them. The conversation's `status_notices` says beforehand which statuses would tell. */
         patch: operations["updateConversation"];
+        trace?: never;
+    };
+    "/api/v1/conversations/spam": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark up to 50 conversations as spam, or as not spam
+         * @description `spam: true` files the conversations in Spam: they leave the inbox and every view but `status=spam`, their response clocks stop, Results stop counting them, and nobody is told. Their senders are marked too: later mail from them opens or joins a conversation straight in Spam, with no notification, no clock and no received notice. `spam: false` (Not spam) puts each conversation back in the status it had before Spam (open for one that arrived in Spam) and stops its sender's rule, so the sender's next mail reaches the inbox. Customers are never told either way. Safe to repeat: a conversation already where the call puts it is not counted in `updated`. All or nothing: an id that is missing or belongs to another workspace answers 404 and changes nothing.
+         */
+        put: operations["markConversationsSpam"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/conversations/{id}/tags/{tagId}": {
@@ -2544,6 +2564,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trial-offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read a trial offer link an operator sent (`collie trial offer`): the workspace it is for, its state (`open`, `accepted`, `expired`, `revoked`), the workspace's trial end and plan, and whether the caller can accept it now (`can_accept`, else `refusal`). Reading changes nothing: mail scanners open links too. Any signed-in member of the offer's workspace may read it, also while the workspace is locked; `accept_by` names the members who can accept (`billing:manage`). The token is the `token` of the link's address. 404 `trial_offer_not_found` for a token no workspace has; 403 `trial_offer_other_workspace` for an offer of another workspace than the session's, without naming it. */
+        get: operations["getTrialOffer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trial-offer/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Accept an open trial offer: the workspace's trial then ends 14 days from now, and a locked workspace opens at once. A trial end already later than that is kept, never shortened (`extended` false). The offer is spent either way, and the change is recorded with the offer and who accepted it. Allowed while the workspace is locked. 409 `trial_offer_accepted`, `trial_offer_expired` or `trial_offer_revoked` when the offer is no longer open, and 409 `trial_offer_has_plan` when the workspace has a plan; each carries `trial_ends_at` and changes nothing. 403 `permission_missing` without `billing:manage`; 403 `trial_offer_other_workspace` and 404 `trial_offer_not_found` as for `GET /api/v1/trial-offer`. A retry with the same Idempotency-Key answers the first acceptance again. */
+        post: operations["acceptTrialOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/webhooks/polar": {
         parameters: {
             query?: never;
@@ -3783,7 +3837,7 @@ export interface paths {
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
+        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -6809,8 +6863,16 @@ export interface components {
              */
             legacy_tier: "read" | "draft" | "send" | "admin" | "custom" | null;
         };
-        /** @enum {string} */
-        ConversationStatus: "open" | "pending" | "resolved" | "closed";
+        /**
+         * @description spam: marked as spam (PUT /api/v1/conversations/spam); out of every view but status=spam, no clocks, not in Results.
+         * @enum {string}
+         */
+        ConversationStatus: "open" | "pending" | "resolved" | "closed" | "spam";
+        /**
+         * @description The statuses a status change sets; Spam is set and left with PUT /api/v1/conversations/spam.
+         * @enum {string}
+         */
+        SettableConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
         /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
@@ -7354,9 +7416,15 @@ export interface components {
              */
             purges_at: string;
         };
+        /** @description Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. */
         KBArticleInput: {
-            /** Format: uuid */
-            collection_id: string;
+            /**
+             * Format: uuid
+             * @description Its home collection.
+             */
+            collection_id?: string;
+            /** @description Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. A collection of another workspace, in the trash or named twice is refused. */
+            collection_ids?: string[];
             title: string;
             /** @description Lowercase letters, digits and hyphens in any script; made from the title when left out. */
             slug?: string;
@@ -7418,8 +7486,13 @@ export interface components {
             id: string;
             /** @description Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>. */
             number: number;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Its home collection: the breadcrumb and its place among siblings.
+             */
             collection_id: string;
+            /** @description Its home (collection_id) first, then every other collection the help center lists it in. One of those in the trash is left out until it is restored, and listed again then. */
+            collection_ids: string[];
             /** @description Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number. */
             position: number;
             title: string;
@@ -7624,6 +7697,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            /** @description Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary. */
+            collection_ids: string[];
             position: number;
             title: string;
             slug: string;
@@ -7667,6 +7742,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            /** @description Its home (collection_id) first, then the other collections outside the trash it is listed in, as in KBArticleSummary. */
+            collection_ids: string[];
             position: number;
             title: string;
             slug: string;
@@ -8252,7 +8329,7 @@ export interface components {
             /** @description The newest change of its status and who made it; null when it never changed in Colliedesk or an import. */
             last_status_change?: components["schemas"]["StatusChange"] | null;
             /** @description The statuses that, set by the team now, would tell its customer: the ones its live chat channel has a notice for, other than its status. Only on GET /conversations/{id}; missing in lists and for a conversation of no chat. */
-            status_notices?: components["schemas"]["ConversationStatus"][];
+            status_notices?: components["schemas"]["SettableConversationStatus"][];
             /** @description true when a status the team sets now may tell its customer: the chat it is in (a chat message moved into it included) has a channel live and on with a notice for a status other than its own. In lists too, so a bulk change can offer to tell; status_notices on the detail names which statuses. */
             may_tell_customer?: boolean;
             /** @description Its number in number_series, which counts on and never restarts. */
@@ -8335,7 +8412,7 @@ export interface components {
         BulkConversationUpdate: {
             ids: string[];
             changes: {
-                status?: components["schemas"]["ConversationStatus"];
+                status?: components["schemas"]["SettableConversationStatus"];
                 /** Format: uuid */
                 assignee_id?: string | null;
                 add_tag_ids?: string[];
@@ -9545,6 +9622,61 @@ export interface components {
             totp_enabled_at?: string | null;
             link_unused: boolean;
         };
+        TrialOffer: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "open" | "accepted" | "expired" | "revoked";
+            /** @description The workspace the offer is for (the session's own). */
+            workspace_name: string;
+            /**
+             * Format: date-time
+             * @description When the link stops working, at most 30 days after it was made.
+             */
+            expires_at: string;
+            /** Format: date-time */
+            accepted_at: string | null;
+            /** @description Who accepted it: display name, else email. */
+            accepted_by: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the workspace's trial ends or ended now.
+             */
+            trial_ends_at: string;
+            /**
+             * @description The plan in effect now, as in `GET /api/v1/billing`.
+             * @enum {string}
+             */
+            plan: "trial" | "solo" | "small" | "team" | "team25" | "founding" | "none";
+            /**
+             * Format: date-time
+             * @description The trial end accepting now would give: 14 days from now, or trial_ends_at when that is later.
+             */
+            extends_to: string;
+            /** @description True when the caller can accept the offer now. */
+            can_accept: boolean;
+            /**
+             * @description Why the caller cannot accept: the offer is no longer open, the workspace has a plan, or the caller lacks billing:manage. Null when can_accept.
+             * @enum {string|null}
+             */
+            refusal: "accepted" | "expired" | "revoked" | "has_plan" | "not_admin" | null;
+            /** @description Active members who can accept (billing:manage), by display name or email. */
+            accept_by: string[];
+        };
+        TrialOfferAccepted: {
+            offer: components["schemas"]["TrialOffer"];
+            /** Format: date-time */
+            previous_trial_ends_at: string;
+            /**
+             * Format: date-time
+             * @description The trial end now.
+             */
+            trial_ends_at: string;
+            /** @description False when the trial already ended later than 14 days from now and was kept. */
+            extended: boolean;
+        };
         Error: {
             error: {
                 code: string;
@@ -9574,6 +9706,11 @@ export interface components {
                 missing_from?: "token" | "person";
                 /** @description Only on permission_missing from the person: names of active members who can change roles (team:manage_roles). */
                 ask?: string[];
+                /**
+                 * Format: date-time
+                 * @description Only on trial_offer_accepted, trial_offer_expired, trial_offer_revoked and trial_offer_has_plan: when the workspace's trial ends or ended.
+                 */
+                trial_ends_at?: string;
                 /** @description Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading. */
                 where?: string;
                 /** @description Only on role_in_use: what still uses the role. */
@@ -12192,7 +12329,7 @@ export interface operations {
     listConversations: {
         parameters: {
             query?: {
-                /** @description One status or several, comma-separated: open,pending. */
+                /** @description One status or several, comma-separated: open,pending. Without it the list holds every status but spam; status=spam is the Spam view. */
                 status?: string;
                 /** @description One priority or several, comma-separated: high,urgent. */
                 priority?: string;
@@ -12391,7 +12528,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    status?: components["schemas"]["ConversationStatus"];
+                    status?: components["schemas"]["SettableConversationStatus"];
                     priority?: components["schemas"]["Priority"];
                     /** Format: uuid */
                     assignee_id?: string | null;
@@ -12403,6 +12540,49 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Conversation"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    markConversationsSpam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: string[];
+                    /** @description true: Spam. false: Not spam. */
+                    spam: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description What changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description How many conversations moved into Spam (or out of it). */
+                        updated: number;
+                        /** @description The customers whose later mail now goes to Spam (spam true), or reaches the inbox again (spam false). */
+                        senders: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            email: string;
+                        }[];
+                    };
+                };
+            };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -15732,6 +15912,127 @@ export interface operations {
             502: components["responses"]["BadGateway"];
         };
     };
+    getTrialOffer: {
+        parameters: {
+            query: {
+                /** @description The token of the offer link. */
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer and what the caller can do with it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialOffer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `trial_offer_other_workspace`: the offer is for another workspace. Sign in to the workspace that received the link. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `trial_offer_not_found`: no offer has this token; check that the whole link was copied. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `validation_failed` with `fields.token` when the token is missing. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    acceptTrialOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The token of the offer link. */
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The offer was accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialOfferAccepted"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description `permission_missing` (needs `billing:manage`) or `trial_offer_other_workspace`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `trial_offer_not_found`: no offer has this token. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `trial_offer_accepted`, `trial_offer_expired`, `trial_offer_revoked` or `trial_offer_has_plan`, with `trial_ends_at`; nothing changed. `request_in_progress` while the first request with this Idempotency-Key still runs. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `validation_failed` with `fields.token` when the token is missing; or `idempotency_key_reused`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     receivePolarWebhook: {
         parameters: {
             query?: never;
@@ -18530,8 +18831,13 @@ export interface operations {
                     title?: string;
                     slug?: string;
                     body_md?: string;
-                    /** Format: uuid */
+                    /**
+                     * Format: uuid
+                     * @description A new home collection (a move). The other collections it is listed in stay, except this one.
+                     */
                     collection_id?: string;
+                    /** @description Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. Replaces the whole list. A collection of another workspace, in the trash or named twice is refused. */
+                    collection_ids?: string[];
                     /** @enum {string} */
                     status?: "draft" | "published";
                     /** @description The page title search engines show; empty uses the article title. */

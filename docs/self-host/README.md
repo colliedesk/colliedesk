@@ -113,6 +113,7 @@ Security fixes go to the latest release and to `edge` only.
 - [Backups and database](database.md)
 - [Upgrade, roll back and restore a workspace](upgrade.md)
 - [Score AI intake on your own cases](intake-eval.md)
+- [Trial offers: give a team 14 more days](trial-offers.md)
 
 ## Troubleshooting and support
 

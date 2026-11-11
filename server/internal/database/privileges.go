@@ -147,6 +147,10 @@ const (
 	// connectors leave the transaction; each fix is then read, sent and moved in its own workspace.
 	PrivilegeAutofixClaim Privilege = "autofix-claim"
 	// PrivilegeResultsShareToken resolves the workspace of a results share link from its token hash.
+	// PrivilegeTrialOffer resolves the workspace of a trial offer from its token hash (to refuse the offer of
+	// another workspace without naming it) or from its id (the operator's revoke). Only the workspace id
+	// leaves the transaction; the offer is read, accepted or revoked in its own workspace.
+	PrivilegeTrialOffer        Privilege = "trial-offer"
 	PrivilegeResultsShareToken Privilege = "results-share-token"
 	// PrivilegeGitHubInstallation routes the Colliedesk GitHub App's webhook: it finds the one workspace
 	// that owns a GitHub installation id (unique on the server) and reads and records the delivery ids

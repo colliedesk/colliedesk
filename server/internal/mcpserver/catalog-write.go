@@ -4,7 +4,7 @@ func conversationUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_conversation_update",
 		Title: "Update a conversation",
-		Description: `Change a conversation's status (open, pending, resolved, closed), priority, assignee or tags in one call. ` +
+		Description: `Change a conversation's status (open, pending, resolved, closed), priority, assignee or tags in one call (spam: colliedesk_conversations_spam). ` +
 			`It is safe to repeat: you state the result you want, so a second identical call changes nothing. ` +
 			`Give at least one change. assignee takes "me", "unassigned", or a team member's email, name or id (see colliedesk_agents_list). ` +
 			`add_tags takes tag names; a name that is not a tag yet is created first (see colliedesk_tags_list for the existing ones, and reuse them: ` +
@@ -74,5 +74,28 @@ func conversationsBulkUpdateSpec() Spec {
 			`"told":{"type":"integer","description":"How many customers the status change tells in their chats, a few seconds after it commits."},` +
 			`"conversation_ids":{"type":"array","items":{"type":"string"}}}}`,
 		run: conversationsBulkUpdate,
+	}
+}
+
+func conversationsSpamSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_conversations_spam",
+		Title: "Mark conversations as spam, or as not spam",
+		Description: `Use it for junk that reached the inbox (adverts, phishing, mail nobody on the team should answer). spam true files up to 50 conversations in Spam: ` +
+			`they leave the inbox and every view (colliedesk_inbox_search finds them with status spam), their response clocks stop, Results stop counting them, ` +
+			`and later mail from their senders goes straight to Spam with no notification and no clock. Nobody is told, the customer included. ` +
+			`spam false (Not spam) puts each conversation back in the status it had and lets its sender's later mail reach the inbox again. ` +
+			`It is safe to repeat: you state the result you want, and updated counts only the conversations that moved. ` +
+			`All or nothing: if one id is not a conversation of this workspace, nothing is changed. A conversation in Spam keeps its status until it is taken out here.`,
+		Idempotent: true,
+		REST:       []string{"PUT /api/v1/conversations/spam"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_ids","spam"],"properties":{` +
+			`"conversation_ids":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string",` + uuid + `}},` +
+			`"spam":{"type":"boolean","description":"true: file them in Spam. false: Not spam, put them back where they were."}}}`,
+		Output: `{"type":"object","required":["updated","senders","conversation_ids"],"properties":{"updated":{"type":"integer","description":"How many conversations moved into Spam, or out of it."},` +
+			`"senders":{"type":"array","description":"The customers whose later mail now goes to Spam (spam true), or reaches the inbox again (spam false).","items":{"type":"object",` +
+			`"required":["name","email"],"properties":{"name":{"type":"string"},"email":{"type":"string"}}}},` +
+			`"conversation_ids":{"type":"array","items":{"type":"string"}}}}`,
+		run: conversationsSpam,
 	}
 }

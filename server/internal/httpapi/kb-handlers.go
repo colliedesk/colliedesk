@@ -411,15 +411,34 @@ func keepBody(request *http.Request) json.RawMessage {
 	return raw
 }
 
+// kbArticleCollections reads collection_ids, the collections an article is listed in with its home
+// first, into the home and the others; collection_id, when sent too, must be that home. Without
+// collection_ids both stay as sent. A refusal says what to send.
+func kbArticleCollections(collectionID *string, collectionIDs *[]string) (*string, *[]string, string) {
+	if collectionIDs == nil {
+		return collectionID, nil, ""
+	}
+	ids := *collectionIDs
+	if len(ids) == 0 {
+		return nil, nil, "collection_ids names at least one collection: the article's home first, then the others it is listed in."
+	}
+	if collectionID != nil && !strings.EqualFold(*collectionID, ids[0]) {
+		return nil, nil, "collection_id is the article's home, the first of collection_ids; send only collection_ids, or put that collection first."
+	}
+	extras := ids[1:]
+	return &ids[0], &extras, ""
+}
+
 func (a *API) createKBArticle(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		CollectionID string  `json:"collection_id"`
-		Title        string  `json:"title"`
-		Slug         *string `json:"slug"`
-		BodyMD       *string `json:"body_md"`
-		Status       string  `json:"status"`
-		SEOTitle     string  `json:"seo_title"`
-		SEODesc      string  `json:"seo_description"`
+		CollectionID  string    `json:"collection_id"`
+		CollectionIDs *[]string `json:"collection_ids"`
+		Title         string    `json:"title"`
+		Slug          *string   `json:"slug"`
+		BodyMD        *string   `json:"body_md"`
+		Status        string    `json:"status"`
+		SEOTitle      string    `json:"seo_title"`
+		SEODesc       string    `json:"seo_description"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.BodyMD == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id, a title and body_md; slug and status are optional.")
@@ -429,6 +448,22 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		writeError(response, http.StatusBadRequest, "invalid_request", "Leave slug out to make one from the title.")
 		return
 	}
+	var sentHome *string
+	if input.CollectionID != "" {
+		sentHome = &input.CollectionID
+	}
+	homeCollection, extras, problem := kbArticleCollections(sentHome, input.CollectionIDs)
+	if problem != "" {
+		writeError(response, http.StatusBadRequest, "invalid_request", problem)
+		return
+	}
+	if homeCollection != nil {
+		input.CollectionID = *homeCollection
+	}
+	var extraIDs []string
+	if extras != nil {
+		extraIDs = *extras
+	}
 	slug := ""
 	if input.Slug != nil {
 		slug = *input.Slug
@@ -437,9 +472,9 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, input.Title, slug, *input.BodyMD, input.Status, input.SEOTitle, input.SEODesc}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, *input.BodyMD, input.Status, input.SEOTitle, input.SEODesc}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
-			store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status,
+			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status,
 				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc})
 		if err != nil {
 			writeKBError(response, err)
@@ -460,18 +495,24 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 
 func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		UpdatedAt    *time.Time `json:"updated_at"`
-		Title        *string    `json:"title"`
-		Slug         *string    `json:"slug"`
-		BodyMD       *string    `json:"body_md"`
-		CollectionID *string    `json:"collection_id"`
-		Status       *string    `json:"status"`
-		SEOTitle     *string    `json:"seo_title"`
-		SEODesc      *string    `json:"seo_description"`
+		UpdatedAt     *time.Time `json:"updated_at"`
+		Title         *string    `json:"title"`
+		Slug          *string    `json:"slug"`
+		BodyMD        *string    `json:"body_md"`
+		CollectionID  *string    `json:"collection_id"`
+		CollectionIDs *[]string  `json:"collection_ids"`
+		Status        *string    `json:"status"`
+		SEOTitle      *string    `json:"seo_title"`
+		SEODesc       *string    `json:"seo_description"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
-		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, status, seo_title or seo_description.")
+		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title or seo_description.")
+		return
+	}
+	homeCollection, extras, problem := kbArticleCollections(input.CollectionID, input.CollectionIDs)
+	if problem != "" {
+		writeError(response, http.StatusBadRequest, "invalid_request", problem)
 		return
 	}
 	who := principal(request)
@@ -486,7 +527,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
-		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: input.CollectionID, Status: input.Status,
+		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
 			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc})
 	if err != nil {
 		writeKBError(response, err)

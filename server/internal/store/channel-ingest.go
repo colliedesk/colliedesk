@@ -717,6 +717,12 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, err
 		}
 	}
+	// A sender marked as spam is filed in Spam (MarkSpam): its conversation opens there, or the one it joins
+	// moves there, so it tells nobody and runs no clock.
+	var spamSender bool
+	if err := tx.QueryRow(ctx, `SELECT spam_since IS NOT NULL FROM contacts WHERE workspace_id=$1 AND id=$2`, workspaceID, contactID).Scan(&spamSender); err != nil {
+		return result, fmt.Errorf("read the sender's spam rule: %w", err)
+	}
 	conversationID := decision.ConversationID
 	// A channel that joins only open conversations never adds to a resolved or closed one, whoever decided
 	// (the rules, AI intake, a person accepting a suggestion made before it was resolved): a new conversation
@@ -759,7 +765,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			}
 		}
 		result.Status = channels.ResultCreated
-		if conversationID, err = s.createChannelConversation(ctx, tx, channel, contactID, in, now); err != nil {
+		status := "open"
+		if spamSender {
+			status = "spam"
+		}
+		if conversationID, err = s.createChannelConversation(ctx, tx, channel, contactID, in, now, status); err != nil {
 			return result, err
 		}
 	} else {
@@ -781,8 +791,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if replyKind == ReplyAcknowledgement && status != "resolved" {
 			replyKind = ReplySubstantive
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
-			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN $4 THEN 'spam' WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement, spamSender); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
 	}
@@ -861,7 +871,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			notice, kind = channel.Settings.Notices.Reopened, channels.NoticeReopened
 		}
 	}
-	if (result.Status == channels.ResultCreated || reopened) && notice != "" {
+	if (result.Status == channels.ResultCreated || reopened) && notice != "" && !spamSender {
 		// {ref} is the code of the conversation, which the customer types back.
 		var ref string
 		if err := tx.QueryRow(ctx, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&ref); err != nil {
@@ -1149,7 +1159,7 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 
 // createChannelConversation opens a conversation from the channel's first message, with the
 // channel's default tags, priority and assignee and those of the command it named.
-func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channel channels.Channel, contactID string, in channels.Inbound, now time.Time) (string, error) {
+func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channel channels.Channel, contactID string, in channels.Inbound, now time.Time, status string) (string, error) {
 	settings := channel.Settings
 	tags := append([]string{}, settings.DefaultTags...)
 	priority := settings.DefaultPriority
@@ -1184,9 +1194,9 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 	if series == "" {
 		series = DefaultNumberSeries
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series)
-		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10) RETURNING id::text`,
-		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series,status)
+		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10,$11) RETURNING id::text`,
+		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series, status).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {

@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, Message, SettableStatus, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, PanelRightIcon, RotateCcwIcon } from '../../ui/icons';
+import { BanIcon, CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, PanelRightIcon, RotateCcwIcon } from '../../ui/icons';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
@@ -46,7 +46,9 @@ interface TimelinePanelProps {
   viewers?: ConversationViewer[];
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
   // notify false sets it without telling the customer (their chat channel's status notice).
-  onSetStatus?: (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+  onSetStatus?: (status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
+  // Spam beside Resolve; on a conversation in Spam, Not spam in its place.
+  onSpam?: (spam: boolean) => Promise<unknown>;
   // A chat conversation's statuses that would tell could not be read: its quiet way is offered anyway.
   noticesFailed?: boolean;
   // An admin may open the channel's settings from the timeline's line for a channel closing it by itself.
@@ -64,7 +66,7 @@ interface TimelinePanelProps {
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
 // closed one offers the way back. A failure says so beside the button.
-type SetStatus = (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+type SetStatus = (status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
 
 function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversation: Conversation; onSetStatus: SetStatus; noticesFailed: boolean }) {
   const [busy, setBusy] = useState(false);
@@ -99,7 +101,20 @@ function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversati
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
+// Spam files the conversation and its sender's later mail in Spam; Not spam puts it back where it was.
+function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const press = () => {
+    if (busy) return;
+    setBusy(true);
+    onSpam(spam).finally(() => setBusy(false));
+  };
+  // On a phone Spam is an icon in the title row; Not spam takes Resolve's place.
+  return <button type="button" className={spam ? 'status-button spam-button' : 'status-button'} aria-disabled={busy || undefined} data-tip={spam ? messages.spamTip : messages.notSpamTip} onClick={press}>
+    {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
+}
+
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -129,8 +144,12 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
               {conversation.contact_name}</a></div>}
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
-        {conversation && (onSetStatus || onToggleDetails) && <div className="timeline-actions">
-          {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}
+        {conversation && (onSetStatus || onSpam || onToggleDetails) && <div className="timeline-actions">
+          {onSpam && conversation.status === 'spam' ? <SpamButton spam={false} onSpam={onSpam} />
+            : <>
+              {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}
+              {onSpam && <SpamButton spam onSpam={onSpam} />}
+            </>}
           {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
             aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
             aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
@@ -164,7 +183,7 @@ function StatusEvent({ conversation, timezone, canManageChannels }: { conversati
   if (!change || change.by === 'agent') return null;
   const channel = conversation.channel_ref;
   const words = change.by === 'token' ? messages.statusEvent.token(change.name || messages.statusEvent.aiAgent, change.to)
-    : change.by === 'customer' ? messages.statusEvent.customer
+    : change.by === 'customer' ? (change.to === 'spam' ? messages.statusEvent.spamSender : messages.statusEvent.customer)
     : change.by === 'command' ? messages.statusEvent.command
     : change.by === 'import' ? messages.statusEvent.imported(messages.statuses[change.to])
     : <>{messages.statusEvent.autoClose}{channel && <> ({canManageChannels ? <a href={`/settings/channels/${channel.id}?tab=messages`}>{channel.name}</a> : channel.name} {messages.statusEvent.setting})</>}</>;

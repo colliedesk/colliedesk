@@ -270,6 +270,15 @@ span.kb-article-open { opacity: 0.35; }
 .kb-side-box .field small { font-size: var(--fs-label); }
 .kb-side-box .button-link { justify-self: start; }
 .kb-side-status { display: grid; gap: 4px; color: var(--text-2); font-size: var(--fs-small); }
+/* Collections: the home select marked Home, a row with × for each other collection, then "Also list in…". */
+.kb-collections-field { gap: var(--space-2); }
+.kb-home-collection { position: relative; display: grid; }
+.kb-home-collection select { padding-right: 76px; }
+.kb-home-badge { position: absolute; top: 50%; right: 28px; transform: translateY(-50%); border-radius: var(--radius-sm); background: var(--surface-2); padding: 1px 6px; color: var(--text-2); font-size: var(--fs-label); font-weight: 500; pointer-events: none; }
+.kb-extra-collections { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.kb-extra-collections li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control); border: 1px solid var(--line); border-radius: var(--radius); padding-left: var(--space-3); }
+.kb-extra-collections li span { min-width: 0; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); text-overflow: ellipsis; white-space: nowrap; }
+.kb-extra-collections .icon-button { flex: none; }
 /* AI marks have no colour of their own: a mono "AI" chip (docs/internals/ai-retrieval.md). */
 .kb-ai-box h3 { display: flex; align-items: center; gap: var(--space-2); }
 .kb-ai-box button { justify-self: start; }
@@ -323,6 +332,8 @@ span.kb-article-open { opacity: 0.35; }
 
 @media (pointer: coarse), (max-width: 30rem) {
   .kb-tree-link, .kb-back { min-height: var(--touch); }
+  .kb-collections-field select, .kb-extra-collections li { min-height: var(--touch); }
+  .kb-extra-collections .icon-button { --control: var(--touch); min-height: var(--touch); }
   .kb-tabs button { --control: var(--touch); }
   /* The status filter is a control of its own on a touch screen: each choice is a whole touch target. */
   .kb-filters .segmented label { min-height: var(--touch); }

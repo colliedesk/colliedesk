@@ -775,6 +775,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .conversation-item .conversation-row { padding-left: var(--touch); }
 }
 .bulk-message:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; }
+/* Spam: the Spam view's one line, and the toast at the foot of the list with Undo (it never pushes the list). */
+.spam-note { margin: 0; padding-bottom: var(--space-3); font-size: var(--fs-small); color: var(--text-2); }
+.list-pane { position: relative; }
+.spam-toast { position: absolute; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); z-index: 5; display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--surface-inverse); color: var(--text-inverse); font-size: var(--fs-small); box-shadow: var(--shadow-2); }
+.spam-toast span { flex: 1; }
+.spam-toast button { min-height: var(--touch); color: var(--text-inverse); background: transparent; border: 0; box-shadow: none; }
+.spam-toast .link-action { font-weight: 600; text-decoration: underline; }
 /* One grid for the whole list, so role, state, last activity and the actions line up from row to row. */
 /* The person keeps room for their name; the role chips (and Change roles) share a column of their own and
    wrap within it. The list measures its own width: beside the Settings headings it is far narrower than the
@@ -1224,6 +1232,11 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .timeline-meta::-webkit-scrollbar { display: none; }
   .timeline-meta > * { flex: none; }
   .timeline-actions > .status-button, .timeline-actions > .status-split { grid-column: 3 / 5; grid-row: 2; justify-self: end; }
+  .timeline-header:has(.spam-button) h2 { grid-column: 2 / 3; }
+  .timeline-actions > .spam-button { grid-column: 3; grid-row: 1; width: var(--touch); height: var(--touch); padding: 0; justify-content: center;
+    border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
+  .spam-button svg { width: 20px; height: 20px; }
+  .spam-button-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .timeline-header > div:first-of-type > :not(h2, .timeline-meta), .status-button-error { grid-column: 1 / -1; margin-left: var(--space-3); }
   .status-button-error { text-align: left; }
   .timeline-header .status-split .action-popover { right: var(--space-3); }

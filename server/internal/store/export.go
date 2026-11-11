@@ -190,7 +190,7 @@ func exportRoles(ctx context.Context, tx pgx.Tx, workspaceID string, sink export
 }
 
 func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,created_at,updated_at,
+	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,spam_since,created_at,updated_at,
 		(SELECT COALESCE(json_agg(json_build_object('channel_id',i.channel_id,'kind',i.kind,'value',i.value,'display_name',i.display_name)
 			ORDER BY i.created_at,i.id),'[]') FROM contact_identities i WHERE i.workspace_id=contacts.workspace_id AND i.contact_id=contacts.id)
 		FROM contacts WHERE workspace_id=$1 ORDER BY id`, workspaceID)
@@ -201,13 +201,17 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 	for rows.Next() {
 		var record export.Contact
 		var identities []byte
-		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.CreatedAt, &record.UpdatedAt, &identities); err != nil {
+		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.SpamSince, &record.CreatedAt, &record.UpdatedAt, &identities); err != nil {
 			return fmt.Errorf("export contacts: %w", err)
 		}
 		if err := json.Unmarshal(identities, &record.Identities); err != nil {
 			return fmt.Errorf("export contact identities: %w", err)
 		}
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if record.SpamSince != nil {
+			at := domain.UTC(*record.SpamSince)
+			record.SpamSince = &at
+		}
 		if err := sink.Contact(record); err != nil {
 			return err
 		}
@@ -666,7 +670,9 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,a.position,a.number,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
+	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,
+			ARRAY[a.collection_id::text] || ARRAY(SELECT x.collection_id::text FROM kb_article_collections x
+				WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id ORDER BY x.collection_id),a.position,a.number,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
 			COALESCE((SELECT array_agg(l.media_id::text ORDER BY l.media_id) FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
 				WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id AND m.kind='image'), '{}'),
 			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text,a.ai_excluded_at,a.ai_excluded_by_agent_id::text
@@ -677,7 +683,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBArticle
 		var meta []byte
-		if err := rows.Scan(&record.ID, &record.CollectionID, &record.Position, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.Status, &record.PublishedAt,
+		if err := rows.Scan(&record.ID, &record.CollectionID, &record.CollectionIDs, &record.Position, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.Status, &record.PublishedAt,
 			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
 			&record.AIExcludedAt, &record.AIExcludedByAgentID); err != nil {
 			rows.Close()

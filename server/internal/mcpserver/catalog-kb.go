@@ -18,8 +18,13 @@ const (
 
 	kbArticleIDProperty    = `"article_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_articles_search or colliedesk_kb_articles_trash."}`
 	kbCollectionIDProperty = `"collection_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_collections_list."}`
-	kbUpdatedAtProperty    = `"updated_at":{"type":"string","format":"date-time","maxLength":40,"description":"The updated_at as you last read it. If someone saved it since, nothing changes and you are told to read it again."}`
-	kbSEOProperties        = `"seo_title":{"type":"string","maxLength":120,"description":"The page title search engines show; empty uses the title."},` +
+	// kbCollectionIDsProperty lists an article in several collections, its home first.
+	kbCollectionIDsProperty = `"collection_ids":{"type":"array","minItems":1,"maxItems":1000,"items":{"type":"string",` + uuid + `},` +
+		`"description":"Every collection the article is listed in, from colliedesk_kb_collections_list, its home first. The help center lists it in each, always at its one address; the home gives its breadcrumb and collection_id. Use instead of collection_id to list it in more than one."}`
+	// kbCollectionIDsOutput is where an article is listed, as the answers carry it.
+	kbCollectionIDsOutput = `"collection_ids":{"type":"array","items":{"type":"string"},"description":"Every collection outside the trash it is listed in, its home (collection_id) first; names in colliedesk_kb_collections_list."}`
+	kbUpdatedAtProperty   = `"updated_at":{"type":"string","format":"date-time","maxLength":40,"description":"The updated_at as you last read it. If someone saved it since, nothing changes and you are told to read it again."}`
+	kbSEOProperties       = `"seo_title":{"type":"string","maxLength":120,"description":"The page title search engines show; empty uses the title."},` +
 		`"seo_description":{"type":"string","maxLength":320,"description":"The meta description search engines show; empty uses the start of the text (160 characters)."}`
 	// kbTeamTextSchema is an article's team_text: its title, text and search fields, all written by the team.
 	kbTeamTextSchema = `{"type":"object","required":["title","body","seo_title","seo_description"],"properties":{"title":{"type":"string"},"body":{"type":"string"},` +
@@ -33,14 +38,14 @@ const (
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","position","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
-		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
+		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","url","team_text","in_trash","ai_exclusion","translations"],"properties":{` +
-		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
+	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","in_trash","ai_exclusion","translations"],"properties":{` +
+		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
 		`"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
 		`"ai_exclusion":{"type":["object","null"],"description":"Set while AI may not read the article (colliedesk_kb_article_ai_exclude); null while it may.","required":["at","by"],"properties":{"at":{"type":"string"},"by":{"type":["string","null"]}}},` +
@@ -185,13 +190,13 @@ func kbArticleCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_create",
 		Title: "Write a knowledge base article",
-		Description: `Write an article in Markdown in a collection. It is a draft unless status is published; a published article is on the public help center while that is on. ` +
+		Description: `Write an article in Markdown in a collection (collection_id), or listed in several (collection_ids, its home first). It is a draft unless status is published; a published article is on the public help center while that is on. ` +
 			`seo_title and seo_description are what search engines show; left out, the title and the start of the text are used. ` +
 			`The text holds at most 100,000 characters and is never cut. Put images in with colliedesk_kb_image_upload and link them as ![text](url). ` +
 			`Delete it with colliedesk_kb_article_delete to undo.` + "\n\n" + kbTextNotice,
 
 		REST: []string{"POST /api/v1/kb/articles"},
-		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","title","body"],"properties":{` + kbCollectionIDProperty + `,` +
+		Input: `{"type":"object","additionalProperties":false,"required":["title","body"],"properties":{` + kbCollectionIDProperty + `,` + kbCollectionIDsProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` + kbSlugProperty + `,` +
 			`"status":{"type":"string","enum":["draft","published"],"default":"draft"},` + kbSEOProperties + `}}`,
 		Output: kbArticleOutput,
@@ -203,13 +208,14 @@ func kbArticleUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_update",
 		Title: "Edit a knowledge base article",
-		Description: `Change the title, text, slug, collection, search title (seo_title) or meta description (seo_description) of an article, or publish (status published) or unpublish it (status draft). Every change is a new version; ` +
+		Description: `Change the title, text, slug, collection, search title (seo_title) or meta description (seo_description) of an article, or publish (status published) or unpublish it (status draft). ` +
+			`collection_id moves it to a new home; collection_ids replaces every collection it is listed in (the home first), and its address never changes. Every change is a new version; ` +
 			`colliedesk_kb_article_version_restore brings an earlier text back.` + "\n\n" + kbTextNotice,
 
 		REST: []string{"PATCH /api/v1/kb/articles/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["article_id","updated_at"],"properties":{` + kbArticleIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` + kbSlugProperty + `,` +
-			`"collection_id":{"type":"string",` + uuid + `},"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `}}`,
+			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleUpdate,
 	}

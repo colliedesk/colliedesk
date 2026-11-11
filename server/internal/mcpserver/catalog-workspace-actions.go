@@ -86,6 +86,24 @@ func billingActionSpec() Spec {
 	}
 }
 
+func trialOfferAcceptSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_trial_offer_accept",
+		Title: "Accept a trial offer link",
+		Description: `When the person you work for got a trial offer link from Colliedesk (an address with /trial-offer?token=), accept it here: the workspace's trial then ends 14 days from now, ` +
+			`and a locked workspace opens at once. A trial end already later than that is kept. Pass the whole link or only its token. preview true only reads the offer ` +
+			`(workspace, state, the trial end it would give, who can accept) and changes nothing. A spent, expired or withdrawn link, a workspace with a plan, or another workspace's link ` +
+			`is refused with the reason and the trial end; for more time, the person writes to support@colliedesk.com.`,
+		REST: []string{"GET /api/v1/trial-offer", "POST /api/v1/trial-offer/accept"},
+		Input: `{"type":"object","additionalProperties":false,"required":["link"],"properties":{` +
+			`"link":{"type":"string","maxLength":2000,"description":"The trial offer link, or only its token."},` +
+			`"preview":{"type":"boolean","default":false,"description":"true: read the offer without accepting it."}}}`,
+		Output: `{"type":"object","required":["offer","next"],"properties":{"offer":{"type":"object"},"previous_trial_ends_at":{"type":"string"},` +
+			`"trial_ends_at":{"type":"string"},"extended":{"type":"boolean"},"next":{"type":"string"}}}`,
+		run: trialOfferAccept,
+	}
+}
+
 func emailChannelDisconnectSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_email_channel_disconnect",

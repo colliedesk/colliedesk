@@ -6,7 +6,9 @@ export type JsonResponse<Operation extends keyof operations, Status extends keyo
   operations[Operation]['responses'][Status] extends { content: { 'application/json': infer Body } } ? Body : never;
 
 const nullableDate = z.string().datetime().nullable();
-export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
+export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed', 'spam']);
+// The statuses a status change sets: Spam is set and left with its own action (markSpam).
+export type SettableStatus = Exclude<z.infer<typeof statusSchema>, 'spam'>;
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 // How a conversation started: the values known today, which the filters offer, and any other channel type the
 // server's registry names (a chat type), which the inbox shows by its name instead of failing to load.
@@ -60,6 +62,17 @@ export const billingSchema = z.object({
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int(), storage_bytes: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
 export const exportLinkSchema = z.object({ url: z.string().min(1), expires_in_seconds: z.number().int() }) satisfies z.ZodType<Generated<'ExportLink'>>;
+// A trial offer link an operator sent, and what the signed-in person can do with it.
+export const trialOfferSchema = z.object({
+  id: z.string().uuid(), state: z.enum(['open', 'accepted', 'expired', 'revoked']), workspace_name: z.string(), expires_at: z.string().datetime(),
+  accepted_at: z.string().datetime().nullable(), accepted_by: z.string().nullable(), revoked_at: z.string().datetime().nullable(),
+  trial_ends_at: z.string().datetime(), plan: z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']), extends_to: z.string().datetime(),
+  can_accept: z.boolean(), refusal: z.enum(['accepted', 'expired', 'revoked', 'has_plan', 'not_admin']).nullable(), accept_by: z.array(z.string()),
+}) satisfies z.ZodType<Generated<'TrialOffer'>>;
+export type TrialOffer = z.infer<typeof trialOfferSchema>;
+export const trialOfferAcceptedSchema = z.object({
+  offer: trialOfferSchema, previous_trial_ends_at: z.string().datetime(), trial_ends_at: z.string().datetime(), extended: z.boolean(),
+}) satisfies z.ZodType<Generated<'TrialOfferAccepted'>>;
 export const migrationRequestSchema = z.object({ freshdesk_address: z.string(), times: z.string(), requested_at: z.string().datetime() }) satisfies z.ZodType<Generated<'MigrationRequest'>>;
 export const foundingSlotsSchema = z.object({ slots: z.number().int(), taken: z.number().int().nullable(), open: z.boolean() }) satisfies z.ZodType<Generated<'FoundingSlots'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
@@ -143,7 +156,7 @@ export const conversationSchema = z.object({
     // One a newer server tells of in a way this app does not know is left out, not a failed conversation.
     .catch(null),
   // The statuses that, set now, would tell the customer in its chat (only on the conversation itself).
-  status_notices: z.array(statusSchema).optional(),
+  status_notices: z.array(statusSchema.exclude(['spam'])).optional(),
   // Whether a status the team sets now may tell its customer (any status); on every conversation, lists too.
   may_tell_customer: z.boolean().optional(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
@@ -332,6 +345,8 @@ export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSave
 export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
 export const bulkUpdateResultSchema = z.object({ updated: z.number().int(), told: z.number().int().optional() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
+export const spamResultSchema = z.object({ updated: z.number().int(), senders: z.array(z.object({ id: z.string().uuid(), name: z.string(), email: z.string() })) }) satisfies z.ZodType<JsonResponse<'markConversationsSpam', 200>>;
+export type SpamResult = z.infer<typeof spamResultSchema>;
 
 export type Agent = Generated<'Agent'>;
 export type TeamMember = Generated<'TeamMember'>;

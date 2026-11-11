@@ -41,6 +41,9 @@ func (c *call) refuse(err error, notFound string) error {
 		return &toolError{notFound}
 	case failure.Status == 404:
 		return &toolError{"Colliedesk could not find that."}
+	case failure.Status == 409 && failure.Code == "conversation_spam":
+		return &toolError{"A conversation in Spam keeps its status, so nothing was changed. Take it out with colliedesk_conversations_spam (spam: false), " +
+			"which puts it back in the status it had; then change it."}
 	case failure.Status == 409:
 		return &toolError{"Colliedesk refused this: " + failure.Message}
 	case failure.Status == 400 || failure.Status == 422:

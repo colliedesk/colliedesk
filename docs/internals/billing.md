@@ -481,6 +481,15 @@ never deletes.
 
 Run on the server shell (`docker compose exec server /app/collie ...`).
 
+- `collie trial offer` / `trial offers` / `trial offer revoke` (operator guide: docs/self-host/trial-offers.md)
+  make a one-time link an admin accepts. Table `trial_offers` stores only the token's SHA-256; state is
+  derived (accepted, revoked, expired by `expires_at`, else open). Accepting goes through the same
+  `setTrialEndTx` as `trial set`, so `workspace_trial_changes.changed_by` reads `trial offer <id> accepted
+  by <admin>`. The end becomes `max(trial_ends_at, now + 14 days)`: never shortened; the offer is spent
+  either way. `GET /api/v1/trial-offer` and `POST /api/v1/trial-offer/accept` are on `lockedAllowed`.
+  The token is looked up in the session's workspace first; only when absent, `PrivilegeTrialOffer`
+  tells "another workspace" from "unknown" without returning anything else. The funnel event
+  `trial_offer_accepted` carries only the workspace id and `extended`.
 - `collie trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at`, prints the old
   and new value and records who changed it, when, and from what to what in `workspace_trial_changes`
   (`--by`, default the OS user). It never touches `trial_extended_at`. Undo a mistake by running it again.
