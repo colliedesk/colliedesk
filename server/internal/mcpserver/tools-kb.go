@@ -65,6 +65,7 @@ type restKBArticle struct {
 	ID            string                `json:"id"`
 	Number        int64                 `json:"number"`
 	CollectionID  string                `json:"collection_id"`
+	CollectionIDs []string              `json:"collection_ids"`
 	Position      int                   `json:"position"`
 	Title         string                `json:"title"`
 	Slug          string                `json:"slug"`
@@ -92,24 +93,33 @@ type kbTitle struct {
 }
 
 type kbArticleRowOut struct {
-	ID           string               `json:"id"`
-	Number       int64                `json:"number"`
-	CollectionID string               `json:"collection_id"`
-	Position     int                  `json:"position"`
-	Status       string               `json:"status"`
-	Slug         string               `json:"slug"`
-	PublishedAt  *string              `json:"published_at"`
-	UpdatedAt    string               `json:"updated_at"`
-	LastChange   *savedReplyChangeOut `json:"last_change"`
-	URL          string               `json:"url"`
-	TeamText     kbTitle              `json:"team_text"`
-	DeletedAt    string               `json:"deleted_at,omitempty"`
-	DeletedBy    *string              `json:"deleted_by,omitempty"`
-	PurgesAt     string               `json:"purges_at,omitempty"`
+	ID            string               `json:"id"`
+	Number        int64                `json:"number"`
+	CollectionID  string               `json:"collection_id"`
+	CollectionIDs []string             `json:"collection_ids"`
+	Position      int                  `json:"position"`
+	Status        string               `json:"status"`
+	Slug          string               `json:"slug"`
+	PublishedAt   *string              `json:"published_at"`
+	UpdatedAt     string               `json:"updated_at"`
+	LastChange    *savedReplyChangeOut `json:"last_change"`
+	URL           string               `json:"url"`
+	TeamText      kbTitle              `json:"team_text"`
+	DeletedAt     string               `json:"deleted_at,omitempty"`
+	DeletedBy     *string              `json:"deleted_by,omitempty"`
+	PurgesAt      string               `json:"purges_at,omitempty"`
+}
+
+// kbCollectionIDs is where the article is listed, its home first; never null.
+func kbCollectionIDs(article restKBArticle) []string {
+	if len(article.CollectionIDs) == 0 {
+		return []string{article.CollectionID}
+	}
+	return article.CollectionIDs
 }
 
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
-	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Position: article.Position, Status: article.Status, Slug: article.Slug,
+	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, PurgesAt: article.PurgesAt}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
@@ -124,6 +134,7 @@ type kbArticleOut struct {
 	ID            string                `json:"id"`
 	Number        int64                 `json:"number"`
 	CollectionID  string                `json:"collection_id"`
+	CollectionIDs []string              `json:"collection_ids"`
 	Status        string                `json:"status"`
 	Slug          string                `json:"slug"`
 	PublishedAt   *string               `json:"published_at"`
@@ -152,7 +163,7 @@ type kbAIExclusionOut struct {
 }
 
 func kbArticleView(article restKBArticle) map[string]any {
-	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Status: article.Status, Slug: article.Slug,
+	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}}
 	for _, translation := range article.Translations {
@@ -389,7 +400,7 @@ func kbArticleUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	change := kbArticleFields(arguments, "article_id")
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: title, body, slug, collection_id, status, seo_title or seo_description."}
+		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title or seo_description."}
 	}
 	c.forArticle(args.ID)
 	var updated restKBArticle
