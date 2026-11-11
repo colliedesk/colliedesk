@@ -21,10 +21,10 @@ const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: mo
 // "Start free trial" link. On APP_ORIGIN of a server whose workspaces each have a host of their own, a
 // completed sign-in continues on the workspace's host; on a workspace host, the server signs in to that
 // workspace only, and an email that is not an agent there is pointed to APP_ORIGIN to find its workspace.
-// returnTo is an AI app's consent page (/oauth/authorize?…) that sent the person here to sign in: the
-// sign-in goes back to it, on the workspace's own host where workspaces have one.
+// returnTo is an AI app's consent page (/oauth/authorize?…) or a trial offer link (/trial-offer?…) that sent
+// the person here to sign in: the sign-in goes back to it, on the workspace's own host where workspaces have one.
 export function returnToConsent(next: string | undefined): string | undefined {
-  return next?.startsWith('/oauth/authorize?') ? next : undefined;
+  return next?.startsWith('/oauth/authorize?') || next?.startsWith('/trial-offer?') ? next : undefined;
 }
 
 export function RedeemRoute({ token, buy, trial = false, signedOut = false, next: asked }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean; next?: string }) {

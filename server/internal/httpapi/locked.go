@@ -35,6 +35,9 @@ var lockedAllowed = map[string]bool{
 	"DELETE " + channelMicrosoftPath: true,
 	// A customer locked out after the trial may be the one who most needs to report a problem.
 	"POST /api/v1/support/problem-reports": true,
+	// A trial offer is sent to a team whose trial ran out: reading and accepting it is the way back in.
+	"GET /api/v1/trial-offer":         true,
+	"POST /api/v1/trial-offer/accept": true,
 }
 
 // LockedAllowlist lists the allowlist as "METHOD pattern" strings, sorted.

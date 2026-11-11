@@ -681,6 +681,8 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/billing/migration-request", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/trial-offer", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/trial-offer/accept", auth.PermissionSession},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 		{http.MethodPost, resendWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, foundingPath, auth.PermissionPublic},

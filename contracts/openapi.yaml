@@ -4276,6 +4276,69 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/trial-offer:
+    get:
+      operationId: getTrialOffer
+      x-permission: authenticated
+      description: >
+        Read a trial offer link an operator sent (`collie trial offer`): the workspace it is for, its state
+        (`open`, `accepted`, `expired`, `revoked`), the workspace's trial end and plan, and whether the caller
+        can accept it now (`can_accept`, else `refusal`). Reading changes nothing: mail scanners open links too.
+        Any signed-in member of the offer's workspace may read it, also while the workspace is locked;
+        `accept_by` names the members who can accept (`billing:manage`). The token is the `token` of the link's
+        address. 404 `trial_offer_not_found` for a token no workspace has; 403 `trial_offer_other_workspace` for
+        an offer of another workspace than the session's, without naming it.
+      parameters:
+        - {name: token, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 200}, description: 'The token of the offer link.'}
+      responses:
+        '200':
+          description: The offer and what the caller can do with it
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrialOffer'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: '`trial_offer_other_workspace`: the offer is for another workspace. Sign in to the workspace that received the link.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '404': {description: '`trial_offer_not_found`: no offer has this token; check that the whole link was copied.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`validation_failed` with `fields.token` when the token is missing.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/trial-offer/accept:
+    post:
+      operationId: acceptTrialOffer
+      x-permission: billing:manage
+      description: >
+        Accept an open trial offer: the workspace's trial then ends 14 days from now, and a locked workspace opens
+        at once. A trial end already later than that is kept, never shortened (`extended` false). The offer is
+        spent either way, and the change is recorded with the offer and who accepted it. Allowed while the
+        workspace is locked. 409 `trial_offer_accepted`, `trial_offer_expired` or `trial_offer_revoked` when the
+        offer is no longer open, and 409 `trial_offer_has_plan` when the workspace has a plan; each carries
+        `trial_ends_at` and changes nothing. 403 `permission_missing` without `billing:manage`; 403
+        `trial_offer_other_workspace` and 404 `trial_offer_not_found` as for `GET /api/v1/trial-offer`.
+        A retry with the same Idempotency-Key answers the first acceptance again.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              additionalProperties: false
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200, description: 'The token of the offer link.'}
+      responses:
+        '200':
+          description: The offer was accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrialOfferAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: '`permission_missing` (needs `billing:manage`) or `trial_offer_other_workspace`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '404': {description: '`trial_offer_not_found`: no offer has this token.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '409': {description: '`trial_offer_accepted`, `trial_offer_expired`, `trial_offer_revoked` or `trial_offer_has_plan`, with `trial_ends_at`; nothing changed. `request_in_progress` while the first request with this Idempotency-Key still runs.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`validation_failed` with `fields.token` when the token is missing; or `idempotency_key_reused`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/webhooks/polar:
     post:
       operationId: receivePolarWebhook
@@ -13603,6 +13666,37 @@ components:
         revoked_at: {type: [string, 'null'], format: date-time}
         totp_enabled_at: {type: [string, 'null'], format: date-time}
         link_unused: {type: boolean}
+    TrialOffer:
+      type: object
+      required: [id, state, workspace_name, expires_at, accepted_at, accepted_by, revoked_at, trial_ends_at, plan, extends_to, can_accept, refusal, accept_by]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [open, accepted, expired, revoked]}
+        workspace_name: {type: string, description: 'The workspace the offer is for (the session''s own).'}
+        expires_at: {type: string, format: date-time, description: 'When the link stops working, at most 30 days after it was made.'}
+        accepted_at: {type: ['string', 'null'], format: date-time}
+        accepted_by: {type: ['string', 'null'], description: 'Who accepted it: display name, else email.'}
+        revoked_at: {type: ['string', 'null'], format: date-time}
+        trial_ends_at: {type: string, format: date-time, description: 'When the workspace''s trial ends or ended now.'}
+        plan:
+          type: string
+          enum: [trial, solo, small, team, team25, founding, none]
+          description: 'The plan in effect now, as in `GET /api/v1/billing`.'
+        extends_to: {type: string, format: date-time, description: 'The trial end accepting now would give: 14 days from now, or trial_ends_at when that is later.'}
+        can_accept: {type: boolean, description: 'True when the caller can accept the offer now.'}
+        refusal:
+          type: ['string', 'null']
+          enum: [accepted, expired, revoked, has_plan, not_admin, null]
+          description: 'Why the caller cannot accept: the offer is no longer open, the workspace has a plan, or the caller lacks billing:manage. Null when can_accept.'
+        accept_by: {type: array, items: {type: string}, description: 'Active members who can accept (billing:manage), by display name or email.'}
+    TrialOfferAccepted:
+      type: object
+      required: [offer, previous_trial_ends_at, trial_ends_at, extended]
+      properties:
+        offer: {$ref: '#/components/schemas/TrialOffer'}
+        previous_trial_ends_at: {type: string, format: date-time}
+        trial_ends_at: {type: string, format: date-time, description: 'The trial end now.'}
+        extended: {type: boolean, description: 'False when the trial already ended later than 14 days from now and was kept.'}
     Error:
       type: object
       required: [error]
@@ -13628,6 +13722,7 @@ components:
             missing_permissions: {type: array, items: {$ref: '#/components/schemas/TokenPermission'}, description: 'Only on permission_missing, role_exceeds_yours and member_outranks_you: what the caller lacks. For an agent token that is stopped (it follows a role its person no longer holds all of), the permissions of that role the person lacks.'}
             missing_from: {type: string, enum: [token, person], description: 'Only on permission_missing: token = the person holds it but this agent token was not given it; person = the person behind the call does not hold it.'}
             ask: {type: array, items: {type: string}, description: 'Only on permission_missing from the person: names of active members who can change roles (team:manage_roles).'}
+            trial_ends_at: {type: string, format: date-time, description: 'Only on trial_offer_accepted, trial_offer_expired, trial_offer_revoked and trial_offer_has_plan: when the workspace''s trial ends or ended.'}
             where: {type: string, description: 'Only on person_only: the page of the web app where a person does it, for example /settings#agents-heading.'}
             in_use:
               type: object
