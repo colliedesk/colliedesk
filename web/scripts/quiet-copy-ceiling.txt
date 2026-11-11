@@ -1,0 +1,132 @@
+# Helper lines longer than 60 characters that were on screen when the quiet-copy gate came in
+# (scripts/quiet-copy.test.mjs; the rule: docs/internals/design.md, Quiet by default). One key per line: the
+# message entry (file:object.key, several joined by " + " when a line shows more than one), or text:<sha1> for words
+# written in the TSX itself.
+#
+# This list only shrinks. Never add a line: move the how, why or definition into a HelpTip and keep one line of 60
+# characters or less. When a line gets short or goes away, the gate asks you to delete its key here.
+
+channels/email/setup-messages.ts:setupMessages.adminsOnly
+channels/email/setup-messages.ts:setupMessages.intro
+channels/zalo/zalo-messages.ts:zaloMessages.addStaffHelp
+channels/zalo/zalo-messages.ts:zaloMessages.askDescriptionHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.autoCloseHint
+channels/zalo/zalo-messages.ts:zaloMessages.commandsLead
+channels/zalo/zalo-messages.ts:zaloMessages.confirmSentence + channels/zalo/zalo-messages.ts:zaloMessages.confirmNeedsCommand
+channels/zalo/zalo-messages.ts:zaloMessages.groupsLead
+channels/zalo/zalo-messages.ts:zaloMessages.helpNoticeHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.linkHelp
+channels/zalo/zalo-messages.ts:zaloMessages.nameHint
+channels/zalo/zalo-messages.ts:zaloMessages.noticesLead
+channels/zalo/zalo-messages.ts:zaloMessages.oaIDHint
+channels/zalo/zalo-messages.ts:zaloMessages.organizationHint
+channels/zalo/zalo-messages.ts:zaloMessages.questionHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.receivedHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.referencesLead
+channels/zalo/zalo-messages.ts:zaloMessages.reopenLegacyHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.reopenNotFoundHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.reopenNotedHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.reopenedHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.secondsOfSilence
+channels/zalo/zalo-messages.ts:zaloMessages.secretsLead
+channels/zalo/zalo-messages.ts:zaloMessages.staffLead
+channels/zalo/zalo-messages.ts:zaloMessages.statusLead
+channels/zalo/zalo-messages.ts:zaloMessages.tokensHelp
+channels/zalo/zalo-messages.ts:zaloMessages.unmatchedAllOpen + channels/zalo/zalo-messages.ts:zaloMessages.count
+channels/zalo/zalo-messages.ts:zaloMessages.verificationCodeHint
+channels/zalo/zalo-messages.ts:zaloMessages.verificationLead
+channels/zalo/zalo-messages.ts:zaloMessages.webhookLead
+features/autofix/autofix-messages.ts:autofixMessages.cancelIssueHelp + features/autofix/autofix-messages.ts:autofixMessages.cancelPRHelp
+features/autofix/autofix-messages.ts:autofixMessages.cancelKeep
+features/autofix/autofix-messages.ts:autofixMessages.linkHelp
+features/autofix/autofix-messages.ts:autofixMessages.notesLockedHelp
+features/autofix/autofix-messages.ts:autofixMessages.retryHelp
+features/autofix/autofix-messages.ts:autofixMessages.sendHelp
+features/autofix/autofix-messages.ts:autofixMessages.set.checklistLocal
+features/autofix/autofix-messages.ts:autofixMessages.set.disconnectAgain
+features/autofix/autofix-messages.ts:autofixMessages.set.disconnectRepoHelp
+features/autofix/autofix-messages.ts:autofixMessages.set.keyAdvice
+features/autofix/autofix-messages.ts:autofixMessages.set.leavingHelp
+features/autofix/autofix-messages.ts:autofixMessages.set.leavingNote
+features/autofix/autofix-messages.ts:autofixMessages.set.notesHelp
+features/autofix/autofix-messages.ts:autofixMessages.set.notesNote
+features/autofix/autofix-messages.ts:autofixMessages.untrustedHelp
+features/inbox/message-moves-messages.ts:moveMessages.moveHelp
+features/inbox/message-moves-messages.ts:moveMessages.searchHelp
+features/kb/article-editor.tsx:seoMessages.seoHelp
+features/kb/help-center-search-console-messages.ts:searchConsoleMessages.googleHelp
+features/kb/help-center-theme-messages.ts:themeMessages.customCSSHelp
+features/kb/kb-messages.ts:kbMessages.articleSlugHelp
+features/kb/kb-messages.ts:kbMessages.collectionsHelp
+features/kb/kb-messages.ts:kbMessages.pickerMissing
+features/kb/media-messages.ts:mediaMessages.altHelp
+features/kb/media-messages.ts:mediaMessages.inProgressHelp
+features/kb/media-messages.ts:mediaMessages.keepHelp
+features/kb/media-messages.ts:mediaMessages.posterHelp + features/kb/media-messages.ts:mediaMessages.chooseFrameHelp
+features/kb/media-messages.ts:mediaMessages.replaceHelp
+features/kb/media-messages.ts:mediaMessages.trashDescription
+features/kb/translation-messages.ts:translationMessages.primaryHelp
+features/kb/translation-messages.ts:translationMessages.unlistedHelp
+features/onboarding/setup-flow-messages.ts:flowMessages.doneSome
+features/settings/agent-tokens-messages.ts:agentTokenMessages.description
+features/settings/ai-chat-messages.ts:aiChatMessages.deleteBody
+features/settings/ai-messages.ts:aiMessages.autoConfirmLead
+features/settings/ai-messages.ts:aiMessages.autoDraftConfirmLead
+features/settings/ai-messages.ts:aiMessages.automaticHelp
+features/settings/ai-messages.ts:aiMessages.baseURLHelp
+features/settings/ai-messages.ts:aiMessages.draftsPerDayHelp
+features/settings/ai-messages.ts:aiMessages.historyHelp
+features/settings/ai-messages.ts:aiMessages.modelsBeforeLoadAddress
+features/settings/ai-messages.ts:aiMessages.modelsHelp
+features/settings/ai-messages.ts:aiMessages.modelsPicked
+features/settings/ai-messages.ts:aiMessages.rotateHelp
+features/settings/ai-messages.ts:aiMessages.usageHelp
+features/settings/channel-setup-messages.ts:channelSetupMessages.emailChannelDescription
+features/settings/channels/channels-messages.ts:channelsMessages.aiHelp
+features/settings/channels/channels-messages.ts:channelsMessages.aiLead
+features/settings/channels/channels-messages.ts:channelsMessages.defaultHelp
+features/settings/channels/channels-messages.ts:channelsMessages.emptyBody
+features/settings/channels/channels-messages.ts:channelsMessages.historyHelp
+features/settings/channels/channels-messages.ts:channelsMessages.intakeAutoLead
+features/settings/channels/channels-messages.ts:channelsMessages.intakeGateHelp
+features/settings/channels/channels-messages.ts:channelsMessages.intakeKeywordsHelp
+features/settings/channels/channels-messages.ts:channelsMessages.intakeLabelsHelp
+features/settings/channels/channels-messages.ts:channelsMessages.intakePatternsHelp
+features/settings/channels/channels-messages.ts:channelsMessages.intakeSettingsLead
+features/settings/channels/channels-messages.ts:channelsMessages.intakeSourcesHelp
+features/settings/channels/channels-messages.ts:channelsMessages.intakeThresholdsHelp
+features/settings/connected-apps-section.tsx:connectedAppsMessages.description
+features/settings/connected-apps-section.tsx:connectedAppsMessages.removingInApp
+features/settings/import-messages.ts:importMessages.connectHelp
+features/settings/import-messages.ts:importMessages.keyHelpAgain
+features/settings/import-messages.ts:importMessages.peopleHelp
+features/settings/numbers/numbers-messages.ts:numbersMessages.editHelp
+features/settings/numbers/numbers-messages.ts:numbersMessages.formatHint
+features/settings/numbers/numbers-messages.ts:numbersMessages.lead
+features/settings/numbers/numbers-messages.ts:numbersMessages.nameHint
+features/settings/numbers/numbers-messages.ts:numbersMessages.startHint
+features/settings/roles-messages.ts:roleMessages.onlySystem + features/settings/roles-messages.ts:roleMessages.makeRole
+features/settings/saved-reply-messages.ts:savedReplyMessages.savedRepliesDescription
+features/settings/settings-messages.ts:settingsMessages.addressNameWarning
+features/settings/settings-messages.ts:settingsMessages.generalDescription
+features/settings/settings-messages.ts:settingsMessages.invitesDescription
+features/settings/settings-messages.ts:settingsMessages.senderNameHelp
+features/settings/settings-messages.ts:settingsMessages.sessionsDescription
+features/settings/settings-messages.ts:settingsMessages.teamDescription
+features/settings/settings-messages.ts:settingsMessages.webFormDescription
+features/settings/settings-messages.ts:settingsMessages.workspaceNameHelp
+features/settings/targets/targets-messages.ts:targetsMessages.alertsLead
+features/settings/targets/targets-messages.ts:targetsMessages.onLead
+features/settings/targets/targets-messages.ts:targetsMessages.targetsLead
+messages.ts:messages.exportDescription
+operator/ai-provider-messages.ts:en.allowanceHelp
+operator/ai-provider-messages.ts:en.pricesHelp
+operator/ai-provider-messages.ts:en.serverModelsHelp
+operator/ai-provider-messages.ts:en.serverProviderOffHelp
+operator/messages.ts:m.confirmTrialLead
+operator/messages.ts:m.environmentLead
+operator/messages.ts:m.noProducts
+operator/messages.ts:m.productsLead
+operator/messages.ts:m.revokeSessionLead
+operator/messages.ts:m.secretOnlyYou
+operator/messages.ts:m.writeOnly

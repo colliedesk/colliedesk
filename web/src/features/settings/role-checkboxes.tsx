@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Role } from '../../api/schemas';
 import { LockIcon } from '../../ui/icons';
+import { LockedReason } from '../../ui/help-tip';
 import { roleMessages as text } from './roles-messages';
 import './role-pickers.css';
 
@@ -16,7 +17,8 @@ interface RoleCheckboxesProps {
 }
 
 // RoleCheckboxes picks roles. A role the person may not give (it holds a permission they lack) stays
-// listed, locked, and says why.
+// listed, locked, and says why: a role locked for a reason of its own (the last admin's Admin) says it in the
+// tip of its lock, which also describes the checkbox.
 export function RoleCheckboxes({ roles, chosen, onChange, idPrefix, locked, note }: RoleCheckboxesProps) {
   const lockedNote = `${idPrefix}-cant-give`;
   return (
@@ -32,12 +34,12 @@ export function RoleCheckboxes({ roles, chosen, onChange, idPrefix, locked, note
             <label htmlFor={id}>
               <input id={id} type="checkbox" checked={chosen.includes(role.id)} aria-disabled={off || undefined} aria-describedby={describedBy}
                 onChange={() => { if (!off) onChange(chosen.includes(role.id) ? chosen.filter((item) => item !== role.id) : [...chosen, role.id]); }} />
-              {off && <span aria-hidden="true" className="role-lock"><LockIcon /></span>}
+              {off && !why && <span aria-hidden="true" className="role-lock"><LockIcon /></span>}
               <span className="role-checkbox-name">{role.name}</span>
               <span className="muted-copy">{role.system === 'admin' ? text.everyPermission : text.permissionCount(role.permissions.length)}</span>
               {!role.assignable && !why && <span className="muted-copy">· {text.cantGive}</span>}
             </label>
-            {why && <p id={`${id}-why`} className="muted-copy">{why}</p>}
+            {why && <LockedReason id={`${id}-why`} label={role.name} text={why} />}
             {note?.(role)}
           </div>
         );
