@@ -203,6 +203,14 @@ of; folding sends only the characters outside ASCII through NFD. Go before the c
 64–69 ms with the test on one CPU beside a busy loop. The scoring is the floor of what is left:
 reading each vector directly or through `strip` instead of `|| ''::tsvector` took the same time.
 
+The same day the gate was found to pass without measuring: run again in one binary (`-count=2`), it
+found no AI retrieval rows (the first run's cleanup had removed them and nothing was queued to build
+them again), every turn ended `no_source` before the provider, and it passed at p95 −2562047 h.
+Every timed turn must now call the provider, or the gate fails. It and `TestAIRetrievalLatencyBudget`
+clear the fixture's retrieval rows before they seed their own and when they end; this gate queues
+every published article and builds its rows as the worker does. Both measure in any order and
+with any `-count`.
+
 ## Results budget
 
 `TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
