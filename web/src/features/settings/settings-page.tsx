@@ -72,7 +72,7 @@ interface SettingsPageProps {
 // SettingsPage is one page in two groups: what belongs to the person signed in, then what the whole
 // workspace shares. A section nav jumps to each; it lists only the sections this person can see,
 // plus Plan and billing (its own page) for admins of a billed workspace.
-export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
+export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canRevokeInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, setupGuideHidden = false, onSetSetupGuideHidden, createdInvite, creatingInvite, onCreateInvite, onRevokeInvite, inviteRoles,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, mcpAddress = `${window.location.origin}/mcp`, savedRepliesSection, helpCenterSection, exportSection, showBilling = false, showInvites = true }: SettingsPageProps) {
   return (
@@ -103,7 +103,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
             </div>
           </section>}
           {teamSection}
-          {showInvites && <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInvite={createdInvite} creatingInvite={creatingInvite}
+          {showInvites && <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} canRevokeInvites={canRevokeInvites} createdInvite={createdInvite} creatingInvite={creatingInvite}
             inviteError={inviteError} roles={inviteRoles} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />}
           <ConnectedAppsSection sessions={sessions} timezone={timezone} mcpAddress={mcpAddress} onDisconnect={onRevokeSession} />
           {agentsSection}

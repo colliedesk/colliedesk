@@ -346,3 +346,18 @@ test('undo is a quiet link below the report, not a button beside the downloads, 
   fireEvent.click(screen.getByRole('button', { name: 'Remove imported data' }));
   expect(onUndo).toHaveBeenCalledWith(job().id);
 });
+
+test('in Settings the page has its title and the settings menu; embedded in the setup flow it has neither, and the import itself stays', () => {
+  page();
+  expect(screen.getByRole('heading', { level: 1, name: 'Import from Freshdesk' })).toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeInTheDocument();
+  expect(screen.getByRole('main')).toBeInTheDocument();
+  cleanup();
+  page({ embedded: true });
+  expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+  expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
+  // The flow owns the page's one main landmark.
+  expect(screen.queryByRole('main')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Freshdesk address')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Read account' })).toBeInTheDocument();
+});
