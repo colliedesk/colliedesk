@@ -88,7 +88,7 @@ test('setup flow: a new admin connects email in place, skips the import, invites
   await expect(page).toHaveURL(`${baseURL}/setup/done`);
   await expect(page.getByRole('heading', { level: 1, name: 'You\'re ready to answer customers' })).toBeVisible();
   const rows = page.getByRole('list', { name: 'Setup steps' }).getByRole('listitem');
-  await expect(rows).toHaveText([/Receive customer email.*Waiting for the first email/, /Import from Freshdesk.*To do/, /Turn on AI drafts.*To do/, /Set reply targets.*To do/,
+  await expect(rows).toHaveText([/Receive customer email.*Waiting for the first email/, /Import from Freshdesk.*To do/, /Turn on AI drafts.*Nothing to do: no built-in AI on this server/, /Set reply targets.*To do/,
     /Invite your team.*Invite sent/, /Answer your first email.*To do/]);
   await expect(rows.nth(1).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/setup/import');
   await expectIdentityVisible(page, workspace, admin);

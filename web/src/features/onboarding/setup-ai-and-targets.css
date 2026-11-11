@@ -85,6 +85,8 @@
   .setup-presets { grid-template-columns: minmax(0, 1fr); }
   /* Stacked, only the chosen preset shows its table. */
   .setup-preset:not([data-selected]) .setup-preset-table { display: none; }
+  /* Each preset's row is its radio's label: a fingertip-sized target. */
+  .setup-preset-head { min-height: 44px; }
   .setup-example-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .setup-example-row .setup-example-priority, .setup-example-row svg { display: none; }
   .setup-example-subject { grid-column: 1 / -1; color: var(--text-1); font-weight: 600; }

@@ -4,13 +4,15 @@ import { CheckIcon } from '../../ui/icons';
 import { flowMessages as m } from './setup-flow-messages';
 import { ownPartIsDone, stepPath } from './setup-flow-path';
 import { setupMessages } from './setup-messages';
-import { stepIsDone } from './setup-steps';
+import { nothingToDo, stepIsDone } from './setup-steps';
 
 type Step = { key: SetupStepKey; state: string };
 
-// The words for where a step stands: done, its own words while others or time finish it ("Importing"), or to do.
+// The words for where a step stands: done, its own words while others or time finish it ("Importing") or when
+// there is nothing to do here, or to do.
 function stateWords(step: Step) {
   if (stepIsDone(step)) return m.stateDone;
+  if (nothingToDo(step)) return setupMessages.state.ai_drafts.unavailable;
   if (ownPartIsDone(step)) return (setupMessages.state[step.key] as Record<string, string>)[step.state] ?? m.stateTodo;
   return step.state === 'needs_attention' ? m.stateAttention : m.stateTodo;
 }

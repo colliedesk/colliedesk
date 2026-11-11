@@ -43,6 +43,8 @@
 .setup-step > a.primary-action, .setup-step > a.primary-action:hover { border-color: transparent; background: transparent; color: var(--text-1); font-weight: 400; }
 .setup-step > a.primary-action .setup-title { color: var(--accent); }
 .setup-step[data-state="done"] .setup-title { color: var(--text-2); font-weight: 500; }
+/* A step with nothing to do here (AI drafts without any AI) reads as quiet as a done one, without its check. */
+.setup-step[data-state="none"] .setup-title { color: var(--text-2); font-weight: 500; }
 .setup-time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 
 /* One pane at a time: the guide waits on the list and steps aside for an open conversation and its reply box. */

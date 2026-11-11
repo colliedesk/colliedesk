@@ -32,6 +32,7 @@ export const aiDraftsMessages = {
   sentRecorded: ' Your consent is recorded in Settings → Built-in AI → History.',
   runsClaude: (label: string) => `${label}, which runs Anthropic's Claude models`,
   yourProvider: 'the provider you add',
+  builtIn: "the server's built-in AI",
   costTitle: 'What it costs',
   // The numbers are the server's estimate, as Settings → Built-in AI shows it.
   costIncluded: (drafts: number | null, perDay: number) => `Included in your plan: ${drafts === null ? '' : `about ${drafts} automatic drafts this month, `}at most ${perDay} a day. They may use half of the included AI; the rest stays for Draft with AI. Your own provider key works too, in Settings → Built-in AI.`,
@@ -44,6 +45,8 @@ export const aiDraftsMessages = {
   consentLine: (to: string) => `Sends conversations to ${to}.`,
   whatIsSent: 'What is sent',
   failed: 'AI drafts could not be turned on. Try again, or turn them on in Settings → Built-in AI.',
+  offFailed: 'AI drafts could not be turned off. Try again, or turn them off in Settings → Built-in AI.',
+  settingsFailed: (reason: string) => `The AI settings could not be read: ${reason}`,
 };
 
 export const replyTargetsMessages = {
@@ -62,7 +65,7 @@ export const replyTargetsMessages = {
   reply: 'Reply',
   resolve: 'Resolve',
   priority: { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' },
-  dayNote: 'In business hours. A day is one business day of your hours: 9 h from 09:00 to 18:00.',
+  dayNote: (day: string) => `In business hours. A day is one business day of your hours: ${day}.`,
   hours: (zone: string, fromBrowser: boolean) => `Business hours: Monday to Friday, 09:00 to 18:00, ${zone}${fromBrowser ? ' (from your browser)' : ''}`,
   ownHours: (zone: string) => `Business hours: as set in Settings → Response targets, ${zone}`,
   change: 'Change',
@@ -81,5 +84,6 @@ export const replyTargetsMessages = {
   consentLine: 'Starts with new conversations. Change it in Settings.',
   onText: (normal: string) => `Reply targets are on. A Normal conversation is due within ${normal}.`,
   changeInSettings: 'Change them in Settings',
-  failed: 'The reply targets could not be saved. Try again, or set them in Settings → Response targets.',
+  failed: 'The reply targets could not be saved. They were read again: try again, or set them in Settings → Response targets.',
+  readFailed: (reason: string) => `The reply targets could not be read: ${reason}`,
 };

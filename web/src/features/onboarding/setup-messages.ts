@@ -23,7 +23,7 @@ export const setupMessages = {
   state: {
     email: { none: 'Connect the address your customers write to', waiting: 'Waiting for the first email', working: 'Done', needs_attention: 'Needs attention' },
     import: { none: 'Moves your history over', running: 'Importing', done: 'Done' },
-    ai_drafts: { none: 'A draft waits in each new conversation', nothing_to_read: 'Better after an import or an article', unavailable: 'Needs an AI provider', on: 'Done' },
+    ai_drafts: { none: 'A draft waits in each new conversation', nothing_to_read: 'Better after an import or an article', unavailable: 'Nothing to do: no built-in AI on this server', on: 'Done' },
     reply_targets: { none: 'Today puts the closest deadline first', on: 'Done' },
     invite: { alone: 'Just you so far', invited: 'Invite sent', joined: 'Done' },
     first_reply: { none: 'Not yet', sent: 'Done' },

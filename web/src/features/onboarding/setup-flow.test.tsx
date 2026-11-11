@@ -24,11 +24,11 @@ beforeAll(async () => {
 
 type Key = 'email' | 'import' | 'invite' | 'first_reply';
 type Progress = { steps: { key: Key; name: string; state: string; detail: null }[]; complete: boolean; recommended: Key | null;
-  reply_target_presets: unknown[]; reply_target_suggestion: { preset: string; basis: string; median_first_reply_minutes: null } };
+  reply_target_presets: unknown[]; reply_target_hours: { kept: boolean; day_minutes: number; hours: unknown[] }; reply_target_suggestion: { preset: string; basis: string; median_first_reply_minutes: null } };
 function progress(states: Partial<Record<Key, string>> = {}, recommended: Key | null = null): Progress {
   const state: Record<Key, string> = { email: 'none', import: 'none', invite: 'alone', first_reply: 'none', ...states };
   return { steps: (['email', 'import', 'invite', 'first_reply'] as const).map((key) => ({ key, name: key, state: state[key], detail: null })), complete: false, recommended,
-    reply_target_presets: [], reply_target_suggestion: { preset: 'same_day', basis: 'no_history', median_first_reply_minutes: null } };
+    reply_target_presets: [], reply_target_hours: { kept: false, day_minutes: 540, hours: [] }, reply_target_suggestion: { preset: 'same_day', basis: 'no_history', median_first_reply_minutes: null } };
 }
 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status }));

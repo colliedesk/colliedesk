@@ -64,8 +64,11 @@ export default defineConfig({
       POLAR_ACCESS_TOKEN: 'polar_oat_e2e', POLAR_WEBHOOK_SECRET: 'whsec_e2e', POLAR_API_URL: 'http://127.0.0.1:9',
       POLAR_PRODUCT_TEAM_MONTHLY: 'e2e-monthly', POLAR_PRODUCT_TEAM_YEARLY: 'e2e-yearly', POLAR_PRODUCT_FOUNDING: 'e2e-founding',
       SIGNUP_HASH_KEY: 'e2e-signup-hash-key-0123456789abcdef', TRUSTED_PROXIES: '127.0.0.1/32,::1/128', AI_ALLOW_PRIVATE_BASE_URLS: '1',
-      // Built-in AI for reply drafts, as the hosted cloud has: the setup flow turns drafts on with it. No
-      // journey has the model write a draft, so nothing listens at its address.
+      // Built-in AI for reply drafts, as the hosted cloud has: the setup flow turns drafts on with it. Nothing
+      // listens at its address on purpose. A customer message after drafts are on (the golden path's first
+      // email) may start an automatic draft: its call is refused at once, the draft ends as failed, and no
+      // journey reads drafts, so nothing waits on it. A journey that needs a written draft must first put a
+      // model stand-in on ports.aiModel; it would otherwise fail on the draft's error, never pass by chance.
       AI_SERVER_PROVIDER: 'openai_compatible', AI_SERVER_BASE_URL: `http://127.0.0.1:${ports.aiModel}/v1`, AI_SERVER_MODELS: 'draft=e2e-draft', AI_SERVER_LABEL: 'Colliedesk AI',
     }, 'e2e'),
   ],

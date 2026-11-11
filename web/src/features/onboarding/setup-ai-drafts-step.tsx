@@ -2,37 +2,50 @@ import { useId } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { aiApi } from '../../api/ai';
 import type { AISettings, AISlotInput } from '../../api/ai';
+import { messages } from '../../messages';
 import { ClockIcon, ExternalLinkIcon, MailIcon, SparklesIcon } from '../../ui/icons';
+import { slotInput } from '../settings/ai-slot-input';
+import { failureReason } from './failure-reason';
 import { FlowActions } from './setup-flow-actions';
 import type { FlowMoves } from './setup-flow-actions';
 import { aiDraftsMessages as m } from './setup-ai-and-targets-messages';
 import './setup-ai-and-targets.css';
 
-// Where turning drafts on sends them: the server's built-in AI when it offers drafts, else the workspace's
-// first provider. Undefined: neither, so nothing can be turned on here.
-function draftSource(settings: AISettings): AISlotInput | undefined {
-  if ((settings.server?.models.draft ?? []).length > 0) return { source: 'server', enabled: true, default_level: 'suggest' };
+// draftInput is where turning drafts on sends them: the source the draft feature already has, kept as Settings
+// keeps it (provider, model, effort); without one, the server's built-in AI when it offers drafts, else the
+// workspace's first provider. Undefined: none of these, so nothing can be turned on here.
+function draftInput(settings: AISettings): AISlotInput | undefined {
+  const slot = settings.slots.find((item) => item.slot === 'draft');
+  if (slot && slot.source !== 'none') return slotInput(slot);
+  if ((settings.server?.models.draft ?? []).length > 0) return { source: 'server', enabled: true };
   const provider = settings.providers[0];
-  return provider ? { source: 'provider', provider_id: provider.id, enabled: true, default_level: 'suggest' } : undefined;
+  return provider ? { source: 'provider', provider_id: provider.id, enabled: true } : undefined;
 }
 
-// recipient names where the data goes, in the words of "What is sent".
-function recipient(settings?: AISettings): string {
-  if (settings?.server) return settings.server.kind === 'anthropic' ? m.runsClaude(settings.server.label) : settings.server.label;
-  return settings?.providers[0]?.label ?? m.yourProvider;
+// Who receives the drafts' data, named in "What is sent" (to, with the models it runs) and in the consent line
+// (short). Both follow the source that will be sent, never only whether the server has built-in AI.
+function recipient(settings: AISettings, input?: AISlotInput): { to: string; short: string } {
+  if (input?.source === 'server') {
+    const label = settings.server?.label ?? m.builtIn;
+    return { to: settings.server?.kind === 'anthropic' ? m.runsClaude(label) : label, short: label };
+  }
+  const provider = input?.source === 'provider' ? settings.providers.find((item) => item.id === input.provider_id) : undefined;
+  const label = provider?.label ?? m.yourProvider;
+  return { to: label, short: label };
 }
 
-// costText is "What it costs" from the server's estimate, as Settings → Built-in AI computes it: half of the
-// month's included AI divided by a draft's cost, and the automatic drafts a day.
-function costText(settings: AISettings): string {
+// costText is "What it costs" for that source: the server's estimate as Settings → Built-in AI computes it (half
+// of the month's included AI divided by a draft's cost, and the automatic drafts a day); a workspace provider
+// bills the workspace.
+function costText(settings: AISettings, input?: AISlotInput): string {
   const perDay = settings.automatic.draft_per_day;
-  if (settings.server) {
+  if (input?.source === 'server') {
     const each = settings.auto_draft_estimate.draft_cost_micro_usd;
     if (!settings.allowance) return m.costServer(perDay);
     const half = Math.floor(settings.allowance.limit_micro_usd / 2);
     return m.costIncluded(each ? Math.floor(half / each) : null, perDay);
   }
-  return settings.providers.length > 0 ? m.costOwn(perDay) : m.costNone;
+  return input?.source === 'provider' ? m.costOwn(perDay) : m.costNone;
 }
 
 // Example is one conversation of Today with its draft ready: only a picture of what the team will see, so
@@ -72,24 +85,21 @@ export function AIDraftsStep({ state, workspace, moves }: { state: string; works
   const client = useQueryClient();
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings });
   const refresh = () => Promise.all(['setup', 'ai-settings'].map((key) => client.invalidateQueries({ queryKey: [key] })));
-  const turnOn = useMutation({ mutationFn: (input: AISlotInput) => aiApi.setSlot('draft', input), onSuccess: refresh });
+  // Turning on and off are Settings' own calls: the slot as it is, at Suggest or back to Off (drafts on request).
+  const setLevel = useMutation({ mutationFn: (input: AISlotInput) => aiApi.setSlot('draft', input), onSuccess: refresh });
   const draft = settings.data?.slots.find((item) => item.slot === 'draft');
-  const turnOff = useMutation({
-    mutationFn: () => aiApi.setSlot('draft', draft?.source === 'provider' && draft.provider_id
-      ? { source: 'provider', provider_id: draft.provider_id, enabled: false } : { source: draft?.source ?? 'server', enabled: false }),
-    onSuccess: refresh,
-  });
   const sentID = useId();
   const on = state === 'on';
   const unavailable = state === 'unavailable';
-  const source = settings.data ? draftSource(settings.data) : undefined;
-  const to = recipient(settings.data);
-  const short = settings.data?.server?.label ?? settings.data?.providers[0]?.label ?? m.yourProvider;
+  const source = settings.data ? draftInput(settings.data) : undefined;
+  const { to, short } = settings.data ? recipient(settings.data, source) : { to: m.yourProvider, short: m.yourProvider };
+  const turnOn = () => source && setLevel.mutate({ ...source, enabled: true, default_level: 'suggest' });
+  const turnOff = () => draft && setLevel.mutate({ ...slotInput(draft), default_level: 'off' });
   const primary = on
     ? <button type="button" className="primary-action" onClick={moves.next}>{moves.nextLabel}</button>
     : unavailable
       ? <a className="button primary-action" href="/settings/ai" target="_blank" rel="noopener noreferrer">{m.addProvider} <ExternalLinkIcon /><span className="sr-only">{m.newTab}</span></a>
-      : <button type="button" className="primary-action" disabled={!source || turnOn.isPending} onClick={() => source && turnOn.mutate(source)}>{m.turnOn}</button>;
+      : <button type="button" className="primary-action" disabled={!source || setLevel.isPending} onClick={turnOn}>{m.turnOn}</button>;
   return <>
     <div className="setup-flow-body setup-steps-body">
       <Example thin={state === 'nothing_to_read'} />
@@ -101,11 +111,13 @@ export function AIDraftsStep({ state, workspace, moves }: { state: string; works
         {m.how.map((row, index) => <li key={row.title}><span>{index + 1}</span><div><b>{row.title}</b><p>{row.text}</p></div></li>)}
       </ol>
       {on && <p className="setup-done" role="status"><span className="setup-done-mark">{m.on}</span>{m.onText}
-        <button type="button" className="link-action" disabled={turnOff.isPending} onClick={() => turnOff.mutate()}>{m.turnOff}</button></p>}
-      {(turnOn.isError || turnOff.isError) && <p role="alert" className="error-copy">{m.failed}</p>}
+        <button type="button" className="link-action" disabled={!draft || setLevel.isPending} onClick={turnOff}>{m.turnOff}</button></p>}
+      {setLevel.isError && <p role="alert" className="error-copy">{on ? m.offFailed : m.failed}</p>}
+      {settings.isError && !settings.data && <p role="alert" className="error-copy">{m.settingsFailed(failureReason(settings.error))}{' '}
+        <button type="button" className="link-action" onClick={() => void settings.refetch()}>{messages.tryAgain}</button></p>}
       <dl className="setup-facts">
         <div id={sentID}><dt>{m.sentTitle}</dt><dd>{m.sent(unavailable ? m.yourProvider : to)}{unavailable ? '' : on ? m.sentRecorded : m.sentConsent}</dd></div>
-        {settings.data && <div><dt>{m.costTitle}</dt><dd>{costText(settings.data)}</dd></div>}
+        {settings.data && <div><dt>{m.costTitle}</dt><dd>{costText(settings.data, source)}</dd></div>}
       </dl>
     </div>
     <FlowActions back={moves.back} later={on ? undefined : moves.later} primary={primary} pinned

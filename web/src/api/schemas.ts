@@ -272,7 +272,11 @@ export const setupProgressSchema = z.object({
   recommended: z.enum(['email', 'import', 'invite']).nullable(),
   reply_target_presets: z.array(z.object({ key: replyTargetPresetKeySchema, name: z.string(),
     targets: z.object({ urgent: presetTargetSchema, high: presetTargetSchema, normal: presetTargetSchema, low: presetTargetSchema }) })),
-  reply_target_suggestion: z.object({ preset: replyTargetPresetKeySchema, basis: z.enum(['history', 'no_history', 'import_running']), median_first_reply_minutes: z.number().int().nullable() }),
+  // The hours a preset applies with, and one business day of them in minutes.
+  reply_target_hours: z.object({ kept: z.boolean(), day_minutes: z.number().int().positive(),
+    hours: z.array(z.object({ day: z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']), open: z.boolean(), from: z.string().optional(), to: z.string().optional() })) }),
+  // Null once targets are on, or for someone who may not change them.
+  reply_target_suggestion: z.object({ preset: replyTargetPresetKeySchema, basis: z.enum(['history', 'no_history', 'import_running']), median_first_reply_minutes: z.number().int().nullable() }).nullable(),
 }) satisfies z.ZodType<Generated<'SetupProgress'>>;
 export type SetupProgress = z.infer<typeof setupProgressSchema>;
 export type ReplyTargetPreset = SetupProgress['reply_target_presets'][number];

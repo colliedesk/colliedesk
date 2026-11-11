@@ -71,7 +71,7 @@ function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; 
     }
     if (path === '/api/v1/auth/redeem') { signedIn = true; return Promise.resolve(json(200, { agent: me.agent, workspace: me.workspace })); }
     if (path === '/api/v1/workspace/setup') return Promise.resolve(json(200, { steps: [{ key: 'email', name: 'Receive customer email', state: 'none', detail: null }, { key: 'first_reply', name: 'Answer your first email', state: 'none', detail: null }],
-      complete: false, recommended: null, reply_target_presets: [], reply_target_suggestion: { preset: 'same_day', basis: 'no_history', median_first_reply_minutes: null } }));
+      complete: false, recommended: null, reply_target_presets: [], reply_target_hours: { kept: false, day_minutes: 540, hours: [] }, reply_target_suggestion: { preset: 'same_day', basis: 'no_history', median_first_reply_minutes: null } }));
     if (path === '/api/v1/channels') return Promise.resolve(json(200, { items: [], types: [] }));
     if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, { ...me, agent, permissions }) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
     if (path === '/api/v1/config') return Promise.resolve(json(200, options.config));

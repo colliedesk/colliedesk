@@ -7,8 +7,15 @@ import type { Permissions } from '../../lib/can';
 export const doneStates: Record<SetupStepKey, string> = { email: 'working', import: 'done', ai_drafts: 'on', reply_targets: 'on', invite: 'joined', first_reply: 'sent' };
 
 // The permission a step's own screen needs, as in Settings: managing channels sets up email and the import,
-// inviting is Settings → Team's own permission. Answering the first email needs none beyond reading the inbox.
-const stepPermission: Partial<Record<SetupStepKey, TokenPermission>> = { email: 'channels:update', import: 'channels:update', ai_drafts: 'channels:update', reply_targets: 'channels:update', invite: 'team:invite' };
+// turning AI drafts on is Built-in AI's ai_settings:update, saving reply targets workspace:update, and inviting is
+// Settings → Team's own permission. Answering the first email needs none beyond reading the inbox.
+const stepPermission: Partial<Record<SetupStepKey, TokenPermission>> = {
+  email: 'channels:update', import: 'channels:update', ai_drafts: 'ai_settings:update', reply_targets: 'workspace:update', invite: 'team:invite',
+};
+
+// The steps offered on the way: they show their state, but the four core steps alone decide whether the setup
+// has work left, as the server's complete does.
+const offers: ReadonlySet<SetupStepKey> = new Set(['ai_drafts', 'reply_targets']);
 
 // visibleSteps are the steps this person can take, by the permissions of their roles.
 export function visibleSteps(progress: SetupProgress, me: Permissions) {
@@ -20,5 +27,9 @@ export function visibleSteps(progress: SetupProgress, me: Permissions) {
 
 export const stepIsDone = (step: { key: SetupStepKey; state: string }) => doneStates[step.key] === step.state;
 
-// guideHasWork is true while the person has a step left to take.
-export const guideHasWork = (progress: SetupProgress, me: Permissions) => visibleSteps(progress, me).some((step) => !stepIsDone(step));
+// nothingToDo is a step this workspace cannot take here: AI drafts on a server without built-in AI and with no
+// provider of the workspace's own. It is neither done nor to do, and is left out of the count.
+export const nothingToDo = (step: { key: SetupStepKey; state: string }) => step.key === 'ai_drafts' && step.state === 'unavailable';
+
+// guideHasWork is true while the person has a core step left to take.
+export const guideHasWork = (progress: SetupProgress, me: Permissions) => visibleSteps(progress, me).some((step) => !offers.has(step.key) && !stepIsDone(step));
