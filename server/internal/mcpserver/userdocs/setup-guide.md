@@ -4,8 +4,9 @@ The setup guide sits in the bottom-left corner of the inbox and shows what is le
 can receive and answer customer email. It stays in the inbox, also when conversations exist, until
 the four core steps are done (receive email, import, invite, answer the first email) or you hide it.
 **Turn on AI drafts** and **Set reply targets** are offers: their rows show where they stand, but
-they never keep the guide open or the setup unfinished. A workspace that finished the four core steps
-does not see the guide again.
+they never keep the guide open or the setup unfinished. The guide stays hidden while the four core
+steps are done. Each step is read again every time, so a step that comes undone (an import that is
+undone, or the only teammate deactivated) brings the guide back.
 
 Heading: **Finish setting up**, with how many steps are done (for example "1 of 6") and a progress bar.
 Each step opens its screen of the [setup flow](#setup-flow).
@@ -63,7 +64,8 @@ Each screen shows:
     a day. What is sent and what it costs name the provider the drafts will actually use. **Turn on AI
     drafts** makes the same call as Settings → Built-in AI: Reply drafts with **Default for channels** set
     to **Suggest**, keeping the provider, model and effort the feature already has; when it has none, the
-    server's built-in AI if it offers drafts, else your own provider. It records your consent, as Settings →
+    server's built-in AI if it offers drafts, else your own provider. A feature left on built-in AI that the
+    server no longer offers for drafts turns on with your own provider, and the step names that provider. It records your consent, as Settings →
     Built-in AI does (History). Triage suggestions are not turned on here. **Turn off** sets **Default for
     channels** back to **Off**, as Settings does; drafts on request stay as they were. When the AI settings
     cannot be read, the step says why, with **Try again**. With no import and no published help center article, a note says drafts have little to read
@@ -85,8 +87,8 @@ Each screen shows:
     **Same day**, longer **Next business day**, tagged "Fits your history". With no such history, or while
     the import still runs, **Same day** is tagged "Suggested". The main button names the preset, for
     example **Use Same day**. It saves the targets, turns them on with business hours Monday to Friday,
-    09:00 to 18:00 in the workspace's timezone (your own hours, when Settings already has some: a preset
-    never replaces them), sets **Due soon** to 30 minutes, and opens the next step. The example rows of
+    09:00 to 18:00 in the workspace's timezone (your own hours, as Settings → Response targets has them when
+    the button is pressed: a preset never replaces them), sets **Due soon** to 30 minutes, and opens the next step. The example rows of
     Today and the worked example count in those same hours. The choice follows the suggestion, for
     example when an import ends, until you pick a preset yourself. When someone else saved the targets in
     between, the save is refused, the step reads them again, and the next press saves. Targets start with
@@ -117,8 +119,8 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
 
 - **Admins** see all six steps.
 - **Everyone else** sees only the steps their roles can take, in the guide and in the setup flow:
-  email and the import need `channels:update`, AI drafts `ai_settings:update`, reply targets
-  `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
+  email and the import need `channels:update`, AI drafts `ai_settings:update` and `ai_settings:read`
+  (to read the AI settings), reply targets `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
   Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email is everyone's step.
 - **Hide** removes the guide from your inbox only. Other team members keep their own choice.

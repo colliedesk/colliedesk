@@ -13,11 +13,13 @@ import './setup-ai-and-targets.css';
 
 // draftInput is where turning drafts on sends them: the source the draft feature already has, kept as Settings
 // keeps it (provider, model, effort); without one, the server's built-in AI when it offers drafts, else the
-// workspace's first provider. Undefined: none of these, so nothing can be turned on here.
+// workspace's first provider. A slot left on built-in AI this server no longer offers for drafts would be refused,
+// so it gets the workspace's provider too. Undefined: none of these, so nothing can be turned on here.
 function draftInput(settings: AISettings): AISlotInput | undefined {
   const slot = settings.slots.find((item) => item.slot === 'draft');
-  if (slot && slot.source !== 'none') return slotInput(slot);
-  if ((settings.server?.models.draft ?? []).length > 0) return { source: 'server', enabled: true };
+  const serverDrafts = (settings.server?.models.draft ?? []).length > 0;
+  if (slot && slot.source !== 'none' && (slot.source !== 'server' || serverDrafts)) return slotInput(slot);
+  if (serverDrafts) return { source: 'server', enabled: true };
   const provider = settings.providers[0];
   return provider ? { source: 'provider', provider_id: provider.id, enabled: true } : undefined;
 }

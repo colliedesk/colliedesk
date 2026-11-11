@@ -70,7 +70,7 @@ const targetsDoc = { enabled: false, timezone: null, hours: [] as { day: string;
   channel_ids: null, alert_email: true, my_alert_email: true, enabled_at: null, updated_at: '2026-11-10T08:00:00Z' };
 
 // world is what the server holds; a save moves the step on, as the server does.
-function serve(world: { setup: ReturnType<typeof progress>; server?: boolean; zone?: string; ai?: AIWorld; aiDown?: boolean; targets?: () => Promise<Response> | undefined; doc?: () => typeof targetsDoc }) {
+function serve(world: { setup: ReturnType<typeof progress>; server?: boolean; zone?: string; ai?: AIWorld; aiDown?: boolean; targets?: () => Promise<Response> | undefined; doc?: () => typeof targetsDoc; permissions?: string[] }) {
   const sent: { path: string; body: unknown }[] = [];
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0];
@@ -79,7 +79,7 @@ function serve(world: { setup: ReturnType<typeof progress>; server?: boolean; zo
     if (path === '/api/v1/auth/me') return json(200, {
       agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@northwind.example', display_name: '', roles: rolesOf('admin'), timezone_override: null },
       workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'northwind', name: 'Northwind Help', timezone: world.zone ?? 'Europe/Berlin' },
-      timezone: world.zone ?? 'Europe/Berlin', token: null, permissions: permissionsOf('admin'), plan: null,
+      timezone: world.zone ?? 'Europe/Berlin', token: null, permissions: world.permissions ?? permissionsOf('admin'), plan: null,
     });
     if (path === '/api/v1/config') return json(200, config);
     if (path === '/api/v1/workspace/setup') return json(200, world.setup);
@@ -227,6 +227,26 @@ test('a workspace provider the server cannot replace is the one the AI drafts st
   await waitFor(() => expect(sent).toEqual([{ path: '/api/v1/ai/slots/draft', body: { source: 'provider', provider_id: providerID, enabled: true, default_level: 'suggest' } }]));
 });
 
+test('a draft feature left on the built-in AI that this server no longer offers turns on with the workspace provider, and names it', async () => {
+  // Saved on the built-in AI earlier; the server now runs triage only, and the workspace has a provider of its own.
+  const draft = { source: 'server', model: 'claude-sonnet-5-5', effort: 'medium', enabled: true, default_level: 'off' };
+  const sent = serve({ setup: progress(), ai: { serverModels: { triage: ['claude-haiku-5-5'] }, providers: [{ id: providerID, label: 'Acme OpenAI' }], draft } });
+  open('/setup/ai_drafts');
+  expect(await screen.findByText(/go to Acme OpenAI\. Private notes never do\./)).toBeInTheDocument();
+  expect(flow().getByText(/Sends conversations to Acme OpenAI\./)).toBeInTheDocument();
+  fireEvent.click(flow().getByRole('button', { name: 'Turn on AI drafts' }));
+  await waitFor(() => expect(sent).toEqual([{ path: '/api/v1/ai/slots/draft', body: { source: 'provider', provider_id: providerID, enabled: true, default_level: 'suggest' } }]));
+});
+
+test('a person who may change but not read the AI settings never gets the AI drafts step, and the AI settings are not asked for', async () => {
+  serve({ setup: progress(), permissions: permissionsOf('admin').filter((name) => name !== 'ai_settings:read') });
+  const router = open('/setup/ai_drafts');
+  await title('Choose when a reply is due');
+  expect(router.state.location.pathname).toBe('/setup/reply_targets');
+  expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveTextContent('Step 3 of 5');
+  expect(fetchMock.mock.calls.map(([url]) => String(url).split('?')[0])).not.toContain('/api/v1/ai');
+});
+
 test('turning drafts on and off keeps the draft feature as Settings set it, its provider, model and effort, as Settings does', async () => {
   const draft = { source: 'provider', provider_id: providerID, model: 'gpt-5', effort: 'medium', enabled: true, default_level: 'off' };
   const sent = serve({ setup: progress(), ai: { providers: [{ id: providerID, label: 'Acme OpenAI' }], draft } });
@@ -276,6 +296,22 @@ test('with business hours already set, a day of every preset, the tables and the
   fireEvent.click(flow().getByRole('button', { name: 'Use Next business day' }));
   await waitFor(() => expect(sent).toHaveLength(1));
   expect(sent[0].body).toMatchObject({ hours: week('08:00', '20:00'), targets: long[2].targets });
+});
+
+test('a preset keeps the hours the response targets read now, not the ones of an older setup read', async () => {
+  // The setup was read while the hours were 08:00 to 20:00; Settings has since changed them to 10:00 to 19:00.
+  const day = 720;
+  const sent = serve({ setup: progress({}, undefined, { kept: true, day_minutes: day, hours: week('08:00', '20:00') }),
+    doc: () => ({ ...targetsDoc, hours: week('10:00', '19:00'), updated_at: '2026-11-11T07:30:00Z' }) });
+  open('/setup/reply_targets');
+  await title('Choose when a reply is due');
+  await waitFor(() => expect(flow().getByRole('button', { name: 'Use Same day' })).toBeEnabled());
+  fireEvent.click(flow().getByRole('button', { name: 'Use Same day' }));
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0].body).toMatchObject({ updated_at: '2026-11-11T07:30:00Z', hours: [
+    { day: 'mon', open: true, from: '10:00', to: '19:00' }, { day: 'tue', open: true, from: '10:00', to: '19:00' }, { day: 'wed', open: true, from: '10:00', to: '19:00' },
+    { day: 'thu', open: true, from: '10:00', to: '19:00' }, { day: 'fri', open: true, from: '10:00', to: '19:00' }, { day: 'sat', open: false }, { day: 'sun', open: false },
+  ] });
 });
 
 test('the chosen preset follows a new suggestion until the person picks one', async () => {

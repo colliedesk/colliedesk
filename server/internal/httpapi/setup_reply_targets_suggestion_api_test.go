@@ -184,3 +184,28 @@ func TestSetupPresetsCountADayInTheHoursTheyApplyWith(t *testing.T) {
 		t.Fatalf("other workspace hours = %+v, want the default", got)
 	}
 }
+
+// A business day is the length most open days have; on a tie the longest wins, whichever days come first.
+func TestSetupPresetDayIsTheLongestLengthOnATie(t *testing.T) {
+	api, service, _ := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Tie Day Desk", "admin@tie-day.example.com")
+	open := func(day, from, to string) map[string]any {
+		return map[string]any{"day": day, "open": true, "from": from, "to": to}
+	}
+	closed := func(day string) map[string]any { return map[string]any{"day": day, "open": false} }
+	for name, hours := range map[string][]any{
+		"short days first": {open("mon", "09:00", "14:00"), open("tue", "09:00", "14:00"), open("wed", "09:00", "18:00"), open("thu", "09:00", "18:00"),
+			closed("fri"), closed("sat"), closed("sun")},
+		"long days first": {open("mon", "09:00", "18:00"), open("tue", "09:00", "18:00"), open("wed", "09:00", "14:00"), open("thu", "09:00", "14:00"),
+			closed("fri"), closed("sat"), closed("sun")},
+	} {
+		body := map[string]any{"enabled": false, "targets": map[string]any{}, "hours": hours}
+		if response := request(t, api, http.MethodPut, "/api/v1/response-targets", body, admin, nil); response.Code != http.StatusOK {
+			t.Fatalf("%s: PUT targets status=%d body=%s", name, response.Code, response.Body.String())
+		}
+		// Two days of 5 h and two of 9 h: a tie, so a day is 9 h.
+		if got := readSetupTargets(t, api, admin).Hours; !got.Kept || got.DayMinutes != 540 {
+			t.Fatalf("%s: hours = %+v, want the workspace's own, 540 a day", name, got)
+		}
+	}
+}

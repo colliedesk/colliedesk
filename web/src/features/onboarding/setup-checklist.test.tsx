@@ -207,6 +207,12 @@ test('a person sees AI drafts only with ai_settings:update and reply targets onl
   expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'ai_drafts', 'invite', 'first_reply']);
 });
 
+// The drafts step reads the AI settings first (GET /api/v1/ai needs ai_settings:read).
+test('a person who may change but not read the AI settings does not see AI drafts', () => {
+  render(<SetupChecklist progress={withNewSteps({})} me={{ permissions: permissionsOf('admin').filter((item) => item !== 'ai_settings:read') }} defaultOpen onHide={vi.fn()} />);
+  expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['email', 'import', 'reply_targets', 'invite', 'first_reply']);
+});
+
 test('an agent whose role may change AI settings and targets, but not channels, gets both offers', () => {
   render(<SetupChecklist progress={withNewSteps({})} me={{ permissions: [...permissionsOf('agent'), 'ai_settings:update', 'workspace:update'] }} defaultOpen onHide={vi.fn()} />);
   expect(rows().map((row) => row.getAttribute('data-step'))).toEqual(['ai_drafts', 'reply_targets', 'first_reply']);

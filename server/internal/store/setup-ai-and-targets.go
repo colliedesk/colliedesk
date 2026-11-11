@@ -83,7 +83,7 @@ func businessDayMinutes(hours []domain.BusinessDay) int {
 		if !day.Open {
 			continue
 		}
-		length := clockMinutes(day.To) - clockMinutes(day.From)
+		length := domain.ClockMinutes(day.To) - domain.ClockMinutes(day.From)
 		if length <= 0 {
 			continue
 		}
@@ -96,15 +96,6 @@ func businessDayMinutes(hours []domain.BusinessDay) int {
 		return 9 * 60
 	}
 	return best
-}
-
-// clockMinutes reads "08:30" (or "24:00") as minutes after midnight; the hours were validated when saved.
-func clockMinutes(clock string) int {
-	var hours, minutes int
-	if _, err := fmt.Sscanf(clock, "%d:%d", &hours, &minutes); err != nil {
-		return 0
-	}
-	return hours*60 + minutes
 }
 
 // presetForMedian is the preset a median first reply fits: up to an hour, up to 8 hours, or longer.

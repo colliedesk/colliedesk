@@ -7,11 +7,12 @@ import type { Permissions } from '../../lib/can';
 export const doneStates: Record<SetupStepKey, string> = { email: 'working', import: 'done', ai_drafts: 'on', reply_targets: 'on', invite: 'joined', first_reply: 'sent' };
 
 // The permissions a step's own screen needs, as in Settings: managing channels sets up email and the import,
-// turning AI drafts on is Built-in AI's ai_settings:update, saving reply targets workspace:update; the invite step
+// the AI drafts step reads the AI settings (ai_settings:read) and turns drafts on (ai_settings:update), saving reply
+// targets is workspace:update; the invite step
 // lists the invites and the roles (team:read) and creates one (team:invite). Answering the first email needs none
 // beyond reading the inbox.
 const stepPermissions: Partial<Record<SetupStepKey, TokenPermission[]>> = {
-  email: ['channels:update'], import: ['channels:update'], ai_drafts: ['ai_settings:update'], reply_targets: ['workspace:update'], invite: ['team:invite', 'team:read'],
+  email: ['channels:update'], import: ['channels:update'], ai_drafts: ['ai_settings:update', 'ai_settings:read'], reply_targets: ['workspace:update'], invite: ['team:invite', 'team:read'],
 };
 
 // mayTake is true when the person holds every permission the step's screen needs.

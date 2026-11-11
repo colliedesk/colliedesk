@@ -15,12 +15,13 @@ import './setup-ai-and-targets.css';
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
 
-// The document a preset makes: its targets, on, the hours the server says it applies with (the workspace's own
-// when Settings has an open day, else Monday to Friday, 09:00 to 18:00), due soon 30 minutes before; the rest as
-// it was read, with the version it was read at, so someone else's save in between is refused rather than
-// overwritten.
-function presetDocument(doc: ResponseTargets, preset: ReplyTargetPreset, hours: ResponseTargetsChange['hours']): ResponseTargetsChange {
+// The document a preset makes: its targets, on, the workspace's own hours when the document has an open day (read
+// with its version, so a setup read from before a change in Settings cannot save older hours), else the hours the
+// server names (Monday to Friday, 09:00 to 18:00); due soon 30 minutes before; the rest as it was read, with the
+// version it was read at, so someone else's save in between is refused rather than overwritten.
+function presetDocument(doc: ResponseTargets, preset: ReplyTargetPreset, fallback: ResponseTargetsChange['hours']): ResponseTargetsChange {
   const { enabled_at: _enabled, my_alert_email: _mine, ...rest } = doc;
+  const hours = doc.hours.some((day) => day.open) ? doc.hours : fallback;
   return { ...rest, enabled: true, hours, targets: preset.targets, warn_before_minutes: 30 };
 }
 

@@ -118,8 +118,8 @@ func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1 WHERE message_id=$1`, reply); err != nil {
 		t.Fatal(err)
 	}
-	// AI drafts and reply targets are offers: the four core steps alone complete the setup, so a workspace
-	// that finished them before these steps existed never sees the guide again.
+	// AI drafts and reply targets are offers: the four core steps alone complete the setup, so the guide of a
+	// workspace that finished them before these steps existed stays hidden while they stay done.
 	answered := readSetup(t, api, admin)
 	wantSetup(t, answered, "working", "done", "joined", "sent")
 	if got := []string{answered.state(t, "ai_drafts"), answered.state(t, "reply_targets")}; got[0] != "none" || got[1] != "none" {
