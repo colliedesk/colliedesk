@@ -1,6 +1,6 @@
 # Invite your team
 
-Invite people from **Settings → Invites** (it needs `team:invite`, which the Admin role holds).
+Invite people from **Settings → Members → Invites** (it needs `team:invite`, which the Admin role holds).
 
 1. Enter the person's email in **Invite email**.
 2. Choose their **Roles** (**Agent** is selected). You can pick several; you can give only roles

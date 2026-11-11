@@ -89,6 +89,8 @@
 .settings-v2.import-page .section-heading p { color: var(--text-2); font-size: var(--fs-small); }
 .settings-v2.import-page .settings-body { gap: var(--space-4); border-radius: 0; background: none; box-shadow: none; padding: 0; }
 .settings-v2.import-page .settings-body > :is(p, small) { max-width: 45rem; }
+/* Settings → Data (S14-a): the import above, then Export all data as one card row of its own. */
+.settings-v2.data-page .data-export > .settings-body { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
 .settings-v2 .import-connect { max-width: 34rem; gap: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
 .settings-v2.import-page .settings-body > .import-connect { padding: var(--space-5); }
 .settings-v2 .import-connect label { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; line-height: 20px; }

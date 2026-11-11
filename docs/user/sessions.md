@@ -1,6 +1,6 @@
 # Sessions and devices
 
-**Settings → Sessions** lists every browser or client signed in to your account, with when it
+**Settings → Account → Sessions** lists every browser or client signed in to your account, with when it
 was last used. A browser is named by its browser and system, for example **Chrome on Linux**; the
 browser you are using is marked **This device**. This applies to pairing links and cloud sign-in alike;
 a client that sends no browser name shows **Browser session** or **Cloud sign-in**.
@@ -26,7 +26,7 @@ asks for a code again. To sign in again on a revoked device, ask an admin for a 
 An AI app you connect with OAuth (see [Connect an app with OAuth](mcp.md#connect-an-app-with-oauth))
 acts as you in the workspace you allowed it in, with everything you can do there, as your roles are on
 each call: a permission taken from you is taken from the app at once, and given back, it works again
-without connecting again. **Settings → External AI agents → Connected AI apps** lists each connection:
+without connecting again. **Settings → Account → Connected AI apps** lists each connection:
 
 - the app's name and the browser you allowed it from (no IP address is kept);
 - when you connected it and when it was last used;
@@ -46,12 +46,12 @@ name>" in the conversation.
 ## Agent tokens
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
-with the permissions you choose. It is a session with a label. It appears in **Settings → Sessions**
-next to your browser sessions, with what it was given as a badge and the date it stops working.
+with the permissions you choose. It is a session with a label. It appears in **Settings → AI & agents → Sessions**,
+apart from your browser sessions (in Account), with what it was given as a badge and the date it stops working.
 **Revoke** ends it at once, as for any session. Someone with `team:revoke` sees and revokes the
 tokens of every person they do not rank below.
 
-Create a token in **Settings → External AI agents** (it needs `team:create_tokens`, which the Agent
+Create a token in **Settings → AI & agents → External AI agents** (it needs `team:create_tokens`, which the Agent
 and Admin roles hold). Give it a name you will recognise in Sessions (1 to 80 characters, for
 example **Claude Code on my laptop**), then under **Access** choose one of:
 

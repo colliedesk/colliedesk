@@ -94,7 +94,7 @@ function options(host: string): Partial<PostHogConfig> {
 // the trial survey, which the admin sends by pressing Send.
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
 export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'agents' | 'connected_apps' | 'sessions' | 'channels' | 'email_channel'
-  | 'web_form' | 'saved_replies' | 'help_center' | 'export' | 'billing' | 'ai';
+  | 'web_form' | 'saved_replies' | 'help_center' | 'export' | 'billing' | 'ai' | 'account' | 'members' | 'targets' | 'data';
 export type SurveyId = 'switch_blocker_v1';
 export type InboxFilterKind = 'status' | 'priority' | 'assignee' | 'tag' | 'contact' | 'organization' | 'awaiting' | 'draft' | 'delivery'
   | 'source' | 'channel' | 'created' | 'updated' | 'sort';

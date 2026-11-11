@@ -50,7 +50,7 @@ function renderPage(props: Partial<ResultsPageProps> = {}) {
   const onWindow = vi.fn();
   render(<ResultsPage results={results()} loading={false} failed={false} onRetry={() => {}} window="30d" onWindow={onWindow} timezone="Europe/Berlin"
     isAdmin now={now} link={({ result, className, children }) => <a href={`/?status=all&result=${result}`} className={className}>{children}</a>}
-    importLink={<a href="/settings/import-freshdesk">Open the import</a>} {...props} />);
+    importLink={<a href="/settings/data">Open the import</a>} {...props} />);
   return { onWindow };
 }
 

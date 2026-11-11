@@ -56,7 +56,9 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   await page.goto(`${servers.main}/settings/channels/type/email`);
   await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();
   await expectTapSized(page.locator('form').filter({ has: page.getByRole('textbox', { name: 'Support address' }) }), 'email channel form');
-  await expectTapSized(page.getByRole('navigation', { name: 'Settings sections' }), 'settings sections');
+  // On a phone a settings page shows the way back to the settings menu (a page of its own) instead of the menu.
+  expect((await page.getByRole('link', { name: 'All settings' }).boundingBox())?.height, 'way back to the settings menu').toBeGreaterThanOrEqual(44);
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeHidden();
 
   // Every step of the email setup, each with its controls open.
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${Date.now()}@narrow-desk.example`);

@@ -309,7 +309,7 @@ test('billing lives in Settings: the rail keeps Settings current, the settings n
   expect(within(rail).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
   const sections = screen.getByRole('navigation', { name: 'Settings sections' });
   expect(within(sections).getByRole('link', { name: 'Plan and billing' })).toHaveAttribute('aria-current', 'page');
-  expect(within(sections).getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/settings#team-heading');
+  expect(within(sections).getByRole('link', { name: 'Members' })).toHaveAttribute('href', '/settings/members');
   expect(screen.queryByRole('region', { name: /plan notices/i })).not.toBeInTheDocument();
   expect(screen.getByText(/ends oct 1, 2026/i)).toBeInTheDocument();
 });
@@ -407,18 +407,75 @@ test('the Colliedesk logo at the top of the rail goes back to the inbox from any
   expect(within(rail).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
 });
 
-test('Settings shows its title at once while its own chunk loads, then the sections', async () => {
+test('a settings page shows its title at once while its own chunk loads, then the sections', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('agent', trialPlan)),
     '/api/v1/config': () => json(200, config),
     '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
-  open('/settings');
-  const title = await screen.findByRole('heading', { level: 1, name: 'Settings' });
+  open('/settings/account');
+  const title = await screen.findByRole('heading', { level: 1, name: 'Account' });
   expect(title).toBeInTheDocument();
   // The sections arrive with the chunk; the title stays where it was.
   await waitFor(() => expect(document.querySelector('.settings-page[aria-busy="true"]')).toBeNull());
-  expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument();
+});
+
+const settingsServer = () => serve({
+  '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+  '/api/v1/config': () => json(200, selfHostedConfig),
+  '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  '/api/v1/auth/sessions': () => json(200, { items: [] }),
+});
+const where = (router: ReturnType<typeof open>) => `${router.state.location.pathname}${router.state.location.hash ? `#${router.state.location.hash}` : ''}`;
+
+// Settings is one page per item of its menu (#528): /settings itself opens Account.
+test('Settings opens Account, at its own address', async () => {
+  settingsServer();
+  const router = open('/settings');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument();
+});
+
+// The sections of the old one-page Settings are linked from bookmarks, emails, MCP answers and guides.
+test('an old link to a section of the one Settings page opens the page that holds it now', async () => {
+  settingsServer();
+  for (const [from, to] of [['/settings#invites-heading', '/settings/members#invites-heading'], ['/settings#agents-heading', '/settings/ai#agents-heading'],
+    ['/settings#export-heading', '/settings/data#export-heading'], ['/settings#sessions-heading', '/settings/account#sessions-heading'],
+    ['/settings/roles', '/settings/members#roles-heading'], ['/settings/numbers', '/settings/general#numbers-heading'], ['/settings/import-freshdesk', '/settings/data']]) {
+    const router = open(from);
+    await waitFor(() => expect(where(router), from).toBe(to));
+    cleanup();
+  }
+});
+
+test('an old anchor followed while a settings page is open opens its page too, and Back returns', async () => {
+  settingsServer();
+  const router = open('/settings/account');
+  await screen.findByRole('heading', { level: 1, name: 'Account' });
+  await act(() => router.navigate({ href: '/settings#team-heading' }));
+  await waitFor(() => expect(where(router)).toBe('/settings/members#team-heading'));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Members' })).toBeInTheDocument();
+  await act(() => { router.history.back(); });
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument();
+});
+
+// The menu moves between pages through the router: Back and Forward walk them in order.
+test('the settings menu opens each page at its address, and Back and Forward walk them', async () => {
+  settingsServer();
+  const router = open('/settings/account');
+  const menu = await screen.findByRole('navigation', { name: 'Settings sections' });
+  fireEvent.click(within(menu).getByRole('link', { name: 'General' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
+  expect(await screen.findByRole('heading', { level: 1, name: 'General' })).toBeInTheDocument();
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'Members' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/members'));
+  await act(() => { router.history.back(); });
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
+  await act(() => { router.history.forward(); });
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/members'));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Members' })).toBeInTheDocument();
 });
 
 // The server answers me until the session ends, then 401, as after a real sign-out.

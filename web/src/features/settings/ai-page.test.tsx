@@ -489,7 +489,7 @@ test('where the page says a person accepts each suggestion, it names the admin e
 
 test('the page never says nothing reaches a customer: the AI chat answers customers once an admin turns it on', () => {
   page();
-  const intro = screen.getByRole('heading', { name: 'Built-in AI', level: 1 }).parentElement!;
+  const intro = screen.getByRole('heading', { name: 'Built-in AI', level: 2 }).parentElement!;
   expect(intro).not.toHaveTextContent(/nothing reaches a customer/i);
   expect(intro).toHaveTextContent(/AI chat answers customers on your help center from its public articles, once an admin turns it on/);
 });

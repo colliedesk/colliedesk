@@ -9,7 +9,6 @@ import { ImportLinksSummary } from './import-links';
 import { importMessages as m } from './import-messages';
 import { ImportSteps } from './import-steps';
 import { onlyArchiveRefused } from './import-verdict';
-import { SettingsNav } from './settings-nav';
 import './settings-v2.css';
 
 const defaultRecentDays = 90;
@@ -45,8 +44,6 @@ export interface ImportPageProps {
   onUndo: (id: string) => void;
   // onNewImport opens the form again, with the address of a preview that failed.
   onNewImport: () => void;
-  // embedded shows the import inside another page (the setup flow), which has the title and the frame.
-  embedded?: boolean;
 }
 
 const recentDays = (job: ImportJob) => job.options.recent_days ?? defaultRecentDays;
@@ -66,16 +63,8 @@ export function ImportPage(props: ImportPageProps) {
       {shownHistory(history, job).length > 0 && <History {...props} />}
     </>}
   </div>;
-  if (props.embedded) return <div className="import-page import-embedded">{sections}</div>;
-  return (
-    <main className="settings-page panel settings-v2 import-page">
-      <header><h1>{m.heading}</h1><p>{m.description}</p></header>
-      <div className="settings-layout">
-        <SettingsNav page="/settings/import-freshdesk" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: Boolean(props.showBilling), importData: isAdmin, ai: true }} />
-        {sections}
-      </div>
-    </main>
-  );
+  // The page around it (Settings → Data, or a step of the setup flow) has the title and the frame.
+  return <div className="import-page import-embedded">{sections}</div>;
 }
 
 function Current(props: ImportPageProps) {

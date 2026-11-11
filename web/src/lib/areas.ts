@@ -16,11 +16,12 @@ const screens: Array<{ prefix: string; exact?: boolean; permission: TokenPermiss
   { prefix: '/review', permission: 'messages:read', label: messages.review },
   { prefix: '/fixes', permission: 'autofix:read', label: messages.autofix },
   { prefix: '/settings/roles', permission: 'team:read', label: messages.roles },
+  { prefix: '/settings/members', permission: 'team:read', label: messages.members },
+  { prefix: '/settings/saved-replies', permission: 'saved_replies:read', label: messages.savedReplies },
   { prefix: '/settings/channels', permission: 'channels:read', label: messages.channels },
-  { prefix: '/settings/ai', permission: 'ai_settings:read', label: messages.aiSettings },
+  // AI & agents itself also holds the agent tokens; a chat's transcript under it is the built-in AI's.
+  { prefix: '/settings/ai/', permission: 'ai_settings:read', label: messages.aiSettings },
   { prefix: '/settings/targets', permission: 'conversations:read', label: messages.responseTargets },
-  { prefix: '/settings/numbers', permission: 'conversations:read', label: messages.conversationNumbers },
-  { prefix: '/settings/import-freshdesk', permission: 'imports:read', label: messages.importFreshdesk },
   { prefix: '/settings/billing', permission: 'billing:read', label: messages.planAndBilling },
   { prefix: '/settings/autofix', permission: 'autofix_settings:read', label: messages.autofix },
 ];

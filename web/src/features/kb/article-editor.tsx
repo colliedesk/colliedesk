@@ -468,7 +468,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
           <span>{status === 'published' ? (isPublic === false ? kbMessages.notPublicHelpCenter : kbMessages.statusPublished) : kbMessages.statusDraft}</span>
         </div>
-        {isPublic === false && <a className="button-link" href="/settings#help-center-heading">
+        {isPublic === false && <a className="button-link" href="/knowledge/settings#help-center-heading">
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}

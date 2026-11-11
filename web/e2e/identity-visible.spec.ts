@@ -35,7 +35,7 @@ test.describe('on a phone with touch', () => {
       const created = await page.request.post(`${servers.main}/api/v1/conversations`, { headers, data: { contact_id: id, subject: `Scroll ticket ${number}` } });
       expect(created.status()).toBe(201);
     }
-    for (const path of ['/', '/settings']) {
+    for (const path of ['/', '/settings/account']) {
       await page.goto(`${servers.main}${path}`);
       await expectIdentityVisible(page, `Scrolled Desk ${suffix}`, email);
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

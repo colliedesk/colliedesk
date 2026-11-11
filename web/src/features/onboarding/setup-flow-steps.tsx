@@ -30,7 +30,7 @@ interface StepProps {
 export function StepBody({ step, ...props }: StepProps & { step: SetupStepKey }) {
   switch (step) {
     case 'email': return <EmailStep {...props} />;
-    case 'import': return <Part part={importPart} failed={<PartUnavailable />} render={({ ImportRoute }) => <ImportRoute embedded />} />;
+    case 'import': return <Part part={importPart} failed={<PartUnavailable />} render={({ ImportRoute }) => <ImportRoute />} />;
     case 'invite': return <InviteStep {...props} />;
     default: return <FirstReplyStep {...props} />;
   }

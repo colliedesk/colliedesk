@@ -3,7 +3,7 @@
 Colliedesk has no passwords. You sign in with a one-time link.
 
 - **Pairing link**: printed by the `create-workspace` or `pair` command for a specific person.
-- **Invite link**: created by an admin in **Settings → Invites** (see [Invite your team](invites.md)).
+- **Invite link**: created by an admin in **Settings → Members → Invites** (see [Invite your team](invites.md)).
 
 Each link works once and expires after 15 minutes. Colliedesk stores only a hash of the link,
 so nobody, including us, can read it back later. If a link is invalid, expired or already used,

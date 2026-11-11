@@ -9,6 +9,7 @@ import { AIPage } from './ai-page';
 import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
 import { AIChatSettingsRoute } from './ai-chat-route';
+import { AIAgentsSections } from './ai-agents-sections';
 import { useBillingShown } from '../billing/billing-shown';
 import { can } from '../../lib/can';
 import { useIntakeSummary } from '../review/use-intake-summary';
@@ -67,7 +68,9 @@ export function AIRoute({ path = '' }: { path?: string } = {}) {
 function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: string) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: Boolean(me.data) });
+  // A person whose roles may not read the AI settings sees the AI agents alone and is asked for nothing else.
+  const readsAI = can(me.data, 'ai_settings:read');
+  const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: readsAI });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const isAdmin = can(me.data, 'ai_settings:update');
   const billingShown = useBillingShown(isAdmin);
@@ -113,6 +116,7 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   return <AIPage chatChannels={chatChannels} isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
     shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
       billing: billingShown, importData: isAdmin, ai: true }}
+    builtIn={readsAI} agents={<AIAgentsSections />}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}
     busySlot={busySlot} busyProvider={busyProvider} error={error}
     onSetSlot={(name, input) => { consent.reset(); check.reset(); slot.mutate({ name, input }); }}

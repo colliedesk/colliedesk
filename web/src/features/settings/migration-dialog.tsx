@@ -66,7 +66,7 @@ export function MigrationDialog({ welcome, plan: asked, onSend, onDismiss }: Mig
     : <>
       <button type="submit" className="primary-action" aria-busy={sending || undefined} disabled={sending}>
         {sending ? <><span className="spinner" aria-hidden="true" />{billingMessages.migrationSending}</> : state === 'failed' ? billingMessages.migrationRetry : billingMessages.migrationSend}</button>
-      <a className="link-action" href="/settings/import-freshdesk" onClick={onDismiss}>{billingMessages.migrationSelfServe}</a>
+      <a className="link-action" href="/settings/data" onClick={onDismiss}>{billingMessages.migrationSelfServe}</a>
       <button type="button" className="link-button" onClick={onDismiss}>{billingMessages.migrationLater}</button>
     </>;
   return (

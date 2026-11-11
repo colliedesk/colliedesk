@@ -463,7 +463,7 @@ test('references: the channel picks its number series, sees the next code, and s
   expect(select).toHaveAccessibleDescription(`Next reference: CHD-${year}-0143`);
   fireEvent.click(screen.getByRole('button', { name: 'Save series' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: { join_policy: { kind: 'never' }, number_series: 'chd' } }));
-  expect(screen.getByRole('link', { name: /Settings → Conversation numbers/ })).toHaveAttribute('href', '/settings/numbers');
+  expect(screen.getByRole('link', { name: /Settings → Conversation numbers/ })).toHaveAttribute('href', '/settings/general#numbers-heading');
 });
 
 test('the reopen notices are saved with the others, and the received notice says what {ref} becomes', async () => {

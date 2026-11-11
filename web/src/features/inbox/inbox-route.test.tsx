@@ -660,7 +660,7 @@ test('Manage saved replies opens Settings in a new tab, so a draft is not lost',
   await waitFor(() => expect(screen.getByRole('button', { name: 'Insert saved reply' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Manage saved replies' }));
-  expect(open).toHaveBeenCalledExactlyOnceWith('/settings', '_blank', 'noopener');
+  expect(open).toHaveBeenCalledExactlyOnceWith('/settings/saved-replies', '_blank', 'noopener');
   open.mockRestore();
 });
 

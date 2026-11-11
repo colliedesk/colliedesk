@@ -9,12 +9,12 @@ customer alone, quoting the message they answer.
 
 An admin, in this order:
 
-1. **A provider for AI**, unless the server's provider will do: **Settings → Built-in AI → Providers →
+1. **A provider for AI**, unless the server's provider will do: **Settings → AI & agents → Providers →
    Add provider** ([Add your own provider](ai.md#add-your-own-provider)).
 2. **The OA**: [connect it](#connect-an-oa), [verify the webhook address](#verify-the-webhook-address)
    in the Zalo app, paste the **Webhook URL** there, and set the OA secret key before deliveries arrive;
    then add the tokens, so replies can be sent.
-3. **Chat intake**: its row in **Settings → Built-in AI → Features** shows once the workspace has a chat
+3. **Chat intake**: its row in **Settings → AI & agents → Features** shows once the workspace has a chat
    channel such as the OA. Pick its provider and model and turn it on: that is your consent to send it the
    chats. **Images customers sent** and **The customer's profile**, under it, are each a consent of their own
    ([Every feature starts off](ai.md#every-feature-starts-off)).
@@ -60,7 +60,7 @@ The channel's page then has four tabs of its own, before AI and History:
    [Verify the webhook address](#verify-the-webhook-address).
    **References** picks the [number series](inbox.md#conversation-numbers) the OA's conversations are
    numbered in and shows the code the next one gets (`CHD-2026-0143`); the series themselves are changed in
-   Settings → Conversation numbers.
+   Settings → General → Conversation numbers.
 2. **Groups**: every group that wrote to the OA (and every group linked before it did). **Link…** files the
    group under an organization, written as your contacts' organization is: a conversation of that group
    then names it. **Unlink** stops that for new conversations; earlier ones keep their organization.

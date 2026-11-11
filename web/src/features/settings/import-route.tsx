@@ -25,8 +25,8 @@ export function currentJob(items: ImportJob[], justAsked?: string): ImportJob | 
   return items.find((job) => open.has(job.state)) ?? items.find((job) => job.id === justAsked && ended(job)) ?? items.find((job) => !ended(job)) ?? items[0];
 }
 
-// embedded shows the import inside the setup flow, without the Settings frame (ImportPage).
-export function ImportRoute({ embedded = false }: { embedded?: boolean }) {
+// ImportRoute is the import of a Freshdesk account, shown in Settings → Data and in the setup flow; both pages give it its frame.
+export function ImportRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
@@ -95,7 +95,7 @@ export function ImportRoute({ embedded = false }: { embedded?: boolean }) {
     mutation.mutate(value);
   };
   const peopleFailed = peopleActions.find((mutation) => mutation.isError)?.error;
-  if (!me.data) return embedded ? <div className="ch-loading" aria-busy="true" /> : <main className="settings-page" aria-busy="true" />;
+  if (!me.data) return <div className="ch-loading" aria-busy="true" />;
   // The section shows once the account was read: with its agents, or with why they could not be loaded.
   const peopleSection = peopleJob && (people.isError || (people.data && people.data.items.length > 0))
     ? <ImportPeople people={people.data?.items ?? []} agents={team.data?.items ?? []} invites={invites.data?.items ?? []} createdInvites={createdInvites}
@@ -104,7 +104,7 @@ export function ImportRoute({ embedded = false }: { embedded?: boolean }) {
       onInvite={onlyPeople(invite)} onRevokeInvite={onlyPeople(revokeInvite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
     : undefined;
   const peopleError = peopleFailed ? (peopleFailed instanceof InvalidRequestError ? peopleFailed.message : importMessages.actionFailed) : undefined;
-  return <ImportPage isAdmin={isAdmin} embedded={embedded} peopleSection={peopleSection} showBilling={billingShown}
+  return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} showBilling={billingShown}
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
     loadFailed={imports.isError} error={error ?? peopleError} busy={busy} connecting={connecting}

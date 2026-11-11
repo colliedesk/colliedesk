@@ -20,10 +20,10 @@ token that holds `messages:send` only when you want it to write to customers.
   how to connect again.
 - An app connected with OAuth acts as you, with everything you can do in the workspace you allowed it
   in, as your roles are on each call; see [Connected AI apps](sessions.md#connected-ai-apps).
-- An agent token is created in **Settings → External AI agents**, as described in
+- An agent token is created in **Settings → AI & agents → External AI agents**, as described in
   [Agent tokens](sessions.md#agent-tokens): it follows a role (one whose permissions you all hold), or holds a fixed
   list of your permissions. Give it only what the job needs. The token is shown once; revoke it in
-  **Settings → Sessions**.
+  **Settings → AI & agents → Sessions**.
 
 ### Connect an app with OAuth
 
@@ -38,7 +38,7 @@ open [Colliedesk in the Claude directory](https://claude.ai/directory/connectors
    there), check the app's name, the workspace and where the answer goes, and choose **Allow**.
    **Cancel** tells the app no. When the answer goes to a program on your computer (Claude Code,
    Codex), the page warns you: allow only if you just started connecting from that computer.
-3. The app is connected. It shows in **Settings → External AI agents → Connected AI apps**.
+3. The app is connected. It shows in **Settings → Account → Connected AI apps**.
 
 If you build your own app: an app that registers itself (dynamic client registration) can send people
 back only to this computer (`localhost`), to its own app scheme (`cursor://…`), or to a known AI app's

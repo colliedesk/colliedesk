@@ -58,7 +58,7 @@ export function PaidBillingRows({ billing, timezone, migration, dialogOpen = fal
             : <span><strong>{planName}</strong>{price && ` · ${price.detail}`}</span>}
         </Row>
         {!complimentary && periodEnd && <Row label={billingMessages.rowNextCharge}><span>{cancelled ? billingMessages.rowNoCharge(periodEnd) : price ? billingMessages.chargeOn(price.amount, periodEnd) : periodEnd}</span></Row>}
-        <Row label={billingMessages.rowAgents} action={<a className="button" href="/settings#invites-heading">{billingMessages.invitePeople}</a>}>
+        <Row label={billingMessages.rowAgents} action={<a className="button" href="/settings/members#invites-heading">{billingMessages.invitePeople}</a>}>
           <span>{billingMessages.seatsOf(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</span>
           <Meter label={billingMessages.rowAgents} used={seats} limit={billing.limits.agents} />
         </Row>

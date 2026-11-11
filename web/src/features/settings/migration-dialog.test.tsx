@@ -25,7 +25,7 @@ test('the welcome of a Founding buyer shows the receipt and exactly one job: sen
   expect(within(dialog).getByLabelText('Times that suit you (optional)')).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'Send to Colliedesk' })).toHaveClass('primary-action');
   expect(dialog.querySelectorAll('.primary-action')).toHaveLength(1);
-  expect(within(dialog).getByRole('link', { name: 'Import it myself' })).toHaveAttribute('href', '/settings/import-freshdesk');
+  expect(within(dialog).getByRole('link', { name: 'Import it myself' })).toHaveAttribute('href', '/settings/data');
   expect(within(dialog).getByRole('button', { name: 'Later' })).toBeInTheDocument();
   expect(within(dialog).queryByText(/receipt sent to/i)).not.toBeInTheDocument();
 });

@@ -1,7 +1,7 @@
 # Import from Freshdesk
 
 Colliedesk copies a Freshdesk account into a workspace through the Freshdesk API: in the app under
-**Settings > Import from Freshdesk** (admins, no terminal needed), or with the `collie import freshdesk`
+**Settings > Data > Import from Freshdesk** (admins, no terminal needed), or with the `collie import freshdesk`
 command on your own server. Both end with a reconcile report that compares what Freshdesk holds with
 what Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
 ids. If the totals could not be confirmed, it says **UNVERIFIED**. Run the import again to retry:
@@ -190,7 +190,7 @@ center stays verified when your DNS switches. It reads the public home page of t
 script does not count.
 
 - A token is copied only when the help center has none of that kind yet. One you set in
-  [Settings → Help center → Search Console](knowledge-base.md#search-console-and-bing-webmaster-tools)
+  [Knowledge base → Settings → Search Console](knowledge-base.md#search-console-and-bing-webmaster-tools)
   is never replaced.
 - A value that is not 16 to 100 letters, digits, `-` or `_` is not copied; the report says so.
 - A dry run reads nothing. `import undo` leaves the tokens: they only prove who owns the address.
@@ -206,7 +206,7 @@ not change the import's status.
 
 If your help center had its own domain, point it at Colliedesk with a 301 at your DNS provider (see
 [Custom domain](knowledge-base.md#custom-domain)). If it was only on `acme.freshdesk.com`, Freshdesk
-cannot answer 301 from that address, so **Settings → Help center → Old Freshdesk links** gives you a
+cannot answer 301 from that address, so **Knowledge base → Settings → Old Freshdesk links** gives you a
 snippet to paste into the portal before you cancel:
 
 1. Say which Freshdesk plan the account is on. Only the **Pro** and **Enterprise** plans can add code to
@@ -243,7 +243,7 @@ never accepts it as a command-line argument and never prints it.
 
 ## Import in the app
 
-1. Open **Settings > Import from Freshdesk** (it needs the `imports:` permissions, which admins hold; an empty inbox links to it).
+1. Open **Settings > Data > Import from Freshdesk** (it needs the `imports:` permissions, which admins hold; an empty inbox links to it).
 2. Enter your `<account>.freshdesk.com` address and the API key of a Freshdesk **admin** (see
    "Before you start"). If your Freshdesk help center had a domain of its own, enter it under **Old
    help center address** (optional; see "Old help center links"). Then select **Read account**. Colliedesk reads the account and shows what it

@@ -283,7 +283,7 @@ test('a failed undo can be tried again', () => {
 test('an import refused for storage says what to do and leads to the plan on the hosted cloud', () => {
   page({ showBilling: true, job: job({ state: 'failed', phase: 'full', error_code: 'storage_cap', has_interim_report: true }) });
   expect(screen.getByRole('alert')).toHaveTextContent('Move to a plan with more storage');
-  expect(within(screen.getByRole('main')).getAllByRole('link', { name: 'Plan and billing' }).at(-1)).toHaveAttribute('href', '/settings/billing');
+  expect(screen.getAllByRole('link', { name: 'Plan and billing' }).at(-1)).toHaveAttribute('href', '/settings/billing');
 });
 
 test('a recent pass that found nothing says so instead of sending the team to an empty inbox', () => {
@@ -347,13 +347,10 @@ test('undo is a quiet link below the report, not a button beside the downloads, 
   expect(onUndo).toHaveBeenCalledWith(job().id);
 });
 
-test('in Settings the page has its title and the settings menu; embedded in the setup flow it has neither, and the import itself stays', () => {
+// The page around the import (Settings → Data, settings-route.test.tsx, or a step of the setup flow) has the
+// title and the frame; the import itself has neither.
+test('the import has no title or settings menu of its own, and the import itself is there', () => {
   page();
-  expect(screen.getByRole('heading', { level: 1, name: 'Import from Freshdesk' })).toBeInTheDocument();
-  expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeInTheDocument();
-  expect(screen.getByRole('main')).toBeInTheDocument();
-  cleanup();
-  page({ embedded: true });
   expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
   // The flow owns the page's one main landmark.

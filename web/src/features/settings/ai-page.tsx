@@ -12,6 +12,7 @@ import { AIChatPanel } from './ai-chat-panel';
 import { featureName, levelMeaning, levelName, levelsOf, scopeName } from './ai-levels';
 import { AutoDraftDialog, AutoTriageDialog, money, parts } from './ai-level-dialogs';
 import type { Part } from './ai-level-dialogs';
+import { messages } from '../../messages';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
 import { selfHostGuide } from '../../lib/self-host-guide';
@@ -72,6 +73,11 @@ export interface AIPageProps {
   chatChannels?: boolean;
   // Gives (true) or takes back (false) the consent that intake may send a kind of context.
   onSourceConsent?: (source: string, on: boolean) => Promise<unknown>;
+  // builtIn is false for a person whose roles may not read the AI settings (ai_settings:read): the page then
+  // holds the AI agents alone.
+  builtIn?: boolean;
+  // agents are the sections for AI agents working through a token, below the built-in AI.
+  agents?: ReactNode;
 }
 
 const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
@@ -120,12 +126,13 @@ export function AIPage(props: AIPageProps) {
   const openAdd = () => { setTab('providers'); setDialog({ kind: 'add' }); };
   return (
     <main className="settings-page panel ai-settings">
-      <header><h1>{m.heading}</h1><p>{m.description}</p></header>
+      <header><h1>{messages.aiAndAgents}</h1><p>{m.pageLead}</p></header>
       <div className="settings-layout">
         <SettingsNav page="/settings/ai" shown={props.shown} />
         <div className="settings-sections ai-page">
+          {props.builtIn !== false && <div className="section-heading ai-intro"><h2>{m.heading}</h2><p>{m.description}</p></div>}
           {props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
-          {!settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
+          {props.builtIn === false ? null : !settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">
               <Tabs label={m.tabs} tabs={tabs} value={tab} onChange={show} prefix={ids.tabs} />
               {isAdmin && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
@@ -143,6 +150,7 @@ export function AIPage(props: AIPageProps) {
               {tab === 'history' && <History events={settings.events} timezone={props.timezone} />}
             </div>
           </>}
+          {props.agents}
         </div>
       </div>
       {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} onListModels={props.onListModels} />}

@@ -136,8 +136,8 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const year = Number(new Intl.DateTimeFormat('en', { timeZone: zone, year: 'numeric' }).format(new Date()));
 
-  // The series, in Settings → Conversation numbers.
-  await page.goto(`${baseURL}/settings/numbers`);
+  // The series, in Settings → General → Conversation numbers.
+  await page.goto(`${baseURL}/settings/general`);
   await page.getByRole('button', { name: 'Add a series' }).click();
   const add = page.getByRole('dialog', { name: 'Add a number series' });
   await add.getByLabel('Name').fill(series);

@@ -5,13 +5,9 @@ import { codeOf, numberSeriesApi, seriesName, yearIn } from '../../../api/number
 import type { NumberSeries, NumberSeriesChange } from '../../../api/number-series';
 import { Dialog, Field } from '../../../ui/dialog';
 import { PlusIcon } from '../../../ui/icons';
-import { useBillingShown } from '../../billing/billing-shown';
-import { SettingsNav } from '../settings-nav';
-import type { Shown } from '../settings-nav';
 import { numbersMessages as m } from './numbers-messages';
 import { can } from '../../../lib/can';
 import './numbers.css';
-import '../settings-v2.css';
 
 // Settings → Conversation numbers: the workspace's number series, each with its code format and next
 // number. Admins add and change them; agents read them.
@@ -27,13 +23,12 @@ function fieldErrors(error: unknown): Record<string, string> {
   return fields && typeof fields === 'object' ? Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
 }
 
-export function NumbersRoute() {
+// NumbersSection is the section of Settings → General that lists the series; it was a page of its own.
+export function NumbersSection() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const isAdmin = can(me.data, 'workspace:update');
-  const billingShown = useBillingShown(isAdmin);
   // A code's {yyyy} is the year where the workspace is, whatever the agent's own time zone.
   const timezone = me.data?.workspace.timezone ?? 'UTC';
-  const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: billingShown, importData: isAdmin, ai: true };
   const series = useQuery({ queryKey: ['number-series'], queryFn: numberSeriesApi.list });
   const [editing, setEditing] = useState<NumberSeries | 'new'>();
   const [done, setDone] = useState<string>();
@@ -41,14 +36,11 @@ export function NumbersRoute() {
   useEffect(() => { if (done) doneNote.current?.focus(); }, [done]);
   const year = yearIn(timezone);
   const label = (item: NumberSeries) => (item.series === 'default' ? m.defaultName : item.series);
-  return <main className="settings-page panel settings-v2">
-    <header><h1>{m.heading}</h1><p>{m.description}</p></header>
-    <div className="settings-layout">
-      <SettingsNav page="/settings/numbers" shown={shown} />
-      <div className="settings-sections">
+  return <>
         <section className="settings-card" aria-labelledby="numbers-heading">
-          <div className="section-heading"><h2 id="numbers-heading">{m.listLabel}</h2><p>{m.lead}</p></div>
+          <div className="section-heading"><h2 id="numbers-heading">{m.heading}</h2><p>{m.description}</p></div>
           <div className="settings-body settings-rows">
+            <p className="muted-copy">{m.lead}</p>
             {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
             {series.isPending ? <div className="num-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
               : series.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void series.refetch()}>{m.tryAgain}</button></p>
@@ -64,11 +56,9 @@ export function NumbersRoute() {
             {done && <p className="notice notice-plain" role="status" tabIndex={-1} ref={doneNote}><span>{done}</span></p>}
           </div>
         </section>
-      </div>
-    </div>
     {editing && <SeriesDialog current={editing === 'new' ? undefined : editing} taken={series.data?.items.map((item) => item.series) ?? []} year={year}
       onClose={() => setEditing(undefined)} onSaved={(name) => { setEditing(undefined); setDone(m.saved(name)); }} />}
-  </main>;
+  </>;
 }
 
 // SeriesDialog adds a series (its name and format at least) or changes one: only what changed is sent.

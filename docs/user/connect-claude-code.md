@@ -22,7 +22,7 @@ one install.
 
 3. Your browser opens Colliedesk. Sign in if it asks, choose the workspace and choose **Allow**.
 
-`/mcp` lists `plugin:colliedesk:colliedesk` as connected, and **Settings → External AI agents → Connected AI
+`/mcp` lists `plugin:colliedesk:colliedesk` as connected, and **Settings → Account → Connected AI
 apps** in Colliedesk lists Claude Code.
 
 ## Connect to a server you run yourself
@@ -68,7 +68,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 - Your own server: `claude mcp remove colliedesk`
 
 Removing it in Claude Code does not disconnect it in Colliedesk: choose **Disconnect** next to it in
-**Settings → External AI agents → Connected AI apps**.
+**Settings → Account → Connected AI apps**.
 ## Other hosts
 
 - [Codex](connect-codex.md)
