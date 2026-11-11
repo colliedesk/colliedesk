@@ -142,7 +142,6 @@ export function InboxRoute() {
   useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
   const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
-  const isAdmin = can(me.data, 'channels:update');
   const activeID = selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen.
   const shownID = activeID ?? conversations.data?.items[0]?.id;
@@ -208,8 +207,8 @@ export function InboxRoute() {
   // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
   // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
   const guideStartsOpen = checkAny && anyConversation.data?.items.length === 0 && channelTypes !== undefined && mailboxes === 0;
-  const guide = !guideHidden && setup.data && guideHasWork(setup.data, isAdmin)
-    ? <SetupGuide progress={setup.data} admin={isAdmin} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
+  const guide = !guideHidden && setup.data && guideHasWork(setup.data, me.data)
+    ? <SetupGuide progress={setup.data} me={me.data} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
   // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
   const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
   const channelLabel = (conversation: Conversation) => {

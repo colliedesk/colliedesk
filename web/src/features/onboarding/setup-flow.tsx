@@ -26,14 +26,15 @@ export interface SetupFlowRouteProps {
 
 // SetupFlowRoute is the setup, one step per screen, each done in place: Continue once the person's own part is
 // done, "I'll do this later" to move on anyway, Back, and a summary at the end. The steps and their order are the
-// server's (the sign-up goal's first); an agent who is not an admin gets only the steps they can take.
+// server's (the sign-up goal's first); a person gets only the steps their roles may take.
 export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
   useDismissibleTooltips();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, refetchInterval: pollMs });
-  // The same test as the inbox's setup guide: the admin steps are the ones a channel manager takes.
+  // The same steps as the inbox's setup guide: each one the person's roles may take. admin is managing channels,
+  // which the email setup and the first reply's link to it need.
   const admin = can(me.data, 'channels:update');
-  const steps = me.data && setup.data ? visibleSteps(setup.data, admin) : undefined;
+  const steps = me.data && setup.data ? visibleSteps(setup.data, me.data) : undefined;
   const index = steps && step ? steps.findIndex((item) => item.key === step) : -1;
   const known = step === 'done' || index >= 0;
   // /setup opens the first step still to do; a step this person cannot take, or none, starts over.
@@ -71,7 +72,7 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
       <h1 ref={heading} tabIndex={-1}>{setupMessages.title[stepKey]}</h1>
       <p className="setup-flow-lead">{m.lead[stepKey]}</p>
     </div>
-    <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} timezone={me.data.timezone} navigate={navigate} /></div>
+    <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} canInvite={can(me.data, 'team:invite')} timezone={me.data.timezone} navigate={navigate} /></div>
     {/* The moves between steps. The main button names the step it opens: the email setup inside has a Continue
         of its own, for its own parts. */}
     <nav className="setup-flow-actions" aria-label={m.flowNav}>

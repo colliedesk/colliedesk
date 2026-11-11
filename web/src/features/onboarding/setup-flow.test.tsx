@@ -36,14 +36,15 @@ const invite = { id: '33333333-3333-4333-8333-333333333333', email: 'kim@example
   created_at: '2026-10-30T04:00:00Z', expires_at: '2026-11-06T04:00:00Z', used_at: null, revoked_at: null };
 
 // world is what the server holds; creating an invite moves the invite step on, as the server does.
-function serve(world: { role?: 'admin' | 'agent'; setup: Progress; signedOut?: boolean; setupDown?: boolean }) {
+// permissions replaces what the role holds, for a custom role.
+function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup: Progress; signedOut?: boolean; setupDown?: boolean }) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0];
     const method = init?.method ?? 'GET';
     if (world.signedOut && path !== '/api/v1/config') return json(401, { error: { code: 'unauthorized', message: 'Sign in.' } });
     if (path === '/api/v1/auth/me') return json(200, {
       agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(world.role ?? 'admin'), timezone_override: null },
-      workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', token: null, permissions: permissionsOf(world.role ?? 'admin'), plan: null,
+      workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', token: null, permissions: world.permissions ?? permissionsOf(world.role ?? 'admin'), plan: null,
     });
     if (path === '/api/v1/config') return json(200, config);
     if (path === '/api/v1/workspace/setup') return world.setupDown ? json(503, { error: { code: 'unavailable', message: 'down' } }) : json(200, world.setup);
@@ -156,6 +157,27 @@ test('an agent who is not an admin sees only the steps they can take; an admin s
   await title('Answer your first email');
   expect(router.state.location.pathname).toBe('/setup/first_reply');
   expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveTextContent('Step 1 of 1');
+});
+
+// Inviting is its own permission, as in Settings → Team: a role may invite without managing channels, or the other way round.
+test('a person who may invite but not manage channels gets the invite step, with the invite form', async () => {
+  serve({ role: 'agent', permissions: [...permissionsOf('agent'), 'team:invite'], setup: progress() });
+  const router = open('/setup/invite');
+  expect(await title('Invite your team')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/setup/invite');
+  expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveTextContent('Step 1 of 2');
+  expect(await screen.findByRole('button', { name: 'Create invite' })).toBeInTheDocument();
+});
+
+test('a person who manages channels but may not invite never gets the invite step, and the invites are not asked for', async () => {
+  serve({ role: 'admin', permissions: permissionsOf('admin').filter((name) => name !== 'team:invite'), setup: progress() });
+  const router = open('/setup/invite');
+  await title('Receive customer email');
+  expect(router.state.location.pathname).toBe('/setup/email');
+  expect(screen.getByRole('progressbar', { name: 'Setup progress' })).toHaveTextContent('Step 1 of 3');
+  const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
+  expect(asked).not.toContain('/api/v1/auth/invites');
+  expect(asked).not.toContain('/api/v1/roles');
 });
 
 test('the summary lists every step with its state, links back to each unfinished one and opens the inbox', async () => {
