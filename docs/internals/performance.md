@@ -190,6 +190,19 @@ and an article with its chat box are help center pages and keep the inbox's 200 
 locally). Their scripts have budgets of their own, gzip: chat.js 25 KB (11 KB), widget.js 6 KB (2 KB),
 chat.css 8 KB (6 KB), `TestTheChatFilesStayInTheirBudget`; none of them is in the web app's bundle.
 
+On 2026-11-10 and 11 the gate failed on main in 3 of 6 runs (106 to 119 ms) with nothing new on its
+path: since 2026-11-05 the same code measured 50 to 157 ms from one CI run to the next, so the gate
+had no headroom. Measured per step on the dev host, median of 20 turns per language: the database took
+28 ms (the excerpt search's scoring 18 ms, the set of articles 2 to 3 ms, the size of the knowledge
+base 1.5 ms), and Go took 19 ms before the call: the chat filter's phone number pattern over the
+excerpts (up to 180 KB) 12 ms, and the folding of every long article the search excerpts 6 ms. Both
+scale with the CPU a busy runner leaves. The filter now reads the articles' phone numbers only at the
+first sentence of an answer that holds one, and then only in the runs of characters a number is made
+of; folding sends only the characters outside ASCII through NFD. Go before the call is now about
+6 ms: median 47 to 30 ms (primary language) and 50 to 35 ms (French) locally, and p95 102–106 ms to
+64–69 ms with the test on one CPU beside a busy loop. The scoring is the floor of what is left:
+reading each vector directly or through `strip` instead of `|| ''::tsvector` took the same time.
+
 ## Results budget
 
 `TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
