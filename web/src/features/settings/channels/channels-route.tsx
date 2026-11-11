@@ -34,7 +34,8 @@ import { useBillingShown } from '../../billing/billing-shown';
 //   /settings/channels/type/<type>     the type's home when it has one; otherwise, and always with a tab or a
 //                                      mailbox outcome in the address, the workspace's channel of that type
 
-export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string }
+// step names the setup step a link opens (the inbox opens forward, step 2).
+export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string; step?: string }
 
 export interface ChannelsRouteProps {
   // path is what follows /settings/channels/ ('' for the list).
@@ -73,7 +74,7 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
   else if (path === '') content = <ChannelsList {...page} tab={search.tab === 'history' ? 'history' : 'channels'} />;
   else if (first === 'new') content = <NewChannel {...page} type={second ?? ''} />;
   else if (first === 'type') content = carriesChannelState(search) ? <TypeShortcut {...page} type={second ?? ''} search={search} /> : <TypeHome {...page} type={second ?? ''} search={search} />;
-  else if (second === 'setup') content = <ChannelSetup {...page} id={first} />;
+  else if (second === 'setup') content = <ChannelSetup {...page} id={first} step={search.step} />;
   else content = <ChannelPage {...page} id={first} tab={search.tab} search={search} />;
   return (
     <main className="settings-page panel channels-settings">
@@ -330,7 +331,7 @@ function TypeHome({ type, search, navigate, isAdmin, timezone }: PageProps & { t
 }
 
 // ChannelSetup is a channel's guided setup; a type without one shows the channel's page.
-function ChannelSetup({ id, navigate, isAdmin, timezone }: PageProps & { id: string }) {
+function ChannelSetup({ id, step, navigate, isAdmin, timezone }: PageProps & { id: string; step?: string }) {
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
   const channels = useChannels();
   const channel = detail.data;
@@ -342,7 +343,7 @@ function ChannelSetup({ id, navigate, isAdmin, timezone }: PageProps & { id: str
   return <>
     <a href={`${base}/type/${ui.type}`} className="ch-back">{ui.label}</a>
     <Part part={ui.panels} failed={<PartUnavailable />} render={({ Setup }) => (Setup
-      ? <Setup channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
+      ? <Setup channel={channel} step={step} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
       : <ChannelPage id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
   </>;
 }

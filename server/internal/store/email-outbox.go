@@ -62,6 +62,21 @@ const channelForwardedBefore = `SELECT EXISTS(SELECT 1 FROM channel_inbound_even
 			AND COALESCE(e.raw->>'support_address',s.support_address)=s.support_address)
 	OR (NOT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2) AND (` + channelReceivedBefore + `))`
 
+// EmailChannelForwarded reports whether mail that passed the channel's current support mailbox became a
+// message on it: the rule Delivery.Forwarded follows. Until then the mailbox may still forward to the old
+// help desk.
+func (s *Store) EmailChannelForwarded(ctx context.Context, workspaceID, channelID string) (bool, error) {
+	forwarded, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var forwarded bool
+		err := tx.QueryRow(ctx, channelForwardedBefore, workspaceID, channelID).Scan(&forwarded)
+		return forwarded, err
+	})
+	if err != nil {
+		return false, fmt.Errorf("check forwarded mail: %w", err)
+	}
+	return forwarded, nil
+}
+
 // DeliveryMailbox is the connected mailbox a reply leaves through, with its sealed grant. Its provider is
 // Grant.Provider.
 type DeliveryMailbox struct {

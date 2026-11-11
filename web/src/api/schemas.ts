@@ -232,6 +232,9 @@ export const emailChannelSettingsSchema = z.object({
   domain_verification: z.enum(['txt', 'provider']),
   sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
+  // An older server says nothing of forwarding: the inbox then says nothing of the old help desk.
+  mail_through_mailbox: z.boolean().catch(true),
+  answers_before_forwarding: z.enum(['colliedesk', 'support_mailbox']).catch('colliedesk'),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
 export const webFormSettingsSchema = z.object({
   channel_id: z.string().uuid().optional(), enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(), legacy_slug: z.boolean().optional(),

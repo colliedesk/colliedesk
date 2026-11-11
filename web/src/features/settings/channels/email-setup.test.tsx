@@ -203,6 +203,15 @@ test('step 2 gives the forwarding address to copy first, then provider tabs with
   expect(within(forward).getByRole('button', { name: 'Skip for now' })).toBeEnabled();
 });
 
+test('the inbox\'s Move your mail opens step 2 even after a test message marked it received', async () => {
+  // A test message makes the channel working, yet customer mail still goes to the old help desk.
+  waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  expect(within(forward).getByRole('textbox', { name: 'Forward to this address' })).toHaveValue('support@acme.colliedesk.test');
+  expect(screen.queryByRole('textbox', { name: 'Support address' })).not.toBeInTheDocument();
+});
+
 test('step 2 flips to First email received when inbox activity brings a conversation, without a reload, and Continue opens step 3', async () => {
   const detail = waitingChannel();
   const { client } = show(`${MAIN}/setup`);

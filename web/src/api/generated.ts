@@ -8672,6 +8672,13 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            /** @description Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the current support address). Until it has, new customer mail may still arrive in the team's old help desk, and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@` address, dropped mail and mail under an earlier support address do not count. False without a channel. */
+            mail_through_mailbox: boolean;
+            /**
+             * @description Where a customer's answer to a reply goes while `mail_through_mailbox` is false. `colliedesk`: replies carry `Reply-To: reply+<token>@<server's sending domain>`, which this server receives, so the answer joins the conversation. `support_mailbox`: this server does not receive mail on its sending domain, so the answer goes to the support address and reaches Colliedesk only once that mailbox forwards here.
+             * @enum {string}
+             */
+            answers_before_forwarding: "colliedesk" | "support_mailbox";
             gmail: components["schemas"]["GmailSettings"];
             microsoft: components["schemas"]["MicrosoftSettings"];
             /** @description Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and more than 0.3% of the replies sent). Replies can still be written; they stay queued with a note until an operator resumes sending with `collie email resume`. Admins cannot clear it. */

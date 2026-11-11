@@ -80,6 +80,8 @@ type restEmailSettings struct {
 			Error   *string `json:"error"`
 		} `json:"connection"`
 	} `json:"microsoft"`
+	MailThroughMailbox      bool   `json:"mail_through_mailbox"`
+	AnswersBeforeForwarding string `json:"answers_before_forwarding"`
 }
 
 func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
@@ -351,7 +353,8 @@ func webFormUpdate(c *call, arguments map[string]any) (any, error) {
 // no room for one either.
 func emailChannelView(settings restEmailSettings) map[string]any {
 	view := map[string]any{"connected": settings.Channel != nil, "inbound_url": settings.InboundURL, "hosted_address": settings.HostedAddress,
-		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom}
+		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom,
+		"mail_through_mailbox": settings.MailThroughMailbox, "answers_before_forwarding": settings.AnswersBeforeForwarding}
 	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false}
 	if connection := settings.Gmail.Connection; connection != nil {
 		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error

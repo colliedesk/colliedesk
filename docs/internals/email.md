@@ -68,6 +68,10 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   a channel keeps the support address until it is changed again. The self-host **Test request** (posted
   with the channel's own secret from a terminal) counts as forwarded mail: nothing tells it from a
   forwarder.
+  The inbox line "New customer mail still arrives in your old help desk" reads the same rule through the
+  email channel's settings (`mail_through_mailbox`, `store.EmailChannelForwarded`), and
+  `answers_before_forwarding` reads `email.Config.ReceivesPlatformReplies`, the worker's condition. Both
+  share one query and one condition, so the line and the Reply-To cannot disagree.
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
   verified by Resend. Both steps are needed, in this order:

@@ -319,6 +319,11 @@ export const messages = {
   sendsInsteadOf: (removed: string, name: string) => `${removed} was removed; replies send from ${name}.`,
   channelRemoved: (name: string) => `Replies to this conversation cannot be sent: ${name} was removed.`,
   repliesNotConnected: 'Replies to this conversation are not emailed until you connect your support email.',
+  // Before customer mail arrives through the support mailbox (it may still forward to the old help desk).
+  mailStillInOldHelpDesk: 'New customer mail still arrives in your old help desk until you move it.',
+  repliesComeBackHere: 'Replies you send here come back here.',
+  moveYourMail: 'Move your mail',
+  answerGoesToMailbox: 'The customer\'s answer goes to your mailbox until it forwards here.',
   planNotices: 'Plan notices',
   // The trial strip: the end as a date (the right day in the agent's timezone), and what it means near the end.
   trialEnds: (when: string) => `Trial ends ${when}`,

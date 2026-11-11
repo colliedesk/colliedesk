@@ -12345,8 +12345,23 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft, mail_through_mailbox, answers_before_forwarding]
       properties:
+        mail_through_mailbox:
+          type: boolean
+          description: >-
+            Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the
+            current support address). Until it has, new customer mail may still arrive in the team's old help desk,
+            and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@`
+            address, dropped mail and mail under an earlier support address do not count. False without a channel.
+        answers_before_forwarding:
+          type: string
+          enum: [colliedesk, support_mailbox]
+          description: >-
+            Where a customer's answer to a reply goes while `mail_through_mailbox` is false. `colliedesk`: replies
+            carry `Reply-To: reply+<token>@<server's sending domain>`, which this server receives, so the answer joins
+            the conversation. `support_mailbox`: this server does not receive mail on its sending domain, so the
+            answer goes to the support address and reaches Colliedesk only once that mailbox forwards here.
         gmail: {$ref: '#/components/schemas/GmailSettings'}
         microsoft: {$ref: '#/components/schemas/MicrosoftSettings'}
         sending_pause:

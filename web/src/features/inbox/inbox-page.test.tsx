@@ -432,3 +432,61 @@ test('an unsent reply comes back after a reload in which the conversation loads 
   expect(screen.getByLabelText('Message body')).toHaveValue('Typed before the reload');
   expect(kept()).toEqual(stored);
 });
+
+// The default email channel's settings as the inbox reads them (GET /api/v1/channels/email).
+const MAILBOX = '55555555-5555-4555-8555-555555555555';
+const mailbox = (change: { mail_through_mailbox?: boolean; answers_before_forwarding?: 'colliedesk' | 'support_mailbox'; connected?: boolean; support_address?: string } = {}) => ({
+  channel: change.connected === false ? null : {
+    channel_id: MAILBOX, support_address: change.support_address ?? 'support@acme.com', sender_name: 'Acme Support', secret_set: true, secret_rotated_at: null, domain: 'acme.com',
+    domain_verified_at: null, dns_record_name: '_colliedesk.acme.com', dns_record_value: 'colliedesk-verification=abc', dns_records: [], dns_records_expired_at: null,
+    created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
+  },
+  inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', from_policy: 'verified' as const, sending_from: null, hosted_address: 'support@acme.colliedesk.test',
+  domain_verification: 'txt' as const, sending_pause: null, smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
+  gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/gmail', connection: null },
+  microsoft: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/ms', admin_consent_redirect_uri: 'https://desk.example.com/ms-admin',
+    admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null },
+  mail_through_mailbox: change.mail_through_mailbox ?? false, answers_before_forwarding: change.answers_before_forwarding ?? 'colliedesk',
+});
+const oldHelpDesk = 'New customer mail still arrives in your old help desk until you move it.';
+const repliesComeBack = 'Replies you send here come back here.';
+const answerToMailbox = 'The customer\'s answer goes to your mailbox until it forwards here.';
+const mailSwitchLine = () => screen.getByText((_, element) => element?.classList.contains('mail-switch') ?? false);
+
+test('until customer mail arrives through the support mailbox, the inbox says new mail still reaches the old help desk, and Move your mail opens step 2 of the email setup', () => {
+  render(<InboxPage canManage defaultMailbox={mailbox()} />);
+  const line = mailSwitchLine();
+  expect(line).toHaveTextContent(`${oldHelpDesk} ${repliesComeBack} Move your mail`);
+  expect(within(line).getByRole('link', { name: 'Move your mail' })).toHaveAttribute('href', `/settings/channels/${MAILBOX}/setup?step=forward`);
+});
+
+test('the line about the old help desk is gone once customer mail arrived through the support mailbox, and without a support address of the team', () => {
+  const { rerender } = render(<InboxPage canManage defaultMailbox={mailbox({ mail_through_mailbox: true })} />);
+  expect(screen.queryByText(oldHelpDesk, { exact: false })).not.toBeInTheDocument();
+  rerender(<InboxPage canManage defaultMailbox={mailbox({ connected: false })} />);
+  expect(screen.queryByText(oldHelpDesk, { exact: false })).not.toBeInTheDocument();
+  // A new cloud workspace's channel starts on its forwarding address: no mailbox of the team's own exists to move yet.
+  rerender(<InboxPage canManage defaultMailbox={mailbox({ support_address: 'support@acme.colliedesk.test' })} />);
+  expect(screen.queryByText(oldHelpDesk, { exact: false })).not.toBeInTheDocument();
+});
+
+test('a teammate who cannot change the channel reads the line without the action', () => {
+  render(<InboxPage defaultMailbox={mailbox()} />);
+  expect(mailSwitchLine()).toHaveTextContent(oldHelpDesk);
+  expect(screen.queryByRole('link', { name: 'Move your mail' })).not.toBeInTheDocument();
+});
+
+test('on a server that cannot receive replies on its sending domain, the inbox line drops its second sentence and the reply box says where the answer goes', () => {
+  const before = mailbox({ answers_before_forwarding: 'support_mailbox' });
+  const { rerender } = render(<InboxPage canManage defaultMailbox={before} selected={conversation} conversations={[conversation]} replyMailbox={before} />);
+  const line = mailSwitchLine();
+  expect(line).toHaveTextContent(`${oldHelpDesk} Move your mail`);
+  expect(line).not.toHaveTextContent(repliesComeBack);
+  expect(screen.getByText(answerToMailbox)).toBeInTheDocument();
+  // Where the server receives the answer, or once the mailbox forwards here, the reply box says nothing of it.
+  rerender(<InboxPage canManage defaultMailbox={mailbox()} selected={conversation} conversations={[conversation]} replyMailbox={mailbox()} />);
+  expect(screen.queryByText(answerToMailbox)).not.toBeInTheDocument();
+  const forwarded = mailbox({ answers_before_forwarding: 'support_mailbox', mail_through_mailbox: true });
+  rerender(<InboxPage canManage defaultMailbox={forwarded} selected={conversation} conversations={[conversation]} replyMailbox={forwarded} />);
+  expect(screen.queryByText(answerToMailbox)).not.toBeInTheDocument();
+});

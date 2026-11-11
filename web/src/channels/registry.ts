@@ -37,6 +37,8 @@ export interface SetupProps extends HomeProps {
   channel?: Channel;
   // named: the setup adds another channel of the type, told apart by its name.
   named?: boolean;
+  // step: the step the address names (?step=), opened first even when it is done; an unknown one is ignored.
+  step?: string;
 }
 
 export interface ChannelPanels {

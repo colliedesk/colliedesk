@@ -36,6 +36,8 @@ const (
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
 		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
+		`"mail_through_mailbox":{"type":"boolean","description":"Whether customer mail has arrived through the support mailbox. Until it has, new customer mail may still arrive in the team's old help desk; a test message does not count. A person moves the mail by forwarding the support mailbox to hosted_address (Colliedesk Cloud) or to inbound_url."},` +
+		`"answers_before_forwarding":{"type":"string","enum":["colliedesk","support_mailbox"],"description":"Where a customer's answer to a reply goes while mail_through_mailbox is false: colliedesk (it joins the conversation) or support_mailbox (this server cannot receive it; it reaches Colliedesk only once the mailbox forwards here)."},` +
 		`"gmail":{"type":"object","description":"Gmail connected for sending: replies go out from address through Gmail. status failed means replies fail until a person reconnects (colliedesk_gmail_connect).",` +
 		`"required":["available","connected"],"properties":{"available":{"type":"boolean","description":"Whether this server can connect Gmail."},"connected":{"type":"boolean"},` +
 		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]}}},` +

@@ -34,6 +34,18 @@ own address that you can answer, and the reply comes to your mailbox (see
 [Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list
 cannot be loaded, it says so with **Try again** instead.
 
+**Before your mailbox forwards here.** Until customer mail has arrived through your support mailbox, one
+line under the **Inbox** title says: "New customer mail still arrives in your old help desk until you
+move it. Replies you send here come back here." This is the time after an import, when your mailbox may
+still forward to the old help desk. **Move your mail** (admins) opens step 2 of the
+[email setup](email-channel.md#2-forward-its-mail-to-colliedesk), where you forward the mailbox here. A
+[test message](email-channel.md#send-yourself-a-test-message) does not count; the line goes away once a
+customer's mail arrives through the mailbox. There is no line before you have a support address of your
+own. On a server that cannot receive replies on its sending domain the line has only its first sentence,
+and the reply box of an email conversation says: "The customer's answer goes to your mailbox until it
+forwards here." Agents read the same in one call: `mail_through_mailbox` and `answers_before_forwarding`
+of `GET /api/v1/channels/email` or of the MCP tool `colliedesk_email_channel_get`.
+
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
   status. When nothing is open but the workspace has conversations, the list says so instead of
