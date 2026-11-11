@@ -31,8 +31,8 @@ func register(server *mcp.Server, spec Spec, rest *restClient) {
 	}
 	// Every hint is an explicit boolean: OpenAI's plugin directory asks for readOnlyHint, destructiveHint and
 	// openWorldHint on every tool, and a read-only tool is never destructive.
-	destructive := !spec.ReadOnly && spec.Destructive
-	annotations := &mcp.ToolAnnotations{Title: spec.Title, ReadOnlyHint: spec.ReadOnly, IdempotentHint: spec.Idempotent,
+	destructive := spec.Destructive()
+	annotations := &mcp.ToolAnnotations{Title: spec.Title, ReadOnlyHint: spec.ReadOnly(), IdempotentHint: spec.Idempotent,
 		DestructiveHint: &destructive, OpenWorldHint: new(bool)}
 	tool := &mcp.Tool{Name: spec.Name, Title: spec.Title, Description: spec.Description, Annotations: annotations,
 		InputSchema: json.RawMessage(spec.Input), OutputSchema: json.RawMessage(spec.Output)}

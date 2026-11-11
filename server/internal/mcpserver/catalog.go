@@ -1,5 +1,7 @@
 package mcpserver
 
+import "github.com/colliedesk/colliedesk/server/internal/httpapi"
+
 // Spec is one tool: everything a registry, a document or a generator needs to know about it.
 type Spec struct {
 	Name        string
@@ -16,12 +18,11 @@ type Spec struct {
 	BodyNeeds []string
 	// Operator marks an operator tool: served on OperatorPath to operator tokens only, never to a workspace.
 	Operator   bool
-	ReadOnly   bool
 	Idempotent bool
-	// Destructive marks a tool whose effect cannot be undone now: it reaches a customer, deletes for
-	// good, or revokes. A delete that waits in a trash (saved replies, restorable for 30 days) is not
-	// destructive; its description says when it becomes permanent.
-	Destructive bool
+	// BodyEffect is what the body the tool always sends does on a route whose effect depends on the
+	// body (httpapi.ByBody): a note Changes, a reply is Final. ReadOnly and Destructive come from the
+	// routes (hints.go), never from a hand-written flag.
+	BodyEffect httpapi.Effect
 	// REST lists the routes the tool calls, as "METHOD pattern" strings of httpapi.Routes.
 	REST []string
 	// Input and Output are JSON schemas.

@@ -12,11 +12,10 @@ func aiChatUsageGetSpec() Spec {
 		Title: "Show AI chat usage",
 		Description: `Show one UTC month of the help center's AI chat: answers today and this month against the limits, spend (as a share of the plan's limit on the ` +
 			`cloud's own provider, in micro-dollars on the workspace's own provider), chats, hand-offs to the team, feedback, and how many published articles it answers from.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/ai/chat/usage"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
-		Output:   `{"type":"object","required":["usage"],"properties":{"usage":{"type":"object","required":["month","answers"],"properties":{"month":{"type":"string"},"answers":{"type":"integer"}}}}}`,
-		run:      aiChatUsageGet,
+		REST:   []string{"GET /api/v1/ai/chat/usage"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
+		Output: `{"type":"object","required":["usage"],"properties":{"usage":{"type":"object","required":["month","answers"],"properties":{"month":{"type":"string"},"answers":{"type":"integer"}}}}}`,
+		run:    aiChatUsageGet,
 	}
 }
 
@@ -27,8 +26,7 @@ func aiChatSessionsListSpec() Spec {
 		Description: `List the end users' chats with the help center's AI, newest activity first, 50 a page: where each started, its state (open, ended, handed_off), ` +
 			`how many turns, its first question, whether an answer was rated not helpful, and the conversation a hand-off opened. ` +
 			`Filter by channel_id, status, only_not_helpful or conversation_id (the chat that handed off to that conversation); pass next_cursor to read on.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/ai/chat/sessions"},
+		REST: []string{"GET /api/v1/ai/chat/sessions"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `},` +
 			`"status":{"type":"string","enum":["open","ended","handed_off"]},"only_not_helpful":{"type":"boolean"},"conversation_id":{"type":"string",` + uuid + `},"cursor":{"type":"string"}}}`,
 		Output: `{"type":"object","required":["items","next_cursor"],"properties":{"items":{"type":"array","items":{"type":"object"}},"next_cursor":{"type":["string","null"]}}}`,
@@ -42,11 +40,10 @@ func aiChatSessionGetSpec() Spec {
 		Title: "Read an AI chat",
 		Description: `Read one chat with the help center's AI: every question and answer as the end user saw it, the articles each answer cited (number, version, ` +
 			`title, as they were), feedback, and the conversation a hand-off opened. Texts are kept 90 days after the last turn.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/ai/chat/sessions/{id}"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["chat_id"],"properties":{` + aiChatIDProperty + `}}`,
-		Output:   `{"type":"object","required":["chat"],"properties":{"chat":{"type":"object","required":["id","status","transcript"]}}}`,
-		run:      aiChatSessionGet,
+		REST:   []string{"GET /api/v1/ai/chat/sessions/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["chat_id"],"properties":{` + aiChatIDProperty + `}}`,
+		Output: `{"type":"object","required":["chat"],"properties":{"chat":{"type":"object","required":["id","status","transcript"]}}}`,
+		run:    aiChatSessionGet,
 	}
 }
 
@@ -55,7 +52,6 @@ func aiChatSessionDeleteSpec() Spec {
 		Name:        "colliedesk_ai_chat_session_delete",
 		Title:       "Delete an AI chat",
 		Description: `Delete one chat with the help center's AI and its transcript, for good: it cannot be undone. A conversation it handed off keeps its own copy.`,
-		Destructive: true,
 		REST:        []string{"DELETE /api/v1/ai/chat/sessions/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["chat_id"],"properties":{` + aiChatIDProperty + `}}`,
 		Output:      `{"type":"object","required":["deleted"],"properties":{"deleted":{"type":"boolean"}}}`,

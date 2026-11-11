@@ -48,11 +48,10 @@ func helpCenterLanguagesGetSpec() Spec {
 		Title: "Read the help center's languages",
 		Description: `Read the help center's languages: its primary language (the articles' own) and the others, each shown to customers or hidden, with how many articles are published, drafts, ` +
 			`outdated and missing in each. Start here before translating: colliedesk_kb_translations_list then names the articles to translate in one language.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/help-center/languages"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["languages"],"properties":{"languages":` + helpCenterLanguagesSchema + `}}`,
-		run:      helpCenterLanguagesGet,
+		REST:   []string{"GET /api/v1/help-center/languages"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["languages"],"properties":{"languages":` + helpCenterLanguagesSchema + `}}`,
+		run:    helpCenterLanguagesGet,
 	}
 }
 
@@ -79,8 +78,7 @@ func kbTranslationsListSpec() Spec {
 		Description: `List the live articles as one language sees them, in the help center's order, one page at a time: state missing (no translation in that language yet), ` +
 			`outdated (its translation is behind the article) or translated. Each item names its article, collection and translation, so you can go straight to ` +
 			`colliedesk_kb_translation_create or colliedesk_kb_translation_get. For the next page pass next_cursor as cursor.` + "\n\n" + kbTranslationTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/kb/translations"},
+		REST: []string{"GET /api/v1/kb/translations"},
 		Input: `{"type":"object","additionalProperties":false,"required":["locale","state"],"properties":{` + kbLocaleProperty + `,` +
 			`"state":{"type":"string","enum":["missing","outdated","translated"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":{"type":"object",` +
@@ -98,9 +96,8 @@ func kbTranslationsTrashSpec() Spec {
 		Title: "List knowledge base translations in the trash",
 		Description: `List the translations deleted in the last 30 days, most recent first, with their article's title and number, who deleted them and when each is deleted for good. ` +
 			`Bring one back with colliedesk_kb_translation_undelete.` + "\n\n" + kbTranslationTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/kb/translations/trash"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200}}}`,
+		REST:  []string{"GET /api/v1/kb/translations/trash"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200}}}`,
 		Output: `{"type":"object","required":["translations","next_cursor"],"properties":{"translations":{"type":"array","items":{"allOf":[` + kbTranslationSummarySchema + `,` +
 			`{"type":"object","required":["article_title","article_number","deleted_at","purges_at"],"properties":{"article_title":{"type":"string"},"article_number":{"type":"integer"},` +
 			`"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"}}}]}},"next_cursor":{"type":["string","null"]}}}`,
@@ -131,11 +128,10 @@ func kbTranslationGetSpec() Spec {
 		Title: "Read a knowledge base translation",
 		Description: `Read one translation with its whole text, and the article it translates as it is now (original), in one call: compare them to bring an outdated translation up to date. ` +
 			`It also finds a translation in the trash (in_trash). Use its updated_at when you change it.` + "\n\n" + kbTranslationTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/kb/articles/{id}/translations/{locale}"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["article_id","locale"],"properties":{` + kbTranslationKeyInput + `}}`,
-		Output:   kbTranslationOutput,
-		run:      kbTranslationGet,
+		REST:   []string{"GET /api/v1/kb/articles/{id}/translations/{locale}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["article_id","locale"],"properties":{` + kbTranslationKeyInput + `}}`,
+		Output: kbTranslationOutput,
+		run:    kbTranslationGet,
 	}
 }
 
@@ -188,8 +184,7 @@ func kbTranslationHistorySpec() Spec {
 		Description: `List the versions of a translation, newest first, one page at a time: what kind of change, who made it, through which agent token, and the title, slug, status and text it had. ` +
 			`Each text is cut after 2000 characters (body_truncated says so); pass version to get that one version whole. For the next page pass next_before_version as before_version.` +
 			"\n\n" + kbTranslationTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/kb/articles/{id}/translations/{locale}/versions"},
+		REST: []string{"GET /api/v1/kb/articles/{id}/translations/{locale}/versions"},
 		Input: `{"type":"object","additionalProperties":false,"required":["article_id","locale"],"properties":{` + kbTranslationKeyInput + `,` + pageLimitProperty + `,` +
 			`"before_version":{"type":"integer","minimum":1},"version":{"type":"integer","minimum":1,"description":"Only this version, with its whole text."}}}`,
 		Output: `{"type":"object","required":["article_id","locale","versions","next_before_version"],"properties":{"article_id":{"type":"string"},"locale":{"type":"string"},"versions":{"type":"array","items":` +
