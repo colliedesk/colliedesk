@@ -40,9 +40,8 @@ func setupProgressGetSpec() Spec {
 			`call colliedesk_response_targets_set with a preset's targets, enabled true, warn_before_minutes 30 and the hours in reply_target_hours: ` +
 			`when kept is true they are the hours already set in Settings, which a preset never replaces; otherwise Monday to Friday, 09:00 to 18:00. ` +
 			`Computed on every call.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/workspace/setup"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/workspace/setup"},
+		Input: noArguments,
 		Output: `{"type":"object","required":["steps","complete","recommended","reply_target_presets","reply_target_hours","reply_target_suggestion"],"properties":{` +
 			`"steps":{"type":"array","items":{"type":"object","required":["key","name","state","detail"],` +
 			`"properties":{"key":{"type":"string"},"name":{"type":"string"},"state":{"type":"string"},"detail":{"type":["string","null"]}}}},` +

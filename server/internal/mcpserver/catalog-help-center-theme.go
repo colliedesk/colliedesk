@@ -47,11 +47,10 @@ func helpCenterThemeGetSpec() Spec {
 		Title: "Read the help center's brand",
 		Description: `Return the brand of the public help center: logo and favicon (media library ids), logo text, website and contact links, colors, fonts and custom CSS, ` +
 			`with the contrast of every color pair (checks). A null color or font is the default look.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/help-center/theme"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
-		run:      helpCenterThemeGet,
+		REST:   []string{"GET /api/v1/help-center/theme"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
+		run:    helpCenterThemeGet,
 	}
 }
 
@@ -62,11 +61,10 @@ func helpCenterThemeCheckSpec() Spec {
 		Description: `Check a candidate brand the way colliedesk_help_center_theme_update would, and save nothing. ` + themeContrastRule +
 			`ok is false when a pair fails; fields then says, per color, its ratio and the nearest color that passes. A field of the wrong shape or a logo that is not a library image is an error. ` +
 			`With preview (home or article), html also holds that page rendered with the theme from the workspace's published articles, the way the settings card shows it.`,
-		ReadOnly: true,
-		REST:     []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
-		Input:    themeCheckInputSchema,
-		Output:   `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
-		run:      helpCenterThemeCheck,
+		REST:   []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
+		Input:  themeCheckInputSchema,
+		Output: `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
+		run:    helpCenterThemeCheck,
 	}
 }
 

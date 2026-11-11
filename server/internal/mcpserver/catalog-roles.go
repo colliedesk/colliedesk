@@ -52,11 +52,10 @@ func rolesListSpec() Spec {
 		Title: "List roles",
 		Description: `List the workspace's roles, Admin and Agent first, then by name: each with its permissions, who holds it, the agent tokens that follow it, and whether you may ` +
 			`change, delete or give it. With deleted true, only the deleted roles, to restore one with colliedesk_role_restore.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/roles"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{"deleted":{"type":"boolean","default":false}}}`,
-		Output:   `{"type":"object","required":["roles"],"properties":{"roles":{"type":"array","items":` + roleSchema + `}}}`,
-		run:      rolesList,
+		REST:   []string{"GET /api/v1/roles"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{"deleted":{"type":"boolean","default":false}}}`,
+		Output: `{"type":"object","required":["roles"],"properties":{"roles":{"type":"array","items":` + roleSchema + `}}}`,
+		run:    rolesList,
 	}
 }
 

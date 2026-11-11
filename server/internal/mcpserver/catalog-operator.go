@@ -19,10 +19,10 @@ func operatorWhoamiSpec() Spec {
 		Title: "Show which operator this token acts as",
 		Description: `Show the operator this token acts as, what the token may ask for, and where the operator console is. Call it first.` +
 			operatorToolNote,
-		Operator: true, ReadOnly: true,
-		REST:   []string{"GET /api/v1/operator/auth/me"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["operator","session","console"],"properties":{"operator":{"type":"object"},"session":{"type":"object"},"console":{"type":"object"}}}`,
+		Operator: true,
+		REST:     []string{"GET /api/v1/operator/auth/me"},
+		Input:    noArguments,
+		Output:   `{"type":"object","required":["operator","session","console"],"properties":{"operator":{"type":"object"},"session":{"type":"object"},"console":{"type":"object"}}}`,
 		run: func(c *call, _ map[string]any) (any, error) {
 			var me map[string]any
 			err := c.get("/api/v1/operator/auth/me", nil, &me)
@@ -36,10 +36,10 @@ func operatorSignOutSpec() Spec {
 		Name:        "colliedesk_operator_sign_out",
 		Title:       "End this operator token",
 		Description: `End this operator token at once. Nothing else changes; an operator makes a new token in the console.` + operatorToolNote,
-		Operator:    true, Destructive: true,
-		REST:   []string{"POST /api/v1/operator/auth/logout"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["signed_out"],"properties":{"signed_out":{"type":"boolean"}}}`,
+		Operator:    true,
+		REST:        []string{"POST /api/v1/operator/auth/logout"},
+		Input:       noArguments,
+		Output:      `{"type":"object","required":["signed_out"],"properties":{"signed_out":{"type":"boolean"}}}`,
 		run: func(c *call, _ map[string]any) (any, error) {
 			if err := c.send(http.MethodPost, "/api/v1/operator/auth/logout", nil, nil); err != nil {
 				return nil, err
@@ -102,10 +102,10 @@ func operatorRead(name, title, description, path string, query []string) Spec {
 	}
 	return Spec{
 		Name: name, Title: title, Description: description + operatorToolNote,
-		Operator: true, ReadOnly: true,
-		REST:   []string{"GET " + path},
-		Input:  input,
-		Output: `{"type":"object"}`,
+		Operator: true,
+		REST:     []string{"GET " + path},
+		Input:    input,
+		Output:   `{"type":"object"}`,
 		run: func(c *call, arguments map[string]any) (any, error) {
 			values := url.Values{}
 			for _, argument := range query {
@@ -128,10 +128,10 @@ func operatorCheckSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_config_check", Title: "Check a settings change",
 		Description: `Check a change of the server's settings without saving it: whether it builds, and what saving it would ask (guards). Nothing is saved. A token never runs a live test (it would send the server's secrets): an operator does that in the console.` + operatorToolNote,
-		Operator:    true, ReadOnly: true,
-		REST:   []string{"POST /api/v1/operator/config/check"},
-		Input:  `{"type":"object","additionalProperties":false,"properties":{` + changeProperties + `}}`,
-		Output: `{"type":"object","required":["ok","errors"],"properties":{"ok":{"type":"boolean"},"errors":{"type":"object"},"guards":{"type":"array"}}}`,
+		Operator:    true,
+		REST:        []string{"POST /api/v1/operator/config/check"},
+		Input:       `{"type":"object","additionalProperties":false,"properties":{` + changeProperties + `}}`,
+		Output:      `{"type":"object","required":["ok","errors"],"properties":{"ok":{"type":"boolean"},"errors":{"type":"object"},"guards":{"type":"array"}}}`,
 		run: func(c *call, arguments map[string]any) (any, error) {
 			var out map[string]any
 			err := c.send(http.MethodPost, "/api/v1/operator/config/check", arguments, &out)
@@ -178,10 +178,10 @@ func operatorRequestGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_request_get", Title: "Show one of your operator requests",
 		Description: `Show one operator request this token made: whether it waits, was approved (and the call's answer) or was refused.` + operatorToolNote,
-		Operator:    true, ReadOnly: true,
-		REST:   []string{"GET /api/v1/operator/requests/{id}"},
-		Input:  operatorRequestIDInput,
-		Output: `{"type":"object"}`,
+		Operator:    true,
+		REST:        []string{"GET /api/v1/operator/requests/{id}"},
+		Input:       operatorRequestIDInput,
+		Output:      `{"type":"object"}`,
 		run: func(c *call, arguments map[string]any) (any, error) {
 			var out map[string]any
 			err := c.get("/api/v1/operator/requests/"+url.PathEscape(fmt.Sprint(arguments["request_id"])), nil, &out)

@@ -20,8 +20,7 @@ func inboxSearchSpec() Spec {
 			`A row is only a summary; call colliedesk_conversation_get with its id to read the messages. ` +
 			`Results come in pages: when next_cursor is not null, call again with the same arguments plus that cursor. A page that is full may be followed by an empty one.` +
 			"\n\n" + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/contacts", "GET /api/v1/tags", "GET /api/v1/auth/me", "GET /api/v1/saved-views"},
+		REST: []string{"GET /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/contacts", "GET /api/v1/tags", "GET /api/v1/auth/me", "GET /api/v1/saved-views"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{` +
 			savedViewIDPropertyForSearch +
 			`"status":` + oneOrMany(`{"type":"string","enum":["open","pending","resolved","closed","spam"]}`, 5, `"Only conversations in this status, or in any of these. Leave out for every status but spam; spam lists the conversations marked as spam."`) + `,` +
@@ -102,8 +101,7 @@ func conversationGetSpec() Spec {
 			`viewers lists who else has the conversation open; when one of them has a reply not sent yet, the hint says so (colliedesk_conversation_presence lists you to them). ` +
 			`latest_reply_number is what colliedesk_reply_send needs as seen_reply_number.` +
 			"\n\n" + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversations/{id}", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/contacts", "GET /api/v1/agents", "GET /api/v1/auth/me", "GET /api/v1/inbox/activity"},
+		REST: []string{"GET /api/v1/conversations/{id}", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/contacts", "GET /api/v1/agents", "GET /api/v1/auth/me", "GET /api/v1/inbox/activity"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `,"description":"The id from colliedesk_inbox_search."},` + detailProperty + `}}`,
 		Output: `{"type":"object","required":["conversation","messages","messages_total","messages_shown","older_messages_omitted","viewers","timezone","detail","latest_reply_number"],"properties":{` +

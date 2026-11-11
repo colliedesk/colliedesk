@@ -42,11 +42,10 @@ func savedRepliesListSpec() Spec {
 		Title: "List saved replies",
 		Description: `List the saved replies the team shares, ordered by title, each with its text and who changed it last (the person, and the agent token when one did). ` +
 			`Replies in the trash are not listed; see colliedesk_saved_replies_trash.` + "\n\n" + teamTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/saved-replies"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["saved_replies"],"properties":{"saved_replies":{"type":"array","items":` + savedReplySchema + `}}}`,
-		run:      savedRepliesList,
+		REST:   []string{"GET /api/v1/saved-replies"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["saved_replies"],"properties":{"saved_replies":{"type":"array","items":` + savedReplySchema + `}}}`,
+		run:    savedRepliesList,
 	}
 }
 
@@ -56,8 +55,7 @@ func savedReplyGetSpec() Spec {
 		Title: "Read a saved reply",
 		Description: `Read one saved reply by id, or by title (ignoring case). It also finds a reply in the trash, and says so with in_trash. ` +
 			`Use its updated_at when you change it.` + "\n\n" + teamTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/saved-replies", "GET /api/v1/saved-replies/trash"},
+		REST: []string{"GET /api/v1/saved-replies", "GET /api/v1/saved-replies/trash"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{` + savedReplyIDProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":200,"description":"Instead of saved_reply_id."}}}`,
 		Output: `{"type":"object","required":["saved_reply","in_trash"],"properties":{"saved_reply":` + savedReplySchema + `,"in_trash":{"type":"boolean"},` +
@@ -116,8 +114,7 @@ func savedReplyHistorySpec() Spec {
 		Description: `List the versions of a saved reply, newest first, one page at a time: what kind of change it was, who made it, through which agent token, and the title and text it set. ` +
 			`Works for a reply in the trash too. Each text is cut after 2000 characters (body_truncated says so); pass version to get that one version whole. ` +
 			`For the next page pass next_before_version as before_version.` + "\n\n" + teamTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/saved-replies/{id}/versions"},
+		REST: []string{"GET /api/v1/saved-replies/{id}/versions"},
 		Input: `{"type":"object","additionalProperties":false,"required":["saved_reply_id"],"properties":{` + savedReplyIDProperty + `,` + pageLimitProperty + `,` +
 			`"before_version":{"type":"integer","minimum":1,"description":"Only versions older than this one."},` +
 			`"version":{"type":"integer","minimum":1,"description":"Only this version, with its whole text."}}}`,
@@ -151,8 +148,7 @@ func savedRepliesTrashSpec() Spec {
 		Description: `List the saved replies deleted in the last 30 days, most recent first, one page at a time, with who deleted them and when each is deleted for good (purges_at). ` +
 			`Each text is cut after 2000 characters (body_truncated); read it whole with colliedesk_saved_reply_history (version). For the next page pass next_cursor as cursor. ` +
 			`Bring one back with colliedesk_saved_reply_undelete.` + "\n\n" + teamTextNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/saved-replies/trash"},
+		REST: []string{"GET /api/v1/saved-replies/trash"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{` + pageLimitProperty + `,` +
 			`"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["saved_replies","next_cursor"],"properties":{"saved_replies":{"type":"array","items":` + trashedReplySchema + `},` +

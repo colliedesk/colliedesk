@@ -1,5 +1,7 @@
 package mcpserver
 
+import "github.com/colliedesk/colliedesk/server/internal/httpapi"
+
 func conversationUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_conversation_update",
@@ -31,8 +33,9 @@ func conversationUpdateSpec() Spec {
 
 func noteAddSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_note_add",
-		Title: "Add a private note",
+		Name:       "colliedesk_note_add",
+		BodyEffect: httpapi.Changes,
+		Title:      "Add a private note",
 		Description: `Add a private internal note to a conversation. Only the support team sees it; it is never sent to the customer. ` +
 			`Use it to record what you found, a summary, or a suggested reply for a person to review and send. ` +
 			`Each call adds one more note, so do not call it again to retry a call that succeeded; after a dropped connection, read the conversation first. ` +
