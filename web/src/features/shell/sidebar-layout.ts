@@ -5,8 +5,8 @@ export const sidebarStorageKey = 'colliedesk.sidebar';
 export const sidebarWidth = { min: 200, max: 360, initial: 248 } as const;
 // Dragged narrower than this, the sidebar folds into the rail; dragged wider from the rail, it opens again.
 export const foldBelow = 160;
-// A browser that never chose starts with the rail, so the views get the room.
-const collapsedByDefault = true;
+// A browser that never chose starts open, so a new person sees each page's name; the rail is one click away.
+const collapsedByDefault = false;
 
 export interface SidebarLayout { width: number; collapsed: boolean }
 
