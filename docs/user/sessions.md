@@ -53,8 +53,7 @@ stops working). **Sessions**, further down the same page, lists them too. Someon
 revokes the tokens of every person they do not rank below; AI & agents is in their settings menu even when they
 may not create tokens or read the built-in AI.
 
-To revoke a token, open the **⋯** menu at the end of its row and choose **Revoke** (in Sessions, its **Revoke**
-button). Colliedesk asks first, naming the token: revoking ends it at once, the agent that uses it is refused on
+To revoke a token, open the **⋯** menu at the end of its row and choose **Revoke**. Colliedesk asks first, naming the token: revoking ends it at once, the agent that uses it is refused on
 its next call, and notes and replies it wrote keep showing "by <your name> via <token label>". A revoked
 token cannot be brought back; its row then reads **Revoked** and has no actions.
 
@@ -90,7 +89,7 @@ with your address filled in, and the way to remove each one; while the token is 
 Cursor** puts it into Cursor in one click. To check that an agent is connected, ask it "Who am I in
 Colliedesk?": it answers with your name, your roles and what the token may do.
 
-In the list and in Sessions a token shows one of:
+In the list a token shows one of:
 
 - **Follows role Agent** (or the role it follows); open it to see **What it may do**.
 - **Fixed · 5 permissions**: a token made with a list.

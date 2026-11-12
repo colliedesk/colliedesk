@@ -19,7 +19,9 @@ export function followableRoles(own: RoleRef[], workspace: Role[] | undefined, h
     .map(({ id, name, system }) => ({ id, name, system }));
 }
 
-type AgentTokensSectionProps = Pick<CreateTokenDialogProps, 'roles' | 'rolePermissions' | 'held' | 'onCreate'> & {
+type AgentTokensSectionProps = Pick<CreateTokenDialogProps, 'roles' | 'rolePermissions' | 'held'> & {
+  // How to create a token; missing for someone who may only see and revoke tokens (no Create token, no setup steps).
+  onCreate?: CreateTokenDialogProps['onCreate'];
   // origin is the address this app is open at; the steps use it in place of the guides' example.
   origin?: string;
   // mcpAddress is where an app signs in with OAuth (APP_ORIGIN's /mcp). Claude Code uses it: when it is the
@@ -47,15 +49,15 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
         <div className="agent-step">
           <div className="tokens-head">
             <div><h3 id="agent-tokens-heading" className="step-title">{text.tokensHeading}</h3><p className="muted-copy">{text.description}</p></div>
-            <button type="button" className="primary-action" onClick={() => setCreating(true)}>{text.create}</button>
+            {onCreate && <button type="button" className="primary-action" onClick={() => setCreating(true)}>{text.create}</button>}
           </div>
           <AgentTokenList tokens={tokens} timezone={timezone} onRevoke={onRevoke} labelledBy="agent-tokens-heading" />
         </div>
-        <div className="agent-step">
+        {onCreate && <div className="agent-step">
           <ConnectAgent host={host} onHost={setHost} origin={origin} mcpAddress={mcpAddress} hidden={hidden} />
-        </div>
+        </div>}
       </div>
-      {creating && <CreateTokenDialog roles={roles} rolePermissions={rolePermissions} held={held} onCreate={onCreate} host={host} onHost={setHost}
+      {creating && onCreate && <CreateTokenDialog roles={roles} rolePermissions={rolePermissions} held={held} onCreate={onCreate} host={host} onHost={setHost}
         origin={origin} mcpAddress={mcpAddress} onClose={(shown) => { setCreating(false); if (shown) setHidden(true); }} />}
     </section>
   );

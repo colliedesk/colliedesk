@@ -142,7 +142,7 @@ used to wait for a person's approval: `results:share`, `team:invite`, `team:crea
 `team:manage_roles`, `team:revoke`, `channels:update`, `channels:manage_credentials`,
 `workspace:update`, `workspace:export`, `billing:manage`, `imports:undo`, `ai_settings:update`,
 `autofix:send` and `autofix_settings:update`. A call that needs one of them is refused; create a new
-token for it. Sessions shows such a token as "Created before roles" with the tier it had.
+token for it. The token list on **AI & agents** shows such a token as "Created before roles" with the tier it had.
 
 ## When a permission is missing
 

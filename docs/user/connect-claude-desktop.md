@@ -115,7 +115,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 ## Remove it
 
 In Claude Desktop, **Settings → Extensions**, remove Colliedesk. Without the extension, delete
-the `colliedesk` entry from the host's configuration and `~/.colliedesk-token`. Then revoke the token in **Settings → AI & agents → Sessions**: it stops working at once, wherever it was
+the `colliedesk` entry from the host's configuration and `~/.colliedesk-token`. Then revoke the token in **Settings → AI & agents → External AI agents** (its **⋯** menu, **Revoke**): it stops working at once, wherever it was
 copied.
 
 ## Other hosts

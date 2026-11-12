@@ -200,7 +200,6 @@ features/settings/numbers/numbers-messages.ts:numbersMessages.formatHint	103
 features/settings/numbers/numbers-messages.ts:numbersMessages.lead	206
 features/settings/numbers/numbers-messages.ts:numbersMessages.nameHint	93
 features/settings/numbers/numbers-messages.ts:numbersMessages.startHint	120
-features/settings/roles-messages.ts:roleMessages.inUse	61
 features/settings/roles-messages.ts:roleMessages.onlySystem + features/settings/roles-messages.ts:roleMessages.makeRole	113
 features/settings/saved-reply-messages.ts:savedReplyMessages.savedRepliesDescription	156
 features/settings/saved-reply-messages.ts:savedReplyMessages.savedReplyTrashDescription	95

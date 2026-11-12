@@ -258,15 +258,16 @@ test('adding a saved reply again after a failed request names the same submit, s
   expect(second[2]).toBe(first[2]);
 });
 
-// AI & agents: the agent tokens and the sessions they opened.
-test('an agent creates an agent token above its Sessions; the list reloads to show it and the token is kept in no cache', async () => {
+// AI & agents: the agent tokens, each listed once (not again under a Sessions list).
+test('an agent creates an agent token; the list reloads to show it, the page has no second Sessions list, and the token is kept in no cache', async () => {
   const session = { id: '77777777-7777-4777-8777-777777777777', agent_id: SAM, agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Claude Code',
     token: { kind: 'role', role: agentRoleRef, role_held: true, permissions: permissionsOf('agent'), legacy_tier: null }, role: null, permissions: permissionsOf('agent'), current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
   const client = newClient();
   show('agent', [], AIAgentsSections, client);
   api.createAgentToken.mockResolvedValue({ token: 'cdk_agent_routetoken', session });
   const card = await screen.findByRole('region', { name: 'External AI agents' });
-  expect(card.compareDocumentPosition(screen.getByRole('region', { name: 'Sessions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(card).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Sessions' })).toBeNull();
   api.sessions.mockResolvedValue({ items: [session] });
   const before = api.sessions.mock.calls.length;
   await waitFor(() => expect(api.roles).toHaveBeenCalled());
@@ -282,7 +283,6 @@ test('an agent creates an agent token above its Sessions; the list reloads to sh
   await waitFor(() => expect(api.sessions.mock.calls.length).toBeGreaterThan(before));
   // The new token follows a role: the roles list, which Team reads to warn before a role is taken, reloads.
   await waitFor(() => expect(api.roles.mock.calls.length).toBeGreaterThan(rolesBefore));
-  expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
   // The token list on External AI agents shows it too, without leaving the page.
   expect(await within(card).findByRole('row', { name: /Claude Code/ })).toBeInTheDocument();
   const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);
@@ -310,8 +310,9 @@ test('revoking an agent token in AI & agents reloads its sessions, who is signed
     token: { kind: 'role', role: agentRoleRef, role_held: true, permissions: permissionsOf('agent'), legacy_tier: null }, role: null, permissions: permissionsOf('agent'), current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
   show('agent', [session], AIAgentsSections);
   api.revokeSession.mockResolvedValue(undefined);
-  const sessions = await screen.findByRole('region', { name: 'Sessions' });
-  const revoke = await within(sessions).findByRole('button', { name: 'Revoke' });
+  const list = await screen.findByRole('table', { name: 'Agent tokens' });
+  fireEvent.click(await within(list).findByRole('button', { name: 'Actions for Claude Code' }));
+  const revoke = screen.getByRole('menuitem', { name: 'Revoke' });
   await waitFor(() => expect(api.roles).toHaveBeenCalled());
   const before = { me: api.me.mock.calls.length, sessions: api.sessions.mock.calls.length, roles: api.roles.mock.calls.length };
   fireEvent.click(revoke);
@@ -338,11 +339,11 @@ test('agent tokens are listed in AI & agents, browser sessions in Account', asyn
   expect(within(devices).queryByTitle('Claude Code')).not.toBeInTheDocument();
   cleanup();
   draw(AIAgentsSections);
-  const tokens = await screen.findByRole('region', { name: 'Sessions' });
-  expect(await within(tokens).findByTitle('Claude Code')).toBeInTheDocument();
-  expect(within(tokens).queryByTitle('Firefox')).not.toBeInTheDocument();
+  const tokens = await screen.findByRole('table', { name: 'Agent tokens' });
+  expect(await within(tokens).findByRole('row', { name: /Claude Code/ })).toBeInTheDocument();
+  expect(within(tokens).queryByText('Firefox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Sessions' })).toBeNull();
   // Revoking a token stops an AI agent; it signs no browser out, so the card says so instead of the devices' line.
-  expect(tokens).toHaveTextContent('AI agents working with a token. Revoke one to stop it.');
   expect(tokens).not.toHaveTextContent('on this device that signs you out');
 });
 

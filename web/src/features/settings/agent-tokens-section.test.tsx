@@ -387,3 +387,10 @@ test('on Colliedesk Cloud, Claude Code installs the plugin and signs in with OAu
   expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk, then Disconnect it in Connected AI apps above.');
   expect(panel).not.toHaveTextContent('acme.colliedesk.com');
 });
+
+test('someone who may see and revoke tokens but not make one gets the list without Create token or the setup steps', () => {
+  render(<AgentTokensSection roles={[]} held={[]} tokens={[]} />);
+  expect(screen.getByRole('heading', { name: 'Agent tokens' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Connect your agent' })).toBeNull();
+});

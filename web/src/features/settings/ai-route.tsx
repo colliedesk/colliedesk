@@ -112,8 +112,8 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   const [usageMonth, setUsageMonth] = useState<string>();
   const usage = useQuery({ queryKey: ['ai-usage', usageMonth], queryFn: () => aiApi.usage(usageMonth ?? ''), enabled: isAdmin && Boolean(usageMonth) });
   const failed = [slot, consent, check].find((mutation) => mutation.isError)?.error;
-  // A link to the agent tokens (#agents-heading: a refused token call, an MCP answer) or their sessions
-  // (#agent-sessions-heading: the roles editor) arrives before the sections do; the built-in AI above them
+  // A link to the agent tokens (#agents-heading: a refused token call, an MCP answer; #agent-tokens-heading:
+  // the roles editor) arrives before the sections do; the built-in AI above them
   // is drawn from its own request and pushes them down.
   useScrollToHashWhenReady(!me.isPending);
   if (!me.data) return <main className="settings-page" aria-busy="true" />;

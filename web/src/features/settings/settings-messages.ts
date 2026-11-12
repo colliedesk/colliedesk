@@ -46,7 +46,6 @@ export const settingsMessages = {
   copyInboundURL: 'Copy inbound URL',
   urlCopied: 'URL copied',
   sessionsDescription: 'Browsers and clients signed in. Revoke one you no longer use; on this device that signs you out.',
-  tokenSessionsDescription: 'AI agents working with a token. Revoke one to stop it.',
   teamDescription: 'Everyone who can sign in to this workspace. A deactivated person cannot sign in and does not use a seat.',
   teamActive: 'Active',
   teamDeactivated: 'Deactivated',
