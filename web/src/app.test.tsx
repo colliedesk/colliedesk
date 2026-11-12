@@ -778,9 +778,11 @@ test('a person who may revoke but not create tokens finds the teammates\' agent 
   const router = open('/settings/account');
   fireEvent.click(within(await screen.findByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'AI & agents' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/settings/ai'));
-  const sessions = await screen.findByRole('region', { name: 'Sessions' });
-  expect(await within(sessions).findByTitle('Claude Code')).toBeInTheDocument();
-  expect(within(sessions).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  // The list is there without Create token: this person may revoke, not create.
+  const list = await screen.findByRole('table', { name: 'Agent tokens' });
+  expect(await within(list).findByRole('row', { name: /Claude Code/ })).toBeInTheDocument();
+  expect(within(list).getByRole('button', { name: 'Actions for Claude Code' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
 });
 
 // The pages scroll inside the app's content pane on a wide screen, not the window.

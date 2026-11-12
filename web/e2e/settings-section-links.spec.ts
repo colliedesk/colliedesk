@@ -36,8 +36,8 @@ test('a link to an old settings section opens the page that holds it now and lan
   await expect(page).toHaveURL(`${baseURL}/settings/ai#agents-heading`);
   await expect(page.getByRole('heading', { name: 'External AI agents', exact: true })).toBeInViewport();
   await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
-  await page.goto(`${baseURL}/settings/ai#agent-sessions-heading`);
-  await expect(page.locator('#agent-sessions-heading')).toBeInViewport();
+  await page.goto(`${baseURL}/settings/ai#agent-tokens-heading`);
+  await expect(page.locator('#agent-tokens-heading')).toBeInViewport();
   await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
   await page.setViewportSize({ width: 1280, height: 800 });
 

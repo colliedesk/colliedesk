@@ -6,11 +6,9 @@ import { can } from '../../lib/can';
 import { messages } from '../../messages';
 import { AgentTokensSection, followableRoles } from './agent-tokens-section';
 import type { TokenChoice } from './agent-tokens-section';
-import { SessionsSection } from './sessions-section';
 
-// AIAgentsSections is the part of Settings → AI & agents for AI agents working through a token: the card
-// that creates a token, then the sessions those tokens opened, where one is revoked. They were sections of
-// the one Settings page, above its Sessions.
+// AIAgentsSections is the part of Settings → AI & agents for AI agents working through a token: one card that
+// lists, creates and revokes tokens.
 export function AIAgentsSections() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -44,9 +42,11 @@ export function AIAgentsSections() {
   if (!me.data) return null;
   return <>
     {revokeSession.isError && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
-    {creates && <AgentTokensSection roles={followableRoles(me.data.agent.roles, roles.data?.items, me.data.permissions)} held={me.data.permissions} mcpAddress={mcpAddress}
+    {/* Each token is listed once, here: someone who may only revoke (team:revoke), or who holds a token
+        without creating new ones, sees the list without Create token. */}
+    {(creates || revokes || tokens.length > 0) && <AgentTokensSection roles={followableRoles(me.data.agent.roles, roles.data?.items, me.data.permissions)} held={me.data.permissions} mcpAddress={mcpAddress}
       rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
-      onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} />}
-    {(creates || revokes || tokens.length > 0) && <SessionsSection kind="tokens" sessions={tokens} timezone={me.data.timezone ?? 'UTC'} onRevokeSession={(id) => revokeSession.mutate(id)} />}
+      onCreate={creates ? (label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); }) : undefined}
+      tokens={tokens.filter((session) => !session.app)} timezone={me.data.timezone ?? 'UTC'} onRevoke={(id) => revokeSession.mutate(id)} />}
   </>;
 }

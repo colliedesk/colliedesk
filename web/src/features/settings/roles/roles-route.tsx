@@ -142,7 +142,7 @@ function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesSta
         </select></label>}
       {original && inUse && <p className="muted-copy">
         {original.members.length > 0 && <>{m.heldByLabel} <LinkedNames names={original.members.map((item) => item.name)} href="/settings/members#team-heading" />. </>}
-        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings/ai#agent-sessions-heading" />.</>}
+        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings/ai#agent-tokens-heading" />.</>}
       </p>}
       {original?.system === 'agent' && <p className="notice notice-plain"><span>{m.agentBuiltIn(original.members.length)}</span></p>}
       <fieldset className="role-permissions"><legend>{m.permissions}</legend>
@@ -176,7 +176,7 @@ function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesSta
                 <button type="button" className="danger-action" disabled={busy} onClick={() => remove.mutate()}>{m.confirm}</button></span></div>
             : <button type="button" className="danger-action" onClick={() => setDeleting(true)}>{m.deleteRole}</button>
           : <p className="muted-copy">{m.inUse(original.members.length, original.invites, original.tokens.length)}{' '}
-              <a href="/settings/members#team-heading">Team</a> · <a href="/settings/members#invites-heading">Invites</a> · <a href="/settings/ai#agent-sessions-heading">Sessions</a></p>}
+              <a href="/settings/members#team-heading">Team</a> · <a href="/settings/members#invites-heading">Invites</a> · <a href="/settings/ai#agent-tokens-heading">Tokens</a></p>}
       </div>}
     </form>
   </section>;
