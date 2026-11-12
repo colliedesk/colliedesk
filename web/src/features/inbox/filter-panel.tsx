@@ -7,7 +7,7 @@ import type { Results } from '../../api/results';
 import { knownChannels } from '../../api/schemas';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
-import { FilterIcon, XIcon } from '../../ui/icons';
+import { ArrowUpDownIcon, FilterIcon, XIcon } from '../../ui/icons';
 import { zonedDay } from '../../lib/zoned-day';
 import { listOf, withoutValue } from '../../lib/inbox-query-edit';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
@@ -111,14 +111,16 @@ export function FilterBar(props: FilterPartProps) {
   return (
     <>
       <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }}>
-        <summary><FilterIcon /><span>{messages.filter}</span>
+        <summary data-tip={messages.filter}><FilterIcon /><span className="sr-only">{messages.filter}</span>
           {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
         <div className="filter-popover" role="group" aria-label={messages.filter}><FilterPanel {...props} opened={opened} /></div>
       </details>
-      <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === 'updated_desc' ? undefined : event.currentTarget.value)}>
-        {/* Due first is offered once a listed conversation has targets. */}
-        {Object.entries(text.sorts).filter(([value]) => offeredSorts.includes(value) || value === sort || (value === 'due' && props.conversations?.some((item) => slaOf(item)))).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-      </select>
+      {/* An icon with the order in its tip; the native list of orders opens over it. */}
+      <label className="sort-pick" data-tip={`${messages.inboxSort}: ${text.sorts[sort as keyof typeof text.sorts] ?? sort}`}><ArrowUpDownIcon />
+        <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === 'updated_desc' ? undefined : event.currentTarget.value)}>
+          {/* Due first is offered once a listed conversation has targets. */}
+          {Object.entries(text.sorts).filter(([value]) => offeredSorts.includes(value) || value === sort || (value === 'due' && props.conversations?.some((item) => slaOf(item)))).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
     </>
   );
 }

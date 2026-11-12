@@ -106,3 +106,27 @@ export function nextChange(items: { sla?: SLA | null }[], now = new Date()): Dat
   }
   return soonest === undefined ? undefined : new Date(soonest);
 }
+
+// RowDue is the due words at the right of an inbox row: "Due 11:30 AM" while a clock runs to a deadline,
+// "1 h 20 min late" once one passed it (counted from the deadline to now, so it grows as the row stays).
+// full is its accessible name and tooltip, as slaMark words it.
+export interface RowDue { text: string; late: boolean; full: string }
+
+export function rowDue(sla: SLA | null | undefined, timeZone: string, now = new Date(), browser = browserTimeZone()): RowDue | undefined {
+  const mark = slaMark(sla, timeZone, now, browser);
+  if (mark?.tone === 'late') {
+    const clock = mark.clock === 'first_response' ? sla?.first_response : sla?.resolution;
+    const since = clock?.breached_at ?? clock?.due_at;
+    const minutes = since ? Math.max(1, Math.floor((now.getTime() - Date.parse(since)) / 60_000)) : undefined;
+    return { text: minutes === undefined ? 'Late' : `${duration(minutes)} late`, late: true, full: mark.full };
+  }
+  if (mark) return { text: mark.short, late: false, full: mark.full };
+  // A clock that runs with its deadline still far: its time, quietly.
+  const running = ([['first_response', sla?.first_response], ['resolution', sla?.resolution]] as const)
+    .filter(([, clock]) => clock?.state === 'running' && clock.due_at)
+    .sort(([, a], [, b]) => Date.parse(a?.due_at ?? '') - Date.parse(b?.due_at ?? ''))[0];
+  if (!running) return undefined;
+  const [name, clock] = running;
+  const at = when(clock?.due_at as string, timeZone, now, browser);
+  return { text: `Due ${at}`, late: false, full: `${clockWords[name].name} due ${at}${today(clock?.due_at as string, timeZone, now) ? ' today' : ''}, counted in business hours` };
+}

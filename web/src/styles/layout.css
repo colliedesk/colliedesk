@@ -105,7 +105,7 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .inbox-shell > .panel + .panel { border-left: 1px solid var(--line); }
 .list-pane:focus { outline: none; }
 .list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
-.list-pane > header { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0 var(--space-8); border-bottom: 1px solid var(--line); }
+.list-pane > header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) var(--space-4) 0 var(--space-8); border-bottom: 1px solid var(--line); }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
 .list-title h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 .list-title > span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }

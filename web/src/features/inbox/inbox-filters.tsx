@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { messages } from '../../messages';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
-import { SearchIcon } from '../../ui/icons';
+import { ArrowUpDownIcon, FilterIcon, SearchIcon } from '../../ui/icons';
 import { allStatuses, defaultStatus } from '../../lib/inbox-query';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { DraftInput } from './draft-input';
@@ -25,6 +25,8 @@ interface InboxFiltersProps {
   focusSignal?: number;
   // The saved views menu, which sits in the same bar.
   views?: ReactNode;
+  // Select all and the bulk actions, in the place of the status tabs while rows are ticked.
+  selection?: ReactNode;
 }
 
 // The Filter menu, the Sort menu and the chips load on their own chunk (filter-panel.tsx), asked for as
@@ -38,7 +40,8 @@ function FilterBarPart(props: FilterPartProps) {
   const part = filterPart.use();
   if (part.status === 'ready') return <part.module.FilterBar {...props} />;
   return part.status === 'error' ? <PartUnavailable />
-    : <><button type="button" className="filter-menu-pending" disabled>{messages.filter}</button><select className="sort-field" disabled aria-label={messages.inboxSort} /></>;
+    : <><button type="button" className="filter-menu-pending icon-button" disabled><FilterIcon /><span className="sr-only">{messages.filter}</span></button>
+      <span className="sort-pick"><ArrowUpDownIcon /><select className="sort-field" disabled aria-label={messages.inboxSort} /></span></>;
 }
 
 function FilterChipsPart(props: FilterPartProps) {
@@ -55,7 +58,7 @@ const ownControls = ['status', 'sort', 'search'];
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; everything else shares one
 // Filter menu that counts what is on, and each active filter shows as a chip that removes it.
-export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views }: InboxFiltersProps) {
+export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views, selection }: InboxFiltersProps) {
   const search = useRef<HTMLInputElement>(null);
   const setStatus = (value: string) => {
     const next: InboxQuery = { ...query, status: value };
@@ -87,11 +90,11 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
         <FilterBarPart {...part} />
         {views}
       </div>
-      <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
+      {selection ?? <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
         {statusTabs.map(([value, label]) => (
           <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => setStatus(value)} /><span>{label}</span></label>
         ))}
-      </div>
+      </div>}
       {Object.keys(query).some((key) => !ownControls.includes(key)) && <FilterChipsPart {...part} />}
     </div>
   );

@@ -1,17 +1,16 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
-import type { ReactNode, Ref } from 'react';
+import { Fragment, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { Conversation, ConversationViewer } from '../../api/schemas';
 import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
-import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { ownRef } from './conversation-ref';
-import { slaMark, slaOf } from '../../lib/sla';
-import { ClockIcon } from '../../ui/icons';
+import { rowDue, slaOf } from '../../lib/sla';
 import { presenceViewPart } from './presence-part';
 import { useListKeys } from './use-list-keys';
+import { isTyping } from '../../lib/typing-target';
 
 interface ConversationListProps {
   items: Conversation[];
@@ -32,13 +31,10 @@ interface ConversationListProps {
   failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   onClearFilters?: () => void;
-  // checkedIds are the rows ticked for a bulk action; ticking never opens the conversation.
+  // checkedIds are the rows ticked for a bulk action; ticking never opens the conversation. range: shift was
+  // held, so every row from the last ticked one to this one takes its new state.
   checkedIds?: ReadonlySet<string>;
-  onToggle?: (id: string) => void;
-  onToggleAll?: (checked: boolean) => void;
-  selectAllRef?: Ref<HTMLInputElement>;
-  // toolbar takes the place of the select all caption while rows are ticked.
-  toolbar?: ReactNode;
+  onToggle?: (id: string, range?: boolean) => void;
   // draftIds are the conversations with a reply draft an AI agent left for a person to send.
   draftIds?: ReadonlySet<string>;
   // viewers are the others who have a conversation open now, by conversation id (the activity poll).
@@ -52,9 +48,16 @@ interface ConversationListProps {
 // Where the inbox sends an admin to finish something in Settings.
 export type SettingsTarget = '/settings' | '/settings/data' | `/settings/channels/${string}`;
 
-const visibleTags = 2;
+// dotOf is a row's status dot: red for an urgent or late conversation, the status colour otherwise, with
+// the status (and an urgent priority) in words for a screen reader.
+function dotOf(item: Conversation, late: boolean): { tone: string; words: string } {
+  const status = messages.statuses[item.status];
+  if (item.priority === 'urgent') return { tone: 'urgent', words: `${status}, ${messages.priorities.urgent.toLowerCase()}` };
+  return { tone: late ? 'urgent' : item.status, words: status };
+}
+
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onTestMessage }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, checkedIds, onToggle, draftIds, viewers, grouped = true, onTestMessage }: ConversationListProps) {
   const [testing, setTesting] = useState(false);
   const [testFailed, setTestFailed] = useState<string>();
   const testInFlight = useRef(false);
@@ -70,21 +73,23 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
   const now = useNow(timezone);
   const settled = !loading && !failed;
   const brandNew = items.length === 0 && !filtered && !nothingOpen && settled && page === 1;
-  const checkedCount = items.filter((item) => checkedIds?.has(item.id)).length;
-  const allChecked = items.length > 0 && checkedCount === items.length;
-  const selectAll = useRef<HTMLInputElement | null>(null);
-  const setSelectAll = (node: HTMLInputElement | null) => {
-    selectAll.current = node;
-    if (typeof selectAllRef === 'function') selectAllRef(node);
-    else if (selectAllRef) selectAllRef.current = node;
-  };
-  useEffect(() => {
-    if (selectAll.current) selectAll.current.indeterminate = checkedCount > 0 && !allChecked;
-  }, [checkedCount, allChecked]);
+  const selecting = items.some((item) => checkedIds?.has(item.id));
   const scroll = useRef<HTMLDivElement>(null);
-  const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
+  const onArrows = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
+  // x ticks the row that has the focus, as a click on its box does.
+  const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const focused = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-conversation-id]')?.dataset.conversationId : undefined;
+    if (event.key === 'x' && focused && onToggle && !event.ctrlKey && !event.metaKey && !event.altKey && !isTyping(event.target)) {
+      event.preventDefault();
+      onToggle(focused);
+      return;
+    }
+    onArrows(event);
+  };
+  // Shift on the click that ticks a box makes it a range; the change event that follows does not carry it.
+  const shift = useRef(false);
   return (
-    <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey}>
+    <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey} data-selecting={selecting || undefined}>
       {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
@@ -100,47 +105,42 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
-      {items.length > 0 && <div className="select-all" data-active={toolbar ? true : undefined}>
-        <label>
-          <input type="checkbox" ref={setSelectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
-          <span className={toolbar ? 'sr-only' : undefined}>{messages.selectAllOnPage}</span>
-        </label>
-        {toolbar}
-      </div>}
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
         const startsGroup = grouped && (index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now));
-        // The tooltip names the timezone when it is not the browser's, so 5:42 AM is never read as local time.
-        const full = formatDate(item.updated_at, timezone, now) + zoneSuffix(item.updated_at, timezone);
+        // The row's time is when the customer last wrote: the team's own notes and replies never move it.
+        // A conversation the customer never wrote in shows its last update. The tooltip names the timezone
+        // when it is not the browser's, so 5:42 AM is never read as local time.
+        const wrote = item.latest_customer_message?.created_at;
+        const stamp = wrote ?? item.updated_at;
+        const full = (wrote ? messages.customerWrote : '') + formatDate(stamp, timezone, now) + zoneSuffix(stamp, timezone);
         const open = viewers?.get(item.id);
-        // A row with a target mark counts its tags, so its meta stays one line; the code and the mark are never cut.
-        const mark = slaMark(slaOf(item), timezone, now);
+        const due = rowDue(slaOf(item), timezone, now);
+        const dot = dotOf(item, due?.late ?? false);
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
           <div className="conversation-item" data-conversation-id={item.id}>
           <label className="row-check">
-            <input type="checkbox" aria-label={messages.selectRow(item.subject, full)} checked={checkedIds?.has(item.id) ?? false} onChange={() => onToggle?.(item.id)} />
+            <input type="checkbox" aria-label={messages.selectRow(item.contact_name, item.subject, full)} checked={checkedIds?.has(item.id) ?? false}
+              onClick={(event) => { shift.current = event.shiftKey; }} onChange={() => { onToggle?.(item.id, shift.current); shift.current = false; }} />
           </label>
           <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
-            <span className="conversation-subject">{item.subject}</span>
-            <time dateTime={item.updated_at} title={stampTitle(item.updated_at, timezone)}>
-              <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>
-              <span aria-hidden="true" className="time-touch">{formatListTime(item.updated_at, timezone, now)}</span>
-              <span className="time-full">{full}</span>
-            </time>
-            <span className="conversation-meta">
-              {ownRef(item) && <span className="conv-ref">{ownRef(item)}</span>}
-              <StatusLabel status={item.status} />
-              <PriorityLabel priority={item.priority} />
-              {mark && <span className={`sla-mark sla-${mark.tone}`} aria-label={mark.full} data-tip={mark.full}><ClockIcon />{mark.short}</span>}
+            <span className="row-top">
+              <span className={`row-dot row-dot-${dot.tone}`}>{dot.words}</span>
+              <span className="row-customer">{item.contact_name}</span>
               {channelLabel?.(item) && <span className="channel-pill">{channelLabel(item)}</span>}
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
               {open && open.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ViewerStack viewers={open} timezone={timezone} />} />}
-              {mark && item.tags.length > 0 ? <span className="tag-pill tag-count" data-tip={item.tags.map((tag) => tag.name).join(', ')}>{messages.tagCount(item.tags.length)}</span>
-                : <>{item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
-                  {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}</>}
+              {due ? <span className={`row-due${due.late ? ' row-due-late' : ''}`} aria-label={due.full} data-tip={due.full}>{due.text}</span>
+                : <time dateTime={stamp} title={stampTitle(stamp, timezone)}>
+                  <span aria-hidden="true" className="time-short">{formatShortDate(stamp, timezone, now)}</span>
+                  <span aria-hidden="true" className="time-touch">{formatListTime(stamp, timezone, now)}</span>
+                </time>}
             </span>
+            <span className="row-subject">{ownRef(item) && <span className="conv-ref">{ownRef(item)}</span>}<span className="conversation-subject">{item.subject}</span></span>
+            {item.latest_customer_message && <span className="row-excerpt">{item.latest_customer_message.excerpt}</span>}
+            <span className="time-full">{full}</span>
           </button>
           </div>
           </Fragment>

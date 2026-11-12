@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -512,7 +513,8 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,
 		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb),
-		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
+		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`,
+		left(regexp_replace(btrim(left(latest.body,`+strconv.Itoa(excerptReadRunes*4)+`)),'\s+',' ','g'),`+strconv.Itoa(excerptReadRunes)+`),latest.created_at
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
@@ -521,6 +523,14 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 			FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id AND t.workspace_id=ct.workspace_id
 			WHERE ct.workspace_id=c.workspace_id AND ct.conversation_id=c.id
 		) tag_data ON true
+		-- The customer's newest message, read backwards through this conversation's own messages: OFFSET 0 keeps
+		-- the planner from walking the workspace's incoming index instead and filtering every conversation out.
+		LEFT JOIN LATERAL (
+			SELECT left(m.body,`+strconv.Itoa(excerptReadRunes*4)+`) AS body,m.created_at FROM (
+				SELECT body,created_at,kind,detached_at FROM messages
+				WHERE workspace_id=c.workspace_id AND conversation_id=c.id ORDER BY created_at DESC OFFSET 0
+			) m WHERE m.kind='incoming' AND m.detached_at IS NULL LIMIT 1
+		) latest ON true
 		ORDER BY listed.position`, workspaceID, ids)
 	if err != nil {
 		return ConversationPage{}, fmt.Errorf("list conversations: %w", err)
@@ -530,15 +540,20 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	for rows.Next() {
 		var item domain.Conversation
 		var tagsJSON []byte
+		var latestText *string
+		var latestAt *time.Time
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority,
 			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON,
-			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID); err != nil {
+			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID, &latestText, &latestAt); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {
 			return ConversationPage{}, fmt.Errorf("decode conversation tags: %w", err)
 		}
 		item.CreatedAt, item.UpdatedAt = domain.UTC(item.CreatedAt), domain.UTC(item.UpdatedAt)
+		if latestText != nil && latestAt != nil {
+			item.LatestCustomerMessage = &domain.CustomerMessageExcerpt{Excerpt: excerpt(*latestText), CreatedAt: domain.UTC(*latestAt)}
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {

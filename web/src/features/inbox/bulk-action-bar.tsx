@@ -9,6 +9,8 @@ import { StatusLabel } from './conversation-labels';
 
 interface BulkActionBarProps {
   selected: Conversation[];
+  // How many rows the page shows, of which the selection is part.
+  total: number;
   agents: TeamMember[];
   tags: Tag[];
   currentAgentId?: string;
@@ -28,7 +30,7 @@ function tagState(selected: Conversation[], tagId: string): 'true' | 'mixed' | '
   return carrying === selected.length ? 'true' : 'mixed';
 }
 
-export function BulkActionBar({ selected, agents, tags, currentAgentId, busy, onApply, onSpam, onClear }: BulkActionBarProps) {
+export function BulkActionBar({ selected, total, agents, tags, currentAgentId, busy, onApply, onSpam, onClear }: BulkActionBarProps) {
   const others = agents.filter((agent) => agent.id !== currentAgentId && !agent.deactivated_at);
   // Ticked again for each new selection: the bar is drawn afresh when rows are picked after none.
   const [tell, setTell] = useState(true);
@@ -44,7 +46,7 @@ export function BulkActionBar({ selected, agents, tags, currentAgentId, busy, on
   };
   return (
     <div className="bulk-bar" role="group" aria-label={messages.bulkActions} onKeyDown={clearOnEscape}>
-      <strong className="bulk-count">{messages.selectedCount(selected.length)}</strong>
+      <strong className="bulk-count">{messages.selectedCount(selected.length, total)}</strong>
       {offersTell && <label className="bulk-tell" data-tip={messages.tellCustomersTip}>
         <input type="checkbox" checked={tell} disabled={busy} onChange={(event) => setTell(event.target.checked)} />{messages.tellCustomers}</label>}
       <div className="bulk-actions">

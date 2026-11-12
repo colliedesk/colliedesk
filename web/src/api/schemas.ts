@@ -163,6 +163,8 @@ export const conversationSchema = z.object({
     // A server from before chat channels sends no type: its replies always left by email.
     replies_via: z.object({ id: z.string(), type: z.string().catch('email'), name: z.string(), enabled: z.boolean(),
       instead_of: z.object({ id: z.string(), name: z.string() }).nullable().optional() }).nullable() }).nullable().optional(),
+  // What the customer wrote last, one line: lists only, and missing when the customer never wrote.
+  latest_customer_message: z.object({ excerpt: z.string(), created_at: z.string().datetime() }).optional(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({

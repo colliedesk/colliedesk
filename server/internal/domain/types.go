@@ -184,6 +184,15 @@ type Conversation struct {
 	MayTellCustomer bool `json:"may_tell_customer"`
 	// ChatChannelID is the channel of the chat it is in (its newest linked item's), read with it.
 	ChatChannelID *string `json:"-"`
+	// LatestCustomerMessage is what its customer wrote last, one line of it; read with the conversation
+	// list only (an inbox row shows it), nil there when the customer never wrote.
+	LatestCustomerMessage *CustomerMessageExcerpt `json:"latest_customer_message,omitempty"`
+}
+
+// CustomerMessageExcerpt is the start of a customer's message on one line, and when it arrived.
+type CustomerMessageExcerpt struct {
+	Excerpt   string    `json:"excerpt"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ConversationSLA is a conversation's response clocks and the most pressing of their states: overdue,

@@ -177,17 +177,40 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   // The bar unmounts when the selection clears, so focus returns to the list once it has rendered.
   const [refocus, setRefocus] = useState(0);
   useEffect(() => {
-    if (refocus > 0) (selectAll.current ?? listPane.current)?.focus();
+    if (refocus > 0) listPane.current?.focus();
   }, [refocus]);
   // Only rows still on the page count: a filter, a page change or a refetch can remove ticked rows.
   const checkedIds = conversations.filter((item) => checked.has(item.id)).map((item) => item.id);
   const changeSelection = (next: Set<string>) => { setChecked(next); setBulkFailed(false); setBulkNotice(''); };
-  const toggle = (id: string) => {
+  // The row ticked or unticked last: a shift-click runs from it.
+  const anchor = useRef<string | undefined>(undefined);
+  const toggle = (id: string, range = false) => {
     const next = new Set(checkedIds);
-    if (!next.delete(id)) next.add(id);
+    const on = !next.has(id);
+    const order = conversations.map((item) => item.id);
+    const from = range && anchor.current ? order.indexOf(anchor.current) : -1;
+    const to = order.indexOf(id);
+    const span = from === -1 ? [id] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
+    for (const each of span) {
+      if (on) next.add(each);
+      else next.delete(each);
+    }
+    anchor.current = id;
     changeSelection(next);
   };
   const toggleAll = (on: boolean) => changeSelection(new Set(on ? conversations.map((item) => item.id) : []));
+  const endSelection = () => { changeSelection(new Set()); setRefocus((count) => count + 1); };
+  const allChecked = conversations.length > 0 && checkedIds.length === conversations.length;
+  useEffect(() => {
+    if (selectAll.current) selectAll.current.indeterminate = checkedIds.length > 0 && !allChecked;
+  });
+  // While rows are ticked, select all and the actions take the place of the status tabs, so the list never moves.
+  const selection = checkedIds.length > 0 && <div className="select-all" data-active>
+    <label><input type="checkbox" ref={selectAll} checked={allChecked} onChange={(event) => toggleAll(event.target.checked)} />
+      <span className="sr-only">{messages.selectAllOnPage}</span></label>
+    <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} total={conversations.length} agents={agents} tags={tags} currentAgentId={currentAgentId}
+      busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onSpam={onSpam && ((spam) => void applySpam(checkedIds, spam))} onClear={endSelection} />
+  </div>;
   const applyBulk = async (changes: BulkConversationChanges) => {
     if (!onBulkUpdate || bulkBusy) return;
     const ids = checkedIds;
@@ -259,14 +282,15 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   }, []);
   return (
     <main className="inbox-shell" data-view={threadOpen ? 'thread' : 'list'} data-details-open={detailsOpen}>
-      <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
+      <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}
+        onKeyDown={(event) => { if (event.key === 'Escape' && checkedIds.length > 0 && !event.defaultPrevented && !bulkBusy) endSelection(); }}>
         <header>
           <div className="list-title"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} />
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
           <MailSwitchLine settings={defaultMailbox} canManageChannels={canManageChannels} />
           <div className="list-head">
             <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} currentAgentId={currentAgentId} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
-              views={viewsMenu} />
+              views={viewsMenu} selection={selection || undefined} />
           </div>
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
           {spamFailed && <p role="alert" className="error-copy bulk-message">{messages.spamFailed}</p>}
@@ -279,9 +303,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         <ConversationList items={conversations} channelLabel={channelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters}
-          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
-          toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
-            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onSpam={onSpam && ((spam) => void applySpam(checkedIds, spam))} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} viewers={viewers}
+          checkedIds={checked} onToggle={toggle} draftIds={draftConversationIds} viewers={viewers}
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onTestMessage={onTestMessage} />
         {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>
           {spamToast.undo && <button type="button" className="link-action" disabled={bulkBusy} onClick={() => void applySpam(spamToast.undo ?? [], false)}>{messages.undo}</button>}
