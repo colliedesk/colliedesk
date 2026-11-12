@@ -51,12 +51,14 @@ A link, secret or consent page a tool hands you (an invite link, an export link,
 
 // Mount serves Path with the MCP server and every other request with next, so the web app and
 // /api/v1 keep their own handler and pay nothing for the extra route.
+// Both endpoints get the API's request id and access log line, so a refused MCP call leaves a trace.
 func Mount(config Config, next http.Handler) http.Handler {
-	mcpHandler := New(config)
+	mcpHandler := httpapi.WithRequestID(New(config))
 	var operatorHandler http.Handler = http.NotFoundHandler()
 	if config.Operators != nil {
 		operatorHandler = NewOperator(config)
 	}
+	operatorHandler = httpapi.WithRequestID(operatorHandler)
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case Path:
