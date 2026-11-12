@@ -298,6 +298,9 @@ export const messages = {
   general: 'General',
   preferences: 'Preferences',
   contact: 'Contact',
+  customer: 'Customer',
+  // A property with no value, such as a conversation without tags.
+  none: 'None',
   tags: 'Tags',
   newTagName: 'New tag name',
   createTag: 'Create tag',

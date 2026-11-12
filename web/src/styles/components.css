@@ -1328,3 +1328,21 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .inbox-filters > .select-all .bulk-actions { gap: 0; }
 .inbox-filters > .select-all .action-menu summary > svg + svg { display: none; }
 .inbox-filters > .select-all .bulk-count { margin-right: var(--space-1); }
+/* Properties (I1-a, I7-b): Tags and Due read as values on one row each and open their menu in place. */
+.property-row:has(.property-menu) { position: relative; }
+.property-menu { position: static; min-width: 0; }
+.property-menu summary { justify-content: flex-start; width: 100%; min-height: var(--control, 32px); gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-8); color: var(--text-1); text-align: left; }
+.property-menu summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.property-menu summary { position: relative; padding-right: var(--space-2); }
+.property-menu summary:is(:hover, :focus-visible), .property-menu[open] summary { padding-right: var(--space-6); }
+.property-menu summary > svg:last-child { position: absolute; right: var(--space-2); opacity: 0; }
+.property-menu summary:is(:hover, :focus-visible) { background: var(--surface-2); }
+.property-menu summary:is(:hover, :focus-visible) > svg:last-child, .property-menu[open] summary > svg:last-child { opacity: 1; }
+.property-menu .action-popover { left: 0; right: 0; width: auto; min-width: 0; max-width: none; padding: var(--space-2); }
+.property-menu .tag-create { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--space-2); margin-top: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-2); }
+.property-menu .tag-check { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius); }
+.property-menu .tag-check:hover { background: var(--surface-2); }
+.due-pick .details-section { border: 0; padding: 0; }
+.conversation-source .customer-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
+.property-row > .tag-names { color: var(--text-1); font-size: var(--fs-ui); padding-left: var(--space-8); }
+.property-menu .tag-create input { width: 100%; }

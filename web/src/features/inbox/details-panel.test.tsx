@@ -162,3 +162,55 @@ test('without the team and the tag list, the details show the conversation\'s ta
   expect(screen.queryByText('No tags yet.')).not.toBeInTheDocument();
   expect(options('Assignee')).toEqual(['Me', 'Another teammate', 'Unassigned']);
 });
+
+const billing = { id: '88888888-8888-4888-8888-888888888888', name: 'billing', color: '#64748b' };
+const refund = { id: '99999999-9999-4999-8999-999999999999', name: 'refund', color: '#64748b' };
+
+test('Tags is one row that names the tags; its menu ticks, unticks and creates one, and stays open meanwhile', () => {
+  const onAddTag = vi.fn();
+  const onRemoveTag = vi.fn();
+  const onCreateTag = vi.fn();
+  const tagged = { ...conversation(null), tags: [billing] } as Conversation;
+  render(<DetailsPanel conversation={tagged} agents={[]} tags={[billing, refund]} onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} />);
+  const summary = screen.getByText('billing', { selector: '.tags-pick summary *' });
+  const menu = summary.closest('details')!;
+  expect(menu.closest('.property-row')).toHaveTextContent(/^Tags/);
+  menu.open = true;
+  const group = within(menu).getByRole('group', { name: 'Tags' });
+  fireEvent.click(within(group).getByRole('checkbox', { name: 'refund' }));
+  expect(onAddTag).toHaveBeenCalledWith(tagged.id, refund.id);
+  fireEvent.click(within(group).getByRole('checkbox', { name: 'billing' }));
+  expect(onRemoveTag).toHaveBeenCalledWith(tagged.id, billing.id);
+  fireEvent.change(within(group).getByRole('textbox', { name: 'New tag name' }), { target: { value: 'bank-delay' } });
+  fireEvent.click(within(group).getByRole('button', { name: 'Create tag' }));
+  expect(onCreateTag).toHaveBeenCalledWith(tagged.id, 'bank-delay');
+  expect(menu.open).toBe(true);
+});
+
+test('a conversation without tags says None on the Tags row', () => {
+  render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[billing]} />);
+  expect(screen.getByText('None', { selector: '.tags-pick summary *' })).toBeInTheDocument();
+});
+
+test('Due is one row that says how late the reply is, in red; its menu holds every clock in full', () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  try {
+    const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+    const sla = { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true, business_minutes_left: -80 }, resolution: null };
+    render(<DetailsPanel conversation={{ ...conversation(null), sla } as unknown as Conversation} agents={[]} tags={[]} timezone="UTC" canManage />);
+    const due = screen.getByText('1 h 20 min late', { selector: '.due-pick summary *' });
+    expect(due).toHaveClass('target-late');
+    expect(due.closest('.property-row')).toHaveTextContent(/^Due/);
+    expect(due.closest('details')).toContainElement(screen.getByRole('region', { name: 'Targets' }));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('the customer section names the customer above the link to all their conversations', () => {
+  render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[]} onShowContactConversations={vi.fn()} />);
+  const section = screen.getByRole('region', { name: 'Customer' });
+  expect(within(section).getByText('Mai Linh', { selector: 'strong' })).toBeInTheDocument();
+  expect(within(section).getByRole('button', { name: 'All conversations of Mai Linh' })).toBeInTheDocument();
+});

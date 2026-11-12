@@ -66,7 +66,7 @@ export function slaMark(sla: SLA | null | undefined, timeZone: string, now = new
   const words = clockWords[name];
   if (clock.overdue) {
     const since = clock.breached_at ?? clock.due_at;
-    return { tone: 'late', clock: name, short: 'Overdue', header: `${words.verb} overdue`,
+    return { tone: 'late', clock: name, short: 'Overdue', header: clock.due_at ? `${words.verb} was due ${when(clock.due_at, timeZone, now, browser)}` : `${words.verb} overdue`,
       full: `${words.name} overdue${since ? ` since ${when(since, timeZone, now, browser)}` : ''}, counted in business hours` };
   }
   const due = clock.due_at as string;

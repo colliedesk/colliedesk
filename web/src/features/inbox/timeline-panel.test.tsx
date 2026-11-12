@@ -314,3 +314,22 @@ test('a press on a picture opens the gallery of all media in the conversation, a
   fireEvent.keyDown(dialog, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
+
+test('the header line says when the reply was due and who wrote, and leaves status and priority to the details', () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  try {
+    const clock = { state: 'running', due_at: '2026-11-02T04:10:00Z', warn_at: null, met_at: null, breached_at: '2026-11-02T04:10:00Z', due_soon: false, overdue: true, business_minutes_left: -80 };
+    const conversation = { latest_reply_number: 0, id: '11111111-1111-4111-8111-111111111111', contact_id: '66666666-6666-4666-8666-666666666666', contact_name: 'Hana Sato',
+      subject: 'Refund still not on my card', status: 'open', priority: 'urgent', assignee_id: null, tags: [], channel: 'email', origin: null,
+      created_at: '2026-11-02T03:00:00Z', updated_at: '2026-11-02T03:00:00Z', sla: { state: 'overdue', first_response: clock, resolution: null } } as unknown as Conversation;
+    render(<TimelinePanel conversation={conversation} items={[]} timezone="UTC" />);
+    const line = document.querySelector('.timeline-meta') as HTMLElement;
+    expect(within(line).getByText('Reply was due 4:10 AM')).toHaveClass('sla-mark', 'sla-late');
+    expect(within(line).getByRole('link', { name: /Hana Sato/ })).toBeInTheDocument();
+    expect(within(line).queryByText('Open')).toBeNull();
+    expect(within(line).queryByText('Urgent')).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

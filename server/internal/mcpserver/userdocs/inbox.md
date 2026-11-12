@@ -4,6 +4,13 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+The details list **Status**, **Priority**, **Assignee**, **Tags** and, while a reply target runs, **Due**,
+one row each, then the **Customer**: their name, their organization and **All conversations of** *name*.
+**Tags** names the conversation's tags (**None** without any); select it to tick or untick tags or create
+one with **New tag name** and **Create tag**. The menu stays open while you change tags; Escape or a click
+elsewhere closes it. The line under the subject says when the reply is due and who wrote; status and
+priority are in the details.
+
 On a computer the sidebar on the left starts open, with each page's name. It can be made wider or narrower: drag its right edge, or focus the
 edge and use the arrow keys. Double-click the edge to restore the default width. **Collapse sidebar** (the
 panel icon at the top) folds it into a row of icons, as does dragging the edge far to the left, and each icon is

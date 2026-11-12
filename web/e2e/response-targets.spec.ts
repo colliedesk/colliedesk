@@ -65,6 +65,8 @@ test('response targets: an admin turns them on, a new conversation is due soon o
   // Below 75 rem the details are a drawer behind Show details.
   const toggle = page.getByRole('button', { name: 'Show details' });
   if (await toggle.isVisible()) await toggle.click();
+  // Due is one row of the details; its menu holds each clock in full.
+  await page.locator('.due-pick summary').click();
   const details = page.getByRole('region', { name: 'Targets' });
   await expect(details).toContainText(/Due .* today/);
   await expect(details).toContainText(/of business time left/);

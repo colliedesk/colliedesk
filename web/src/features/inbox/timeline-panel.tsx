@@ -13,7 +13,6 @@ import type { GalleryItem } from './media-kind';
 import { mediaViewerPart } from './media-part';
 import { mayTell, noticesOf } from './status-tell';
 import { presenceViewPart } from './presence-part';
-import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { ownRef } from './conversation-ref';
 import { slaMark, slaOf } from '../../lib/sla';
 import { TimeEntriesSection } from './time-entries-section';
@@ -135,8 +134,8 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
           {conversation && <div className="timeline-meta">{ownRef(conversation) && <span className="ref-copy"><span className="conv-ref">{ownRef(conversation)}</span>
             <CopyButton value={ownRef(conversation) ?? ''} className="icon-button" label={messages.copyReference(ownRef(conversation) ?? '')}><CopyIcon /></CopyButton></span>}
-            <StatusLabel status={conversation.status} />
-            <PriorityLabel priority={conversation.priority} /><HeaderMark conversation={conversation} timezone={timezone} />
+            {/* Status and priority are in the details; the line says what is pressing and who wrote (I1-a). */}
+            <HeaderMark conversation={conversation} timezone={timezone} />
             {channelLabel && <span className="channel-pill">{channelLabel}</span>}
             {/* Anyone can type any address into the help chat: say so, and link the chat it came from. */}
             {conversation.channel === 'help_chat' && <Part part={presenceViewPart} render={(view) => <view.HelpChatLine conversationId={conversation.id} />} />}
