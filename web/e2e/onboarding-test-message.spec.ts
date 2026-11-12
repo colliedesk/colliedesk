@@ -31,7 +31,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
   await page.getByRole('link', { name: 'Exit setup' }).click();
   await page.getByRole('region', { name: 'Get started' }).getByRole('button', { name: 'Send yourself a test message' }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
 
   // The trial lets this reply go: its only recipient is the workspace's own, verified agent.
   const reply = `Answering my own test (${suffix}).`;
@@ -62,7 +62,7 @@ test('the Connection tab sends one test message before an inbound secret exists 
   const send = page.getByRole('button', { name: 'Send yourself a test message' });
   await send.evaluate((button: HTMLButtonElement) => { button.click(); button.click(); button.click(); });
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
   const list = page.getByRole('region', { name: 'Conversation list' });
   await expect(list.getByText('Test message from Colliedesk')).toHaveCount(1);
 });

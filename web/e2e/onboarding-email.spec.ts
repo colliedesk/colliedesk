@@ -53,7 +53,8 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
 
   await page.getByRole('link', { name: 'Inbox' }).click();
   await page.getByRole('button', { name: new RegExp(`Order ${suffix} never arrived`) }).click();
-  await expect(page.getByText('My order never arrived. Receipt attached.')).toBeVisible();
+  // The list row quotes the same words; the message itself is in the timeline.
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('My order never arrived. Receipt attached.')).toBeVisible();
   const receipt = page.getByRole('link', { name: 'receipt.pdf' });
   expect(await (await page.request.get(`${baseURL}${await receipt.getAttribute('href')}`)).text()).toBe('%PDF-1.4 receipt bytes');
   await expect(page.getByRole('status')).toHaveCount(0);
