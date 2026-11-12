@@ -13,6 +13,8 @@ test('a locked permission chip shows its label, not the box under it', async ({ 
   const agent = await context.newPage();
   await redeemLink(agent, url);
   await agent.goto(`${base}/settings#agents-heading`);
+  // The form is in the dialog Create token opens.
+  await agent.getByRole('region', { name: 'External AI agents' }).getByRole('button', { name: 'Create token' }).click();
   await agent.getByRole('radio', { name: 'Pick permissions (fixed)' }).check();
   for (const name of [/Team and sessions: Invite/, /Team and sessions: View/]) {
     await expect(agent.getByRole('checkbox', { name })).toHaveCSS('opacity', '0');

@@ -9,8 +9,8 @@ import type { TokenChoice } from './agent-tokens-section';
 import { SessionsSection } from './sessions-section';
 
 // AIAgentsSections is the part of Settings → AI & agents for AI agents working through a token: the card
-// that creates a token, then the sessions those tokens opened, where one is revoked. They were sections of
-// the one Settings page, above its Sessions.
+// that lists, creates and revokes tokens, then the sessions those tokens opened, which list them too for a
+// person who may revoke tokens without making them.
 export function AIAgentsSections() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -46,7 +46,8 @@ export function AIAgentsSections() {
     {revokeSession.isError && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
     {creates && <AgentTokensSection roles={followableRoles(me.data.agent.roles, roles.data?.items, me.data.permissions)} held={me.data.permissions} mcpAddress={mcpAddress}
       rolePermissions={roles.data ? new Map(roles.data.items.map((role) => [role.id, role.permissions])) : undefined}
-      onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} />}
+      onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })}
+      tokens={tokens.filter((session) => !session.app)} timezone={me.data.timezone ?? 'UTC'} onRevoke={(id) => revokeSession.mutate(id)} />}
     {(creates || revokes || tokens.length > 0) && <SessionsSection kind="tokens" sessions={tokens} timezone={me.data.timezone ?? 'UTC'} onRevokeSession={(id) => revokeSession.mutate(id)} />}
   </>;
 }

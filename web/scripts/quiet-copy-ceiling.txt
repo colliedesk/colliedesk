@@ -133,11 +133,10 @@ features/settings/agent-tokens-messages.ts:agentTokenMessages.claudeCodeSkills	1
 features/settings/agent-tokens-messages.ts:agentTokenMessages.codexReadsEnv	82
 features/settings/agent-tokens-messages.ts:agentTokenMessages.cursorEnv	64
 features/settings/agent-tokens-messages.ts:agentTokenMessages.cursorNoToken	103
-features/settings/agent-tokens-messages.ts:agentTokenMessages.description	140
+features/settings/agent-tokens-messages.ts:agentTokenMessages.description	128
 features/settings/agent-tokens-messages.ts:agentTokenMessages.desktopToken	65
 features/settings/agent-tokens-messages.ts:agentTokenMessages.followRoleHelp	150
 features/settings/agent-tokens-messages.ts:agentTokenMessages.fullGuide + features/settings/agent-tokens-messages.ts:agentTokenMessages.disconnect + features/settings/agent-tokens-messages.ts:agentTokenMessages.disconnectAfter	76
-features/settings/agent-tokens-messages.ts:agentTokenMessages.hiddenBefore + features/settings/agent-tokens-messages.ts:agentTokenMessages.hiddenRevoke + features/settings/agent-tokens-messages.ts:agentTokenMessages.hiddenAfter + features/settings/agent-tokens-messages.ts:agentTokenMessages.createAnother	106
 features/settings/agent-tokens-messages.ts:agentTokenMessages.lifetime	78
 features/settings/agent-tokens-messages.ts:agentTokenMessages.pluginInstalls	93
 features/settings/agent-tokens-messages.ts:agentTokenMessages.vscodePrompt	65

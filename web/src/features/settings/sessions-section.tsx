@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import type { Session } from '../../api/schemas';
 import { describeUserAgent } from '../../lib/describe-user-agent';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { permissionLabel } from './token-permissions';
+import { RevokeTokenDialog } from './revoke-token-dialog';
 import { StopIcon } from './stop-icon';
 import './role-pickers.css';
 
@@ -46,8 +48,10 @@ function TokenDetail({ session }: { session: Session }) {
 }
 
 // SessionsSection names each device by browser and system; revoking this device is signing out, so it says so.
-// AI apps connected with OAuth are listed by ConnectedAppsSection instead.
+// AI apps connected with OAuth are listed by ConnectedAppsSection instead. Revoking an agent token asks first,
+// as on External AI agents: it cannot be brought back, while a browser signs in again with a new link.
 export function SessionsSection({ sessions, timezone, onRevokeSession, kind = 'devices' }: SessionsSectionProps) {
+  const [confirming, setConfirming] = useState<Session | null>(null);
   const heading = kind === 'tokens' ? 'agent-sessions-heading' : 'sessions-heading';
   const shown = sessions.filter((session) => !session.app && (kind === 'tokens') === Boolean(session.token));
   return (
@@ -62,10 +66,11 @@ export function SessionsSection({ sessions, timezone, onRevokeSession, kind = 'd
             <time>{formatDate(session.last_seen_at, timezone)}</time>
             <TokenDetail session={session} />
             {session.token && (state === 'active' || state === 'stopped') && <span>{settingsMessages.tokenExpires} <time dateTime={session.expires_at}>{formatDate(session.expires_at, timezone)}</time></span>}</div>
-          {(state === 'active' || state === 'stopped') && <button type="button" className="danger-action" onClick={() => onRevokeSession?.(session.id)}>
+          {(state === 'active' || state === 'stopped') && <button type="button" className="danger-action" onClick={() => (session.token ? setConfirming(session) : onRevokeSession?.(session.id))}>
             {session.current ? messages.signOut : settingsMessages.revoke}</button>}
         </article>;
       })}</div></div>
+      {confirming && <RevokeTokenDialog session={confirming} onClose={() => setConfirming(null)} onRevoke={(id) => onRevokeSession?.(id)} />}
     </section>
   );
 }

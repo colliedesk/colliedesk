@@ -70,6 +70,32 @@ test('a fixed token shows how many permissions it holds and lists them by name',
   expect(screen.getByText('Knowledge base articles: Edit')).toBeInTheDocument();
 });
 
+test('revoking an agent token in Sessions asks first, as on External AI agents; a device is revoked at once', () => {
+  const onRevokeSession = vi.fn();
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', role: null, current: false,
+    created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null };
+  const sessions = [
+    { ...base, id: '77777777-7777-4777-8777-777777777777', label: 'KB writer', permissions: ['kb_articles:read'],
+      token: { kind: 'custom' as const, role: null, role_held: true, permissions: ['kb_articles:read' as const], legacy_tier: null } },
+    { ...base, id: '88888888-8888-4888-8888-888888888888', label: 'Firefox', permissions: [], token: null },
+  ];
+  render(<><SessionsSection kind="tokens" timezone="UTC" sessions={sessions} onRevokeSession={onRevokeSession} />
+    <SessionsSection timezone="UTC" sessions={sessions} onRevokeSession={onRevokeSession} /></>);
+  const [tokens, devices] = screen.getAllByRole('region', { name: 'Sessions' });
+  fireEvent.click(within(tokens).getByRole('button', { name: 'Revoke' }));
+  const confirm = screen.getByRole('alertdialog', { name: 'Revoke KB writer?' });
+  expect(confirm).toHaveTextContent('refused on its next call');
+  expect(confirm).toHaveTextContent('“by Sam via KB writer”');
+  expect(onRevokeSession).not.toHaveBeenCalled();
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Revoke' }));
+  expect(onRevokeSession).toHaveBeenCalledWith('77777777-7777-4777-8777-777777777777');
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  // A browser signs in again with a new link: no question before it ends.
+  fireEvent.click(within(devices).getByRole('button', { name: 'Revoke' }));
+  expect(onRevokeSession).toHaveBeenLastCalledWith('88888888-8888-4888-8888-888888888888');
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+});
+
 test('a revoked or expired session is shown as such and cannot be revoked again', () => {
   const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Chrome', token: null, role: null, permissions: [], current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
