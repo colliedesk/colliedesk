@@ -14,8 +14,9 @@ interface AccountMenuProps {
   signingOut?: boolean;
 }
 
-// AccountMenu is the avatar at the end of the rail: who is signed in, as which role, and the way out. The
-// workspace and the address are in the identity bar above every page, so the menu does not repeat them.
+// AccountMenu is the person at the foot of the sidebar (their name, and their address under it), which opens who is
+// signed in, as which role, and the way out. Folded into the rail or on a phone it is the avatar alone, and the
+// workspace and the address are in the top bar, so the menu does not repeat them.
 export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, signingOut = false }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -32,8 +33,10 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
   return (
     <div className="account-menu" ref={root} onKeyDown={(event) => { if (event.key === 'Escape' && open) close(); }}
       onBlur={(event) => { if (open && !root.current?.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
-      <button type="button" ref={button} className="rail-avatar" aria-label={messages.account} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Avatar name={name} />
+      <button type="button" ref={button} className="rail-avatar" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Avatar name={name} size="sm" /><span className="sr-only">{messages.account}, </span>
+        <span className="current-user"><span className="current-user-name">{name}</span>
+          {me.agent.display_name && <> <span className="current-user-email">{me.agent.email}</span></>}</span>
       </button>
       {open && <div className="account-popover" role="group" aria-label={messages.account}>
         <p><strong>{name}</strong><span>{me.agent.roles.map((role) => role.name).join(", ")}</span></p>

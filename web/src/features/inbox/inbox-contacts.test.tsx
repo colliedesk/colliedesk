@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeAll, expect, test, vi } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import { beforeAll, expect, test } from 'vitest';
 import { InboxPage } from './inbox-page';
 import { presenceViewPart } from './presence-part';
 
@@ -34,9 +34,3 @@ test('the customers a search finds go under the filters, above the conversations
   expect(within(list).getByRole('navigation', { name: 'Customers' })).toBeInTheDocument();
 });
 
-test('the inbox offers to start a new conversation', () => {
-  const onNewConversation = vi.fn();
-  render(<InboxPage onNewConversation={onNewConversation} />);
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
-  expect(onNewConversation).toHaveBeenCalled();
-});

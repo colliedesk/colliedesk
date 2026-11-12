@@ -378,7 +378,7 @@ test('a paused admin can still open the billing portal from the paused screen', 
   Object.defineProperty(window, 'location', { configurable: true, value: original });
 });
 
-test('the rail opens the knowledge base, which marks Knowledge as the current destination', async () => {
+test('the rail opens the knowledge base, which marks Help center as the current destination', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('agent', null)),
     '/api/v1/config': () => json(200, config),
@@ -388,7 +388,7 @@ test('the rail opens the knowledge base, which marks Knowledge as the current de
   open('/knowledge');
   expect(await screen.findByRole('heading', { level: 1, name: 'Knowledge base' })).toBeInTheDocument();
   const rail = screen.getByRole('navigation', { name: 'Main' });
-  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('aria-current', 'page');
+  expect(within(rail).getByRole('link', { name: 'Help center' })).toHaveAttribute('aria-current', 'page');
   expect(within(rail).getByRole('link', { name: 'Inbox' })).not.toHaveAttribute('aria-current');
 });
 
@@ -517,7 +517,7 @@ test('on the cloud, sign out from the locked screen ends the identity provider s
   expect(await screen.findByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeInTheDocument();
   // An admin's locked screen has no Sign out of its own: the way out is the one in the account menu.
   expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Account/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
   expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
@@ -668,8 +668,8 @@ test('a role that reads only the knowledge base lands in Knowledge and is offere
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge'));
   const rail = screen.getByRole('navigation', { name: 'Main' });
   expect(within(rail).queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
-  expect(within(rail).queryByRole('link', { name: 'Results' })).not.toBeInTheDocument();
-  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+  expect(within(rail).queryByRole('link', { name: 'Reports' })).not.toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Help center' })).toBeInTheDocument();
   await act(async () => { await router.navigate({ to: '/results' }); });
   expect(await screen.findByText(/Your roles do not let you open Results/)).toBeInTheDocument();
   const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
@@ -687,7 +687,7 @@ test('a role that reads only media lands in the media library, and the rail take
   const router = open('/');
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/media'));
   const rail = screen.getByRole('navigation', { name: 'Main' });
-  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/media');
+  expect(within(rail).getByRole('link', { name: 'Help center' })).toHaveAttribute('href', '/knowledge/media');
 });
 
 // The help center's settings moved from Settings to Knowledge base → Settings (#528); they still need only
@@ -730,7 +730,7 @@ test('a role that reads only the help center finds Knowledge on the rail, at its
   });
   const router = open('/');
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
-  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('href', '/knowledge/settings');
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Help center' })).toHaveAttribute('href', '/knowledge/settings');
   expect(await screen.findByRole('region', { name: 'Help center' })).toBeInTheDocument();
 });
 
@@ -800,4 +800,48 @@ test('the settings menu of a phone turned on its side opens Account', async () =
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', fetchMock);
   }
+});
+
+const savedView = { id: '33333333-3333-4333-8333-333333333333', name: 'Mine, open', scope: 'personal', filters: { status: ['open'], assignee: ['me'] },
+  owner_agent_id: '11111111-1111-4111-8111-111111111111', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', deleted_at: null, purges_at: null };
+const channelRow = (id: string, name: string, type: string, state: string) => ({ id, type, name, enabled: true, status: { state, reason_code: null, message: null }, summary: '',
+  capabilities: [], held_count: 0, unsent_count: 0, last_inbound_at: null, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z' });
+
+test('on every page the sidebar counts the open conversations and lists the saved views and the channels, each opening its inbox list', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', null)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/kb/collections': () => json(200, { items: [] }),
+    '/api/v1/kb/articles': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/conversations': () => json(200, { items: [], page: 1, page_size: 50, status_counts: { open: 23, pending: 4, resolved: 9, closed: 0, spam: 0 } }),
+    '/api/v1/saved-views': () => json(200, { items: [savedView] }),
+    '/api/v1/channels': () => json(200, { items: [channelRow('44444444-4444-4444-8444-444444444444', 'support@northwind.help', 'email', 'working'),
+      channelRow('55555555-5555-4555-8555-555555555555', 'Chat widget', 'help_chat', 'needs_attention')], types: [{ type: 'email', available: true, count: 1, default_channel_id: null }] }),
+  });
+  const router = open('/knowledge');
+  const rail = await screen.findByRole('navigation', { name: 'Main' });
+  expect(await within(rail).findByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('href', '/');
+  expect(within(rail).getByRole('link', { name: 'Reports' })).toHaveAttribute('href', '/results');
+  expect(within(rail).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members');
+  // The open view is in the address, so Back and a shared link open the same list.
+  fireEvent.click(await within(rail).findByRole('link', { name: 'Mine, open' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+  expect(router.state.location.search).toEqual({ status: 'open', assignee: 'me' });
+  expect(within(rail).getByRole('link', { name: 'Mine, open' })).toHaveAttribute('aria-current', 'page');
+  fireEvent.click(within(rail).getByRole('link', { name: 'Chat widget, needs attention' }));
+  await waitFor(() => expect(router.state.location.search).toEqual({ channel_id: '55555555-5555-4555-8555-555555555555' }));
+  expect(within(rail).getByRole('link', { name: 'support@northwind.help' })).not.toHaveAttribute('aria-current');
+});
+
+test('the top bar names the page the person is on', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', null)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/kb/collections': () => json(200, { items: [] }),
+    '/api/v1/kb/articles': () => json(200, { items: [], next_cursor: null }),
+  });
+  open('/knowledge');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Knowledge base' })).toBeInTheDocument();
+  // The page has a header of its own; the top bar is the app's, above it.
+  await waitFor(() => expect(document.querySelector('.app-topbar .topbar-title')).toHaveTextContent('Help center'));
 });
