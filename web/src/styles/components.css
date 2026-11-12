@@ -1,5 +1,5 @@
 /* List header: status tabs, then search beside one Filter menu. */
-.inbox-filters { display: grid; gap: var(--space-3); }
+.inbox-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
 .status-tabs { display: flex; gap: 10px; margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
 .status-tabs::-webkit-scrollbar { display: none; }
 .status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: var(--control, 32px); min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
@@ -8,8 +8,8 @@
 .status-tabs label:has(input:checked) { color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
 .status-tabs label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
 /* Search takes the first row; Filter, Sort and Views share the second. The menus open under the whole bar. */
-.filter-bar { position: relative; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-1); }
-.search-field { position: relative; display: block; flex: 1 1 100%; min-width: 0; }
+.filter-bar { position: relative; display: flex; align-items: center; gap: var(--space-1); }
+.search-field { position: relative; display: block; flex: 1 1 auto; min-width: 0; margin-right: var(--space-1); }
 .search-field svg { position: absolute; top: 50%; left: 10px; translate: 0 -50%; color: var(--text-3); pointer-events: none; }
 .search-field input { width: 100%; padding-left: 32px; border-color: transparent; background: var(--surface-2); }
 .search-field input:hover:not(:disabled) { border-color: transparent; background: var(--surface-3); }
@@ -19,10 +19,13 @@
   border: 1px solid transparent; border-radius: var(--radius); background: transparent; box-shadow: none;
   padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); font-weight: 500;
 }
-/* Ghost toolbar: the first and last icons sit on the column edge. */
-.filter-bar > .filter-menu:first-of-type summary { margin-left: calc(-1 * var(--space-3)); }
-.filter-bar > .views-menu { margin-left: auto; }
+/* Ghost toolbar beside the search box: Filter, Sort and Views are icons with their name in a tip (I4-a). */
+.filter-bar .filter-menu summary { min-width: var(--control, 32px); justify-content: center; gap: var(--space-1); padding: 0 var(--space-1); }
 .filter-bar > .views-menu summary { margin-right: calc(-1 * var(--space-2)); }
+.sort-pick { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); display: inline-grid; place-items: center; border-radius: var(--radius); color: var(--text-3); cursor: pointer; }
+.sort-pick:hover { background: var(--surface-2); color: var(--text-1); }
+.sort-pick:has(select:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.filter-bar .sort-pick select.sort-field { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; opacity: 0; cursor: pointer; appearance: auto; }
 .filter-menu[open] summary { background: var(--surface-3); color: var(--text-1); }
 .filter-menu summary::-webkit-details-marker { display: none; }
 .filter-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
@@ -157,16 +160,30 @@
   color: var(--text-3); font-size: var(--fs-label); font-weight: 600;
 }
 .conversation-row {
-  width: 100%; min-height: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-1) var(--space-2);
+  width: 100%; min-height: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: var(--space-1);
   border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-3) var(--space-4) var(--space-3) var(--space-8);
   text-align: left; font-size: var(--fs-ui); font-weight: 400; line-height: 20px; white-space: normal;
 }
 .conversation-row:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line); }
-.conversation-row[aria-current="true"] { background: var(--surface-3); box-shadow: inset 2px 0 var(--accent); }
+.conversation-row[aria-current="true"] { background: var(--surface-3); }
 .conversation-row:focus-visible { outline-offset: -2px; }
 .conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.conversation-row time { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 16px; font-variant-numeric: tabular-nums; }
-.conversation-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.conversation-row time { color: var(--text-3); font-size: var(--fs-label); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A row (I1-a): the status dot, who wrote and when it is due; the subject; one line of what they wrote. */
+.row-top { min-width: 0; display: flex; align-items: center; gap: var(--space-2); }
+.row-dot { flex: none; width: 8px; height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--dot, var(--text-3)); color: transparent; font-size: 0; }
+.row-dot-open { --dot: var(--open); }
+.row-dot-pending { --dot: var(--pending); }
+.row-dot-resolved { --dot: var(--ok); }
+.row-dot-closed, .row-dot-spam { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.row-dot-urgent { --dot: var(--danger); }
+.row-customer { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-1); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.row-top > :is(.channel-pill, .badge, .viewer-stack) { flex: none; }
+.row-due { flex: none; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row-due-late { color: var(--danger); }
+.row-subject { min-width: 0; display: flex; align-items: baseline; gap: var(--space-2); }
+.row-subject .conv-ref { flex: none; }
+.row-excerpt { min-width: 0; overflow: hidden; color: var(--text-3); font-size: var(--fs-small); text-overflow: ellipsis; white-space: nowrap; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 .get-started { display: grid; gap: var(--space-2); padding: var(--space-6) var(--space-4); }
 .get-started h2 { font-size: 14px; font-weight: 600; }
@@ -193,9 +210,6 @@
 .priority-high, .priority-urgent { font-weight: 500; }
 .priority-high { color: var(--text-2); }
 .priority-urgent { color: var(--danger); }
-.conversation-meta .priority-normal { display: none; }
-/* A status tab already names the status, so rows under it do not repeat it. */
-body:has(.status-tabs input:not([value="all"]):checked) .conversation-meta .status { display: none; }
 .tag-pill { color: var(--text-3); font-size: var(--fs-label); }
 .channel-pill { max-width: 12rem; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .tag-pill::before { content: "#"; opacity: 0.7; }
@@ -711,18 +725,18 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .select-all { position: sticky; top: 0; z-index: 2; background: var(--surface-1); display: flex; align-items: center; gap: var(--space-2); min-height: calc(var(--control, 32px) + var(--space-2) * 2); border-bottom: 1px solid var(--line); padding: var(--space-1) var(--space-2) var(--space-1) 0; color: var(--text-3); font-size: var(--fs-label); }
 .select-all > label { display: flex; align-items: center; align-self: stretch; gap: var(--space-3); cursor: pointer; }
 .select-all input { margin-inline: calc((2.75rem - 16px) / 2); margin-right: 0; }
-/* With a mouse, the checkbox shows in the row's left padding on hover or focus, and stays there once a row is ticked
-   (bulk mode). Select all stays: focus returns to it after a bulk change. Touch keeps the 44 px column. */
+/* Row selection (Spec — Row selection): at rest no box shows, only its slot in the row's left padding; hovering
+   or focusing a row shows its box; once one is ticked every row shows its box. Nothing in a row moves. */
 @media (pointer: fine) {
-  /* The checkbox lives in the row's 32 px left margin, ticked or not, so ticking a row never moves the text. */
   .conversation-item .conversation-row { padding-left: var(--space-8); }
   .row-check { width: var(--space-8); }
-  .select-all input { margin-inline: calc((var(--space-8) - 16px) / 2); margin-right: 0; }
-  .conversation-scroll:not(:has(.row-check input:checked)) .row-check { opacity: 0; }
-  .conversation-scroll:not(:has(.row-check input:checked)) .conversation-item:is(:hover, :focus-within) .row-check { opacity: 1; }
-  .conversation-scroll:not(:has(.row-check input:checked)) .row-check input { width: 13px; height: 13px; }
+  .conversation-scroll:not([data-selecting]) .row-check { opacity: 0; }
+  .conversation-scroll:not([data-selecting]) .conversation-item:is(:hover, :focus-within) .row-check { opacity: 1; }
 }
-.select-all[data-active] { background: var(--accent-soft); }
+/* While rows are ticked, select all and the actions take the status tabs' row, the box over the rows' boxes. */
+.inbox-filters > .select-all { position: static; min-width: 0; min-height: 36px; margin-left: calc(-1 * var(--space-8)); border-bottom: 0; padding: 0; }
+.inbox-filters > .select-all input { margin-inline: calc((var(--space-8) - 16px) / 2); margin-right: 0; }
+.select-all[data-active] { background: transparent; }
 .row-check:has(input:focus-visible), .select-all > label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .list-head { display: grid; gap: var(--space-3); }
 /* Bulk actions: one row in place of the select all caption, Gmail style; icons carry a tooltip and a name. */
@@ -1310,3 +1324,25 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 @media (pointer: coarse), (max-width: 30rem) {
   .inbox-shell :is(.link-button, .link-action, .details-panel a, .message-envelope a, .timeline-panel .message a[download], .targets-foot a), .timeline-contact { padding-block: 14px; margin-block: -14px; }
 }
+/* In the tabs' row the actions fit the list column: no gap, and a menu's arrow gives way (its tip names it). */
+.inbox-filters > .select-all .bulk-actions { gap: 0; }
+.inbox-filters > .select-all .action-menu summary > svg + svg { display: none; }
+.inbox-filters > .select-all .bulk-count { margin-right: var(--space-1); }
+/* Properties (I1-a, I7-b): Tags and Due read as values on one row each and open their menu in place. */
+.property-row:has(.property-menu) { position: relative; }
+.property-menu { position: static; min-width: 0; }
+.property-menu summary { justify-content: flex-start; width: 100%; min-height: var(--control, 32px); gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-8); color: var(--text-1); text-align: left; }
+.property-menu summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.property-menu summary { position: relative; padding-right: var(--space-2); }
+.property-menu summary:is(:hover, :focus-visible), .property-menu[open] summary { padding-right: var(--space-6); }
+.property-menu summary > svg:last-child { position: absolute; right: var(--space-2); opacity: 0; }
+.property-menu summary:is(:hover, :focus-visible) { background: var(--surface-2); }
+.property-menu summary:is(:hover, :focus-visible) > svg:last-child, .property-menu[open] summary > svg:last-child { opacity: 1; }
+.property-menu .action-popover { left: 0; right: 0; width: auto; min-width: 0; max-width: none; padding: var(--space-2); }
+.property-menu .tag-create { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--space-2); margin-top: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-2); }
+.property-menu .tag-check { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius); }
+.property-menu .tag-check:hover { background: var(--surface-2); }
+.due-pick .details-section { border: 0; padding: 0; }
+.conversation-source .customer-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
+.property-row > .tag-names { color: var(--text-1); font-size: var(--fs-ui); padding-left: var(--space-8); }
+.property-menu .tag-create input { width: 100%; }

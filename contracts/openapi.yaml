@@ -12049,6 +12049,18 @@ components:
             - {$ref: '#/components/schemas/ConversationOrigin'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        latest_customer_message:
+          $ref: '#/components/schemas/CustomerMessageExcerpt'
+          description: >-
+            What its customer wrote last (never the team's replies or notes), on one line: what an inbox row shows
+            under the subject. Only in GET /conversations; missing on a single conversation and when the customer
+            never wrote (a conversation the team started and nobody answered yet).
+    CustomerMessageExcerpt:
+      type: object
+      required: [excerpt, created_at]
+      properties:
+        excerpt: {type: string, maxLength: 141, description: 'The start of the message, spaces and line breaks folded into one space, at most 140 characters; a longer one is cut at a word and ends with "…".'}
+        created_at: {type: string, format: date-time, description: When the message arrived.}
     StatusChange:
       type: object
       required: [to, at, by]

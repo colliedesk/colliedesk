@@ -84,7 +84,8 @@ test('freshdesk import: reconcile OK with exact counts, tickets searchable with 
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill(fixture.searchableWord);
     const row = page.getByRole('button', { name: /Fixture ticket 42: parcel stuck in Rotterdam/ });
     await expect(row).toHaveCount(1);
-    await expect(row.locator('time')).toHaveAttribute('dateTime', '2024-01-02T18:30:00Z');
+    // The row's time is the customer's follow-up (18:10), not the agent's answer after it (18:20) or the last change.
+    await expect(row.locator('time')).toHaveAttribute('dateTime', '2024-01-02T18:10:00Z');
     await expect(row.locator('time')).toContainText('2024');
     await row.click();
     // Imported HTML is shown formatted, inside the locked frame.

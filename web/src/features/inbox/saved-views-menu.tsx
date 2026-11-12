@@ -180,7 +180,7 @@ export function SavedViewsMenuView({ views, loading = false, trash, query, timez
     <>
       <details className="filter-menu views-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut}
         onToggle={(event) => { if (event.currentTarget.open) onOpen?.(); }}>
-        <summary><BookmarkIcon /><span>{text.title}</span></summary>
+        <summary data-tip={text.title}><BookmarkIcon /><span className="sr-only">{text.title}</span></summary>
         <div className="filter-popover views-popover" role="group" aria-label={text.title}>
           {views.length === 0 && <p className="filter-hint" role="status">{loading ? text.loading : text.none}</p>}
           {groups.map(([group, label]) => {

@@ -63,7 +63,7 @@ test('connects email, receives a customer email and shows why the reply is not e
 
   await page.goto(`${baseURL}/`);
   await page.getByRole('button', { name: /E2E email thread/i }).click();
-  await expect(page.getByText('My order never arrived.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('My order never arrived.')).toBeVisible();
   await expect(page.getByText(`erin-${suffix}@customer.example`)).toBeVisible();
   await expect(page.getByText('Failed sender verification')).toBeVisible();
   const receipt = page.getByRole('link', { name: 'receipt.pdf' });

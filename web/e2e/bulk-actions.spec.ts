@@ -34,12 +34,12 @@ test('selects conversations with the keyboard and resolves them in one action', 
 
   await page.reload();
   // Whole flow from the keyboard: Space ticks a row, Enter opens the menu, Tab and Enter choose.
-  await page.getByRole('checkbox', { name: /^Select Bulk first/ }).focus();
+  await page.getByRole('checkbox', { name: /^Select .*: Bulk first/ }).focus();
   await page.keyboard.press('Space');
-  await page.getByRole('checkbox', { name: /^Select Bulk third/ }).focus();
+  await page.getByRole('checkbox', { name: /^Select .*: Bulk third/ }).focus();
   await page.keyboard.press('Space');
   const bar = page.getByRole('group', { name: 'Bulk actions' });
-  await expect(bar.getByText('2 selected')).toBeVisible();
+  await expect(bar.getByText(/^2 of \d+ selected$/)).toBeVisible();
   await bar.getByLabel('Set status', { exact: true }).and(page.locator('summary')).focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Tab'); // Open
@@ -50,7 +50,7 @@ test('selects conversations with the keyboard and resolves them in one action', 
 
   await expect(page.getByText('Updated 2 conversations')).toBeVisible();
   await expect(bar).toBeHidden();
-  await expect(page.getByRole('checkbox', { name: 'Select all on this page' })).toBeFocused();
+  await expect(page.getByRole('region', { name: 'Conversation list' })).toBeFocused();
   const byStatus = await Promise.all(ids.map(statusOf));
   expect(byStatus).toEqual(['resolved', 'open', 'resolved']);
 });

@@ -255,19 +255,43 @@ test('a conversation numbered in a series of its own shows its code first; one o
   expect(screen.queryByText('#12')).toBeNull();
 });
 
-test('a row draws a target only when it is due soon or late, with the clock and business hours in its name; its tags then count', () => {
+test('a row names the customer, says what they wrote last and when the reply is due, and leaves tags to the details', () => {
   vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
   const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
-  const tags = [{ id: '44444444-4444-4444-8444-444444444444', name: 'printer' }, { id: '55555555-5555-4555-8555-555555555555', name: 'warehouse' }];
-  const late = { ...row('2026-11-02T05:00:00Z'), id: '33333333-3333-4333-8333-333333333333', subject: 'Late one', tags,
+  const tags = [{ id: '44444444-4444-4444-8444-444444444444', name: 'printer' }];
+  const late = { ...row('2026-11-02T05:00:00Z'), id: '33333333-3333-4333-8333-333333333333', contact_name: 'Hana Sato', subject: 'Refund still not on my card', tags,
+    latest_customer_message: { excerpt: 'The refund left us on 24 October…', created_at: '2026-11-02T03:50:00Z' },
     sla: { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true }, resolution: null } };
-  const calm = { ...row('2026-11-02T04:00:00Z'), subject: 'Calm one', tags, sla: { state: 'ok', first_response: { ...clock, due_at: '2026-11-02T09:00:00Z' }, resolution: null } };
+  const calm = { ...row('2026-11-02T04:00:00Z'), contact_name: 'Lena Fischer', subject: 'Export to CSV drops the last column', tags,
+    sla: { state: 'ok', first_response: { ...clock, due_at: '2026-11-02T11:30:00Z' }, resolution: null } };
   render(<ConversationList items={[late, calm] as unknown as Conversation[]} timezone="UTC" page={1} hasNextPage={false} />);
-  const mark = screen.getByText('Overdue');
-  expect(mark).toHaveClass('sla-mark', 'sla-late');
+  const lateRow = screen.getByRole('button', { name: /Refund still not on my card/ });
+  expect(within(lateRow).getByText('Hana Sato')).toBeInTheDocument();
+  expect(within(lateRow).getByText('The refund left us on 24 October…')).toBeInTheDocument();
+  const mark = within(lateRow).getByText('1 h 20 min late');
+  expect(mark).toHaveClass('row-due', 'row-due-late');
   expect(mark).toHaveAccessibleName('First reply overdue since 4:10 AM, counted in business hours');
-  expect(screen.getByText('2 tags')).toHaveAttribute('data-tip', 'printer, warehouse');
-  const calmRow = screen.getByRole('button', { name: /Calm one/ });
-  expect(within(calmRow).queryByText(/Due|Overdue/)).toBeNull();
-  expect(within(calmRow).getByText('printer')).toBeInTheDocument();
+  const calmRow = screen.getByRole('button', { name: /Export to CSV/ });
+  expect(within(calmRow).getByText('Due 11:30 AM')).not.toHaveClass('row-due-late');
+  expect(within(calmRow).getByText('Lena Fischer')).toBeInTheDocument();
+  expect(screen.queryByText('printer')).toBeNull();
+});
+
+test('without a running target a row shows when the customer last wrote, never when the team last touched it', () => {
+  vi.setSystemTime(new Date('2026-11-02T12:00:00Z'));
+  const item = { ...row('2026-11-02T10:00:00Z'), latest_customer_message: { excerpt: 'Hello', created_at: '2026-11-02T08:00:00Z' } };
+  render(<ConversationList items={[item]} timezone="UTC" page={1} hasNextPage={false} />);
+  const button = screen.getByRole('button', { name: /example request/i });
+  expect(within(button).getByText('8:00 AM', { selector: '.time-short' })).toBeInTheDocument();
+  expect(button).toHaveAccessibleName(/Customer wrote Nov 2, 8:00 AM/);
+});
+
+test('the status dot says the status and an urgent priority in words; urgent and late rows are red', () => {
+  vi.setSystemTime(new Date('2026-11-02T12:00:00Z'));
+  const urgent = { ...row('2026-11-02T10:00:00Z'), id: '33333333-3333-4333-8333-333333333333', subject: 'Urgent one', priority: 'urgent' as const };
+  const pending = { ...row('2026-11-02T09:00:00Z'), subject: 'Pending one', status: 'pending' as const };
+  render(<ConversationList items={[urgent, pending]} timezone="UTC" page={1} hasNextPage={false} />);
+  const urgentDot = within(screen.getByRole('button', { name: /Urgent one/ })).getByText('Open, urgent');
+  expect(urgentDot).toHaveClass('row-dot', 'row-dot-urgent');
+  expect(within(screen.getByRole('button', { name: /Pending one/ })).getByText('Pending')).toHaveClass('row-dot', 'row-dot-pending');
 });

@@ -168,7 +168,7 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await page.goto(`${baseURL}/`);
   await expect(async () => {
     await page.reload();
-    await expect(page.locator('.conversation-meta .conv-ref', { hasText: code })).toBeVisible({ timeout: 1000 });
+    await expect(page.locator('.conversation-row .conv-ref', { hasText: code })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: `Copy reference ${code}` })).toBeVisible();
 

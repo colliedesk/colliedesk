@@ -4,6 +4,13 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+The details list **Status**, **Priority**, **Assignee**, **Tags** and, while a reply target runs, **Due**,
+one row each, then the **Customer**: their name, their organization and **All conversations of** *name*.
+**Tags** names the conversation's tags (**None** without any); select it to tick or untick tags or create
+one with **New tag name** and **Create tag**. The menu stays open while you change tags; Escape or a click
+elsewhere closes it. The line under the subject says when the reply is due and who wrote; status and
+priority are in the details.
+
 On a computer the sidebar on the left starts open, with each page's name. It can be made wider or narrower: drag its right edge, or focus the
 edge and use the arrow keys. Double-click the edge to restore the default width. **Collapse sidebar** (the
 panel icon at the top) folds it into a row of icons, as does dragging the edge far to the left, and each icon is
@@ -79,9 +86,17 @@ MCP tool `colliedesk_email_channel_get`.
 - When nothing matches, **Clear filters** below the message resets the search and every filter, and
   returns to **Open**, in one step.
 - By default the list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
+- Each row shows, from the top: a status dot and the customer's name, with the time on the right; the
+  subject; and the start of what the customer wrote last, on one line. The dot is the status colour (blue
+  Open, amber Pending, green Resolved, a ring for Closed and Spam) and red for an urgent conversation or one
+  whose reply target passed; a screen reader reads the status in words.
+- The time on the right is when the customer last wrote: your own replies and private notes never change
+  it. A conversation the customer never wrote in shows when it last changed. While a
+  [reply target](response-targets.md) runs, the row shows **Due** and the time instead, and once it passed,
+  how late it is in red (**12 min late**); the tooltip names the clock and says it counts business hours.
 - A row under **Today** shows only its time; an earlier row shows its date. Days follow your timezone
   (see [Timezones](timezones.md)). The full date and time are in the tooltip of the row and are read out
-  by a screen reader.
+  by a screen reader. Tags are in the conversation's details, not on the row.
 - Dates from an earlier year show the year, for example imported history.
 - **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
   previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
@@ -125,7 +140,7 @@ another year does not. Search words that are a code find that conversation, ahea
 
 ## Filter and sort
 
-**Filter** (next to the search box) holds every filter. Ticking several values of one filter shows
+**Filter** (the funnel icon next to the search box) holds every filter. Ticking several values of one filter shows
 conversations with any of them; each filter you add narrows the list further.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me**, each other teammate, or **Unassigned**.
@@ -159,7 +174,7 @@ A link can set filters that the menu does not list. They work and show as chips:
 `created_before`, `updated_after` and `updated_before` (UTC instants; the chip shows the days in your
 timezone, see [Timezones](timezones.md)).
 
-**Sort** orders the list by **Latest activity** (the default), **Waiting longest** (conversations waiting on
+**Sort** (the arrows icon next to Filter; its tooltip names the order in use) orders the list by **Latest activity** (the default), **Waiting longest** (conversations waiting on
 you, the customer who wrote longest ago first, then everything else) or **Priority** (urgent first). Only the
 latest-activity order is grouped under Today and Earlier. A link can also set `sort=updated_asc`,
 `created_desc` or `created_asc`; the menu then shows that order as chosen.
@@ -173,7 +188,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 
 ## Saved views
 
-**Views** (next to Sort) keeps sets of filters under a name.
+**Views** (the bookmark icon next to Sort) keeps sets of filters under a name.
 - Set the filters, sort and search you want, then under **Save these filters** type a name, choose **Only
   me** or **Everyone in the workspace**, and select **Save view**.
 - Select a view to open its filters. The view that matches the list on screen is marked.
@@ -236,10 +251,16 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   `PUT /api/v1/conversations/{id}/presence` for one conversation.
 
 **Change many conversations at once**
-- Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box
-  does not open the conversation. With the keyboard, press Tab to reach a box and Space to tick it.
-- While at least one row is selected, the **Select all on this page** row becomes an action bar. It
-  shows how many rows are selected and a row of icon buttons; hover or focus one to see its name:
+- At rest the list shows no boxes. Point at a row, or move the focus to it, and its box shows at its left;
+  once one row is ticked every row shows its box until the selection ends. Nothing in a row moves when the
+  boxes show. On a touch screen the boxes always show.
+- Tick a row's box to select it, or press **X** while the row has the focus. Hold Shift and tick a box to
+  tick every row between it and the row you ticked last. Ticking a box does not open the conversation; a
+  click anywhere else on the row opens it, also while selecting. With the keyboard, press Tab to reach a
+  box and Space to tick it.
+- While at least one row is selected, the status tabs give their place to the selection: a box that
+  ticks every row of this page (**Select all on this page**; a dash means some are ticked), how many are
+  selected of the rows on the page (**3 of 23 selected**) and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
   **Tags**, **Spam** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
   In the **Spam** tab the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
@@ -249,7 +270,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   Untick it to change them quietly; the buttons' names say **Resolve quietly** and **Set status quietly**.
 - In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
   checked tag removes it from all of them; choosing any other tag adds it to the rows that lack it.
-- Press Escape to close an open menu; press it again to clear the selection.
+- Press Escape to close an open menu; press it again, anywhere in the list, to clear the selection. The
+  tabs come back.
 - A choice applies to every selected row at once, up to 50 rows. It is all or nothing: if one change
   cannot be made, no conversation changes, the selection stays and a message says so. Try again.
 - After a successful change the selection clears, the list reloads and a line says

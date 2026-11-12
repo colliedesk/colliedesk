@@ -110,9 +110,13 @@ export const messages = {
   noConversations: 'No conversations match these filters.',
   noOpenConversations: 'No open conversations. Every customer has an answer.',
   bulkActions: 'Bulk actions',
-  selectedCount: (count: number) => `${count} selected`,
+  // SelectAll ticks this page only, so the count says of how many.
+  selectedCount: (count: number, of: number) => `${count} of ${of} selected`,
   selectAllOnPage: 'Select all on this page',
-  selectRow: (subject: string, when: string) => `Select ${subject}, ${when}`,
+  // The time keeps two rows of the same customer and subject apart.
+  selectRow: (customer: string, subject: string, when: string) => `Select ${customer}: ${subject}, ${when}`,
+  // Before a row's time when it is the customer's last message, not the team's last change.
+  customerWrote: 'Customer wrote ',
   setStatus: 'Set status',
   assignTo: 'Assign to',
   assignToMe: 'Me',
@@ -294,6 +298,9 @@ export const messages = {
   general: 'General',
   preferences: 'Preferences',
   contact: 'Contact',
+  customer: 'Customer',
+  // A property with no value, such as a conversation without tags.
+  none: 'None',
   tags: 'Tags',
   newTagName: 'New tag name',
   createTag: 'Create tag',

@@ -44,11 +44,11 @@ has one, resolving. A clock runs only while the conversation is Open: Pending pa
 business time used, Resolved, Closed or [Spam](inbox.md#spam) stops it, and opening it again goes on from what was used.
 Changing the priority adds or removes the resolution clock at once.
 
-The inbox shows a conversation due soon or overdue: its row says "Due 1:15 PM" or "Overdue" after the
-priority (which clock, in business hours, in its tooltip), and counts its tags to stay one line; the
-header says the clock in full ("Reply by 1:15 PM", "Resolve overdue"); the details list both clocks under
-**Targets**, with the business time left or late, met or paused. Nothing shows while a clock is far from
-its target. Times are in your own time zone, named ("6:15 AM UTC") when it is not your browser's; an
+The inbox shows when a reply is due while a clock runs: its row says "Due 1:15 PM", and once the target
+passed, how late it is in red ("12 min late"; which clock, in business hours, in its tooltip). The header
+says it in full ("Reply by 1:15 PM", "Reply was due 11:10 AM"); the details have one **Due** row with the
+same words, and its menu lists both clocks under **Targets**, with the business time left or late, met or
+paused. Times are in your own time zone, named ("6:15 AM UTC") when it is not your browser's; an
 inbox left open reads again when a mark is due to change. Filter them with Targets (Overdue, Due soon)
 and sort by Due first (both offered once a listed conversation has targets), and save that as a view
 (`filters.sla` and `sort: due` of `POST /api/v1/saved-views`, MCP `colliedesk_saved_view_create`). For AI

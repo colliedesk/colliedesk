@@ -8362,6 +8362,17 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description What its customer wrote last (never the team's replies or notes), on one line: what an inbox row shows under the subject. Only in GET /conversations; missing on a single conversation and when the customer never wrote (a conversation the team started and nobody answered yet). */
+            latest_customer_message?: components["schemas"]["CustomerMessageExcerpt"];
+        };
+        CustomerMessageExcerpt: {
+            /** @description The start of the message, spaces and line breaks folded into one space, at most 140 characters; a longer one is cut at a word and ends with "…". */
+            excerpt: string;
+            /**
+             * Format: date-time
+             * @description When the message arrived.
+             */
+            created_at: string;
         };
         StatusChange: {
             to: components["schemas"]["ConversationStatus"];

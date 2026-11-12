@@ -52,7 +52,7 @@ test('response targets: an admin turns them on, a new conversation is due soon o
   expect((await page.request.post(`${baseURL}/api/v1/channels/zalo/webhook`, { headers: { 'Content-Type': 'application/json', 'X-ZEvent-Signature': `mac=${signature}` }, data: body })).status()).toBe(200);
 
   await page.goto(`${baseURL}/`);
-  const mark = page.locator('.conversation-meta .sla-mark');
+  const mark = page.locator('.conversation-row .row-due');
   await expect(async () => {
     await page.reload();
     await expect(mark).toBeVisible({ timeout: 1000 });
@@ -65,6 +65,8 @@ test('response targets: an admin turns them on, a new conversation is due soon o
   // Below 75 rem the details are a drawer behind Show details.
   const toggle = page.getByRole('button', { name: 'Show details' });
   if (await toggle.isVisible()) await toggle.click();
+  // Due is one row of the details; its menu holds each clock in full.
+  await page.locator('.due-pick summary').click();
   const details = page.getByRole('region', { name: 'Targets' });
   await expect(details).toContainText(/Due .* today/);
   await expect(details).toContainText(/of business time left/);

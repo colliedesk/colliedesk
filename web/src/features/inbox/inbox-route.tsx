@@ -15,6 +15,7 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { BookmarkIcon } from '../../ui/icons';
 import { useSettleTargets, useSLARefresh } from './sla-refresh';
 import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
@@ -79,7 +80,7 @@ const viewsPart = lazyPart(() => import('./saved-views-menu'));
 function SavedViewsPart(props: { query: InboxQuery; timezone: string; onApply: (query: InboxQuery) => void }) {
   const part = viewsPart.use();
   if (part.status === 'ready') return <part.module.SavedViewsMenu {...props} />;
-  return part.status === 'error' ? <PartUnavailable /> : <span className="filter-menu views-menu"><button type="button" disabled>{messages.savedViewsTitle}</button></span>;
+  return part.status === 'error' ? <PartUnavailable /> : <span className="filter-menu views-menu"><button type="button" className="icon-button" disabled><BookmarkIcon /><span className="sr-only">{messages.savedViewsTitle}</span></button></span>;
 }
 
 // How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.

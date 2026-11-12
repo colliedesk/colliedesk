@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { SLA, SLAClock } from '../api/schemas';
-import { clockLine, duration, nextChange, slaMark } from './sla';
+import { clockLine, duration, nextChange, rowDue, slaMark } from './sla';
 
 // The design's sample (spec §4b): Monday 2 November 2026, 12:30 in Ho Chi Minh City.
 const now = new Date('2026-11-02T05:30:00Z');
@@ -8,9 +8,9 @@ const zone = 'Asia/Ho_Chi_Minh';
 const clock = (change: Partial<SLAClock>): SLAClock => ({ state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null, ...change });
 const sla = (first: Partial<SLAClock>, resolution: Partial<SLAClock> | null = null, state: SLA['state'] = 'ok'): SLA => ({ state, first_response: clock(first), resolution: resolution && clock(resolution) });
 
-test('a late first reply reads Overdue on the row, Reply overdue in the header, and says since when in business hours', () => {
+test('a late first reply reads Overdue, says in the header when the reply was due, and says since when in business hours', () => {
   const mark = slaMark(sla({ due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true, business_minutes_left: -80 }, { due_at: '2026-11-02T09:10:00Z' }), zone, now, zone);
-  expect(mark).toMatchObject({ tone: 'late', clock: 'first_response', short: 'Overdue', header: 'Reply overdue', full: 'First reply overdue since 11:10 AM, counted in business hours' });
+  expect(mark).toMatchObject({ tone: 'late', clock: 'first_response', short: 'Overdue', header: 'Reply was due 11:10 AM', full: 'First reply overdue since 11:10 AM, counted in business hours' });
 });
 
 test('a clock due soon reads its time today, or its weekday when the deadline falls on the next working day', () => {
@@ -24,7 +24,7 @@ test('a clock far from its deadline, met or paused draws nothing on the row; the
   expect(slaMark(sla({ due_at: '2026-11-02T09:00:00Z' }), zone, now, zone)).toBeUndefined();
   expect(slaMark(sla({ state: 'met', met_at: '2026-11-02T02:12:00Z' }), zone, now, zone)).toBeUndefined();
   expect(slaMark(null, zone, now, zone)).toBeUndefined();
-  expect(slaMark(sla({ due_at: '2026-11-02T06:15:00Z', due_soon: true }, { due_at: '2026-11-02T05:00:00Z', overdue: true }), zone, now, zone)).toMatchObject({ clock: 'resolution', header: 'Resolve overdue' });
+  expect(slaMark(sla({ due_at: '2026-11-02T06:15:00Z', due_soon: true }, { due_at: '2026-11-02T05:00:00Z', overdue: true }), zone, now, zone)).toMatchObject({ clock: 'resolution', header: 'Resolve was due 12:00 PM' });
 });
 
 test('the details say each clock in full, with the business time left or late', () => {
@@ -50,4 +50,11 @@ test('the next moment a mark may change is the soonest warning or deadline still
   const later = { due_at: '2026-11-02T09:00:00Z', warn_at: '2026-11-02T08:00:00Z' };
   expect(nextChange([{ sla: sla(later) }, { sla: sla({ due_at: '2026-11-02T07:00:00Z', warn_at: '2026-11-02T04:00:00Z' }) }, { sla: null }], now)).toEqual(new Date('2026-11-02T07:00:00Z'));
   expect(nextChange([{ sla: sla({ state: 'met', due_at: '2026-11-02T07:00:00Z' }) }], now)).toBeUndefined();
+});
+
+test('an inbox row says how late a passed deadline is, and the time of one still ahead even when far', () => {
+  expect(rowDue(sla({ due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true }), zone, now, zone)).toMatchObject({ text: '1 h 20 min late', late: true });
+  expect(rowDue(sla({ due_at: '2026-11-02T09:00:00Z' }), zone, now, zone)).toEqual({ text: 'Due 4:00 PM', late: false, full: 'First reply due 4:00 PM today, counted in business hours' });
+  expect(rowDue(sla({ state: 'met', met_at: '2026-11-02T02:12:00Z' }), zone, now, zone)).toBeUndefined();
+  expect(rowDue(null, zone, now, zone)).toBeUndefined();
 });
