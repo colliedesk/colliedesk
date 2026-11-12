@@ -89,7 +89,7 @@ MCP tool `colliedesk_email_channel_get`.
   Open list.
 - When nothing matches, **Clear filters** below the message resets the search and every filter, and
   returns to **Open**, in one step.
-- By default the list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
+- By default the list is ordered by **Due first** (see [Filter and sort](#filter-and-sort)); ordered by latest activity it is grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Each row shows, from the top: a status dot and the customer's name, with the time on the right; the
   subject; and the start of what the customer wrote last, on one line. The dot is the status colour (blue
   Open, amber Pending, green Resolved, a ring for Closed and Spam) and red for an urgent conversation or one
@@ -178,8 +178,10 @@ A link can set filters that the menu does not list. They work and show as chips:
 `created_before`, `updated_after` and `updated_before` (UTC instants; the chip shows the days in your
 timezone, see [Timezones](timezones.md)).
 
-**Sort** (the arrows icon next to Filter; its tooltip names the order in use) orders the list by **Latest activity** (the default), **Waiting longest** (conversations waiting on
-you, the customer who wrote longest ago first, then everything else) or **Priority** (urgent first). Only the
+**Sort** (the arrows icon next to Filter; its tooltip names the order in use) orders the list by **Due first** (the default:
+the earliest [reply target](response-targets.md) first; while reply targets are off, the same as Waiting longest), **Latest activity**,
+**Waiting longest** (conversations waiting on you, the customer who wrote longest ago first, then everything else) or
+**Priority** (urgent first). Only the
 latest-activity order is grouped under Today and Earlier. A link can also set `sort=updated_asc`,
 `created_desc` or `created_asc`; the menu then shows that order as chosen.
 

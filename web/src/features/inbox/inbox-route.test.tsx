@@ -709,7 +709,7 @@ test('a saved view is saved from the filters on screen and opens them again', as
   fireEvent.click(within(menu).getByRole('button', { name: 'Save view' }));
   await waitFor(() => expect(views.create).toHaveBeenCalledWith({ name: 'Pending, our turn', scope: 'personal', filters: { status: ['pending'], awaiting: 'team' } }, expect.any(String)));
   fireEvent.click(await within(menu).findByRole('button', { name: 'Urgent' }));
-  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&page=1&page_size=50&counts=true', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=due&page=1&page_size=50&counts=true', expect.anything()));
 });
 
 test('on the trial with an unverified domain, New conversation says it cannot send yet; once verified it starts the conversation', async () => {

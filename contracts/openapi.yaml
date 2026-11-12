@@ -1479,7 +1479,8 @@ paths:
             updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first,
             then the most recently updated), waiting_longest (conversations awaiting the team, the
             oldest customer message first, then every other conversation by last update), due (the earliest
-            running response target first, then the rest by last update).
+            running response target first, then the rest by last update; while the workspace's reply targets
+            are off, the same as waiting_longest). The web inbox asks for due unless the person picks another order.
           schema: {$ref: '#/components/schemas/ConversationSort'}
         - name: counts
           in: query

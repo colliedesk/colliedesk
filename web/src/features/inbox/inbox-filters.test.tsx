@@ -179,21 +179,24 @@ test('Clear all is outside the list of chips, so scrolling the chips never hides
   expect(chips.contains(screen.getByRole('button', { name: 'Clear all' }))).toBe(false);
 });
 
-test('the sort menu offers latest activity, waiting longest and priority, and orders the list', async () => {
+test('the list starts on Due first; the sort menu also offers latest activity, waiting longest and priority', async () => {
   const onChange = vi.fn();
   render(<Harness onChange={onChange} />);
   const sort = screen.getByRole('combobox', { name: 'Sort' });
-  await within(sort).findByRole('option', { name: 'Latest activity' });
-  expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Latest activity', 'Waiting longest', 'Priority']);
-  fireEvent.change(sort, { target: { value: 'waiting_longest' } });
-  expect(onChange).toHaveBeenLastCalledWith({ sort: 'waiting_longest' });
+  await within(sort).findByRole('option', { name: 'Due first' });
+  expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Due first', 'Latest activity', 'Waiting longest', 'Priority']);
+  expect(sort).toHaveValue('due');
+  fireEvent.change(sort, { target: { value: 'updated_desc' } });
+  expect(onChange).toHaveBeenLastCalledWith({ sort: 'updated_desc' });
+  fireEvent.change(sort, { target: { value: 'due' } });
+  expect(onChange).toHaveBeenLastCalledWith({});
 });
 
 test('a sort set by a link that the menu does not offer still shows as chosen', async () => {
   render(<Harness initial={{ sort: 'created_asc' }} />);
   const sort = screen.getByRole('combobox', { name: 'Sort' });
   await within(sort).findByRole('option', { name: 'Latest activity' });
-  expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Latest activity', 'Waiting longest', 'Priority', 'Oldest first']);
+  expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Due first', 'Latest activity', 'Waiting longest', 'Priority', 'Oldest first']);
   expect(sort).toHaveValue('created_asc');
 });
 
