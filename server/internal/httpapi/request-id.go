@@ -27,16 +27,17 @@ func newRequestID() string {
 	return hex.EncodeToString(raw[:])
 }
 
-// requestIDOf is the id the request was given, or "" outside withRequestID.
+// requestIDOf is the id the request was given, or "" outside WithRequestID.
 func requestIDOf(ctx context.Context) string {
 	id, _ := ctx.Value(requestIDKey{}).(string)
 	return id
 }
 
-// withRequestID gives every request an id (the proxy's X-Request-Id when it is sane, else a generated
+// WithRequestID gives every request an id (the proxy's X-Request-Id when it is sane, else a generated
 // one), returns it in the X-Request-Id response header, and logs one line per request carrying it.
 // writeError and writeInternalError read it back from that header, so error bodies and error logs name it.
-func withRequestID(next http.Handler) http.Handler {
+// The API and the MCP endpoints each wrap their own handler with it, so every request is logged once.
+func WithRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		id := request.Header.Get(requestIDHeader)
 		if !proxyRequestID.MatchString(id) {
