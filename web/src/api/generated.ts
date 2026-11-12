@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/livez": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Answers while the process answers HTTP, on every host the server serves (app, help centers, operator console). Checks no dependency, so a database outage never gets a working process restarted. Never cached. */
+        get: operations["getLiveness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Whether the process can serve a request, on every host the server serves: `postgres` (the request login connects and answers) and `migrations` (the database holds every migration this binary needs). All checks run at once within 2 seconds. The body names each check, never why it failed; the server log says why. Point a load balancer or an uptime monitor here, never at a page: the web app answers any path with 200. Never cached. */
+        get: operations["getReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/chat/session": {
         parameters: {
             query?: {
@@ -4946,6 +4980,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Readiness: {
+            /** @description True when every check passed. */
+            ready: boolean;
+            checks: {
+                postgres: boolean;
+                migrations: boolean;
+            };
+        };
         /** @description The browser's IANA timezone. At the first sign-in of the person who created the workspace, while the workspace is still on the `UTC` default nobody chose, it becomes the workspace's timezone (the zone business hours count in) and they follow it. At anyone else's first sign-in, while they never chose a timezone and the workspace is on `UTC`, it becomes the agent's own (`timezone_override`); a teammate never changes the workspace's. A later sign-in never changes either, a timezone an admin chose (`UTC` included) is kept, and a name of UTC (`GMT`, `Etc/UTC`, `Zulu`...) or an unknown zone is ignored; it never fails the sign-in. */
         SignInTimezone: string;
         ImportPerson: {
@@ -10462,6 +10504,58 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getLiveness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The process is alive. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        live: true;
+                    };
+                };
+            };
+        };
+    };
+    getReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every check passed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readiness"];
+                };
+            };
+            /** @description At least one check failed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readiness"];
+                };
+            };
+        };
+    };
     getHelpChatSession: {
         parameters: {
             query?: {

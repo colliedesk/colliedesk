@@ -21,6 +21,26 @@ sign-in page, even if its DNS still points at the proxy.
   `Host: colliedesk:8080`, and every request gets `404`.
 - **Another proxy or load balancer:** forward the original `Host`, not the address of the upstream.
 
+## Health checks
+
+Two paths answer on every host name the server serves (the app, each help center, the operator
+console), whatever the `Host` header says. Both answer JSON, are never cached, and accept `GET` and
+`HEAD` only.
+
+| Path | Answers `200` when | Use it for |
+|---|---|---|
+| `/livez` | the process answers HTTP; it checks nothing else | restarting a stuck process |
+| `/readyz` | the database answers and holds every migration this binary needs | a load balancer, an uptime monitor, a deploy that waits for the new server |
+
+`/readyz` answers `503` when a check fails, with a body such as
+`{"ready":false,"checks":{"postgres":false,"migrations":true}}`. The server log says why the check
+failed; the body never does. Each request runs every check at once and takes at most 2 seconds.
+
+Point an uptime monitor at `/readyz` and expect `200`, or look for `"ready":true` in the body. Do not
+point it at a page: the web app answers any path with `200`, so a page check stays green while the
+database is down. Do not point `/livez` at a restart policy that also restarts on a database outage:
+a restart does not bring the database back.
+
 ## Trusted proxies
 
 Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's address from

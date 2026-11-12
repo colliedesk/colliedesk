@@ -18,8 +18,9 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 // DB runs every query that reads or writes rows in a transaction that is either scoped to one
 // workspace (InWorkspace) or declared privileged with a reviewed reason (Privileged). The owner pool
-// also runs maintenance that returns no rows: advisory locks (TryAdvisoryLock) and table statistics
-// (RefreshStatistics). Nothing else touches the owner pool outside these methods.
+// also runs maintenance that returns no workspace rows: advisory locks (TryAdvisoryLock), table
+// statistics (RefreshStatistics) and the migration ledger (PendingMigrations). Nothing else touches the
+// owner pool outside these methods.
 type DB struct {
 	pool    *pgxpool.Pool // owner: migrations, privileged lookups, locks, ANALYZE
 	request *pgxpool.Pool // workspace-scoped transactions
@@ -196,6 +197,11 @@ func (d *DB) Listen(ctx context.Context, channel string, notify chan<- struct{})
 		default:
 		}
 	}
+}
+
+// Ping checks that the request login connects and answers, as every workspace request needs.
+func (d *DB) Ping(ctx context.Context) error {
+	return d.request.Ping(ctx)
 }
 
 // Verify refuses to serve when row-level security could be skipped: the app role must exist, must
