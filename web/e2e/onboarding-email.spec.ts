@@ -88,6 +88,6 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   expect(await answer.json()).toMatchObject({ status: 'threaded', conversation_id: created.conversation_id });
 
   await page.reload();
-  await expect(page.getByText('Thanks, it just arrived.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('Thanks, it just arrived.')).toBeVisible();
   await expect(page.getByRole('button', { name: new RegExp(`Order ${suffix} never arrived`) })).toHaveCount(1);
 });
