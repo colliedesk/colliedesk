@@ -47,7 +47,7 @@ func writeErrorWith(response http.ResponseWriter, status int, code, message stri
 	writeJSON(response, status, map[string]any{"error": errorBody(response, body)})
 }
 
-// errorBody adds the request id (the X-Request-Id header withRequestID set) to an error object, so a person
+// errorBody adds the request id (the X-Request-Id header WithRequestID set) to an error object, so a person
 // reporting a failure can quote the id that finds it in the server log.
 func errorBody(response http.ResponseWriter, body map[string]any) map[string]any {
 	if id := response.Header().Get(requestIDHeader); id != "" {
