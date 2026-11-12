@@ -11,6 +11,7 @@ import { leaveTo } from '../../lib/leave-to';
 import { readCheckoutIntent } from '../settings/checkout-intent';
 import { readPlanIntent } from '../settings/plan-intent';
 import { preconnectClerk } from './clerk-appearance';
+import { InvitePage, LinkPageLoading } from './invite-page';
 import { RedeemPage } from './redeem-page';
 
 const loadCloudSignIn = () => import('./cloud-sign-in');
@@ -63,6 +64,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
   const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent, next), onSuccess: (result) => goAfterSignIn(result) });
+  // An invite link shows its workspace, inviter and roles before it is used; any other token (pairing,
+  // unknown) answers 401 and keeps the link page. The preview never uses the link up.
+  const preview = useQuery({ queryKey: ['invite-preview', token], queryFn: () => api.previewInvite(token), enabled: token !== '', retry: false, staleTime: Infinity });
   const exchange = useCallback(async (sessionToken: string) => {
     setCloudPending(true);
     setCloudFailed(false);
@@ -90,6 +94,11 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   const findWorkspaceAt = config.data?.workspace_hosts && appOrigin !== '' && appOrigin !== window.location.origin ? `${appOrigin}/sign-in` : undefined;
   const hostedCloud = cloudConfig?.enabled === true && config.data?.billing.enabled === true;
 
+  if (token && preview.isPending) return <LinkPageLoading />;
+  if (token && preview.data) {
+    return <InvitePage preview={preview.data} cloud={cloudConfig?.enabled === true} pending={redeem.isPending} failed={redeem.isError}
+      planLimited={redeem.error instanceof PlanLimitError} onJoin={() => redeem.mutate()} />;
+  }
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} hostedCloud={hostedCloud} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
     buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}

@@ -3,7 +3,6 @@ import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
 import { SessionsSection } from './sessions-section';
 import { builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
-import { sessionSchema } from '../../api/schemas';
 
 test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
@@ -61,15 +60,6 @@ test('an invite stays listed without Revoke for a person who may invite but not 
 });
 
 // Agent tokens are listed in AI & agents (ai-agents-sections.tsx), with the same rows as before.
-test('a fixed token shows how many permissions it holds and lists them by name', () => {
-  render(<SessionsSection kind="tokens" timezone="UTC" sessions={[{ id: '77777777-7777-4777-8777-777777777777', agent_id: '55555555-5555-4555-8555-555555555555',
-    agent_email: 'sam@example.com', agent_name: 'Sam', label: 'KB writer', role: null, permissions: ['kb_articles:read', 'kb_articles:update'], current: false,
-    token: { kind: 'custom', role: null, role_held: true, permissions: ['kb_articles:read', 'kb_articles:update'], legacy_tier: null },
-    created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null }]} />);
-  expect(screen.getByText('Fixed · 2 permissions')).toBeInTheDocument();
-  expect(screen.getByText('Knowledge base articles: Edit')).toBeInTheDocument();
-});
-
 test('a revoked or expired session is shown as such and cannot be revoked again', () => {
   const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Chrome', token: null, role: null, permissions: [], current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
@@ -92,36 +82,22 @@ test('shows why an invite was refused next to the invite form', () => {
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
 
-test('an agent token shows what it was given and when it ends; a browser session shows neither', () => {
-  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', role: null, current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
-  const editor = { id: '99999999-9999-4999-8999-999999999999', name: 'Editor', system: null };
-  const grant = (kind: 'role' | 'custom' | 'legacy', extra = {}) => ({ kind, role: null, role_held: true, permissions: ['tags:read' as const], legacy_tier: null, ...extra });
+test('Sessions lists the browsers people signed in on and never an agent token; a device is revoked at once', () => {
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', role: null, current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: '2037-10-14T09:30:00Z', revoked_at: null };
+  const onRevokeSession = vi.fn();
   const sessions = [
-    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', token: grant('role', { role: editor }), permissions: ['tags:read'], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
-    { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Stopped bot', token: grant('role', { role: editor, role_held: false }), permissions: ['tags:read'], expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
-    { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Old bot', token: grant('legacy', { legacy_tier: 'send' }), permissions: ['tags:read'], expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
-    { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Revoked bot', token: grant('custom'), permissions: ['tags:read'], expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
-    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', token: null, permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', token: { kind: 'custom' as const, role: null, role_held: true, permissions: ['tags:read' as const], legacy_tier: null }, permissions: ['tags:read'] },
+    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', token: null, permissions: [] },
   ];
-  // The tokens are listed in AI & agents, the browser in Account: each list holds its own.
-  render(<><SessionsSection kind="tokens" timezone="UTC" sessions={sessions} /><SessionsSection timezone="UTC" sessions={sessions} /></>);
-  const [tokens, devices] = screen.getAllByRole('region', { name: 'Sessions' });
-  expect(within(tokens).queryByText('Chrome')).not.toBeInTheDocument();
+  render(<SessionsSection timezone="UTC" sessions={sessions} onRevokeSession={onRevokeSession} />);
+  const devices = screen.getByRole('region', { name: 'Sessions' });
+  // Agent tokens are listed once, on AI & agents.
   expect(within(devices).queryByText('Claude Code')).not.toBeInTheDocument();
-  const row = (label: string) => (within(tokens).queryByText(label) ?? within(devices).getByText(label)).closest('article') as HTMLElement;
-  expect(row('Claude Code')).toHaveTextContent('Follows role Editor');
-  expect(row('Claude Code')).toHaveTextContent(/Expires Oct 14, 2037/);
-  expect(row('Stopped bot')).toHaveTextContent('Stopped: Sam no longer holds all of Editor');
-  expect(row('Stopped bot')).toHaveTextContent('Giving them the role starts it again.');
-  // A stopped token is not called Active next to the line that says it stopped.
-  expect(row('Stopped bot')).not.toHaveTextContent('Active');
-  expect(within(row('Stopped bot')).getByRole('button', { name: /Revoke|Sign out/ })).toBeInTheDocument();
-  expect(row('Stopped bot')).toHaveTextContent(/Expires Nov 2, 2037/);
-  expect(row('Claude Code')).toHaveTextContent('Active');
-  expect(row('Old bot')).toHaveTextContent('Created before roles · was send');
-  expect(row('Revoked bot')).not.toHaveTextContent(/Expires/);
-  expect(row('Chrome')).not.toHaveTextContent(/Expires|Follows|Fixed/);
-  expect(sessionSchema.parse({ ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', token: grant('custom'), permissions: ['tags:read'], expires_at: '2037-12-24T06:15:00Z', revoked_at: null }).token?.kind).toBe('custom');
+  const chrome = within(devices).getByText('Chrome').closest('article') as HTMLElement;
+  expect(chrome).not.toHaveTextContent(/Expires|Follows|Fixed/);
+  fireEvent.click(within(chrome).getByRole('button', { name: 'Revoke' }));
+  expect(onRevokeSession).toHaveBeenCalledWith('55555555-5555-4555-8555-555555555556');
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 });
 
 test('shows the loading status while settings data is pending, without the forms', () => {

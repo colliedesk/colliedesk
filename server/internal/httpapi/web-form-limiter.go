@@ -82,6 +82,27 @@ func (l *webFormLimiter) allow(key string, now time.Time) (bool, time.Duration) 
 	return true, 0
 }
 
+// full reports whether key has used every attempt of the window at now, and how long until a slot frees,
+// without recording an attempt: a limiter that counts only failures checks before it tries.
+func (l *webFormLimiter) full(key string, now time.Time) (bool, time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	element, present := l.index[key]
+	if !present {
+		return false, 0
+	}
+	var recent []time.Time
+	for _, hit := range element.Value.(*limiterEntry).hits {
+		if now.Sub(hit) < l.window {
+			recent = append(recent, hit)
+		}
+	}
+	if len(recent) < l.limit {
+		return false, 0
+	}
+	return true, l.window - now.Sub(recent[0])
+}
+
 // clientAddress is the address a request counts under. It is the TCP peer unless the peer is a
 // trusted proxy, in which case it is the rightmost X-Forwarded-For entry that is not itself a
 // trusted proxy: entries to its left are written by the client and are never believed. IPv6

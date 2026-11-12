@@ -96,7 +96,7 @@ test('a role you may only read names who can change it, and names who holds it a
   render(<QueryClientProvider client={client}><RolesRoute page={{ kind: 'edit', id: viewed.id }} /></QueryClientProvider>);
   expect(await screen.findByText('Ask someone who can change roles (Ada, Linh) to change it.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Mai' })).toHaveAttribute('href', '/settings/members#team-heading');
-  expect(screen.getByRole('link', { name: 'KB bot (Mai)' })).toHaveAttribute('href', '/settings/ai#agent-sessions-heading');
+  expect(screen.getByRole('link', { name: 'KB bot (Mai)' })).toHaveAttribute('href', '/settings/ai#agent-tokens-heading');
 });
 
 test('a taken name puts focus back on the name, with the reason', async () => {

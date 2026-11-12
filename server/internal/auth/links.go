@@ -88,15 +88,28 @@ func (s *Service) createLinkFor(ctx context.Context, tx pgx.Tx, workspaceID, age
 	return createdLink{Token: token, URL: s.redeemURL(token, slug), ID: linkID}, nil
 }
 
+// linkOf finds the workspace and kind of the one-time link with token. A link's workspace is unknown
+// until its hash is looked up, so this is the one lookup that crosses workspaces; everything after it
+// runs scoped to that workspace. ErrUnknownLink when no link has the token.
+func (s *Service) linkOf(ctx context.Context, token string) (string, string, error) {
+	var workspaceID, kind string
+	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text, kind FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&workspaceID, &kind)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrUnknownLink
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("find link: %w", err)
+	}
+	return workspaceID, kind, nil
+}
+
 // Redeem spends a one-time link for a new session; cookie tells whether the session will be a browser's
 // cookie (true) or a bearer token the client keeps.
 func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string, cookie bool) (Redeemed, error) {
-	// The link's workspace is unknown until the token hash is looked up; the redemption itself,
-	// with its checks and the row lock, runs scoped to that workspace.
-	var linkWorkspace string
-	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&linkWorkspace)
-	})
+	// The redemption itself, with its checks and the row lock, runs scoped to the link's workspace.
+	linkWorkspace, _, err := s.linkOf(ctx, token)
 	if err != nil {
 		return Redeemed{}, fmt.Errorf("redeem link: %w", err)
 	}
