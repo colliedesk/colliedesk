@@ -338,6 +338,8 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-rail { padding-inline: var(--space-2); }
   .rail-brand { margin-right: 0; }
   .rail-link { gap: var(--space-1); }
+  /* Inbox, Mentions, Help center and Reports touch edge to edge, each still 44 px to tap. */
+  .rail-links { gap: 0; }
 }
 /* A short wide screen (a phone on its side): the reply box and what stands above it (a reply warning, a
    draft) scroll on their own instead of being cut below the pane. */
