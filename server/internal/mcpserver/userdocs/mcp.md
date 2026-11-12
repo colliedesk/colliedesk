@@ -65,6 +65,13 @@ for a person to approve it, and it never does more than the person who made the 
 now. The **Needs** column below names the permissions each tool needs. `colliedesk_whoami` answers
 your name and roles, how the token was made and its permissions.
 
+A new workspace has no conversations until your customers' mail reaches it. When you connect an AI
+app first, ask it how to start: the server tells the model to read the [setup steps](setup-guide.md)
+(`colliedesk_setup_progress_get`) and help with the one recommended, for email by giving you the
+support address to forward to (`colliedesk_email_channel_get`), sending a test message that opens a
+first conversation (`colliedesk_email_test_message_send`) and reading Google's forwarding
+confirmation code (`colliedesk_email_forwarding_confirmation_get`).
+
 A tool the token has no permission for fails with the message, `missing_permissions` and
 `missing_from` of [a refused call](roles-and-permissions.md#when-a-permission-is-missing): `token`
 means you hold the permission and a token that includes it would work, `person` that you would need a
