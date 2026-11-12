@@ -459,7 +459,7 @@ export const api = {
           ...(aiDraft && draftFiles ? { ai_draft_file_ids: draftFiles } : {}), ...(mentions.length > 0 ? { mentions } : {}) }) }),
   // The notes that ask the person signed in: unread or all, newest first, a page after before.
   mentions: (status: 'unread' | 'all', before?: string) => request(`/api/v1/mentions?${new URLSearchParams({ status, ...(before ? { before } : {}) })}`, mentionListSchema),
-  markMentionsRead: (value: RequestBody<'markMentionsRead'>) => request('/api/v1/mentions/read', markMentionsResultSchema, { method: 'POST', body: json<'markMentionsRead'>(value) }),
+  markMentionsRead: (value: RequestBody<'markMentionsRead'>) => request('/api/v1/mentions/read', markMentionsResultSchema, { method: 'PUT', body: json<'markMentionsRead'>(value) }),
   setMentionEmail: (email: boolean) => request('/api/v1/agents/me/mention-email', mentionEmailSchema, { method: 'PATCH', body: json<'setMentionEmail'>({ email }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string, key: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createContact'>({ name, email }) }),

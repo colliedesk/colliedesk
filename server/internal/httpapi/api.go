@@ -853,9 +853,9 @@ func Routes() []Route {
 		{http.MethodGet, oauthClientRoutePath, auth.PermissionPublic},
 		{http.MethodPost, oauthAllowRoutePath, auth.PermissionSession},
 		// Mentions: a note asks teammates; each reads their own list and marks it read.
-		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/mentions", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/conversations/{id}/messages/{messageId}/mentions", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/mentions", auth.PermissionSession},
-		{http.MethodPost, "/api/v1/mentions/read", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/mentions/read", auth.PermissionSession},
 		{http.MethodPatch, "/api/v1/agents/me/mention-email", auth.PermissionSession},
 	}
 }

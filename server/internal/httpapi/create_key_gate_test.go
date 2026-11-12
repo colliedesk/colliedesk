@@ -24,8 +24,6 @@ var postWithoutKey = map[string]string{
 	// Actions on one row named by its id: a repeat finds the row already moved and changes nothing or is refused.
 	"POST /api/v1/conversations/{id}/messages/{messageId}/retry":       "Requeues the one failed delivery of a reply: only a failed delivery can be retried, so a repeat finds it queued (409).",
 	"POST /api/v1/contacts/{id}/merges":                                "The duplicate merges once: a repeat finds it merged already and is refused.",
-	"POST /api/v1/conversations/{id}/messages/{messageId}/mentions":    "Asks people on one note, once each (unique per note and person): a repeat finds them asked and tells nobody again.",
-	"POST /api/v1/mentions/read":                                       "Sets the caller's own mentions read or unread: a repeat finds them so and changes nothing.",
 	"POST /api/v1/saved-views/{id}/restore":                            "Brings one view out of the trash: a view not in the trash is answered unchanged.",
 	"POST /api/v1/saved-replies/{id}/restore":                          "Brings one reply out of the trash: a reply not in the trash is answered unchanged.",
 	"POST /api/v1/saved-replies/{id}/versions/{version}/restore":       "Carries the updated_at it read: the version it adds changes updated_at, so a repeat is refused (409 changed_elsewhere).",
@@ -96,8 +94,8 @@ var postWithoutKey = map[string]string{
 
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
 // One DNS status check added for the workspace's single help center domain; eight Autofix routes, each
-// with its reason above; two for mentions, which store at most one row per note and person.
-const maxPostWithoutKey = 69
+// with its reason above.
+const maxPostWithoutKey = 67
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {

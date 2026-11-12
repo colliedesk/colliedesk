@@ -5070,12 +5070,12 @@ paths:
         in: path
         required: true
         schema: {type: string, format: uuid}
-    post:
+    put:
       operationId: addNoteMentions
       x-permission: messages:note
       description: >-
-        Ask more teammates on a private note you wrote (or the person your token acts as wrote). Only the
-        people the note did not ask yet are told, once each, in their Mentions list and by email; the people
+        Make sure these teammates are asked on a private note you wrote (or the person your token acts as
+        wrote): a set that only grows. Only the people the note did not ask yet are told, once each, in their Mentions list and by email; the people
         already asked are not told again, so a repeat changes nothing. A mention cannot be taken back: the
         person was told. Another person's note answers 403 `not_your_note`; a reply or a customer message
         answers 400.
@@ -5105,7 +5105,7 @@ paths:
       description: >-
         The private notes that asked you (the person your token acts as), newest first, with how many are
         unread and whether you get them by email. Listing does not mark them read: opening the note does
-        (`POST /api/v1/mentions/read`).
+        (`PUT /api/v1/mentions/read`).
       parameters:
         - name: status
           in: query
@@ -5129,7 +5129,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/mentions/read:
-    post:
+    put:
       operationId: markMentionsRead
       x-permission: messages:read
       description: >-

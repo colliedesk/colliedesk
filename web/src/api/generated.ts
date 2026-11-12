@@ -3055,9 +3055,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
-        /** @description Ask more teammates on a private note you wrote (or the person your token acts as wrote). Only the people the note did not ask yet are told, once each, in their Mentions list and by email; the people already asked are not told again, so a repeat changes nothing. A mention cannot be taken back: the person was told. Another person's note answers 403 `not_your_note`; a reply or a customer message answers 400. */
-        post: operations["addNoteMentions"];
+        /** @description Make sure these teammates are asked on a private note you wrote (or the person your token acts as wrote): a set that only grows. Only the people the note did not ask yet are told, once each, in their Mentions list and by email; the people already asked are not told again, so a repeat changes nothing. A mention cannot be taken back: the person was told. Another person's note answers 403 `not_your_note`; a reply or a customer message answers 400. */
+        put: operations["addNoteMentions"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3071,7 +3071,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The private notes that asked you (the person your token acts as), newest first, with how many are unread and whether you get them by email. Listing does not mark them read: opening the note does (`POST /api/v1/mentions/read`). */
+        /** @description The private notes that asked you (the person your token acts as), newest first, with how many are unread and whether you get them by email. Listing does not mark them read: opening the note does (`PUT /api/v1/mentions/read`). */
         get: operations["listMentions"];
         put?: never;
         post?: never;
@@ -3089,9 +3089,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
         /** @description Mark your own mentions read, or unread again with `read` false. Name exactly one of `mention_ids` (ids from `GET /api/v1/mentions`), `conversation_id` (every mention of you on that conversation's notes: what opening the conversation does) or `all` true (Mark all read). An id that is not one of your mentions answers 404 and nothing changes. Safe to repeat. */
-        post: operations["markMentionsRead"];
+        put: operations["markMentionsRead"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;

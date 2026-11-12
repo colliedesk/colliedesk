@@ -16,7 +16,7 @@ func noteMentionSpec() Spec {
 			`Only the people the note did not ask yet are told, once each, in their Mentions list and by email; a repeat tells nobody again. ` +
 			`A mention cannot be taken back. To ask on a new matter, write a new note with colliedesk_note_add and its mentions.`,
 		Idempotent: true,
-		REST:       []string{"POST /api/v1/conversations/{id}/messages/{messageId}/mentions"},
+		REST:       []string{"PUT /api/v1/conversations/{id}/messages/{messageId}/mentions"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","note_id","mentions"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},"note_id":{"type":"string",` + uuid + `,"description":"The note's message id."},` + mentionsProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","note_id","mentions"],"properties":{"conversation_id":{"type":"string"},"note_id":{"type":"string"},"mentions":` + mentionedSchema + `}}`,
@@ -51,7 +51,7 @@ func mentionsMarkReadSpec() Spec {
 		Description: `Mark the mentions of the person your token acts as read once handled, or unread again with read false. ` +
 			`Give exactly one of mention_ids (from colliedesk_mentions_list), conversation_id (every mention on that conversation's notes) or all true. Safe to repeat.`,
 		Idempotent: true,
-		REST:       []string{"POST /api/v1/mentions/read"},
+		REST:       []string{"PUT /api/v1/mentions/read"},
 		Input: `{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"mention_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"type":"string",` + uuid + `}},` +
 			`"conversation_id":{"type":"string",` + uuid + `},"all":{"type":"boolean","enum":[true]},"read":{"type":"boolean","default":true,"description":"false marks them unread again."}}}`,
 		Output: `{"type":"object","required":["changed","unread"],"properties":{"changed":{"type":"integer"},"unread":{"type":"integer","description":"How many stay unread."}}}`,

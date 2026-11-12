@@ -74,7 +74,7 @@ func myMentions(t *testing.T, f teamFixture, token, query string) mentionList {
 
 func markRead(t *testing.T, f teamFixture, token string, body map[string]any) (int, struct{ Changed, Unread int }) {
 	t.Helper()
-	response := request(t, f.api, http.MethodPost, "/api/v1/mentions/read", body, token, nil)
+	response := request(t, f.api, http.MethodPut, "/api/v1/mentions/read", body, token, nil)
 	var result struct{ Changed, Unread int }
 	if response.Code == http.StatusOK {
 		decode(t, response, &result)
@@ -244,7 +244,7 @@ func TestAddingMentionsToANoteTellsOnlyTheNewPeople(t *testing.T) {
 		t.Fatalf("ann reads: %d", code)
 	}
 	path := "/api/v1/conversations/" + conversation + "/messages/" + note.ID + "/mentions"
-	response := request(t, f.api, http.MethodPost, path, map[string]any{"mentions": []string{f.annID, f.bobID}}, f.admin, nil)
+	response := request(t, f.api, http.MethodPut, path, map[string]any{"mentions": []string{f.annID, f.bobID}}, f.admin, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("add bob: status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -256,7 +256,7 @@ func TestAddingMentionsToANoteTellsOnlyTheNewPeople(t *testing.T) {
 	if ann, bob := mentionEmails(t, f, f.annID), mentionEmails(t, f, f.bobID); ann["queued"] != 1 || len(ann) != 1 || bob["queued"] != 1 || len(bob) != 1 {
 		t.Fatalf("emails: ann=%v bob=%v, want one each", ann, bob)
 	}
-	if again := request(t, f.api, http.MethodPost, path, map[string]any{"mentions": []string{f.bobID}}, f.admin, nil); again.Code != http.StatusOK || mentionEmails(t, f, f.bobID)["queued"] != 1 {
+	if again := request(t, f.api, http.MethodPut, path, map[string]any{"mentions": []string{f.bobID}}, f.admin, nil); again.Code != http.StatusOK || mentionEmails(t, f, f.bobID)["queued"] != 1 {
 		t.Fatalf("a repeat tells nobody again: status=%d", again.Code)
 	}
 	if bobs := myMentions(t, f, f.bob, ""); bobs.Unread != 1 {
@@ -264,13 +264,13 @@ func TestAddingMentionsToANoteTellsOnlyTheNewPeople(t *testing.T) {
 	}
 
 	// Only the writer adds to their note, and only to a note.
-	if other := request(t, f.api, http.MethodPost, path, map[string]any{"mentions": []string{f.adminID}}, f.ann, nil); other.Code != http.StatusForbidden {
+	if other := request(t, f.api, http.MethodPut, path, map[string]any{"mentions": []string{f.adminID}}, f.ann, nil); other.Code != http.StatusForbidden {
 		t.Fatalf("ann adds to the admin's note: status=%d body=%s", other.Code, other.Body.String())
 	}
 	reply := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hi"}, f.admin, nil)
 	var sent mentionedNote
 	decode(t, reply, &sent)
-	if onReply := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+sent.ID+"/mentions",
+	if onReply := request(t, f.api, http.MethodPut, "/api/v1/conversations/"+conversation+"/messages/"+sent.ID+"/mentions",
 		map[string]any{"mentions": []string{f.bobID}}, f.admin, nil); onReply.Code != http.StatusBadRequest {
 		t.Fatalf("mentions on a reply: status=%d", onReply.Code)
 	}
@@ -292,7 +292,7 @@ func TestMentionsNeverCrossWorkspaces(t *testing.T) {
 		t.Fatalf("another workspace marks a conversation: %d", code)
 	}
 	other := workspaceAgentID(t, f, f.otherAdmin)
-	if response := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+note.ID+"/mentions",
+	if response := request(t, f.api, http.MethodPut, "/api/v1/conversations/"+conversation+"/messages/"+note.ID+"/mentions",
 		map[string]any{"mentions": []string{other}}, f.otherAdmin, nil); response.Code != http.StatusNotFound {
 		t.Fatalf("another workspace adds to a note: status=%d", response.Code)
 	}

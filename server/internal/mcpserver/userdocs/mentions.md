@@ -54,7 +54,7 @@ works.
 ## Ask more people on a note you wrote
 
 An AI agent, or a script with an agent token, can add teammates to a note its person wrote
-(`POST /api/v1/conversations/{id}/messages/{messageId}/mentions`, the MCP tool `colliedesk_note_mention`).
+(`PUT /api/v1/conversations/{id}/messages/{messageId}/mentions`, the MCP tool `colliedesk_note_mention`).
 Only the people the note did not ask yet are told. A mention cannot be taken back once the person was told.
 
 ## For AI agents (MCP)

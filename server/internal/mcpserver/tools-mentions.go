@@ -39,7 +39,7 @@ func noteMention(c *call, arguments map[string]any) (any, error) {
 	c.notFound = "No note " + args.NoteID + " on conversation " + args.ConversationID + " in this workspace. Read the conversation with colliedesk_conversation_get for its notes' ids."
 	var note restMessage
 	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/messages/" + url.PathEscape(args.NoteID) + "/mentions"
-	if err := c.send(http.MethodPost, path, map[string]any{"mentions": args.Mentions}, &note); err != nil {
+	if err := c.send(http.MethodPut, path, map[string]any{"mentions": args.Mentions}, &note); err != nil {
 		return nil, err
 	}
 	return map[string]any{"conversation_id": args.ConversationID, "note_id": note.ID, "mentions": mentionedRows(note)}, nil
@@ -123,7 +123,7 @@ func mentionsList(c *call, arguments map[string]any) (any, error) {
 func mentionsMarkRead(c *call, arguments map[string]any) (any, error) {
 	c.notFound = "No such mention of yours in this workspace. Use ids from colliedesk_mentions_list, or a conversation id from colliedesk_inbox_search."
 	var out map[string]any
-	if err := c.send(http.MethodPost, "/api/v1/mentions/read", arguments, &out); err != nil {
+	if err := c.send(http.MethodPut, "/api/v1/mentions/read", arguments, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
