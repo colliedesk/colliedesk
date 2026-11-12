@@ -449,6 +449,7 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/auth/cloud/exchange":              notForPeople,
 	"POST " + cloudSignupPath:                       notForPeople,
 	"POST /api/v1/auth/redeem":                      notForPeople,
+	"GET /api/v1/auth/invite-preview":               notForPeople,
 	"POST /api/v1/channels/email/inbound":           notForPeople,
 	"POST /api/v1/channels/email/inbound/recipient": notForPeople,
 	"POST " + polarWebhookPath:                      notForPeople,

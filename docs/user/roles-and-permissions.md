@@ -122,7 +122,7 @@ does there; an AI agent cannot create one. Under **Access**, choose one of:
   list is fixed when you create the token.
 
 Either way, a token never does more than you can do right now: if you lose a permission, every token
-of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → Sessions**
+of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External AI agents**
 shows each token as "Follows role …", "Fixed · N permissions", or "Stopped" with the reason. Revoke a
 token there. More about tokens: [Sessions and devices](sessions.md#agent-tokens).
 
@@ -143,7 +143,7 @@ used to wait for a person's approval: `results:share`, `team:invite`, `team:crea
 `team:manage_roles`, `team:revoke`, `channels:update`, `channels:manage_credentials`,
 `workspace:update`, `workspace:export`, `billing:manage`, `imports:undo`, `ai_settings:update`,
 `autofix:send` and `autofix_settings:update`. A call that needs one of them is refused; create a new
-token for it. Sessions shows such a token as "Created before roles" with the tier it had.
+token for it. The token list on **AI & agents** shows such a token as "Created before roles" with the tier it had.
 
 ## When a permission is missing
 

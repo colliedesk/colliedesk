@@ -1,4 +1,4 @@
-/* Access screens (sign-in, one-time link, AI app consent) restyled after Paper "05 Access" (A1, A2-b, A5)
+/* Access screens (sign-in, one-time link, invite, AI app consent) restyled after Paper "05 Access" (A1, A2, A5)
    on the markup the app already has: the sign-in keeps its brand side, the consent page its card.
    Every rule starts at main.redeem-page so it wins over the shared rules of layout.css by specificity. */
 
@@ -23,6 +23,26 @@ main.redeem-page .redeem-panel .error-copy[role="alert"]::before {
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 main.redeem-page .redeem-panel > .primary-action { margin-top: var(--space-5); font-weight: 500; }
+
+/* The invite page (Paper "05 Access" A2-a, A2-b, A2-c): the card alone on the page. The facts are label/value rows
+   in the small size, labels in an 88px column; the footnote is the small meta text under the button. */
+main.redeem-page .invite-facts { display: grid; gap: var(--space-2); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+main.redeem-page .invite-facts li { display: flex; gap: var(--space-3); font-size: var(--fs-small); line-height: 20px; }
+main.redeem-page .invite-facts li > :first-child { flex: none; width: 88px; color: var(--text-3); }
+main.redeem-page .invite-facts li > :last-child { min-width: 0; color: var(--text-1); overflow-wrap: anywhere; }
+main.redeem-page .redeem-panel > .invite-footnote { margin-top: var(--space-5); color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
+main.redeem-page .redeem-panel > a.primary-action, main.redeem-page .redeem-panel > a.secondary-action { display: flex; width: 100%; margin-top: var(--space-5); font-size: var(--fs-ui); font-weight: 500; }
+main.redeem-page .redeem-panel > a.primary-action { --control: var(--touch); border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+main.redeem-page .redeem-panel > a.secondary-action { background: var(--surface-1); }
+
+/* No free seat is a warning, not an error: the same tinted box in the warn colours (A2-b). */
+main.redeem-page .redeem-panel .warn-copy[role="status"] { position: relative; margin: var(--space-5) 0 0; border-radius: var(--radius-lg); background: var(--warn-soft);
+  padding: var(--space-4) var(--space-4) var(--space-4) calc(var(--space-4) + 18px + var(--space-3)); color: var(--text-1); font-size: var(--fs-ui); line-height: 20px; }
+main.redeem-page .redeem-panel .warn-copy[role="status"]::before {
+  content: ""; position: absolute; top: calc(var(--space-4) + 1px); left: var(--space-4); width: 18px; height: 18px; background: var(--warn);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 
 /* Cloud sign-in: the lines after the form sit under a hairline, the terms line smallest. */
 main.redeem-page .cloud-sign-in { display: grid; gap: var(--space-2); margin-top: var(--space-5); }

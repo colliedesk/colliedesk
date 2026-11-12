@@ -11,7 +11,7 @@ import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
-  inviteCreatedSchema, inviteListSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
+  inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
@@ -395,6 +395,8 @@ export const api = {
   redeem: (token: string, label: string, next?: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   }),
+  // What an invite link is, without using it; any other token answers 401 like an invalid link.
+  previewInvite: (token: string) => request(`/api/v1/auth/invite-preview?${new URLSearchParams({ token }).toString()}`, invitePreviewSchema),
   me: () => request('/api/v1/auth/me', meSchema),
   // The AI app a consent page shows, and whether redirect_uri is its own (only then may the page go there).
   describeOAuthClient: (client_id: string, redirect_uri: string) =>

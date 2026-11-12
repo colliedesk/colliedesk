@@ -242,6 +242,8 @@ type API struct {
 	certificateNotes *webFormLimiter
 	// operatorSignIns limits the tries of operator links, tickets and client addresses.
 	operatorSignIns, operatorSignInIPs *webFormLimiter
+	// refusedLinks counts, per client address, the one-time links redeem and the invite preview refused.
+	refusedLinks *webFormLimiter
 	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
 	helpCenterHostLookups *webFormLimiter
 	// channelFileLookups counts each client address's requests for a channel type's public file.
@@ -387,7 +389,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports, oauth: carry.oauth,
 		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
-		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, refusedLinks: carry.refusedLinks, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
@@ -525,6 +527,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
 		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/auth/invite-preview", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/totp", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/cloud", auth.PermissionPublic},
