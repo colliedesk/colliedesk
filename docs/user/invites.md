@@ -28,6 +28,27 @@ to you; nothing waits for approval. It lists invites with `colliedesk_invites_li
 revokes one with `colliedesk_invite_revoke` (`team:revoke`). A token created before roles cannot
 create invites; create a new token for it.
 
+## What the invited person sees
+
+Opening the link shows **Join** and the workspace's name, who invited them, the email the invite is
+for, its roles and when it expires, before anything is used. **Join <workspace>** signs that browser
+in for 30 days and opens the inbox. Next time, on the hosted cloud, they sign in with a code sent to
+that email; on a server without cloud sign-in, they ask for a new link.
+
+When the link no longer works, the page says why and whom to ask:
+
+- **Expired**: the date it expired; ask the person who invited you for a new one.
+- **Revoked**: the invite was cancelled; ask the person who invited you if you still need access.
+- **Already used**: the person already joined; **Sign in** instead.
+
+If the workspace has no free seat (hosted cloud), the page says so, names who invited you, and says
+the link keeps working until it expires: once a seat is free, **Try again** joins. A link that is not
+an invite (a pairing link, or a mistyped one) shows the ordinary sign-in link page.
+
+Looking at an invite never uses it up. An AI agent or script can read the same facts with
+`POST /api/v1/auth/invite-preview` and the token; it needs no session. A client address that tries 30
+tokens no link has within a minute must wait a minute before it opens or previews another link.
+
 ## Agent limit on the hosted cloud
 
 On the hosted cloud, an active agent and a pending invite each take one seat; a [deactivated](team.md)
