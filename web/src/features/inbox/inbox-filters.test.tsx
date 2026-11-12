@@ -298,3 +298,19 @@ test('Targets filters what is late or due soon, shows as chips, and is offered o
   fireEvent.click(within(targets).getByRole('checkbox', { name: 'Due soon' }));
   expect(onChange).toHaveBeenLastCalledWith({ sla: 'overdue,due_soon' });
 });
+
+test('the status tabs count Open and Pending, and the tab on screen, under the other filters; the count is not part of the name', () => {
+  render(<InboxFilters tags={tags} query={{ status: 'resolved' }} counts={{ open: 23, pending: 4, resolved: 7, closed: 0, spam: 2 }} />);
+  const tab = (name: string) => screen.getByRole('radio', { name }).closest('label')!;
+  expect(tab('Open')).toHaveTextContent('Open23');
+  expect(tab('Pending')).toHaveTextContent('Pending4');
+  expect(tab('Resolved')).toHaveTextContent('Resolved7');
+  expect(tab('Closed')).toHaveTextContent(/^Closed$/);
+  expect(tab('Spam')).toHaveTextContent(/^Spam$/);
+  expect(tab('All')).toHaveTextContent(/^All$/);
+});
+
+test('a zero count shows nothing', () => {
+  render(<InboxFilters tags={tags} query={{}} counts={{ open: 0, pending: 0, resolved: 0, closed: 0, spam: 0 }} />);
+  expect(screen.getByRole('radio', { name: 'Open' }).closest('label')).toHaveTextContent(/^Open$/);
+});

@@ -1481,6 +1481,12 @@ paths:
             oldest customer message first, then every other conversation by last update), due (the earliest
             running response target first, then the rest by last update).
           schema: {$ref: '#/components/schemas/ConversationSort'}
+        - name: counts
+          in: query
+          description: >-
+            true adds status_counts: how many conversations each status holds under every other filter given
+            (the inbox's status tabs). Leave it out when only the page is needed.
+          schema: {type: boolean}
         - name: search
           in: query
           description: Words to find in the subject, in any message text, or in the name or email of the contact.
@@ -12150,6 +12156,16 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+        status_counts:
+          type: object
+          description: Only with counts=true. How many conversations each status holds under every filter but the status.
+          required: [open, pending, resolved, closed, spam]
+          properties:
+            open: {type: integer, minimum: 0}
+            pending: {type: integer, minimum: 0}
+            resolved: {type: integer, minimum: 0}
+            closed: {type: integer, minimum: 0}
+            spam: {type: integer, minimum: 0}
     ReplyConflict:
       type: object
       required: [error]

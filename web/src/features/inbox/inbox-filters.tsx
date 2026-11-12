@@ -27,6 +27,8 @@ interface InboxFiltersProps {
   views?: ReactNode;
   // Select all and the bulk actions, in the place of the status tabs while rows are ticked.
   selection?: ReactNode;
+  // How many conversations each status holds under the other filters (status_counts).
+  counts?: Partial<Record<string, number>>;
 }
 
 // The Filter menu, the Sort menu and the chips load on their own chunk (filter-panel.tsx), asked for as
@@ -58,7 +60,7 @@ const ownControls = ['status', 'sort', 'search'];
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; everything else shares one
 // Filter menu that counts what is on, and each active filter shows as a chip that removes it.
-export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views, selection }: InboxFiltersProps) {
+export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views, selection, counts }: InboxFiltersProps) {
   const search = useRef<HTMLInputElement>(null);
   const setStatus = (value: string) => {
     const next: InboxQuery = { ...query, status: value };
@@ -91,9 +93,12 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
         {views}
       </div>
       {selection ?? <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
-        {statusTabs.map(([value, label]) => (
-          <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => setStatus(value)} /><span>{label}</span></label>
-        ))}
+        {statusTabs.map(([value, label]) => {
+          // Open and Pending always say how many they hold, the tab on screen too; a zero says nothing.
+          const count = (value === 'open' || value === 'pending' || value === status) ? counts?.[value] : undefined;
+          return <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => setStatus(value)} /><span>{label}</span>
+            {count ? <span className="tab-count" aria-hidden="true">{count}</span> : null}</label>;
+        })}
       </div>}
       {Object.keys(query).some((key) => !ownControls.includes(key)) && <FilterChipsPart {...part} />}
     </div>

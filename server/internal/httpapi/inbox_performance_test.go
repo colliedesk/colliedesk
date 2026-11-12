@@ -36,7 +36,8 @@ func TestInboxListLatencyBudget(t *testing.T) {
 	if telling == 0 || telling == len(page.Items) {
 		t.Fatalf("rows that may tell = %d of %d, want some", telling, len(page.Items))
 	}
-	statusP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?status=open&page_size=100")
+	// The inbox asks for the status tabs' counts with every page but a search's (counts=true), so the budget covers them.
+	statusP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?status=open&page_size=100&counts=true")
 	searchP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?search=budget-needle&page_size=100")
 	t.Logf("inbox p95: status=%s search=%s", statusP95, searchP95)
 	if statusP95 > inboxLatencyBudget || searchP95 > inboxLatencyBudget {

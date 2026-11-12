@@ -127,6 +127,7 @@ func (a *API) listConversations(response http.ResponseWriter, request *http.Requ
 	}
 	identity := principal(request)
 	filter.AgentID, filter.Page, filter.PageSize = identity.Agent.ID, page, pageSize
+	filter.Counts = query.Get("counts") == "true"
 	items, err := a.store.ListConversations(request.Context(), identity.Workspace.ID, filter)
 	if err != nil {
 		writeStoreError(response, err)
