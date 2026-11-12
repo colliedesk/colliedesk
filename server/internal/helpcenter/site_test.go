@@ -2,6 +2,7 @@ package helpcenter
 
 import (
 	"io/fs"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,9 +13,15 @@ import (
 // no page may carry an inline script or style. The one script a page may load is a channel type's own
 // file (the chat), by address, only where the type asks for it; the JSON-LD data block is no script a
 // browser runs.
+var servedFont = regexp.MustCompile(`url\("fonts/[a-z0-9-]+\.woff2"\)`)
+
 func TestTemplatesCarryNoBrandingScriptOrInlineStyle(t *testing.T) {
 	check := func(path string, data []byte) {
 		text := strings.ReplaceAll(strings.ToLower(strings.ReplaceAll(string(data), `<script src="{{.Script}}" defer></script>`, "")), `<script type="application/ld+json">`, "")
+		// site.css may name its own heading fonts, which the help center serves beside it; nothing else.
+		if path == "static/site.css" {
+			text = servedFont.ReplaceAllString(text, "")
+		}
 		for _, banned := range []string{"colliedesk", "hc labs", "powered by", "<script", "style=", "<style", "@import", "url("} {
 			if strings.Contains(text, banned) {
 				t.Errorf("%s holds %q", path, banned)

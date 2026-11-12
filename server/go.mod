@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
+	github.com/andybalholm/brotli v1.2.0
 	github.com/anthropics/anthropic-sdk-go v1.84.0
 	github.com/getkin/kin-openapi v0.150.0
 	github.com/google/jsonschema-go v0.4.3

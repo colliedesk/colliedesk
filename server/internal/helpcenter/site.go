@@ -46,11 +46,11 @@ const (
 	descriptionChars = 160
 )
 
-// contentSecurityPolicy lets a page load its own style sheet, images and media, and frame the video
+// contentSecurityPolicy lets a page load its own style sheet, heading font, images and media, and frame the video
 // players of kbhtml's allowlist, and nothing else; no script of the page may run, and no other site
 // may frame it. A help center on the app's own origin therefore cannot reach a signed-in person's
 // session.
-var contentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
+var contentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
 	"; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 
 // ScriptPolicy is contentSecurityPolicy for a page that runs one script of the help center's own
@@ -61,7 +61,7 @@ func ScriptPolicy(script, frameAncestors string) string {
 	if frameAncestors == "" {
 		frameAncestors = "'none'"
 	}
-	return "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
+	return "default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
 		"; media-src 'self'; script-src " + script + "; connect-src 'self'; require-trusted-types-for 'script'; form-action 'self'; frame-ancestors " +
 		frameAncestors + "; base-uri 'none'"
 }
@@ -267,6 +267,15 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	}
 	if sub == stylePath+s.pages.styleName || base == pathPrefix+"_" && sub == "/"+s.pages.styleName {
 		s.writeStyle(response, request, s.pages.style)
+		return
+	}
+	// The fonts sit next to site.css, which names them relative to itself.
+	fontName, belowStyle := strings.CutPrefix(sub, stylePath)
+	if !belowStyle && base == pathPrefix+"_" {
+		fontName, belowStyle = strings.TrimPrefix(sub, "/"), true
+	}
+	if font, ok := s.pages.fonts[fontName]; ok && belowStyle {
+		s.writeAsset(response, request, "font/woff2", font)
 		return
 	}
 	if at.host == "" && !slugShape.MatchString(slug) {
@@ -652,15 +661,20 @@ func (s *Site) writeError(response http.ResponseWriter, err error) {
 
 // writeStyle sends a style sheet: site.css or a brand sheet.
 func (s *Site) writeStyle(response http.ResponseWriter, request *http.Request, style []byte) {
+	s.writeAsset(response, request, "text/css; charset=utf-8", style)
+}
+
+// writeAsset sends a style sheet or a font whose name holds its hash.
+func (s *Site) writeAsset(response http.ResponseWriter, request *http.Request, contentType string, body []byte) {
 	header := response.Header()
-	header.Set("Content-Type", "text/css; charset=utf-8")
+	header.Set("Content-Type", contentType)
 	header.Set("X-Content-Type-Options", "nosniff")
 	// The name holds the content's hash, so it never changes under the same address.
 	header.Set("Cache-Control", "public, max-age=31536000, immutable")
-	header.Set("Content-Length", strconv.Itoa(len(style)))
+	header.Set("Content-Length", strconv.Itoa(len(body)))
 	response.WriteHeader(http.StatusOK)
 	if request.Method != http.MethodHead {
-		_, _ = response.Write(style)
+		_, _ = response.Write(body)
 	}
 }
 

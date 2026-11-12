@@ -14,7 +14,7 @@ const previewPath = "/api/v1/help-center/theme/preview"
 // workspace's own image and media routes, and style only from the help center's hashed sheets and the
 // inline brand block.
 const previewCSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ` + testOrigin + `/api/v1/kb/images/ ` + testOrigin +
-	`/api/v1/kb/media/; style-src ` + testOrigin + `/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'">`
+	`/api/v1/kb/media/; style-src ` + testOrigin + `/help/_/ 'unsafe-inline'; font-src ` + testOrigin + `/help/_/; script-src 'none'; form-action 'none'; base-uri 'none'">`
 
 // previewStyle is the inline block of a preview document: the candidate brand only, with links inert.
 // previewStyles is the text of each inline <style> element of a preview, in order.

@@ -18,14 +18,15 @@ const (
 )
 
 // ThemeFontStacks are the fonts a help center may use: stacks of fonts already on the reader's
-// system, so nothing is downloaded and the page's Content-Security-Policy stays as it is.
+// system, except the serif stacks, which start with Noto Serif that the help center serves itself
+// (helpcenter/static/fonts) so every Latin and Vietnamese letter of a heading has one typeface.
 // system-sans and classic-serif are the default text and heading fonts.
 var ThemeFontStacks = map[string]string{
 	"system-sans":        `system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif`,
 	"humanist-sans":      `Seravek, "Gill Sans Nova", Ubuntu, Calibri, "DejaVu Sans", source-sans-pro, sans-serif`,
 	"geometric-sans":     `Avenir, "Avenir Next", Montserrat, Corbel, "URW Gothic", source-sans-pro, sans-serif`,
-	"classic-serif":      `"Iowan Old Style", "Charter", "Bitstream Charter", "Sitka Text", Cambria, "Palatino Linotype", Georgia, serif`,
-	"transitional-serif": `Charter, "Bitstream Charter", "Sitka Text", Cambria, serif`,
+	"classic-serif":      `"Noto Serif", "Iowan Old Style", "Charter", "Bitstream Charter", "Sitka Text", Cambria, "Palatino Linotype", Georgia, serif`,
+	"transitional-serif": `"Noto Serif", Charter, "Bitstream Charter", "Sitka Text", Cambria, serif`,
 	"rounded-sans":       `ui-rounded, "Hiragino Maru Gothic ProN", Quicksand, Comfortaa, Manjari, "Arial Rounded MT", Calibri, source-sans-pro, sans-serif`,
 	"mono":               `ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace`,
 }

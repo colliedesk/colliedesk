@@ -8058,7 +8058,7 @@ export interface components {
         /** @description A color as #rrggbb; answers are lowercase. */
         ThemeColor: string | null;
         /**
-         * @description A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans for text, classic-serif for headings).
+         * @description A font stack of the reader's own system, except the serif stacks (classic-serif, transitional-serif), which start with Noto Serif that the help center serves itself, so a heading in Vietnamese or another Latin language with stacked accents has one typeface on every device. Null is the default (system-sans for text, classic-serif for headings).
          * @enum {string|null}
          */
         ThemeFont: "system-sans" | "humanist-sans" | "geometric-sans" | "classic-serif" | "transitional-serif" | "rounded-sans" | "mono" | null;

@@ -28,7 +28,7 @@ func TestBrandStyleSheetSetsTheThemeAndNothingForTheDefault(t *testing.T) {
 		"--accent:#0b5cad;", "--accent-ink:#ffffff;", "--accent-hover:#0a5198;", "--link:#0b5cad;", "--ring:#0b5cad;", "--paper:#ffffff;", "--ink:#1f2328;",
 		"--header:#ffffff;", "--header-ink:#16201c;", "--footer:#f6f8fa;", "--footer-ink:#16201c;",
 		`--font-body:Seravek, "Gill Sans Nova", Ubuntu, Calibri, "DejaVu Sans", source-sans-pro, sans-serif;`,
-		`--font-head:Charter, "Bitstream Charter", "Sitka Text", Cambria, serif;`,
+		`--font-head:"Noto Serif", Charter, "Bitstream Charter", "Sitka Text", Cambria, serif;`,
 		// Brand colors are chosen for a light page: the automatic dark palette is off.
 		"color-scheme:light;",
 	} {

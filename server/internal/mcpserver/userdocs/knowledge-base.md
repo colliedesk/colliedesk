@@ -423,9 +423,10 @@ see the saved brand and its preview, without the controls. A brand has:
   no `%` encoding), and a phone number (digits, spaces and `+ - ( )`).
 - **Colors**: primary, header, header text, background, text, links and footer, each `#rrggbb`. Any
   color set makes the help center light only.
-- **Fonts** for text and headings, from fonts already on the reader's device, so nothing is
-  downloaded: **Sans** (`system-sans`, the default text font) or **Serif** (`classic-serif`, the default
-  heading font). The API also takes `humanist-sans`, `geometric-sans`, `transitional-serif`,
+- **Fonts** for text and headings: **Sans** (`system-sans`, the default text font), the font already
+  on the reader's device, or **Serif** (`classic-serif`, the default heading font), Noto Serif served by
+  the help center itself (about 35 KB, kept by the browser), so every Latin and Vietnamese letter of a
+  heading has the same typeface on every device. The API also takes `humanist-sans`, `geometric-sans`, `transitional-serif`,
   `rounded-sans` and `mono`; a font saved that way stays and shows in the form until you choose another.
 - **Custom CSS** (`custom_css`), for details the fields above do not cover, such as
   `.masthead{border-bottom:2px solid #0b5cad}`. See [custom CSS](#custom-css).

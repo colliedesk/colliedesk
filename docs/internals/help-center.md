@@ -208,7 +208,7 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   the primary language's cache key is what it was. Sources link `/<lang>/a/<number>`, which moves to
   the primary page while no translation is published.
 - **The brand is a second style sheet, not inline style** (`theme.go`). `style-src 'self'` refuses
-  inline style, and the CSP stays byte for byte as it is, so `brandCSS` writes the theme as custom
+  inline style, and the CSP stays as it is, so `brandCSS` writes the theme as custom
   properties of `site.css` into `<base>/_/brand-<sha256[:16]>.css`, served after `OpenHelpCenter`,
   `immutable` like `site.css`; any other `brand-*.css` name is the help center's 404, so a cache
   never keeps an old look under a live name. The name keeps 128 bits because an admin writes every
@@ -217,9 +217,20 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   over the dark palette: with any color set, it sets every color and `color-scheme: light` (owner
   decision: brand colors are chosen for light; the `<meta name="color-scheme">` says `light` too).
   A theme without colors, fonts or custom CSS has no sheet, so an untouched help center sends what
-  it sent before. Only validated `#rrggbb` colors, the fixed font stacks (system fonts, no
-  `font-src`) and checked custom CSS (below) reach it; `TestTemplatesCarryNoBrandingScriptOrInlineStyle`
+  it sent before. Only validated `#rrggbb` colors, the fixed font stacks (system fonts, plus the
+  served Noto Serif below) and checked custom CSS (below) reach it; `TestTemplatesCarryNoBrandingScriptOrInlineStyle`
   checks it with every font.
+- **The serif heading font is served, every other font is the reader's own** (`static/fonts`,
+  `hashedFonts` in `pages.go`; owner decision 2026-11-12). On a Mac the old first choice, Iowan Old
+  Style, lacks Vietnamese letters such as ử and ợ, so a browser drew those letters from another font
+  and a heading mixed two typefaces (help.hclabs.co, 2026-11-12). The serif stacks now start with
+  Noto Serif (SIL OFL 1.1, no reserved name), subset to Latin, Latin Extended and Vietnamese by
+  `static/fonts/subset.sh`: 400 and 600, about 32 and 36 KB of WOFF2, `font-display: swap`, so text
+  shows at once in the next font of the stack. Each file is named by its hash like `site.css`, served
+  beside it under `immutable`, and allowed by `font-src 'self'` (the preview: `font-src <origin>/help/_/`).
+  `TestHelpCenterHeadingFontDrawsEveryVietnameseLetter` reads the served font's cmap and fails on any
+  Vietnamese letter it lacks. Sans stacks stay system fonts: system-ui covers Vietnamese on every
+  platform.
 - **Custom CSS is the end of the brand sheet, not a sheet of its own** (`custom-css.go`). Appended
   after the `:root` variables, it overrides them, its bytes are in the sheet's hash (a new text is a
   new immutable name, the old one the help center's 404) and it costs no extra request or route;

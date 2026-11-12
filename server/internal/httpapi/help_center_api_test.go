@@ -251,7 +251,7 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 		for _, path := range []string{base, base + "/c/guides", fmt.Sprintf("%s/a/%d-%s", base, article.Number, article.Slug), base + "/search?q=tricky", base + "/missing", "/help/nobody"} {
 			response := visit(site, path, "192.0.2.40")
 			header := response.Header()
-			if got := header.Get("Content-Security-Policy"); got != "default-src 'none'; img-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" {
+			if got := header.Get("Content-Security-Policy"); got != "default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" {
 				t.Errorf("themed=%v %s CSP=%q", themed, path, got)
 			}
 			if header.Get("X-Content-Type-Options") != "nosniff" || header.Get("X-Frame-Options") != "DENY" || header.Get("Content-Type") != "text/html; charset=utf-8" {
@@ -280,7 +280,8 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 		}
 		for style := range styles {
 			sheet := visit(site, style, "192.0.2.40")
-			body := strings.ToLower(sheet.Body.String())
+			// The one url() a sheet may hold names a heading font served beside it, never another host.
+			body := sameFolderFont.ReplaceAllString(strings.ToLower(sheet.Body.String()), "")
 			if sheet.Code != http.StatusOK || sheet.Header().Get("Content-Type") != "text/css; charset=utf-8" ||
 				sheet.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" || strings.Contains(body, "colliedesk") ||
 				strings.Contains(body, "url(") || strings.Contains(body, "@import") || strings.Contains(body, "<") {
