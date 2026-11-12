@@ -300,7 +300,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   connected, it is also emailed to the contact and shows **Queued**, **Sent** or
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
-- **Send reply** (or Ctrl/Cmd + Enter) sends what you wrote.
+- **Send reply** (or Ctrl/Cmd + Enter, shown in the button) sends what you wrote. It leads the row under the
+  box, with **Send and resolve** beside it; attach, saved replies and articles sit on the right.
 - **Send and resolve**, next to **Send reply** (or Ctrl/Cmd + Shift + Enter), sends the reply and then sets
   the conversation to **Resolved**, in one step. The status changes only after the reply was accepted: if the
   reply is refused, nothing changes and your text stays in the box with the reason. If the reply was sent but

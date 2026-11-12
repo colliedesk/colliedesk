@@ -1131,3 +1131,22 @@ test('the box offers only what the role holds: a note without Reply, no saved re
   fireEvent.keyDown(document.body, { key: '/' });
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
+
+test('the send button leads the row with its shortcut, Send and resolve follows, and the tools sit after them', () => {
+  render(<ReplyComposer onSubmit={vi.fn()} onResolve={vi.fn()} savedReplies={[]} />);
+  const row = document.querySelector('.composer-actions') as HTMLElement;
+  const buttons = within(row).getAllByRole('button');
+  expect(buttons[0]).toHaveAccessibleName('Send reply');
+  expect(buttons[0]).toHaveTextContent(/↵/);
+  expect(buttons[1]).toHaveAccessibleName('Send and resolve');
+  expect(buttons.findIndex((button) => button.getAttribute('aria-label') === 'Attach files' || /Insert saved reply/.test(button.textContent ?? ''))).toBeGreaterThan(1);
+  expect(document.querySelector('.composer-keys')).toBeNull();
+});
+
+test('a private note leads with Add private note and offers no Send and resolve', () => {
+  render(<ReplyComposer onSubmit={vi.fn()} onResolve={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
+  const buttons = within(document.querySelector('.composer-actions') as HTMLElement).getAllByRole('button');
+  expect(buttons[0]).toHaveAccessibleName('Add private note');
+  expect(screen.queryByRole('button', { name: 'Send and resolve' })).toBeNull();
+});

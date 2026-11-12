@@ -372,7 +372,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-files li button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .composer-files li button svg { width: 12px; height: 12px; }
 .composer-attachments-problem, .composer-attachments-warning { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
-.composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
+.composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
 /* Attach is the first tool of the reply box: its picker's own box dissolves into the row, and the chosen files and
    their notes take a full line above the tools, as Plain and Front do. */
 .composer-actions > .composer-attachments { display: contents; }
@@ -1348,3 +1348,16 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .property-menu .tag-create input { width: 100%; }
 /* A status tab's count (I1-a "Open 23"): quieter than the word, never part of the tab's name. */
 .status-tabs .tab-count { margin-left: var(--space-1); color: var(--text-3); font-weight: 500; font-variant-numeric: tabular-nums; }
+/* The composer's row (I1-a, I7-a, I2-b): Send with its shortcut first, Send and resolve beside it, the tools on the right. */
+.composer-actions .composer-tools-start { margin-left: auto; }
+.primary-action .send-keys { margin-left: var(--space-2); border: 0; background: none; padding: 0; color: inherit; font: inherit; font-size: var(--fs-label); opacity: 0.72; }
+/* In a private note the tools say their names, as the note has no Send and resolve to share the row with. */
+.composer-card[data-kind="note"] .composer-actions .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+.composer-card[data-kind="note"] .composer-actions .saved-reply-button kbd { display: inline; }
+@media (pointer: coarse) { .primary-action .send-keys { display: none; } }
+.composer-card[data-compact="true"] .send-keys { display: none; }
+/* With counts, six tabs share the list column: a tighter gap; the row still scrolls when it must. */
+.list-pane .status-tabs { gap: var(--space-2); }
+.status-tabs .tab-count { margin-left: 3px; }
+/* AI drafts write replies, so a private note leaves their tool out and keeps one row (I2-b). */
+.composer-card[data-kind="note"] .composer-actions :is(.ai-tool, a.saved-reply-button[href="/settings/ai"]) { display: none; }
