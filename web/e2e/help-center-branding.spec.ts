@@ -214,7 +214,7 @@ test('help center branding: from Settings to a branded public page takes at most
   const started = Date.now();
 
   // The help center's settings are the knowledge base's Settings tab (#528).
-  await person.click(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge' }));
+  await person.click(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }));
   await person.click(page.getByRole('navigation', { name: 'Knowledge base sections' }).getByRole('link', { name: 'Settings' }));
   const brand = page.getByRole('region', { name: 'Brand' });
   await person.upload(brand.getByRole('button', { name: 'Upload logo' }), { name: 'acme-logo.png', mimeType: 'image/png', buffer: logoPNG });

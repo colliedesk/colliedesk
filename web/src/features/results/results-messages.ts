@@ -1,6 +1,6 @@
 // Strings of the results page. The page is a lazy part, so they live in its chunk.
 export const resultsMessages = {
-  heading: 'Results',
+  heading: 'Reports',
   description: 'How your team did in Freshdesk, next to how it does in Colliedesk. Every number opens the conversations it counts.',
   windows: 'Period',
   last30: 'Last 30 days',
@@ -103,12 +103,12 @@ export const resultsMessages = {
   archiveLimit: 'Freshdesk doesn’t let your plan read archived tickets, so a few old tickets could not be counted. The import report lists them; everything else was checked.',
   showLast7: 'Show last 7 days',
   computeError: (message: string) => `We could not work out your numbers the last time we tried (${message}). Colliedesk tries again in a few minutes; if it keeps failing, send a problem report from the menu.`,
-  loadFailed: 'Results did not load',
+  loadFailed: 'Reports did not load',
   loadFailedBody: 'Check your connection, then try again. If it keeps failing, the server may be down: tell whoever runs it.',
   tryAgain: 'Try again',
   loading: 'Loading results…',
   agentNote: 'Admins can share these numbers with a link and get them by email every Monday.',
-  fullDefinitions: 'How Results counts, in full',
+  fullDefinitions: 'How Reports counts, in full',
   definitionsURL: 'https://colliedesk.com/docs/results',
   footer: 'Numbers update in the background; nothing here changes your conversations.',
   metricLabels: {

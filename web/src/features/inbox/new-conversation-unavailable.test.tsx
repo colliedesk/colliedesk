@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
+import { askInbox } from '../shell/inbox-intents';
 import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
@@ -27,8 +28,11 @@ beforeAll(async () => {
 });
 
 test('a window whose chunk cannot load says so, takes the focus, and closes with Escape or Close back to its button', async () => {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
-  const opener = await screen.findByRole('button', { name: 'New conversation' });
+  // The sidebar's button, which asks the inbox to start a conversation.
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute />
+    <button type="button" data-opens="new-conversation" onClick={() => askInbox('new-conversation')}>New conversation</button></QueryClientProvider>);
+  await screen.findByRole('region', { name: /conversation list/i });
+  const opener = screen.getByRole('button', { name: 'New conversation' });
   opener.focus();
   fireEvent.click(opener);
   const unavailable = await screen.findByRole('alertdialog', { name: 'New conversation' });

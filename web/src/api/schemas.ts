@@ -240,7 +240,9 @@ export const microsoftSettingsSchema = z.object({
 export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'connectGmail', 200>>;
 // How many live channels each type has: the inbox says which mailbox a reply leaves from once there are two.
 // The whole list and its schemas load with Settings, not with the inbox.
-export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })) });
+// The sidebar lists the channels from the same answer, by name, so it reads only what it shows of each.
+export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })),
+  items: z.array(z.object({ id: z.string(), type: z.string(), name: z.string(), status: z.object({ state: z.string() }) })).catch([]) });
 const mailboxToMoveSchema = z.object({ channel_id: z.string().uuid(), name: z.string(), support_address: z.string(), old_help_desk: z.boolean() });
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,

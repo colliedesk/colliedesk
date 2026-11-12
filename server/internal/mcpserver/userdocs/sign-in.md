@@ -11,8 +11,8 @@ ask your admin for a new one. An invite link names its workspace, who invited yo
 you join, and says which of these happened when it no longer works ([Invite your team](invites.md)).
 
 Opening a link signs that browser in for 30 days; using Colliedesk extends it. A link for another
-workspace switches the browser to that workspace; a bar at the top of every page always shows which workspace and
-address you are signed in as. You can see and
+workspace switches the browser to that workspace; every page always shows which workspace and address you are
+signed in as (in the sidebar, or in the top bar when the sidebar is folded or on a phone). You can see and
 revoke every signed-in device in [Sessions and devices](sessions.md).
 
 ## Cloud sign-in

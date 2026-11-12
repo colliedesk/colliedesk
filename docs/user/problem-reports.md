@@ -1,7 +1,7 @@
 # Report a problem
 
 If something in Colliedesk does not work, press **Report a problem** in the account menu (your
-avatar at the bottom of the left rail). You describe what happened, and Colliedesk adds the facts a
+name at the foot of the sidebar). You describe what happened, and Colliedesk adds the facts a
 person needs to check it. Nothing is stored or sent until you press **Send**.
 
 ## What a report contains

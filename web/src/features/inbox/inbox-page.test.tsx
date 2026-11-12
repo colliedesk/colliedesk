@@ -274,8 +274,8 @@ test('a list that failed to load says so and offers a retry, never "Get started"
 test('the list of a results number that was refreshed says so and leads back to Results', () => {
   const onQuery = vi.fn();
   render(<InboxPage conversations={[]} failed="results_refreshed" query={{ status: 'all', result: '11111111-1111-4111-8111-111111111111:30d.first_response' }} onQuery={onQuery} filtered />);
-  expect(screen.getByRole('alert')).toHaveTextContent('These numbers were refreshed. Open Results again.');
-  expect(screen.getByRole('link', { name: 'Open Results' })).toHaveAttribute('href', '/results');
+  expect(screen.getByRole('alert')).toHaveTextContent('These numbers were refreshed. Open Reports again.');
+  expect(screen.getByRole('link', { name: 'Open Reports' })).toHaveAttribute('href', '/results');
   expect(screen.queryByText('Conversations could not be loaded.')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
   expect(onQuery).toHaveBeenCalled();
@@ -544,4 +544,20 @@ test('Open Settings beside the outbound notice follows the permission to change 
   expect(screen.queryByRole('link', { name: 'Open Settings' })).not.toBeInTheDocument();
   rerender(<InboxPage canManageChannels selected={conversation} conversations={[conversation]} outboundNotice="Replies are not sent yet." />);
   expect(screen.getByRole('link', { name: 'Open Settings' })).toBeInTheDocument();
+});
+
+test('the list header leaves the page title and New conversation to the app frame, and keeps the heading for screen readers', () => {
+  render(<InboxPage conversations={[conversation]} />);
+  const heading = screen.getByRole('heading', { level: 1, name: 'Inbox' });
+  // The top bar shows the title and the sidebar starts a conversation, so the list starts with its tabs.
+  expect(heading.closest('.sr-only')).not.toBeNull();
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+});
+
+test('Search in the sidebar puts the focus in the inbox search box', () => {
+  const { rerender } = render(<InboxPage conversations={[conversation]} searchSignal={0} />);
+  const box = screen.getByRole('searchbox', { name: 'Search conversations' });
+  expect(box).not.toHaveFocus();
+  rerender(<InboxPage conversations={[conversation]} searchSignal={1} />);
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveFocus();
 });

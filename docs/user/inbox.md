@@ -11,10 +11,27 @@ one with **New tag name** and **Create tag**. The menu stays open while you chan
 elsewhere closes it. The line under the subject says when the reply is due and who wrote; status and
 priority are in the details.
 
-On a computer the sidebar on the left starts open, with each page's name. It can be made wider or narrower: drag its right edge, or focus the
+On a computer the sidebar on the left starts open. From the top it has:
+
+- the logo and the name of your workspace;
+- **Search**, which opens the inbox with its search box ready to type in (from any page, **Ctrl K**, or **⌘K** on a
+  Mac, does the same), and the pen, **New conversation**, which opens the inbox and starts one;
+- **Inbox** with the number of open conversations, **Knowledge base** ([guide](knowledge-base.md)) and
+  **Reports** (the [results](results.md));
+- **Views**: your saved views, each opening the inbox on its filters;
+- **Channels**: each channel of the workspace, opening the inbox on its open conversations. A channel that needs
+  attention has an orange dot; its page in **Settings → Channels** says why;
+- at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members**), **Settings**, and
+  you: your name and address, which open the account menu.
+
+The top bar over each page names the page, with **Help**, which opens the Colliedesk docs in a new tab.
+
+The sidebar can be made wider or narrower: drag its right edge, or focus the
 edge and use the arrow keys. Double-click the edge to restore the default width. **Collapse sidebar** (the
 panel icon at the top) folds it into a row of icons, as does dragging the edge far to the left, and each icon is
 named when you point at it; **Expand sidebar** or dragging the edge to the right opens it again. The browser remembers the width and the choice.
+Folded, on a tablet and on a phone, the workspace name and your address move to the top bar, so you always see
+which workspace you are working in.
 
 On a phone the list and the conversation take turns. A conversation you open fills the screen, and its
 messages take most of it. The top row has **Back to Inbox** (the arrow), the subject (two lines at most)
@@ -370,7 +387,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   as a page inside Colliedesk.
 
 **Start a new conversation**
-- Select **New conversation** next to the inbox title.
+- Select **New conversation**, the pen next to **Search** at the top of the sidebar (on a phone, next to the logo).
 - **To**: find the customer by name or email, or select **Add a new customer** and enter a name and an
   email address. The new customer is saved together with the conversation: if the email is refused,
   neither is stored. An address that is already a customer says so under the email field, with

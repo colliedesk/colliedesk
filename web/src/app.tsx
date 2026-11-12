@@ -25,6 +25,9 @@ import { settingsAddress } from './features/settings/settings-anchors';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
+import { askInbox } from './features/shell/inbox-intents';
+import type { InboxIntent } from './features/shell/inbox-intents';
+import { useSidebarData } from './features/shell/use-sidebar-data';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
@@ -71,6 +74,8 @@ const pageChunk = (part: LazyPart<unknown>) => () => (pageOnScreen ? part.ready(
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
+  const search = useRouterState({ select: (state) => state.location.search });
+  const navigate = useNavigate();
   useEffect(() => { pageOnScreen = true; }, []);
   // A bare link to a page of the app opens without reloading, wherever it is written.
   useInAppLinks();
@@ -109,6 +114,14 @@ function AppLayout() {
   const fixes = autofixPreviewOn() && config.data?.autofix?.available === true && Boolean(me.data) && !signedOut && !locked;
   // Cards of chat channels waiting in Review; the link shows only where a chat channel collects messages.
   const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
+  // The inbox list on screen (its filters are in the address), so the sidebar marks the view or channel it is.
+  const inInbox = path === '/' || path.startsWith('/conversations/');
+  const sidebar = useSidebarData(me.data, !onSignIn && !signedOut && !locked, inInbox ? inboxQueryFromSearch(search) : undefined);
+  // Search and New conversation in the sidebar open the inbox (where it is not on screen) and ask it to do them.
+  const askTheInbox = (intent: InboxIntent) => {
+    if (!inInbox) void navigate({ to: '/' });
+    askInbox(intent);
+  };
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -137,7 +150,19 @@ function AppLayout() {
   const shows = (permission: TokenPermission) => !me.data || can(me.data, permission);
   // Knowledge opens on what the session reads of it: the articles, the media or the help center's settings.
   const knowledge = me.data ? knowledgeHome(me.data) : '/knowledge';
+  const inboxOpen = sidebar.inboxOpen ?? 0;
+  // The page the top bar names: the area the sidebar marks current.
+  const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
+    : inKnowledge ? { title: messages.knowledge, icon: <BookIcon /> } : inResults ? { title: messages.results, icon: <ChartIcon /> }
+    // Fixes keeps its wrench in the Autofix chunk; its name is enough here.
+    : inFixes ? { title: messages.autofix, icon: null } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
+  // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
+  const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
+    page={page} views={locked ? undefined : sidebar.views} channels={locked ? undefined : sidebar.channels}
+    onSearch={locked || !shows('conversations:read') ? undefined : () => askTheInbox('search')}
+    onNewConversation={locked || !mayStart || !shows('conversations:read') ? undefined : () => askTheInbox('new-conversation')}
+    canInvite={!locked && can(me.data, 'team:invite')}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
       {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
@@ -145,7 +170,9 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>}
+      {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}
+        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
+        {inboxOpen > 0 && <span className="rail-badge" aria-hidden="true">{inboxOpen > 999 ? '999+' : inboxOpen}</span>}</Link>}
       {fixes && <Part part={autofixPart} render={({ FixesRailLink }) => <FixesRailLink current={inFixes} />} />}
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
@@ -154,9 +181,10 @@ function AppLayout() {
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
       {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
         onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
-      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
-        onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
-    </>}>
+    </>}
+    // Settings is not in the design's list of places; it sits at the foot, beside the person and Invite teammates.
+    footLinks={locked ? undefined : <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
+      onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>}>
     {closed && me.data ? <ClosedScreen label={closed.label} permission={closed.permission} me={me.data} />
       : <PermissionsContext.Provider value={me.data?.permissions}><Outlet /></PermissionsContext.Provider>}
   </AppShell></SettingsNavLinkContext.Provider>;

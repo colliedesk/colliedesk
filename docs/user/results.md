@@ -1,6 +1,6 @@
-# Results
+# Reports
 
-**Results** (in the rail) shows how your team did in Freshdesk next to how it does in Colliedesk,
+**Reports** in the sidebar shows how your team did in Freshdesk next to how it does in Colliedesk,
 for the last 30 days (the default) or the last 7. Every number is a link: it opens the inbox on the
 conversations it counts, in any status, so you can check it. Every role can read the page.
 
@@ -92,9 +92,9 @@ It assumes each of those conversations would have taken as long as it did in Fre
 ## Open the conversations behind a number
 
 Click a number (or a count under it, such as "8 waiting for a first reply"). The inbox opens with
-the filter **Counted in: …** and every status; **Back to Results** returns to the page. The numbers
+the filter **Counted in: …** and every status; **Back to Reports** returns to the page. The numbers
 are worked out again every hour or so and the list belongs to the count you clicked; a count
-replaced more than a day ago says "These numbers were refreshed. Open Results again."
+replaced more than a day ago says "These numbers were refreshed. Open Reports again."
 
 ## Share the numbers
 

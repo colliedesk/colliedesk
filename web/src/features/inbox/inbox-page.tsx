@@ -129,7 +129,8 @@ interface InboxPageProps {
   onRestoreDraft?: (draft: AIDraft) => Promise<unknown>;
   // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
   contactMatches?: ReactNode;
-  onNewConversation?: () => void;
+  // Raised each time Search in the sidebar asks for the search box; the box then takes the focus.
+  searchSignal?: number;
   // The setup guide while setup is unfinished; it floats in a corner, outside the conversation list.
   guide?: ReactNode;
   onTestMessage?: () => Promise<unknown>;
@@ -157,7 +158,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, onNewConversation, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -167,8 +168,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   // The details' AI triage card says when its suggestion has a part nobody accepted yet.
   const [triageWaiting, setTriageWaiting] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
-  const [focusSignal, setFocusSignal] = useState(0);
-  const clearFilters = () => { setFocusSignal((current) => current + 1); onQuery?.({}); };
+  const [cleared, setCleared] = useState(0);
+  const clearFilters = () => { setCleared((current) => current + 1); onQuery?.({}); };
+  const focusSignal = cleared + searchSignal;
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -287,8 +289,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
       <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}
         onKeyDown={(event) => { if (event.key === 'Escape' && checkedIds.length > 0 && !event.defaultPrevented && !bulkBusy) endSelection(); }}>
         <header>
-          <div className="list-title"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} />
-            {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
+          {/* The top bar shows the page's name and the sidebar starts a conversation, so the list starts with its tabs.
+              The heading and the count of this page stay for screen readers. */}
+          <div className="list-title sr-only"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} /></div>
           <MailSwitchLine settings={defaultMailbox} canManageChannels={canManageChannels} />
           <div className="list-head">
             <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} currentAgentId={currentAgentId} timezone={timezone} conversations={conversations} focusSignal={focusSignal}

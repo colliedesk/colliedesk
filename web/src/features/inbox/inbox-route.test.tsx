@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
+import { askInbox } from '../shell/inbox-intents';
 import { testRouter } from './test-router';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
@@ -730,7 +731,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   const { unmount } = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   await screen.findAllByText('Alpha conversation');
   await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  act(() => askInbox('new-conversation'));
   const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
   await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent(/trial/));
   unmount();
@@ -744,7 +745,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   render(<QueryClientProvider client={second}><InboxRoute /></QueryClientProvider>);
   await screen.findAllByText('Alpha conversation');
   await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  act(() => askInbox('new-conversation'));
   const ready = await screen.findByRole('dialog', { name: 'Start a conversation' });
   expect(within(ready).queryByRole('status')).not.toBeInTheDocument();
   fireEvent.change(within(ready).getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
@@ -768,12 +769,29 @@ test('New conversation takes no input until the plan and the email channel are k
     smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await screen.findAllByText('Alpha conversation');
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  act(() => askInbox('new-conversation'));
   const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
   // Typing now could be lost: the trial may refuse the email once the plan is known.
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
   expect(within(dialog).getByLabelText('Message')).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+});
+
+test('Search and New conversation asked from the sidebar on another page are done once the inbox opens', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  // Asked while another page is on screen: the inbox is not mounted yet.
+  askInbox('search');
+  const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  await waitFor(() => expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveFocus());
+  first.unmount();
+  askInbox('new-conversation');
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('dialog', { name: 'Start a conversation' })).toBeInTheDocument();
 });
 
 test('the open ticket is announced only after its own requests and the side lists went out, and names who else is writing', async () => {
@@ -1239,7 +1257,9 @@ test('a role that reads only conversations asks for nothing else and is offered 
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   expect(await screen.findByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /^Reply/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  // The sidebar offers no New conversation to this role, and a request for one opens nothing.
+  act(() => askInbox('new-conversation'));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(screen.queryByRole('textbox', { name: /new tag name/i })).not.toBeInTheDocument();
   for (const call of [api.agents, api.tags, api.savedReplies, api.emailChannel]) expect(call).not.toHaveBeenCalled();
 });
@@ -1257,7 +1277,8 @@ test('a role without messages:read is told why the messages are not shown, and n
   expect(await screen.findByText('Your roles do not let you read the messages of a conversation (messages:read).')).toBeInTheDocument();
   expect(api.messages).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: /Views/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  act(() => askInbox('new-conversation'));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 // A written draft waiting on a conversation; outcome discarded is what resolving or closing makes of it.

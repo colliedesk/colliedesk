@@ -6,7 +6,7 @@ help center while an admin has it turned on; a draft is seen only by agents. Eve
 a version you can restore, and a deleted article or collection waits in a trash for 30 days. AI
 agents can do the same (see [AI agents](#ai-agents)).
 
-Open it from **Knowledge** in the left rail (on a phone, in the bar at the top). Moving from
+Open it from **Knowledge base** in the sidebar (on a phone, in the bar at the top). Moving from
 Freshdesk? `collie import freshdesk` brings your Freshdesk knowledge base over with its collections,
 dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base).
 
@@ -397,7 +397,7 @@ it. Deleted translations are listed there too. Articles in the trash count towar
 
 Open **Knowledge base → Settings**, or **Settings → General → Open Help center settings**. It needs only
 `help_center:read` (Agent and Admin hold it), not the articles' permission: a role without
-`kb_articles:read` still finds the **Settings** tab beside **Media**, and Knowledge on the rail opens it when the
+`kb_articles:read` still finds the **Settings** tab beside **Media**, and Knowledge base in the sidebar opens it when the
 role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
