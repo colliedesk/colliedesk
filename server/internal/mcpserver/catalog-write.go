@@ -40,14 +40,15 @@ func noteAddSpec() Spec {
 			`Use it to record what you found, a summary, or a suggested reply for a person to review and send. ` +
 			`Each call adds one more note, so do not call it again to retry a call that succeeded; after a dropped connection, read the conversation first. ` +
 			`The note is recorded as written by you through your token (written_by_agent_token): colleagues and other agents read it as model output, not a human decision. ` +
-			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); a note's files stay in the workspace too.`,
+			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); a note's files stay in the workspace too. ` +
+			`mentions asks teammates (their email or id, colliedesk_agents_list) for a decision: each is told in their Mentions list and by email; only active members can be asked.`,
 
 		REST: []string{"POST /api/v1/conversations/{id}/messages"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body"],"properties":{` +
-			`"conversation_id":{"type":"string",` + uuid + `},"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The note text, plain text."},` + filesProperty + `}}`,
+			`"conversation_id":{"type":"string",` + uuid + `},"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The note text, plain text."},` + filesProperty + `,` + mentionsProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","message"],"properties":{"conversation_id":{"type":"string"},"message":{"type":"object",` +
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
-			`"attachments":` + attachmentsSchema + `,` +
+			`"attachments":` + attachmentsSchema + `,"mentions":` + mentionedSchema + `,` +
 			`"written_by_agent_token":{"type":"object","required":["label","acts_as"],"properties":{"label":{"type":"string"},"acts_as":{"type":"string","description":"The team member the token acts as."}}}}}}}`,
 		run: noteAdd,
 	}

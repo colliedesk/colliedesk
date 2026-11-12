@@ -196,6 +196,7 @@ type noteArgs struct {
 	ConversationID string          `json:"conversation_id"`
 	Body           string          `json:"body"`
 	Files          []inlineFileArg `json:"files"`
+	Mentions       []string        `json:"mentions"`
 }
 
 type noteOut struct {
@@ -207,6 +208,7 @@ type noteOut struct {
 		Author              string             `json:"author,omitempty"`
 		WrittenByAgentToken *tokenOut          `json:"written_by_agent_token,omitempty"`
 		Attachments         []attachmentRowOut `json:"attachments,omitempty"`
+		Mentions            []mentionedOut     `json:"mentions,omitempty"`
 	} `json:"message"`
 }
 
@@ -226,10 +228,18 @@ func noteAdd(c *call, arguments map[string]any) (any, error) {
 	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/messages"
 	var created restMessage
 	if len(files) > 0 {
-		contentType, form := messageForm([][2]string{{"kind", "note"}, {"body", args.Body}}, files)
+		fields := [][2]string{{"kind", "note"}, {"body", args.Body}}
+		for _, mention := range args.Mentions {
+			fields = append(fields, [2]string{"mentions", mention})
+		}
+		contentType, form := messageForm(fields, files)
 		err = c.sendBytes(http.MethodPost, path, contentType, nil, form, &created)
 	} else {
-		err = c.send(http.MethodPost, path, map[string]any{"kind": "note", "body": args.Body}, &created)
+		body := map[string]any{"kind": "note", "body": args.Body}
+		if len(args.Mentions) > 0 {
+			body["mentions"] = args.Mentions
+		}
+		err = c.send(http.MethodPost, path, body, &created)
 	}
 	if err != nil {
 		return nil, err
@@ -237,6 +247,7 @@ func noteAdd(c *call, arguments map[string]any) (any, error) {
 	out := noteOut{ConversationID: args.ConversationID}
 	out.Message.ID, out.Message.Kind, out.Message.CreatedAt = created.ID, created.Kind, utc(created.CreatedAt)
 	out.Message.Attachments = attachmentRows(created)
+	out.Message.Mentions = mentionedRows(created)
 	if nativeTeamMessage(created) {
 		out.Message.WrittenByAgentToken = tokenOf(created)
 		// The note is saved already, so a failed team lookup only leaves the author's name out.
