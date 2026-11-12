@@ -48,6 +48,40 @@ security:
   - bearerAuth: []
   - sessionCookie: []
 paths:
+  /livez:
+    get:
+      operationId: getLiveness
+      tags: [Health]
+      x-permission: public
+      security: []
+      description: >
+        Answers while the process answers HTTP, on every host the server serves (app, help centers, operator
+        console). Checks no dependency, so a database outage never gets a working process restarted. Never cached.
+      responses:
+        '200':
+          description: The process is alive.
+          content:
+            application/json:
+              schema: {type: object, required: [live], properties: {live: {type: boolean, const: true}}}
+  /readyz:
+    get:
+      operationId: getReadiness
+      tags: [Health]
+      x-permission: public
+      security: []
+      description: >
+        Whether the process can serve a request, on every host the server serves: `postgres` (the request login
+        connects and answers) and `migrations` (the database holds every migration this binary needs). All checks
+        run at once within 2 seconds. The body names each check, never why it failed; the server log says why.
+        Point a load balancer or an uptime monitor here, never at a page: the web app answers any path with 200.
+        Never cached.
+      responses:
+        '200':
+          description: Every check passed.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Readiness'}}}
+        '503':
+          description: At least one check failed.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Readiness'}}}
   /chat/session:
     servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
     parameters:
@@ -8780,6 +8814,17 @@ components:
       description: Resource not found in this workspace
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    Readiness:
+      type: object
+      required: [ready, checks]
+      properties:
+        ready: {type: boolean, description: True when every check passed.}
+        checks:
+          type: object
+          required: [postgres, migrations]
+          properties:
+            postgres: {type: boolean}
+            migrations: {type: boolean}
     SignInTimezone:
       type: string
       maxLength: 64

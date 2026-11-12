@@ -23,6 +23,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/health"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
@@ -124,7 +125,8 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		return newGeneration(p, next, built, slog.Default()), nil
 	}, hot, handler, first, loaded, serverconfig.Process{InstanceID: newInstanceID(), Hostname: hostname, BinaryVersion: version, StartedAt: time.Now()}, slog.Default())
 	p.Go(processCtx, reload.Run)
-	server := &http.Server{Addr: *address, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+	// The probes sit outside every generation and host: a reload or a help center host never hides them.
+	server := &http.Server{Addr: *address, Handler: health.Wrap(handler, db), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
 	select {
