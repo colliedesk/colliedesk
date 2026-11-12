@@ -207,11 +207,13 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const field = useRef<HTMLTextAreaElement>(null);
   // The @ being typed in a private note and the teammate the list marks.
   const [mention, setMention] = useState<{ start: number; query: string }>();
-  const [mentionActive, setMentionActive] = useState(0);
+  const [mentionIndex, setMentionActive] = useState(0);
   const mentionList = useId();
   const asksTeammates = kind === 'note' && teammates.length > 0;
   const mentionOptions = mention && asksTeammates ? matchingTeammates(teammates, mention.query) : [];
   const mentionOpen = Boolean(mention && asksTeammates) && !disabled;
+  // Fewer matches as the name is typed keep the mark on the last one.
+  const mentionActive = Math.max(0, Math.min(mentionIndex, mentionOptions.length - 1));
   const followCaret = (text: string, caretAt: number | null) => {
     const found = asksTeammates && caretAt !== null ? mentionAt(text, caretAt) : undefined;
     setMention((current) => (found && current && found.start === current.start && found.query === current.query ? current : found));
@@ -405,7 +407,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     // While the @ list is open the arrows move in it, Enter or Tab picks and Esc closes it; the text stays as typed.
     if (mentionOpen && !event.metaKey && !event.ctrlKey && !event.altKey) {
       const move = { ArrowDown: 1, ArrowUp: -1 }[event.key];
-      if (move && mentionOptions.length > 0) { event.preventDefault(); setMentionActive((index) => (index + move + mentionOptions.length) % mentionOptions.length); return; }
+      if (move && mentionOptions.length > 0) { event.preventDefault(); setMentionActive((mentionActive + move + mentionOptions.length) % mentionOptions.length); return; }
       if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && mentionOptions[mentionActive]) { event.preventDefault(); pickMention(mentionOptions[mentionActive]); return; }
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMention(undefined); return; }
     }
