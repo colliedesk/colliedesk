@@ -18,5 +18,5 @@ const element = document.getElementById('root');
 if (!element) throw new Error('Missing application root');
 
 createRoot(element).render(<StrictMode><QueryClientProvider client={queryClient}>
-  <RouterProvider router={router} />
+  <RouterProvider router={router} context={{ queryClient }} />
 </QueryClientProvider></StrictMode>);
