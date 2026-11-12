@@ -309,7 +309,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters}
           checkedIds={checked} onToggle={toggle} draftIds={draftConversationIds} viewers={viewers}
-          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onTestMessage={onTestMessage} />
+          grouped={query.sort === 'updated_desc'} onTestMessage={onTestMessage} />
         {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>
           {spamToast.undo && <button type="button" className="link-action" disabled={bulkBusy} onClick={() => void applySpam(spamToast.undo ?? [], false)}>{messages.undo}</button>}
           <button type="button" className="icon-button" aria-label={messages.dismiss} onClick={() => setSpamToast(undefined)}><XIcon /></button></div>}

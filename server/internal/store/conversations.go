@@ -481,8 +481,10 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled FROM response_targets WHERE workspace_id=$1),false)`, workspaceID).Scan(&filter.slaOn); err != nil {
 			return ConversationPage{}, fmt.Errorf("read response targets: %w", err)
 		}
+		// Without reply targets nothing is due: Due first is who has waited longest, as Today orders it.
 		if !filter.slaOn && filter.Sort == ConversationSortDue {
-			filter.Sort = ConversationSortUpdatedDesc
+			filter.Sort = ConversationSortWaitingLongest
+			order = conversationOrders[ConversationSortWaitingLongest]
 		}
 	}
 	if filter.Ref != "" || filter.Search != "" {

@@ -50,7 +50,7 @@ says it in full ("Reply by 1:15 PM", "Reply was due 11:10 AM"); the details have
 same words, and its menu lists both clocks under **Targets**, with the business time left or late, met or
 paused. Times are in your own time zone, named ("6:15 AM UTC") when it is not your browser's; an
 inbox left open reads again when a mark is due to change. Filter them with Targets (Overdue, Due soon)
-and sort by Due first (both offered once a listed conversation has targets), and save that as a view
+(offered once a listed conversation has targets); the inbox is ordered Due first by default, and you can save that as a view
 (`filters.sla` and `sort: due` of `POST /api/v1/saved-views`, MCP `colliedesk_saved_view_create`). For AI
 agents and the API: `sla` on each conversation (`state` overdue, due_soon, ok,
 paused, stopped or met; `first_response` and `resolution` with `due_at`, `warn_at`, `met_at`,

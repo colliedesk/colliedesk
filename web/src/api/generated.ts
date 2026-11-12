@@ -12461,7 +12461,7 @@ export interface operations {
                 created_before?: string;
                 updated_after?: string;
                 updated_before?: string;
-                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update). */
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update; while the workspace's reply targets are off, the same as waiting_longest). The web inbox asks for due unless the person picks another order. */
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description true adds status_counts: how many conversations each status holds under every other filter given (the inbox's status tabs). Leave it out when only the page is needed. */
                 counts?: boolean;
