@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -109,23 +110,13 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	}
 	// Counted only once the person has a session, so a failed sign-in is not a started trial. The
 	// answers are fixed lists, never free text, and the event carries no email.
-	properties := onboarding.Properties()
-	if tracked := attribution.Properties(); tracked != nil {
-		if properties == nil {
-			properties = map[string]any{}
-		}
-		maps.Copy(properties, tracked)
-	}
+	properties := map[string]any{"signup_via": a.signupVia(input.Next)}
+	maps.Copy(properties, onboarding.Properties())
+	maps.Copy(properties, attribution.Properties())
 	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {
-		if properties == nil {
-			properties = map[string]any{}
-		}
 		properties["website_visitor_id"] = visitor
 	}
 	if a.hot().InternalSignups.Match(verified, ip) {
-		if properties == nil {
-			properties = map[string]any{}
-		}
 		properties["internal"] = true
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
@@ -135,6 +126,29 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeJSON(response, http.StatusCreated, result)
+}
+
+// How a trial started, as trial_started's signup_via says: a fixed value, never the page itself.
+const (
+	signupViaWeb            = "web"
+	signupViaAIAppConnector = "ai_app_connector"
+)
+
+// signupVia says whether a sign-up came through an AI app's connector: its sign-in returns (next) to the
+// consent page an AI app opens to connect with OAuth. Only that page of this server counts, as a path or
+// under this server's origin; a query naming it, a longer path or another host is a sign-up on the web.
+func (a *API) signupVia(next string) string {
+	target, err := url.Parse(next)
+	if err != nil || target.Opaque != "" || target.User != nil {
+		return signupViaWeb
+	}
+	if (target.Scheme != "" || target.Host != "") && target.Scheme+"://"+target.Host != a.config.Origin {
+		return signupViaWeb
+	}
+	if target.Path != oauthAuthorizePagePath {
+		return signupViaWeb
+	}
+	return signupViaAIAppConnector
 }
 
 // queueStartTrial queues the report to Meta of a trial that came from a Meta ad. It only writes a row

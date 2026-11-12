@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -80,7 +81,7 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	if err != nil {
 		return SetupProgress{}, err
 	}
-	emailState, emailDetail, err := s.setupEmail(ctx, workspaceID)
+	emailState, emailDetail, err := s.EmailSetupState(ctx, workspaceID)
 	if err != nil {
 		return SetupProgress{}, err
 	}
@@ -160,19 +161,17 @@ func setupDone(step SetupStep) bool {
 	return step.State == "sent"
 }
 
-// setupEmail summarizes the workspace's live email channels by their best state: working, then waiting
-// for the first message, then needing attention (off or broken); none without a channel.
-func (s *Store) setupEmail(ctx context.Context, workspaceID string) (string, *string, error) {
-	list, err := s.ListChannels(ctx, workspaceID, false)
+// EmailSetupState is the setup guide's email step: the workspace's live email channels summarized by their
+// best state: working, then waiting for the first message, then needing attention (off or broken, with its
+// reason code); none without a channel. The daily workspace snapshot reports the same state.
+func (s *Store) EmailSetupState(ctx context.Context, workspaceID string) (string, *string, error) {
+	list, err := s.listChannels(ctx, workspaceID, false, domain.ChannelEmail)
 	if err != nil {
 		return "", nil, fmt.Errorf("read email channels: %w", err)
 	}
 	state, rank := "none", 0
 	var detail *string
 	for _, channel := range list {
-		if channel.Channel.Type != "email" {
-			continue
-		}
 		next, nextRank := channels.StateNeedsAttention, 1
 		switch channel.Status.State {
 		case channels.StateWorking:

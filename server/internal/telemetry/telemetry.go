@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 const (
@@ -34,6 +35,7 @@ const (
 // Reporter collects the counts and sends them.
 type Reporter struct {
 	db     *database.DB
+	store  *store.Store
 	config Config
 	client *http.Client
 	logger *slog.Logger
@@ -45,6 +47,13 @@ func New(db *database.DB, config Config, client *http.Client) *Reporter {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &Reporter{db: db, config: config, client: client, logger: slog.Default()}
+}
+
+// WithStore gives the reporter the server's store with the channel types it runs, which reads each
+// workspace's email step as the setup guide shows it (workspace_snapshot's email_state).
+func (r *Reporter) WithStore(s *store.Store) *Reporter {
+	r.store = s
+	return r
 }
 
 // Run says whether the report is on, then from a minute after start checks every hour and sends
@@ -84,7 +93,16 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
-	u, claimed, err := claimUsage(ctx, r.db, r.config.Realm == "cloud")
+	cloud := r.config.Realm == "cloud"
+	// The snapshots' email state is the setup guide's, which needs the server's channel types.
+	if cloud && r.store == nil {
+		return errors.New("collect usage: the workspace snapshots need the server's store (Reporter.WithStore)")
+	}
+	var emailState emailStateFunc
+	if r.store != nil {
+		emailState = r.store.EmailSetupState
+	}
+	u, claimed, err := claimUsage(ctx, r.db, cloud, emailState)
 	if err != nil {
 		return fmt.Errorf("collect usage: %w", err)
 	}

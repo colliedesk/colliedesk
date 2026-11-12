@@ -65,8 +65,8 @@ func TestCloudSignupRecordsTrialStartedOnce(t *testing.T) {
 	if !uuidPattern.MatchString(events[0].Workspace) {
 		t.Fatalf("workspace=%q, want the workspace id, never a slug, name or email", events[0].Workspace)
 	}
-	if len(events[0].Properties) != 0 {
-		t.Fatalf("properties=%v, want none", events[0].Properties)
+	if len(events[0].Properties) != 1 || events[0].Properties["signup_via"] != "web" {
+		t.Fatalf("properties=%v, want only signup_via=web", events[0].Properties)
 	}
 }
 
@@ -135,8 +135,8 @@ func TestCloudSignupLinksTrialToTheWebsiteVisitorWhoAcceptedCookies(t *testing.T
 	if len(events) != 1 || events[0].Properties["website_visitor_id"] != "01a1524f-3bd0-7b2b-b2fd-edb4cf9852dc" {
 		t.Fatalf("events=%+v, want trial_started with website_visitor_id from the website cookie", events)
 	}
-	if len(events[0].Properties) != 1 {
-		t.Fatalf("properties=%v, want only website_visitor_id", events[0].Properties)
+	if len(events[0].Properties) != 2 || events[0].Properties["signup_via"] != "web" {
+		t.Fatalf("properties=%v, want only website_visitor_id and signup_via=web", events[0].Properties)
 	}
 }
 
@@ -155,8 +155,8 @@ func TestCloudSignupIgnoresAWebsiteCookieWithoutAVisitorID(t *testing.T) {
 			f := newSignupFixture(t, func(config *httpapi.Config) { config.Funnel = funnel })
 			f.signUpWithCookies(t, fmt.Sprintf("owner%d@cookie-acme.example.com", index), fmt.Sprintf("Cookie Acme %d", index), cookie)
 			events := funnel.recorded()
-			if len(events) != 1 || len(events[0].Properties) != 0 {
-				t.Fatalf("events=%+v, want trial_started without properties", events)
+			if len(events) != 1 || len(events[0].Properties) != 1 || events[0].Properties["signup_via"] != "web" {
+				t.Fatalf("events=%+v, want trial_started with only signup_via=web", events)
 			}
 		})
 	}
