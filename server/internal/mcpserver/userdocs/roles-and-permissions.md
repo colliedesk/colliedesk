@@ -121,7 +121,7 @@ does there; an AI agent cannot create one. Under **Access**, choose one of:
   list is fixed when you create the token.
 
 Either way, a token never does more than you can do right now: if you lose a permission, every token
-of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → Sessions**
+of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External AI agents**
 shows each token as "Follows role …", "Fixed · N permissions", or "Stopped" with the reason. Revoke a
 token there. More about tokens: [Sessions and devices](sessions.md#agent-tokens).
 

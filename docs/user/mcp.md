@@ -22,8 +22,8 @@ token that holds `messages:send` only when you want it to write to customers.
   in, as your roles are on each call; see [Connected AI apps](sessions.md#connected-ai-apps).
 - An agent token is created in **Settings → AI & agents → External AI agents**, as described in
   [Agent tokens](sessions.md#agent-tokens): it follows a role (one whose permissions you all hold), or holds a fixed
-  list of your permissions. Give it only what the job needs. The token is shown once; revoke it in
-  **Settings → AI & agents → Sessions**.
+  list of your permissions. Give it only what the job needs. The token is shown once; revoke it from its
+  row in **Settings → AI & agents → External AI agents** (or in Sessions on the same page).
 
 ### Connect an app with OAuth
 
