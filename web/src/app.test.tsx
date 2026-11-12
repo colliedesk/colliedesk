@@ -262,6 +262,36 @@ test('after signing in with a pairing link the remembered intent leads to the bi
   await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/billing/checkout')).toHaveLength(1));
 });
 
+test('an invite link shows the workspace it joins before it is used, and joins with one press', async () => {
+  serve({
+    '/api/v1/auth/invite-preview': () => json(200, { state: 'pending', workspace_name: 'Beta Desk', invited_by: 'Mai Tran', email: 'sam@example.com', roles: ['Agent'], expires_at: '2026-11-12T14:30:00Z' }),
+    '/api/v1/auth/redeem': () => json(200, { agent: meBody('agent', trialPlan).agent, workspace: meBody('agent', trialPlan).workspace }),
+    '/api/v1/auth/me': () => json(200, meBody('agent', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  const router = open('/sign-in?token=invite-token');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Join Beta Desk' })).toBeInTheDocument();
+  expect(screen.getByText('Mai Tran invited you to the support team.')).toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/auth/invite-preview?token=invite-token')).toBe(true);
+  expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/auth/redeem')).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Join Beta Desk' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+  expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/auth/redeem')).toHaveLength(1);
+});
+
+test('a link the invite preview does not describe (a pairing link, an unknown token) keeps the link page', async () => {
+  serve({
+    '/api/v1/auth/invite-preview': () => json(401, { error: { code: 'invalid_link', message: 'This link is invalid, expired, revoked, or already used.' } }),
+    '/api/v1/auth/redeem': () => json(401, { error: { code: 'invalid_link', message: 'This link is invalid, expired, revoked, or already used.' } }),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+  });
+  open('/sign-in?token=pairing-token');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Open your secure link' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue to Colliedesk' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('This link is invalid, expired, or already used. Ask your workspace admin for a new link.');
+});
+
 test('a locked workspace drops the remembered plan and shows its own plan choices', async () => {
   rememberCheckoutIntent('founding');
   serve({

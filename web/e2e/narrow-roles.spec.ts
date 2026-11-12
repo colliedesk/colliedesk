@@ -28,7 +28,7 @@ test('a narrow role opens every screen without a refused call', async ({ page, b
     const refused: string[] = [];
     narrow.on('response', (response) => { if (response.status() === 403) refused.push(`${response.request().method()} ${new URL(response.url()).pathname}`); });
     await narrow.goto(url);
-    await narrow.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+    await narrow.getByRole('button', { name: /^Join / }).click();
     await narrow.waitForLoadState('networkidle');
     for (const screen of screens) {
       await narrow.goto(`${base}${screen}`);
