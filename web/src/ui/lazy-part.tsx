@@ -8,6 +8,9 @@ export type PartState<T> = { status: 'loading' } | { status: 'ready'; module: T 
 export interface LazyPart<T> {
   // preload starts the import now (once); a failure is kept for use() to report, never thrown.
   preload: () => void;
+  // ready starts the import and settles once the part can render, loaded or failed; it never rejects. A route
+  // loader returns it, so the router keeps the page on screen until the next one can show.
+  ready: () => Promise<void>;
   // use returns the part's state and starts the import if nothing did, unless load is false (it starts once
   // load turns true). A hook: call it unconditionally.
   use: (load?: boolean) => PartState<T>;
@@ -26,16 +29,19 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
     state = next;
     for (const listener of listeners) listener();
   };
-  const preload = () => {
-    if (state) return;
+  let settled: Promise<void> | undefined;
+  const ready = () => {
+    if (settled) return settled;
     set({ status: 'loading' });
-    load().then((module) => set({ status: 'ready', module }), (error: unknown) => {
+    settled = load().then((module) => set({ status: 'ready', module }), (error: unknown) => {
       // Not swallowed: the console shows it, and "Report a problem" can attach it.
       console.warn('A part of the page could not be loaded', error);
       recordClientError('lazy-part', error);
       set({ status: 'error' });
     });
+    return settled;
   };
+  const preload = () => { void ready(); };
   const subscribe = (listener: () => void) => {
     listeners.add(listener);
     return () => { listeners.delete(listener); };
@@ -45,7 +51,7 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
     useEffect(() => { if (load) preload(); }, [load]);
     return useSyncExternalStore(subscribe, snapshot);
   };
-  return { preload, use };
+  return { preload, ready, use };
 }
 
 const loading = { status: 'loading' } as const;

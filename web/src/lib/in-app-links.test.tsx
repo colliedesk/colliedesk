@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Outlet, RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { useInAppLinks } from './in-app-links';
 
 function Root() {
@@ -73,5 +73,21 @@ test('a click with a modifier key or another button keeps opening a new tab or w
 test('a link that follows itself is not followed a second time', async () => {
   const router = await openApp();
   expect(click('Handled')).toBe(false);
+  expect(router.state.location.pathname).toBe('/');
+});
+
+test('pointing at a plain link to a page of the app loads that page ahead, and only that page', async () => {
+  const loaded: string[] = [];
+  const rootRoute = createRootRoute({ component: Root });
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/', component: Links }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/results', loader: () => { loaded.push('results'); }, component: () => <h1>Results page</h1> }),
+  ]);
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  render(<RouterProvider router={router} />);
+  await screen.findByText('Results');
+  act(() => { fireEvent.pointerOver(screen.getByText('Website')); fireEvent.pointerOver(screen.getByText('New tab')); });
+  act(() => { fireEvent.pointerOver(screen.getByText('Results')); });
+  await vi.waitFor(() => expect(loaded).toEqual(['results']));
   expect(router.state.location.pathname).toBe('/');
 });
