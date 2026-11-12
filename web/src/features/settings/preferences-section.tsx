@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { applyTheme, onThemeChange, saveTheme, storedTheme } from '../../lib/theme';
 import type { Theme } from '../../lib/theme';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { NotificationsSetting } from './notifications-setting';
 
-// Preferences are per-browser choices: saved locally, not on the agent profile.
-export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHidden }: { setupGuideHidden?: boolean; onSetSetupGuideHidden?: (hidden: boolean) => void }) {
+// Preferences are per-browser choices, saved locally, except the mention email, which the server keeps for the person.
+// mentionEmail is the mention email setting, which reads and saves on the server (MentionEmailSetting).
+export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHidden, mentionEmail }: { setupGuideHidden?: boolean; onSetSetupGuideHidden?: (hidden: boolean) => void; mentionEmail?: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(storedTheme);
   // Another tab saved a different theme: follow it, and show it as the choice.
   useEffect(() => onThemeChange((next) => { setTheme(next); applyTheme(next); }), []);
@@ -24,6 +26,7 @@ export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHi
           </fieldset>
         </div>
         <NotificationsSetting />
+        {mentionEmail}
         {onSetSetupGuideHidden && <div className="field">
           <label className="field-inline"><input type="checkbox" checked={!setupGuideHidden} onChange={(event) => onSetSetupGuideHidden(!event.target.checked)} />
             <span>{settingsMessages.showSetupGuide}</span></label>

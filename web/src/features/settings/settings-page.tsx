@@ -56,6 +56,8 @@ interface SettingsPageProps {
   inviteError?: string;
   // teamSection lists the agents; invites follow it, as they add to the same people.
   teamSection?: ReactNode;
+  // The mention email setting under Preferences, which the route wires to the server.
+  mentionEmail?: ReactNode;
   // rolesSection lists the workspace's roles, under the team that holds them.
   rolesSection?: ReactNode;
   // savedRepliesSection is for every agent, not only admins.
@@ -103,7 +105,7 @@ export function SettingsPage(props: SettingsPageProps) {
 // Account: the profile, this browser's preferences, the devices signed in and the AI apps connected with OAuth.
 // The agent tokens and the sessions they opened are in AI & agents.
 function AccountSections({ sessions = [], timezone, displayName = '', email, displayNameSave, onSetDisplayName, timezoneOverride = null, workspaceTimezone = 'UTC',
-  personalTimezoneSave, onSetAgentTimezone, setupGuideHidden = false, onSetSetupGuideHidden, onRevokeSession, mcpAddress = `${window.location.origin}/mcp` }: SettingsPageProps) {
+  personalTimezoneSave, onSetAgentTimezone, setupGuideHidden = false, onSetSetupGuideHidden, onRevokeSession, mentionEmail, mcpAddress = `${window.location.origin}/mcp` }: SettingsPageProps) {
   return <>
     <section className="settings-card" aria-labelledby="profile-heading">
       <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{settingsMessages.profileDescription}</p></div>
@@ -113,7 +115,7 @@ function AccountSections({ sessions = [], timezone, displayName = '', email, dis
           save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
       </div>
     </section>
-    <PreferencesSection setupGuideHidden={setupGuideHidden} onSetSetupGuideHidden={onSetSetupGuideHidden} />
+    <PreferencesSection setupGuideHidden={setupGuideHidden} onSetSetupGuideHidden={onSetSetupGuideHidden} mentionEmail={mentionEmail} />
     <SessionsSection sessions={sessions} timezone={timezone} onRevokeSession={onRevokeSession} />
     <ConnectedAppsSection sessions={sessions} timezone={timezone} mcpAddress={mcpAddress} onDisconnect={onRevokeSession} />
   </>;

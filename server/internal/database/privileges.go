@@ -184,4 +184,8 @@ const (
 	// Only workspace ids and event names leave the transaction; each event is then read, sent and settled in
 	// its own workspace.
 	PrivilegeMetaConversionClaim Privilege = "meta-conversion-claim"
+	// PrivilegeMentionEmailClaim lists the mention emails of every workspace that are queued, or left
+	// sending by a stopped server, for the mention email sender. Only workspace ids and mention ids leave
+	// the transaction; each email is then claimed, read, sent and settled in its own workspace.
+	PrivilegeMentionEmailClaim Privilege = "mention-email-claim"
 )

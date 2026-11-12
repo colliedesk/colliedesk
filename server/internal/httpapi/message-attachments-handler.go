@@ -60,6 +60,8 @@ type messageFields struct {
 	draftFiles *[]string
 	// draft is set for a reply draft (POST …/reply-drafts): fields text and cc, then files.
 	draft bool
+	// mentions are the mentions fields of a note, one teammate each.
+	mentions []string
 }
 
 // newContact is the customer the fields add, or nil when they name a contact of the workspace.
@@ -152,13 +154,17 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		return
 	}
 	actor.AIDraftID, actor.AIDraftFileIDs = fields.aiDraft, fields.draftFiles
+	if !checkMentions(response, fields.kind, fields.mentions) {
+		return
+	}
+	actor.Mentions = fields.mentions
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)
 		return
 	}
 	item, replayed, err := a.store.CreateReplyOnce(request.Context(), workspaceID, conversationID, key, actor, fields.kind, fields.body, cc, fields.seen, files...)
-	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) {
+	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) || writeMentionRefused(response, err) {
 		return
 	}
 	if errors.Is(err, store.ErrObjectMissing) {
@@ -293,7 +299,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 		message := !fields.opening && !fields.draft
 		switch name := part.FormName(); {
 		case name == "kind" && message, name == "body" && !fields.draft, name == "text" && fields.draft, name == "cc", name == "seen_reply_number" && message,
-			name == "ai_draft_id" && message, name == "ai_draft_file_ids" && message,
+			name == "ai_draft_id" && message, name == "ai_draft_file_ids" && message, name == "mentions" && message,
 			fields.opening && (name == "contact_id" || name == "subject" || name == "channel_id" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
@@ -324,6 +330,11 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				if text = strings.TrimSpace(text); text != "" {
 					*fields.draftFiles = append(*fields.draftFiles, text)
 				}
+			case "mentions":
+				if len(fields.mentions) >= maxMentions {
+					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "A note can mention at most 20 teammates."}
+				}
+				fields.mentions = append(fields.mentions, strings.TrimSpace(text))
 			case "seen_reply_number":
 				seen, err := strconv.Atoi(text)
 				if err != nil {

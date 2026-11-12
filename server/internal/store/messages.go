@@ -70,6 +70,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 		message.ChannelMeta = channelMeta
 	}
 	message.Attachments = []domain.Attachment{}
+	message.Mentions = []domain.NoteMention{}
 	if message.CC == nil {
 		message.CC = []string{}
 	}
@@ -120,6 +121,9 @@ func listMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID st
 		return nil, fmt.Errorf("iterate messages: %w", err)
 	}
 	rows.Close()
+	if err := attachMentions(ctx, tx, workspaceID, messages); err != nil {
+		return nil, err
+	}
 	return messages, attachConversationFiles(ctx, tx, workspaceID, conversationID, messages)
 }
 
@@ -136,7 +140,11 @@ func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageI
 	if err := attachMessageFiles(ctx, query, workspaceID, &message); err != nil {
 		return domain.Message{}, err
 	}
-	return message, nil
+	one := []domain.Message{message}
+	if err := attachMentions(ctx, query, workspaceID, one); err != nil {
+		return domain.Message{}, err
+	}
+	return one[0], nil
 }
 
 // Actor is who wrote something: an agent, and the agent token they used when an AI agent wrote it
@@ -152,6 +160,9 @@ type Actor struct {
 	AIDraftFileIDs *[]string
 	// NoticeKind marks a reply the channel sends by itself (its received notice): no reply of the team.
 	NoticeKind string
+	// Mentions are the teammates a note asks, each an agent id or email address; they are resolved to
+	// active members of the workspace in the note's transaction (MentionRefusedError otherwise).
+	Mentions []string
 	// Via sends a notice through this chat channel, to the place the conversation's newest item of it is
 	// in, whatever channel carries the conversation's replies (a chat message moved into a conversation
 	// that came by email is told in its chat, never by email).
@@ -416,6 +427,14 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if err := s.insertMessageFiles(ctx, tx, workspaceID, messageID, files); err != nil {
 		return domain.Message{}, err
+	}
+	if len(actor.Mentions) > 0 {
+		if kind != "note" {
+			return domain.Message{}, ErrMentionsOnlyOnNotes
+		}
+		if err := mention(ctx, tx, workspaceID, messageID, actor.AgentID, actor.Mentions); err != nil {
+			return domain.Message{}, err
+		}
 	}
 	if kind == "outgoing" && actor.Via != nil {
 		if err := s.enqueueNotice(ctx, tx, workspaceID, conversationID, messageID, *actor.Via); err != nil {

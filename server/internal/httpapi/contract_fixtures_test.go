@@ -58,8 +58,10 @@ type contractFixture struct {
 	usedInviteToken               string
 	inboundSecret                 string
 	failedReplyID                 string
-	deleteChannelToken            string
-	portalToken, webhookBody      string
+	// noteID is a note of the admin that the contract case asks the agent on.
+	noteID                   string
+	deleteChannelToken       string
+	portalToken, webhookBody string
 	// requestToken is a read token that has the conversation open.
 	// roleID is a role the cases read, change and give; spareRoleID one they delete; deletedRoleID one they restore.
 	roleID, spareRoleID, deletedRoleID                 string
@@ -301,7 +303,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	oauthClientID := registerContractOAuthClient(t, api)
-	return contractFixture{trialOfferToken: trialOfferToken, trialAcceptToken: trialAcceptToken, oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{trialOfferToken: trialOfferToken, trialAcceptToken: trialAcceptToken, oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, noteID: noteID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb}
 }

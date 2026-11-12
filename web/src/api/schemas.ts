@@ -193,6 +193,9 @@ export type TokenGrant = z.infer<typeof tokenGrantSchema>;
 export const messageAgentTokenSchema = z.object({
   id: z.string().uuid(), label: z.string(), agent_name: z.string(),
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
+export const noteMentionSchema = z.object({
+  agent_id: z.string().uuid(), name: z.string(), by_email: z.boolean(), read_at: z.string().datetime().nullable(),
+}) satisfies z.ZodType<Generated<'NoteMention'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
   author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), agent_request_id: z.string().uuid().nullable(),
@@ -209,7 +212,21 @@ export const messageSchema = z.object({
   other_contact_id: z.string().uuid().nullable().optional(),
   intake_reply_kind: z.enum(['substantive', 'acknowledgement']).nullable().optional(),
   notice_kind: z.string().nullable().optional(),
+  // The teammates a note asks; an older server sends none.
+  mentions: z.array(noteMentionSchema).optional(),
 }) satisfies z.ZodType<Generated<'Message'>>;
+export const mentionSchema = z.object({
+  id: z.string().uuid(), conversation_id: z.string().uuid(), message_id: z.string().uuid(), subject: z.string(), display_ref: z.string(),
+  excerpt: z.string(), author_agent_id: z.string().uuid().nullable(), author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(),
+  created_at: z.string().datetime(), read_at: z.string().datetime().nullable(),
+}) satisfies z.ZodType<Generated<'Mention'>>;
+export const mentionListSchema = z.object({
+  items: z.array(mentionSchema), unread: z.number().int(), email: z.boolean(), next_before: z.string().uuid().nullable(),
+}) satisfies z.ZodType<Generated<'MentionList'>>;
+export type Mention = z.infer<typeof mentionSchema>;
+export type NoteMention = z.infer<typeof noteMentionSchema>;
+export const markMentionsResultSchema = z.object({ changed: z.number().int(), unread: z.number().int() });
+export const mentionEmailSchema = z.object({ email: z.boolean() });
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
 }) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;

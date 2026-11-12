@@ -61,6 +61,8 @@ interface TimelinePanelProps {
   messageLabel?: (item: Message) => ReactNode;
   messageMenu?: (item: Message) => ReactNode;
   messageNote?: (item: Message) => ReactNode;
+  // The person reading, whom a note may have asked.
+  currentAgentId?: string;
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
@@ -113,7 +115,7 @@ function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) =
     {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -163,7 +165,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {conversation && !readsMessages && <p className="empty-copy">{messages.messagesClosed}</p>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
-          {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
+          {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} currentAgentId={currentAgentId} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
             approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} onOpenMedia={openMedia} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
           {eventAt === items.length && event}

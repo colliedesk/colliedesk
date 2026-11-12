@@ -6,6 +6,7 @@ import { messages } from '../../messages';
 import { useBillingShown } from '../billing/billing-shown';
 import { saveState } from './save-feedback';
 import { SettingsPage } from './settings-page';
+import { MentionEmailSetting } from './mention-email-setting';
 
 // Settings → Account: the profile, this browser's preferences, the devices signed in and the AI apps
 // connected with OAuth. It asks for who is signed in and the sessions only.
@@ -27,7 +28,7 @@ export function AccountRoute() {
   const loading = me.isPending || sessions.isPending;
   // A link to a section (a pasted address, an old anchor) arrives before the sections do.
   useScrollToHashWhenReady(!loading);
-  return <SettingsPage page="account" loading={loading} sessions={sessions.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown}
+  return <SettingsPage page="account" loading={loading} mentionEmail={can(me.data, 'messages:read') ? <MentionEmailSetting /> : undefined} sessions={sessions.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown}
     personalTimezoneSave={saveState(agentTimezone)} email={me.data?.agent.email} displayName={me.data?.agent.display_name} displayNameSave={saveState(agentDisplayName)}
     onSetDisplayName={(name) => agentDisplayName.mutate(name)}
     setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}

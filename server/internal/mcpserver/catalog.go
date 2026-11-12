@@ -37,7 +37,7 @@ type Spec struct {
 func Catalog() []Spec {
 	specs := []Spec{
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), conversationPresenceSpec(), timeEntriesListSpec(), attachmentGetSpec(),
-		conversationUpdateSpec(), conversationsBulkUpdateSpec(), conversationsSpamSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
+		conversationUpdateSpec(), conversationsBulkUpdateSpec(), conversationsSpamSpec(), noteAddSpec(), noteMentionSpec(), mentionsListSpec(), mentionsMarkReadSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		conversationStartSpec(),
 		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), contactUpdateSpec(), contactMergeSpec(), contactUnmergeSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
 		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
@@ -56,7 +56,7 @@ func Catalog() []Spec {
 		replyDraftSpec(),
 		replyDraftRestoreSpec(),
 		workspaceExportSpec(), billingActionSpec(), trialOfferAcceptSpec(), emailChannelDisconnectSpec(),
-		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
+		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), myMentionEmailSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		rolesListSpec(), roleCreateSpec(), roleUpdateSpec(), roleDeleteSpec(), roleResetSpec(), roleRestoreSpec(), memberRolesSetSpec(),

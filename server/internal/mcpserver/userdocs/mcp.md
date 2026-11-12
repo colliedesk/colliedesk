@@ -104,7 +104,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `conversations:update`, `tags:create`, `tags:read`, `team:read` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `conversations:update`, `tags:read`, `team:read` |
 | `colliedesk_conversations_spam` | Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Reports), or back where they were with `spam` false; all or nothing | `conversations:update` |
-| `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call) | `messages:note` |
+| `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call), and asks teammates in it | `messages:note` |
+| `colliedesk_note_mention` | Asks more teammates on a note you wrote; only the new ones are told | `messages:note` |
+| `colliedesk_mentions_list` | Lists the notes that ask you, unread first by default, with the unread count | `messages:read` |
+| `colliedesk_mentions_mark_read` | Marks your mentions read, or unread again: some, those on one conversation, or all | `messages:read` |
 | `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from; without `ai_draft_file_ids` every file of that draft is sent. Cannot be undone | `conversations:read`, `messages:note`, `messages:read`, `messages:send`, `team:read` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `messages:send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `messages:send` |
@@ -207,6 +210,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_response_targets_get` | Reads the business hours and the response targets by priority | `conversations:read` |
 | `colliedesk_response_targets_set` | Changes the business hours or the response targets | `workspace:update` |
 | `colliedesk_my_sla_alerts_set` | Turns your own reminder and overdue emails on or off | `profile:update` |
+| `colliedesk_my_mention_email_set` | Turns your own mention emails on or off | `profile:update` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | any token |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | any token |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `workspace:update` |
