@@ -13,7 +13,8 @@ uptime and self-hosted installs.
 - Passwordless sign-in: one-time pairing and invite links, role ceilings, revocable sessions;
   cloud sign-in through Clerk.
 - Shared inbox: replies, private notes, status, priority, assignee, tags, search, pagination,
-  bulk actions, saved replies, attachments, Cc on replies, live updates and browser notifications.
+  bulk actions, saved replies, attachments, Cc on replies, live updates and browser notifications;
+  @mention a teammate in a private note, with a Mentions list and one email each.
 - **New conversation from the inbox**: email a contact first, and see a contact's history with
   merged duplicates.
 - **Email channel**: inbound and outbound, threading, spoof and loop protection.
