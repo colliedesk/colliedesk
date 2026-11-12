@@ -379,6 +379,31 @@ type Message struct {
 	// NoticeKind marks a reply the channel sent by itself (received: its received notice); nil for a
 	// reply of the team.
 	NoticeKind *string `json:"notice_kind"`
+	// Mentions are the teammates a private note asks, in the order they were asked; empty otherwise.
+	Mentions []NoteMention `json:"mentions"`
+}
+
+// NoteMention is one teammate a private note asks: whether they get an email for it and when they read it.
+type NoteMention struct {
+	AgentID string     `json:"agent_id"`
+	Name    string     `json:"name"`
+	ByEmail bool       `json:"by_email"`
+	ReadAt  *time.Time `json:"read_at"`
+}
+
+// Mention is a note that asks the person reading their Mentions list, with where it is and who asked.
+type Mention struct {
+	ID             string        `json:"id"`
+	ConversationID string        `json:"conversation_id"`
+	MessageID      string        `json:"message_id"`
+	Subject        string        `json:"subject"`
+	DisplayRef     string        `json:"display_ref"`
+	Excerpt        string        `json:"excerpt"`
+	AuthorAgentID  *string       `json:"author_agent_id"`
+	AuthorName     *string       `json:"author_name"`
+	AgentToken     *MessageToken `json:"agent_token"`
+	CreatedAt      time.Time     `json:"created_at"`
+	ReadAt         *time.Time    `json:"read_at"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the

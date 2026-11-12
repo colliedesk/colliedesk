@@ -71,6 +71,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.createKBTranslation, a.getKBTranslation, a.updateKBTranslation, a.deleteKBTranslation, a.restoreKBTranslation,
 		a.listKBTranslationVersions, a.restoreKBTranslationVersion, a.putKBCollectionTranslation, a.deleteKBCollectionTranslation,
 		a.describeOAuthClient, a.allowOAuth,
+		a.addNoteMentions, a.listMentions, a.markMentionsRead, a.setMentionEmail,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

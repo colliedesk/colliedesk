@@ -1781,6 +1781,11 @@ paths:
         files as attachments; a note never leaves the workspace.
 
 
+        A note may ask teammates with `mentions` (in `multipart/form-data`, one `mentions` field each, before
+        the files): each is told once, in their Mentions list (`GET /api/v1/mentions`) and by email unless
+        they turned that email off. Only active members of the workspace can be asked.
+
+
         A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no
         display name), stored lowercase without duplicates. The conversation contact stays the only
         `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are
@@ -1826,6 +1831,7 @@ paths:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                mentions: {$ref: '#/components/schemas/MentionTargets'}
                 seen_reply_number: {type: integer, minimum: 0, description: 'The newest reply number the sender had seen; 0 when there was none.'}
                 ai_draft_id: {type: string, format: uuid, description: 'The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation''s ready, undecided draft.'}
                 ai_draft_file_ids:
@@ -1851,6 +1857,7 @@ paths:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                mentions: {$ref: '#/components/schemas/MentionTargets'}
                 ai_draft_id: {type: string, format: uuid}
                 ai_draft_file_ids:
                   type: array
@@ -5056,6 +5063,143 @@ paths:
           description: The link was turned off, replaced or never existed
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/conversations/{id}/messages/{messageId}/mentions:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: messageId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: addNoteMentions
+      x-permission: messages:note
+      description: >-
+        Ask more teammates on a private note you wrote (or the person your token acts as wrote). Only the
+        people the note did not ask yet are told, once each, in their Mentions list and by email; the people
+        already asked are not told again, so a repeat changes nothing. A mention cannot be taken back: the
+        person was told. Another person's note answers 403 `not_your_note`; a reply or a customer message
+        answers 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mentions]
+              properties:
+                mentions: {$ref: '#/components/schemas/MentionTargets'}
+      responses:
+        '200':
+          description: The note with everyone it asks (mentions)
+          content: {application/json: {schema: {$ref: '#/components/schemas/Message'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/mentions:
+    get:
+      operationId: listMentions
+      x-permission: messages:read
+      description: >-
+        The private notes that asked you (the person your token acts as), newest first, with how many are
+        unread and whether you get them by email. Listing does not mark them read: opening the note does
+        (`POST /api/v1/mentions/read`).
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: unread (default) lists only the mentions you have not read; all lists every one.
+          schema: {type: string, enum: [unread, all], default: unread}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+        - name: before
+          in: query
+          required: false
+          description: next_before of the previous page, for the page after it.
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Your mentions
+          content: {application/json: {schema: {$ref: '#/components/schemas/MentionList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/mentions/read:
+    post:
+      operationId: markMentionsRead
+      x-permission: messages:read
+      description: >-
+        Mark your own mentions read, or unread again with `read` false. Name exactly one of `mention_ids`
+        (ids from `GET /api/v1/mentions`), `conversation_id` (every mention of you on that conversation's
+        notes: what opening the conversation does) or `all` true (Mark all read). An id that is not one of
+        your mentions answers 404 and nothing changes. Safe to repeat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                mention_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  items: {type: string, format: uuid}
+                conversation_id: {type: string, format: uuid}
+                all: {type: boolean, enum: [true]}
+                read: {type: boolean, default: true, description: false marks them unread again.}
+      responses:
+        '200':
+          description: How many changed and how many of yours are unread now
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [changed, unread]
+                properties:
+                  changed: {type: integer}
+                  unread: {type: integer}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/agents/me/mention-email:
+    patch:
+      operationId: setMentionEmail
+      x-permission: profile:update
+      description: >-
+        Turn your own mention emails on or off (Email me when someone mentions me; on for everyone at
+        first). Off, a note that asks you still reaches your Mentions list. Your setting is `email` of
+        `GET /api/v1/mentions`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: {type: boolean}
+      responses:
+        '200':
+          description: Your setting
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email]
+                properties:
+                  email: {type: boolean}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/agents/me/results-email:
     patch:
       operationId: setResultsEmail
@@ -12308,6 +12452,10 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MessageAgentToken'}
+        mentions:
+          type: array
+          description: The teammates a private note asks (@mention), in the order they were asked; empty for every other message.
+          items: {$ref: '#/components/schemas/NoteMention'}
         reply_number:
           type: [integer, 'null']
           minimum: 1
@@ -12358,6 +12506,52 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/IncomingEmail'}
+    MentionTargets:
+      type: array
+      minItems: 1
+      maxItems: 20
+      uniqueItems: true
+      description: >-
+        Teammates a private note asks, each an agent's id or email address (GET /api/v1/agents). Only active
+        members of the workspace can be asked: a customer's address, a deactivated person or anyone else
+        answers 400 with its place in `fields` (`mentions.0`) and nothing is stored. Your own id is left out:
+        you are never told of your own note. A reply takes none (400).
+      items: {type: string, minLength: 1, maxLength: 320}
+    NoteMention:
+      type: object
+      required: [agent_id, name, by_email, read_at]
+      properties:
+        agent_id: {type: string, format: uuid}
+        name: {type: string, description: 'The person''s display name, else their email.'}
+        by_email: {type: boolean, description: 'They are emailed too; false when they turned mention emails off.'}
+        read_at: {type: [string, 'null'], format: date-time, description: When they opened the note; null while unread.}
+    Mention:
+      type: object
+      required: [id, conversation_id, message_id, subject, display_ref, excerpt, author_agent_id, author_name, agent_token, created_at, read_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid, description: 'The note; the conversation shows it at the anchor message-<id>.'}
+        subject: {type: string, description: The conversation's subject.}
+        display_ref: {type: string, description: 'The conversation''s code (#12); empty when it has none.'}
+        excerpt: {type: string, description: 'The start of the note on one line, at most 200 characters.'}
+        author_agent_id: {type: [string, 'null'], format: uuid}
+        author_name: {type: [string, 'null'], description: Who asked; the person the token acts as when an agent token wrote the note.}
+        agent_token:
+          description: 'The agent token the note was written with ("<author_name> via <label>"); null when a person wrote it.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageAgentToken'}
+        created_at: {type: string, format: date-time}
+        read_at: {type: [string, 'null'], format: date-time}
+    MentionList:
+      type: object
+      required: [items, unread, email, next_before]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Mention'}}
+        unread: {type: integer, description: 'How many of your mentions are unread, in all.'}
+        email: {type: boolean, description: 'Your setting: Email me when someone mentions me.'}
+        next_before: {type: [string, 'null'], format: uuid, description: The before of the next page; null on the last.}
     MessageAgentToken:
       type: object
       required: [id, label, agent_name]

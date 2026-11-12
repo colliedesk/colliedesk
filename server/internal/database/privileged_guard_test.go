@@ -63,6 +63,7 @@ var privilegedCallSites = []string{
 	"internal/store/mail-image-cache.go: PrivilegeMailImageSweep",
 	"internal/store/mailbox-connections.go: PrivilegeMailboxGrantShared",
 	"internal/store/mailbox-connections.go: PrivilegeMailboxKeepAlive",
+	"internal/store/mentions.go: PrivilegeMentionEmailClaim",
 	"internal/store/results-sharing.go: PrivilegeResultsShareToken",
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/store/server-secrets.go: PrivilegeServerSecret",

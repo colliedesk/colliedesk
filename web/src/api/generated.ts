@@ -995,6 +995,8 @@ export interface paths {
         /**
          * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
          *
+         *     A note may ask teammates with `mentions` (in `multipart/form-data`, one `mentions` field each, before the files): each is told once, in their Mentions list (`GET /api/v1/mentions`) and by email unless they turned that email off. Only active members of the workspace can be asked.
+         *
          *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
@@ -3040,6 +3042,77 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/messages/{messageId}/mentions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Ask more teammates on a private note you wrote (or the person your token acts as wrote). Only the people the note did not ask yet are told, once each, in their Mentions list and by email; the people already asked are not told again, so a repeat changes nothing. A mention cannot be taken back: the person was told. Another person's note answers 403 `not_your_note`; a reply or a customer message answers 400. */
+        post: operations["addNoteMentions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The private notes that asked you (the person your token acts as), newest first, with how many are unread and whether you get them by email. Listing does not mark them read: opening the note does (`POST /api/v1/mentions/read`). */
+        get: operations["listMentions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentions/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mark your own mentions read, or unread again with `read` false. Name exactly one of `mention_ids` (ids from `GET /api/v1/mentions`), `conversation_id` (every mention of you on that conversation's notes: what opening the conversation does) or `all` true (Mark all read). An id that is not one of your mentions answers 404 and nothing changes. Safe to repeat. */
+        post: operations["markMentionsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/mention-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turn your own mention emails on or off (Email me when someone mentions me; on for everyone at first). Off, a note that asks you still reaches your Mentions list. Your setting is `email` of `GET /api/v1/mentions`. */
+        patch: operations["setMentionEmail"];
         trace?: never;
     };
     "/api/v1/agents/me/results-email": {
@@ -8589,6 +8662,8 @@ export interface components {
             ai_draft_source: "ai" | "written" | null;
             /** @description For a reply sent from a written draft, the agent token that wrote it; null otherwise. author_* is the person who sent it. */
             drafted_by: null | components["schemas"]["MessageAgentToken"];
+            /** @description The teammates a private note asks (@mention), in the order they were asked; empty for every other message. */
+            mentions?: components["schemas"]["NoteMention"][];
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
             /** Format: uuid */
@@ -8622,6 +8697,60 @@ export interface components {
             delivery: null | components["schemas"]["MessageDelivery"];
             /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
             email: null | components["schemas"]["IncomingEmail"];
+        };
+        /** @description Teammates a private note asks, each an agent's id or email address (GET /api/v1/agents). Only active members of the workspace can be asked: a customer's address, a deactivated person or anyone else answers 400 with its place in `fields` (`mentions.0`) and nothing is stored. Your own id is left out: you are never told of your own note. A reply takes none (400). */
+        MentionTargets: string[];
+        NoteMention: {
+            /** Format: uuid */
+            agent_id: string;
+            /** @description The person's display name, else their email. */
+            name: string;
+            /** @description They are emailed too; false when they turned mention emails off. */
+            by_email: boolean;
+            /**
+             * Format: date-time
+             * @description When they opened the note; null while unread.
+             */
+            read_at: string | null;
+        };
+        Mention: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /**
+             * Format: uuid
+             * @description The note; the conversation shows it at the anchor message-<id>.
+             */
+            message_id: string;
+            /** @description The conversation's subject. */
+            subject: string;
+            /** @description The conversation's code (#12); empty when it has none. */
+            display_ref: string;
+            /** @description The start of the note on one line, at most 200 characters. */
+            excerpt: string;
+            /** Format: uuid */
+            author_agent_id: string | null;
+            /** @description Who asked; the person the token acts as when an agent token wrote the note. */
+            author_name: string | null;
+            /** @description The agent token the note was written with ("<author_name> via <label>"); null when a person wrote it. */
+            agent_token: null | components["schemas"]["MessageAgentToken"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at: string | null;
+        };
+        MentionList: {
+            items: components["schemas"]["Mention"][];
+            /** @description How many of your mentions are unread, in all. */
+            unread: number;
+            /** @description Your setting: Email me when someone mentions me. */
+            email: boolean;
+            /**
+             * Format: uuid
+             * @description The before of the next page; null on the last.
+             */
+            next_before: string | null;
         };
         MessageAgentToken: {
             /** Format: uuid */
@@ -12696,6 +12825,7 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    mentions?: components["schemas"]["MentionTargets"];
                     /** @description The newest reply number the sender had seen; 0 when there was none. */
                     seen_reply_number?: number;
                     /**
@@ -12714,6 +12844,7 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    mentions?: components["schemas"]["MentionTargets"];
                     /** Format: uuid */
                     ai_draft_id?: string;
                     /** @description One field per file of the draft to send, before the files; leave the field out to send every file of the draft. Send `ai_draft_file_ids` once with an empty value to send none. */
@@ -16899,6 +17030,142 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    addNoteMentions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    mentions: components["schemas"]["MentionTargets"];
+                };
+            };
+        };
+        responses: {
+            /** @description The note with everyone it asks (mentions) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMentions: {
+        parameters: {
+            query?: {
+                /** @description unread (default) lists only the mentions you have not read; all lists every one. */
+                status?: "unread" | "all";
+                limit?: number;
+                /** @description next_before of the previous page, for the page after it. */
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your mentions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentionList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    markMentionsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    mention_ids?: string[];
+                    /** Format: uuid */
+                    conversation_id?: string;
+                    /** @enum {boolean} */
+                    all?: true;
+                    /**
+                     * @description false marks them unread again.
+                     * @default true
+                     */
+                    read?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description How many changed and how many of yours are unread now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changed: number;
+                        unread: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setMentionEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Your setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        email: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     setResultsEmail: {

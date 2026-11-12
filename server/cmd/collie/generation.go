@@ -28,6 +28,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
+	"github.com/colliedesk/colliedesk/server/internal/mentionmail"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -212,6 +213,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		alerts := sla.Alerts{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
 			Origin: origin, HelpCenterDomain: helpCenterDomain}
 		g.Go(func(ctx context.Context) { alerts.Run(ctx, time.Minute) })
+		// A teammate a private note mentions is emailed once, from the same address (docs/user/mentions.md).
+		mentions := mentionmail.Sender{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
+			Origin: origin, HelpCenterDomain: helpCenterDomain}
+		g.Go(func(ctx context.Context) { mentions.Run(ctx, 15*time.Second) })
 	}
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
