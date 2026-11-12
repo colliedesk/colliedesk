@@ -34,12 +34,15 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Session type must be cookie or bearer.")
 		return
 	}
+	if a.tooManyRefusedLinks(response, request) {
+		return
+	}
 	result, err := a.auth.Redeem(request.Context(), input.Token, input.RequestedRole, input.Label, input.SessionType == "cookie")
 	if writePlanLimit(response, err) {
 		return
 	}
 	if err != nil {
-		writeError(response, http.StatusUnauthorized, "invalid_link", "This link is invalid, expired, revoked, or already used.")
+		a.refuseLink(response, request, err)
 		return
 	}
 	// A person who joins takes over the imported replies and tickets of the Freshdesk agent with

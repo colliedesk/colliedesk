@@ -97,6 +97,9 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&linkWorkspace)
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Redeemed{}, fmt.Errorf("redeem link: %w", ErrUnknownLink)
+	}
 	if err != nil {
 		return Redeemed{}, fmt.Errorf("redeem link: %w", err)
 	}

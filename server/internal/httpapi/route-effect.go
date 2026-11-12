@@ -50,6 +50,7 @@ func RouteEffectTable() map[string]Effect { return maps.Clone(routeEffects) }
 var routeEffects = map[string]Effect{
 	// A POST that stores nothing: it checks or previews what the body would do.
 	"POST /api/v1/ai/models":                        Reads,
+	"POST /api/v1/auth/invite-preview":              Reads, // the token rides in the body, never in a logged address
 	"POST /api/v1/conversations/{id}/fixes/preview": Reads,
 	"POST /api/v1/help-center/theme/check":          Reads,
 	"POST /api/v1/help-center/theme/preview":        Reads,
