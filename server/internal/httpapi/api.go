@@ -502,7 +502,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
 	api.mountOAuth(mux)
-	return &Server{Handler: withRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
+	return &Server{Handler: WithRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
 }
 
 // observeTrial counts, while a trial change runs, the distinct client addresses this process sees, so the
