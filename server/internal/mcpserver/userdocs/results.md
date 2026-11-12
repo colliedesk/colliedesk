@@ -1,6 +1,6 @@
 # Results
 
-**Results** (in the rail) shows how your team did in Freshdesk next to how it does in Colliedesk,
+**Reports** in the sidebar opens **Results**, which shows how your team did in Freshdesk next to how it does in Colliedesk,
 for the last 30 days (the default) or the last 7. Every number is a link: it opens the inbox on the
 conversations it counts, in any status, so you can check it. Every role can read the page.
 

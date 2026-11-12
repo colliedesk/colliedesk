@@ -1,11 +1,11 @@
-/* App shell: a sidebar on the grey app background; the identity bar over one white sheet that holds the view. */
+/* App shell: a sidebar on the grey app background beside one white sheet; the sheet's top bar names the page. */
 :root { --sidebar-width: 248px; }   /* things fixed to the viewport (the setup dock) start beside it */
 .app-shell { height: 100dvh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); background: var(--surface-0); }
 .app-sidebar {
-  position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto;
-  padding: var(--space-2) var(--space-2); background: var(--surface-0); box-shadow: inset -1px 0 0 var(--line);
+  position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  padding: 0 var(--space-2) var(--space-2); background: var(--surface-0); box-shadow: inset -1px 0 0 var(--line);
 }
-.app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); overflow: hidden; padding: 0 var(--space-2) var(--space-2) 0; }
+.app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); overflow: hidden; padding: var(--space-2) var(--space-2) var(--space-2) 0; }
 .app-sheet { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 /* Positioned, so an absolute child (an sr-only label, a hidden radio) never sizes the window and adds a second scrollbar. */
 .app-content { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: auto; }
@@ -14,21 +14,55 @@
 /* Sign-in and an AI app's consent page stand alone, outside the shell: their page is the whole window, no inset. */
 .app-main:has(> .redeem-page) { padding: 0; }
 .app-main:has(> .redeem-page) > .app-sheet, .app-main > .app-sheet:has(> .app-content > .redeem-page) { border-radius: 0; box-shadow: none; }
-/* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
-.identity-bar {
-  flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: 40px;
-  background: var(--surface-0); padding: 0 var(--space-2); font-size: var(--fs-label);
+/* The top bar of the sheet: the page's icon and name, and Help. */
+.app-topbar {
+  flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 44px; padding: 0 var(--space-3) 0 var(--space-4);
+  background: var(--surface-1); box-shadow: inset 0 -1px 0 var(--line);
 }
+.topbar-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.topbar-title svg { flex: none; width: 14px; height: 14px; color: var(--text-3); stroke-width: 1.75; }
+.topbar-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-help { flex: none; display: inline-flex; align-items: center; min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius);
+  color: var(--text-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
+.topbar-help:hover { color: var(--text-1); }
+/* Where the sidebar does not name them, the top bar does: always visible, never a tooltip, it is what tells a person
+   which workspace this browser acts in. */
+.identity-bar { flex: 0 1 auto; display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--fs-label); }
+.topbar-title + .identity-bar { max-width: 60%; }
+.identity-bar:first-child { flex: 1; }
 .identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
-.app-rail { flex: 1 0 auto; display: flex; flex-direction: column; gap: var(--space-1); background: var(--surface-0); }
-.rail-brand {
-  width: var(--control, 32px); height: var(--control, 32px); display: grid; place-items: center; margin: var(--space-1) 0 var(--space-2);
-  border-radius: var(--radius);
-}
+.app-rail { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-0); }
+.rail-brand { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius); }
 .rail-brand .logo-mark { width: 24px; height: 24px; }
+/* The head: the logo and the workspace, as the design's workspace switcher (one workspace per session, so no menu). */
+.workspace-name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-actions { flex: none; display: flex; gap: var(--space-2); padding: var(--space-1) 0 var(--space-3); }
+.sidebar-search { flex: 1; min-width: 0; justify-content: flex-start; gap: var(--space-2); padding: 0 var(--space-1) 0 var(--space-2); border-color: transparent;
+  color: var(--text-3); font-size: var(--fs-ui); }
+.sidebar-search:hover:not(:disabled) { border-color: transparent; color: var(--text-1); }
+.sidebar-search svg, .sidebar-new svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
+.sidebar-search-label { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; }
+.sidebar-search kbd { flex: none; padding: 0 var(--space-1); border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3);
+  font-family: var(--font-mono); font-size: var(--fs-label); line-height: 20px; }
+.sidebar-new { flex: none; width: var(--control, 32px); padding: 0; border-color: transparent; }
+.sidebar-new:hover:not(:disabled) { border-color: transparent; }
+/* The visible label says it: the tooltips of the open sidebar would only repeat it. */
+:is(.sidebar-search, .sidebar-new)[data-tip]::after { display: none; }
+.sidebar-new[data-tip]:is(:hover, :focus-visible)::after { display: block; left: auto; right: 0; translate: 0 0; }
+.sidebar-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .rail-links { display: flex; flex-direction: column; }
+.sidebar-section-title { margin: 0; padding: var(--space-5) var(--space-2) var(--space-2); color: var(--text-3); font: 500 var(--fs-label)/16px var(--font-sans); letter-spacing: 0; }
+.sidebar-section ul { margin: 0; padding: 0; list-style: none; }
+/* What a saved view holds: open, waiting on the customer, urgent, or a ring for anything else. */
+.view-mark { flex: none; position: relative; width: 16px; height: 16px; }
+.view-mark::before { content: ""; position: absolute; inset: 4px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.view-mark[data-mark="open"]::before { background: var(--open); box-shadow: none; }
+.view-mark[data-mark="pending"]::before { background: var(--pending); box-shadow: none; }
+.view-mark[data-mark="urgent"]::before { background: var(--danger); box-shadow: none; }
+.channel-warn { flex: none; width: 8px; height: 8px; margin: 0 var(--space-1); border-radius: var(--radius-full); background: var(--warn); }
+.sidebar-foot { flex: none; display: flex; flex-direction: column; padding-top: var(--space-2); box-shadow: inset 0 1px 0 var(--line); }
 .rail-link {
   height: var(--control, 32px); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius);
   color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none;
@@ -42,7 +76,7 @@
 .rail-link[data-tip]::after { display: none; }
 .app-rail .rail-badge { position: static; flex: none; width: var(--space-6); min-width: 0; padding: 0; border-radius: 0; background: none; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; text-align: right; }
 /* Desktop: the sidebar's width is the person's (sidebar-layout.ts): dragged at its edge, or folded into the icon rail. */
-.rail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.rail-head { flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 48px; padding: 0 var(--space-1); }
 .sidebar-toggle { --control: 28px; flex: none; width: 28px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
 .sidebar-toggle:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
 .sidebar-toggle svg { width: 16px; height: 16px; transform: scaleX(-1); }   /* the panel on the left */
@@ -59,9 +93,17 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   html[data-sidebar-resizing] .app-shell { transition: none; }
   .app-shell[data-sidebar="collapsed"] { --sidebar-width: 56px; }
   .app-shell[data-sidebar="collapsed"] .app-sidebar { padding: var(--space-2) 0; overflow: visible; }
-  .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links) { align-items: center; }
-  .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; gap: 0; margin-bottom: var(--space-2); }
-  .app-shell[data-sidebar="collapsed"] .rail-brand { margin-bottom: var(--space-1); }
+  .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links, .sidebar-foot) { align-items: center; }
+  .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; justify-content: center; gap: var(--space-2); height: auto; margin-bottom: var(--space-2); padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .sidebar-scroll { overflow: visible; }
+  .app-shell[data-sidebar="collapsed"] :is(.workspace-name, .sidebar-section, .sidebar-search-label, .sidebar-search kbd) { display: none; }
+  .app-shell[data-sidebar="collapsed"] .sidebar-actions { flex-direction: column; align-items: center; gap: var(--space-1); padding: 0 0 var(--space-2); }
+  .app-shell[data-sidebar="collapsed"] :is(.sidebar-search, .sidebar-new) { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] :is(.sidebar-search, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
+  .app-shell[data-sidebar="collapsed"] :is(.sidebar-search, .sidebar-new)[data-tip]:is(:hover, :focus-visible)::after { display: block; }
+  .app-shell[data-sidebar="collapsed"] .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app-shell[data-sidebar="collapsed"] .rail-avatar { width: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .rail-brand { width: 40px; height: 40px; }
   .app-shell[data-sidebar="collapsed"] .sidebar-toggle svg { transform: none; }
   .app-shell[data-sidebar="collapsed"] .sidebar-toggle[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
   .app-shell[data-sidebar="collapsed"] .rail-links { gap: var(--space-1); }
@@ -79,10 +121,15 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .rail-head { flex-direction: column; }
 }
 @media (max-width: 44rem) { .rail-head { display: contents; } }
-/* The person at the foot of the sidebar opens the account menu. */
-.account-menu { position: relative; margin-top: auto; padding-top: var(--space-2); box-shadow: inset 0 1px 0 var(--line); }
-.rail-avatar { width: 40px; height: 40px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--radius-full); }
+/* The person at the foot of the sidebar (name, and the address under it) opens the account menu. */
+.account-menu { position: relative; }
+.rail-avatar { width: 100%; height: 40px; justify-content: flex-start; gap: var(--space-2); padding: 0 var(--space-2); border-color: transparent; background: transparent; box-shadow: none; }
 .rail-avatar:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.rail-avatar .avatar { width: 20px; height: 20px; font-size: 9px; }
+.current-user { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.current-user > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-user-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 18px; }
+.current-user-email { color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; }
 .account-popover {
   position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(100% + var(--space-1)); display: grid; gap: var(--space-3);
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
@@ -215,14 +262,23 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (min-width: 44.01rem) and (max-width: 64rem) {
   :root { --sidebar-width: 56px; }
   .app-sidebar { padding: var(--space-2) 0; }
-  .app-rail { align-items: center; }
+  .app-rail, .sidebar-foot { align-items: center; }
   .rail-links { align-items: center; gap: var(--space-1); }
+  .rail-head { justify-content: center; height: auto; margin-bottom: var(--space-2); padding: 0; }
+  .sidebar-scroll { overflow: visible; }
+  :is(.workspace-name, .sidebar-section, .sidebar-search-label, .sidebar-search kbd) { display: none; }
+  .sidebar-actions { flex-direction: column; align-items: center; gap: var(--space-1); padding: 0 0 var(--space-2); }
+  :is(.sidebar-search, .sidebar-new) { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  :is(.sidebar-search, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
+  :is(.sidebar-search, .sidebar-new)[data-tip]:is(:hover, :focus-visible)::after { display: block; }
+  .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rail-avatar { width: 40px; justify-content: center; padding: 0; }
+  .rail-brand { width: 40px; height: 40px; }
   .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
   .rail-link svg { width: 20px; height: 20px; }
   .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .rail-link[data-tip]::after { display: block; left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
   .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
-  .account-menu { padding-top: var(--space-2); }
   .account-popover { left: calc(100% + var(--space-2)); right: auto; bottom: 0; width: 16rem; }
   /* The tooltips stand beside the rail: it never clips them. */
   .app-sidebar { overflow: visible; }
@@ -254,8 +310,15 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   :root { --sidebar-width: 0px; --top-bar: calc(var(--touch) + 2 * var(--space-2) + 1px); scroll-padding-top: calc(var(--top-bar) + 2.25rem); }
   .app-shell { height: auto; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .app-sidebar { display: contents; }
-  .app-rail { position: sticky; top: 0; z-index: 3; flex-direction: row; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .app-rail { position: sticky; top: 0; z-index: 3; flex: none; flex-direction: row; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .rail-brand { flex: none; margin: 0 var(--space-2) 0 0; }
+  /* The phone's top bar holds the logo, the pen, the places, Settings and the person: the inbox has its own search
+     box, and the lists and the invite are a tap away in the inbox's filters and in Settings. */
+  .sidebar-scroll, .sidebar-foot { display: contents; }
+  :is(.workspace-name, .sidebar-section, .sidebar-search, .sidebar-invite) { display: none; }
+  .sidebar-actions { flex: none; padding: 0; }
+  .sidebar-new { width: var(--touch); height: var(--touch); }
+  .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   /* Labelled links can be wider than a small tablet: scroll, never push the page. */
   .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; gap: var(--space-1); padding-top: 0; overflow-x: auto; scrollbar-width: none; }
   .rail-links::-webkit-scrollbar { display: none; }
@@ -300,10 +363,13 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-main, .app-content, .app-sheet { overflow: visible; }
   .app-main { gap: 0; padding: 0; }
   .app-sheet { border-radius: 0; box-shadow: none; }
-  .account-menu { flex: none; margin: 0 0 0 auto; padding: 0; box-shadow: none; }
-  .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); }
+  .account-menu { flex: none; margin: 0 0 0 auto; }
+  .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); justify-content: center; padding: 0; }
   .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); width: 16rem; }
-  .identity-bar { position: sticky; top: var(--top-bar); z-index: 2; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  /* The top bar is the phone's identity bar: it stays under the row of places while the page scrolls. The row
+     already marks the page, so the bar names the workspace and the person instead. */
+  .app-topbar { position: sticky; top: var(--top-bar); z-index: 2; height: auto; min-height: 40px; padding: var(--space-2) var(--space-3); }
+  .topbar-title { display: none; }
   .app-content > .inbox-shell { height: auto; }
   .list-pane > header { padding-inline: var(--space-4); }
   .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; overflow: visible; }
@@ -315,7 +381,7 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-shell:has(.inbox-shell[data-view="thread"]) { height: 100dvh; min-height: 0; }
   .app-shell:has(.inbox-shell[data-view="thread"]) :is(.app-main, .app-sheet) { min-height: 0; overflow: hidden; }
   /* Nothing scrolls the page here, and app-main would be the bar's scroll container: it stays in the flow. */
-  .app-shell:has(.inbox-shell[data-view="thread"]) .identity-bar { position: static; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) .app-topbar { position: static; }
   .app-shell:has(.inbox-shell[data-view="thread"]) .app-content { overflow: auto; }
   .app-content > .inbox-shell[data-view="thread"] { height: 100%; grid-template-rows: minmax(0, 1fr); }
   .inbox-shell[data-view="thread"] .composer { max-height: 60dvh; overflow-y: auto; }

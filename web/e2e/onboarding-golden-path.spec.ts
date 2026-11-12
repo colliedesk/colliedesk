@@ -70,7 +70,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     // the resolved and closed ones were resolved at 40 minutes (Freshdesk stats, read with the list).
     // The import ran in the setup flow, which has no rail: leaving it brings the rail back.
     await page.getByRole('link', { name: 'Exit setup' }).click();
-    await page.getByRole('link', { name: 'Results' }).click();
+    await page.getByRole('link', { name: 'Reports' }).click();
     await expect(page).toHaveURL(`${baseURL}/results`);
     const firstResponse = page.getByRole('region', { name: 'First response time' });
     await expect(firstResponse.getByRole('link', { name: '20 min' }).first()).toBeVisible({ timeout: 60_000 });

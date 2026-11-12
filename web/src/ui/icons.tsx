@@ -60,3 +60,6 @@ export const AudioIcon = () => <Icon><path d="M9 18V5l12-2v13" /><circle cx="6" 
 // Alert marks: the colour (icon-warn, icon-danger) carries the level; the words beside them stay ink.
 export const TriangleAlertIcon = ({ tone = 'warn' }: { tone?: 'warn' | 'danger' }) => <Icon className={`icon icon-${tone}`}><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></Icon>;
 export const CircleAlertIcon = ({ tone = 'danger' }: { tone?: 'warn' | 'danger' }) => <Icon className={`icon icon-${tone}`}><circle cx="12" cy="12" r="9" /><path d="M12 8v4" /><path d="M12 16h.01" /></Icon>;
+// The sidebar's New conversation (a pen) and Invite teammates (a person with a plus).
+export const PenIcon = () => <Icon><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></Icon>;
+export const UserPlusIcon = () => <Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" /></Icon>;

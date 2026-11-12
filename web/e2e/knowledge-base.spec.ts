@@ -16,7 +16,7 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${servers.main}/`);
 
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Help center' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Knowledge base' })).toBeVisible();
   const newCollection = page.getByRole('form', { name: 'New collection' });
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Getting started');
@@ -259,7 +259,7 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   await page.goto(url);
   await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${servers.main}/`);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Help center' }).click();
   const newCollection = page.getByRole('form', { name: 'New collection' });
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Billing');
   await newCollection.getByRole('button', { name: 'Create collection' }).click();

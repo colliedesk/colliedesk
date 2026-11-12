@@ -545,3 +545,19 @@ test('Open Settings beside the outbound notice follows the permission to change 
   rerender(<InboxPage canManageChannels selected={conversation} conversations={[conversation]} outboundNotice="Replies are not sent yet." />);
   expect(screen.getByRole('link', { name: 'Open Settings' })).toBeInTheDocument();
 });
+
+test('the list header leaves the page title and New conversation to the app frame, and keeps the heading for screen readers', () => {
+  render(<InboxPage conversations={[conversation]} />);
+  const heading = screen.getByRole('heading', { level: 1, name: 'Inbox' });
+  // The top bar shows the title and the sidebar starts a conversation, so the list starts with its tabs.
+  expect(heading.closest('.sr-only')).not.toBeNull();
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+});
+
+test('Search in the sidebar puts the focus in the inbox search box', () => {
+  const { rerender } = render(<InboxPage conversations={[conversation]} searchSignal={0} />);
+  const box = screen.getByRole('searchbox', { name: 'Search conversations' });
+  expect(box).not.toHaveFocus();
+  rerender(<InboxPage conversations={[conversation]} searchSignal={1} />);
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveFocus();
+});

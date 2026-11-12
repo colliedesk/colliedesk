@@ -29,6 +29,7 @@ import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
 import { mayTell, noticesOf } from './status-tell';
 import { PermissionsContext } from '../../lib/permissions-context';
+import { useInboxIntent } from '../shell/inbox-intents';
 import type { TokenPermission } from '../../api/schemas';
 
 // errorMessage reads the message of an API error body, when the answer is one.
@@ -241,6 +242,15 @@ export function InboxRoute() {
     if (failedDeliveries) void client.invalidateQueries({ queryKey: ['email-channel'] });
   }, [client, failedDeliveries]);
   const [starting, setStarting] = useState(false);
+  // Starting one picks a contact and the channel it leaves through, so it needs those reads as well. Until the
+  // session answers it is allowed; the window itself waits for what it needs.
+  const mayStart = !me.data || (['messages:send', 'channels:read', 'contacts:read'] as const).every(reads);
+  // Search and New conversation are in the sidebar, on every page: what it asked for is done here.
+  const [searchSignal, setSearchSignal] = useState(0);
+  useInboxIntent((intent) => {
+    if (intent === 'search') setSearchSignal((count) => count + 1);
+    else if (mayStart) setStarting(true);
+  });
   // An address that names a conversation is the thread view; on a phone it replaces the list (layout.css).
   const threadOpen = Boolean(params.conversationId);
   useLayoutEffect(() => (threadOpen ? showThread() : showList()), [threadOpen]);
@@ -389,8 +399,7 @@ export function InboxRoute() {
     } : undefined}
     onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); await afterDraft(draft.conversation_id); } : undefined}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
-    // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
-    onNewConversation={me.data && !(['messages:send', 'channels:read', 'contacts:read'] as const).every(reads) ? undefined : () => setStarting(true)} />
+    searchSignal={searchSignal} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
   </PermissionsContext.Provider>;
