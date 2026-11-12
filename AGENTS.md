@@ -83,6 +83,9 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - Tests first (red → green), at the public seams: HTTP API, CLI, web components.
 - Go tests use a real PostgreSQL (`TEST_DATABASE_URL`); never mock the database.
 - `make test` before pushing; `make e2e` for user-visible flows.
+- A page that loads from its own chunk (`ui/lazy-part.tsx`) gives its route `loader: pageChunk(part)` (`web/src/app.tsx`),
+  so the router keeps the current page until the next one can show; the first load shows the rail at once. `web/src/routes-never-blank.test.tsx` opens every
+  route with no chunk loaded and fails on a blank page (`docs/internals/performance.md`).
 - Market is international: timestamps are stored and returned in UTC; the UI formats them in the
   agent's IANA timezone. No country-specific defaults.
 

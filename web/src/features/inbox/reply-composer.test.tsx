@@ -872,7 +872,8 @@ test('a draft is cleared once its reply is sent, and kept when the send is refus
   expect(restored).toHaveValue('Keep me');
   fireEvent.keyDown(restored, { key: 'Enter', ctrlKey: true });
   await waitFor(() => expect(restored).toHaveValue(''));
-  expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-3'))).toEqual([]);
+  // The empty box is written (the draft removed) by an effect after the render that empties it.
+  await waitFor(() => expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-3'))).toEqual([]));
 });
 
 test('a draft older than seven days is dropped when it is read, and a younger one comes back', () => {
