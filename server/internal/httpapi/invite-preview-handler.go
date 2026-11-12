@@ -19,17 +19,15 @@ const invalidLinkMessage = "This link is invalid, expired, revoked, or already u
 // previewInvite describes an invite link without using it: the invite page shows the workspace, the
 // inviter and the roles before the person joins, and says why a link stopped working.
 func (a *API) previewInvite(response http.ResponseWriter, request *http.Request) {
-	var input struct {
-		Token string `json:"token"`
-	}
-	if err := decodeJSON(request, &input); err != nil || input.Token == "" {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A one-time token is required.")
+	token := request.URL.Query().Get("token")
+	if token == "" {
+		writeError(response, http.StatusBadRequest, "invalid_request", "A one-time token is required: send it as token=.")
 		return
 	}
 	if a.tooManyRefusedLinks(response, request) {
 		return
 	}
-	preview, err := a.auth.PreviewInvite(request.Context(), input.Token)
+	preview, err := a.auth.PreviewInvite(request.Context(), token)
 	if errors.Is(err, auth.ErrNotAnInvite) || errors.Is(err, auth.ErrUnknownLink) {
 		a.refuseLink(response, request, err)
 		return

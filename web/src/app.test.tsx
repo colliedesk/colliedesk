@@ -273,8 +273,7 @@ test('an invite link shows the workspace it joins before it is used, and joins w
   const router = open('/sign-in?token=invite-token');
   expect(await screen.findByRole('heading', { level: 1, name: 'Join Beta Desk' })).toBeInTheDocument();
   expect(screen.getByText('Mai Tran invited you to the support team.')).toBeInTheDocument();
-  const [, previewInit] = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/auth/invite-preview')!;
-  expect(JSON.parse(String(previewInit.body))).toEqual({ token: 'invite-token' });
+  expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/auth/invite-preview?token=invite-token')).toBe(true);
   expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/auth/redeem')).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Join Beta Desk' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));

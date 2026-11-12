@@ -360,10 +360,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** @description Describes an invite link without using it: the workspace, who invited, the invited email, the roles it gives, when it expires, and whether it still works (`pending`) or was `used`, `revoked` or has `expired`. The invite page shows it before the person joins; redeeming still works afterwards. Any token that is not an invite (unknown, mistyped, a pairing or hand-off link) gets 401 `invalid_link`, the answer an invalid link gets from `POST /api/v1/auth/redeem`, so the preview never tells whether a token exists. The token is already in the address of the page that asks (`/sign-in?token=`), so a query adds no exposure. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's invites are described; another workspace's gets the same 401. Tokens no link has count toward the same limit as redeem. */
+        get: operations["previewInvite"];
         put?: never;
-        /** @description Describes an invite link without using it: the workspace, who invited, the invited email, the roles it gives, when it expires, and whether it still works (`pending`) or was `used`, `revoked` or has `expired`. The invite page shows it before the person joins; redeeming still works afterwards. Any token that is not an invite (unknown, mistyped, a pairing or hand-off link) gets 401 `invalid_link`, the answer an invalid link gets from `POST /api/v1/auth/redeem`, so the preview never tells whether a token exists. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's invites are described; another workspace's gets the same 401. Tokens no link has count toward the same limit as redeem. */
-        post: operations["previewInvite"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -11223,18 +11223,15 @@ export interface operations {
     };
     previewInvite: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description The token of the link (`token=` in its address). */
+                token: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    token: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description What the invite is and whether it still works */
             200: {

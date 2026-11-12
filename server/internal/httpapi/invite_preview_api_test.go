@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -12,7 +13,9 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
-const invitePreviewPath = "/api/v1/auth/invite-preview"
+func invitePreviewPath(token string) string {
+	return "/api/v1/auth/invite-preview?" + url.Values{"token": {token}}.Encode()
+}
 
 type invitePreview struct {
 	State         string    `json:"state"`
@@ -26,7 +29,7 @@ type invitePreview struct {
 // previewFrom asks what an invite link is, from the client address client, on host.
 func previewFrom(t *testing.T, site http.Handler, host, client, token string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := newRequest(t, http.MethodPost, invitePreviewPath, map[string]any{"token": token}, "", nil)
+	req := newRequest(t, http.MethodGet, invitePreviewPath(token), nil, "", nil)
 	req.RemoteAddr, req.Host = client+":4242", host
 	return serve(site, req)
 }
@@ -95,7 +98,7 @@ func TestInvitePreviewShowsTheInviteAndLeavesTheLinkUsable(t *testing.T) {
 
 	for range 3 {
 		response := previewFrom(t, api, testOriginHost, "192.0.2.10", token)
-		validateContractResponse(t, newRequest(t, http.MethodPost, invitePreviewPath, map[string]any{"token": token}, "", nil), response)
+		validateContractResponse(t, newRequest(t, http.MethodGet, invitePreviewPath(token), nil, "", nil), response)
 		wantPreview(t, response, pending)
 	}
 	if response := redeemFrom(t, api, testOriginHost, "192.0.2.10", token); response.Code != http.StatusOK {

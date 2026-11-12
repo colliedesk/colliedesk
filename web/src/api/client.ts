@@ -394,7 +394,7 @@ export const api = {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   }),
   // What an invite link is, without using it; any other token answers 401 like an invalid link.
-  previewInvite: (token: string) => request('/api/v1/auth/invite-preview', invitePreviewSchema, { method: 'POST', body: json<'previewInvite'>({ token }) }),
+  previewInvite: (token: string) => request(`/api/v1/auth/invite-preview?${new URLSearchParams({ token }).toString()}`, invitePreviewSchema),
   me: () => request('/api/v1/auth/me', meSchema),
   // The AI app a consent page shows, and whether redirect_uri is its own (only then may the page go there).
   describeOAuthClient: (client_id: string, redirect_uri: string) =>

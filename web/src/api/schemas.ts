@@ -284,7 +284,7 @@ export const inviteSchema = z.object({
   created_at: z.string().datetime(), expires_at: z.string().datetime(), used_at: nullableDate, revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Invite'>>;
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
-// What an invite link is, read without using it (POST /api/v1/auth/invite-preview).
+// What an invite link is, read without using it (GET /api/v1/auth/invite-preview).
 export const invitePreviewSchema = z.object({
   state: z.enum(['pending', 'expired', 'revoked', 'used']), workspace_name: z.string(), invited_by: z.string(), email: z.string().email(),
   roles: z.array(z.string()), expires_at: z.string().datetime(),

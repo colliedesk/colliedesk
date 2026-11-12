@@ -46,7 +46,7 @@ the link keeps working until it expires: once a seat is free, **Try again** join
 an invite (a pairing link, or a mistyped one) shows the ordinary sign-in link page.
 
 Looking at an invite never uses it up. An AI agent or script can read the same facts with
-`POST /api/v1/auth/invite-preview` and the token; it needs no session. A client address that tries 30
+`GET /api/v1/auth/invite-preview?token=…`; it needs no session. A client address that tries 30
 tokens no link has within a minute must wait a minute before it opens or previews another link.
 
 ## Agent limit on the hosted cloud

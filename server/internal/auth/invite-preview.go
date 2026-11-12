@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
@@ -42,16 +41,9 @@ var ErrUnknownLink = errors.New("no link has this token")
 
 // PreviewInvite describes the invite link token without using it up: it only reads.
 func (s *Service) PreviewInvite(ctx context.Context, token string) (InvitePreview, error) {
-	// As for Redeem, the link's workspace is unknown until its hash is looked up.
-	var linkWorkspace, kind string
-	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text, kind FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&linkWorkspace, &kind)
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return InvitePreview{}, ErrUnknownLink
-	}
+	linkWorkspace, kind, err := s.linkOf(ctx, token)
 	if err != nil {
-		return InvitePreview{}, fmt.Errorf("find invite: %w", err)
+		return InvitePreview{}, err
 	}
 	if kind != "invite" {
 		return InvitePreview{}, ErrNotAnInvite
