@@ -146,7 +146,7 @@ function AppLayout() {
   const mentionsUnread = sidebar.mentionsUnread ?? 0;
   // The page the top bar names: the area the sidebar marks current.
   const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
-    : inKnowledge ? { title: messages.helpCenter, icon: <BookIcon /> } : inResults ? { title: messages.reports, icon: <ChartIcon /> }
+    : inKnowledge ? { title: messages.knowledge, icon: <BookIcon /> } : inResults ? { title: messages.results, icon: <ChartIcon /> }
     // Fixes keeps its wrench in the Autofix chunk; its name is enough here.
     : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
@@ -174,10 +174,10 @@ function AppLayout() {
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
         {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
-      {knowledge && <Link to={knowledge} className="rail-link" data-tip={messages.helpCenter} aria-label={messages.helpCenter} aria-current={inKnowledge ? 'page' : undefined}
-        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.helpCenter}</span></Link>}
-      {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.reports} aria-label={messages.reports} aria-current={inResults ? 'page' : undefined}
-        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.reports}</span></Link>}
+      {knowledge && <Link to={knowledge} className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>}
+      {shows('results:read') && <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
+        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>}
     </>}
     // Settings is not in the design's list of places; it sits at the foot, beside the person and Invite teammates.
     footLinks={locked ? undefined : <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}

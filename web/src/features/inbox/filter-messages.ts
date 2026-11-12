@@ -46,7 +46,7 @@ export const filterMessages = {
     without_resolve_time: 'Without a resolve time', reopened: 'Reopened within 7 days', volume: 'Conversations per week', handle: 'Handle time',
     ai_sent_unchanged: 'AI drafts sent nearly unchanged', ai_sent_edited: 'AI drafts sent after edits', ai_discarded: 'AI drafts discarded',
   } as Record<string, string>,
-  backToResults: 'Back to Results',
+  backToResults: 'Back to Reports',
   unknownAgent: 'Former teammate',
   unknownTag: 'Deleted tag',
   selectedContact: 'Selected customer',

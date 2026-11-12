@@ -103,7 +103,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_attachment_get` | Reads an attachment, or a file of a reply draft (with `conversation_id` and `draft_id`): name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `ai_assist:read`, `messages:read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `conversations:update`, `tags:create`, `tags:read`, `team:read` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `conversations:update`, `tags:read`, `team:read` |
-| `colliedesk_conversations_spam` | Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Results), or back where they were with `spam` false; all or nothing | `conversations:update` |
+| `colliedesk_conversations_spam` | Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Reports), or back where they were with `spam` false; all or nothing | `conversations:update` |
 | `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call), and asks teammates in it | `messages:note` |
 | `colliedesk_note_mention` | Asks more teammates on a note you wrote; only the new ones are told | `messages:note` |
 | `colliedesk_mentions_list` | Lists the notes that ask you, unread first by default, with the unread count | `messages:read` |

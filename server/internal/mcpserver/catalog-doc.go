@@ -56,7 +56,7 @@ var toolDocs = map[string]string{
 	"colliedesk_attachment_get":                      "Reads an attachment, or a file of a reply draft (with `conversation_id` and `draft_id`): name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB",
 	"colliedesk_conversation_update":                 "Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created",
 	"colliedesk_conversations_bulk_update":           "Sets status, assignee and tags of up to 50 conversations at once, all or nothing",
-	"colliedesk_conversations_spam":                  "Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Results), or back where they were with `spam` false; all or nothing",
+	"colliedesk_conversations_spam":                  "Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Reports), or back where they were with `spam` false; all or nothing",
 	"colliedesk_note_add":                            "Adds a private note, with files if needed (up to 10, 5 MiB a call), and asks teammates in it",
 	"colliedesk_note_mention":                        "Asks more teammates on a note you wrote; only the new ones are told",
 	"colliedesk_mentions_list":                       "Lists the notes that ask you, unread first by default, with the unread count",

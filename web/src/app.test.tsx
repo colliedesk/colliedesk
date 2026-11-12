@@ -378,7 +378,7 @@ test('a paused admin can still open the billing portal from the paused screen', 
   Object.defineProperty(window, 'location', { configurable: true, value: original });
 });
 
-test('the rail opens the knowledge base, which marks Help center as the current destination', async () => {
+test('the rail opens the knowledge base, which marks Knowledge base as the current destination', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('agent', null)),
     '/api/v1/config': () => json(200, config),
@@ -388,7 +388,7 @@ test('the rail opens the knowledge base, which marks Help center as the current 
   open('/knowledge');
   expect(await screen.findByRole('heading', { level: 1, name: 'Knowledge base' })).toBeInTheDocument();
   const rail = screen.getByRole('navigation', { name: 'Main' });
-  expect(within(rail).getByRole('link', { name: 'Help center' })).toHaveAttribute('aria-current', 'page');
+  expect(within(rail).getByRole('link', { name: 'Knowledge base' })).toHaveAttribute('aria-current', 'page');
   expect(within(rail).getByRole('link', { name: 'Inbox' })).not.toHaveAttribute('aria-current');
 });
 
@@ -669,9 +669,9 @@ test('a role that reads only the knowledge base lands in Knowledge and is offere
   const rail = screen.getByRole('navigation', { name: 'Main' });
   expect(within(rail).queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
   expect(within(rail).queryByRole('link', { name: 'Reports' })).not.toBeInTheDocument();
-  expect(within(rail).getByRole('link', { name: 'Help center' })).toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Knowledge base' })).toBeInTheDocument();
   await act(async () => { await router.navigate({ to: '/results' }); });
-  expect(await screen.findByText(/Your roles do not let you open Results/)).toBeInTheDocument();
+  expect(await screen.findByText(/Your roles do not let you open Reports/)).toBeInTheDocument();
   const asked = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
   for (const path of ['/api/v1/conversations', '/api/v1/inbox/activity', '/api/v1/intake/summary', '/api/v1/results', '/api/v1/tags', '/api/v1/agents']) expect(asked, path).not.toContain(path);
 });
@@ -687,7 +687,7 @@ test('a role that reads only media lands in the media library, and the rail take
   const router = open('/');
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/media'));
   const rail = screen.getByRole('navigation', { name: 'Main' });
-  expect(within(rail).getByRole('link', { name: 'Help center' })).toHaveAttribute('href', '/knowledge/media');
+  expect(within(rail).getByRole('link', { name: 'Knowledge base' })).toHaveAttribute('href', '/knowledge/media');
 });
 
 // The help center's settings moved from Settings to Knowledge base → Settings (#528); they still need only
@@ -730,7 +730,7 @@ test('a role that reads only the help center finds Knowledge on the rail, at its
   });
   const router = open('/');
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
-  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Help center' })).toHaveAttribute('href', '/knowledge/settings');
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Knowledge base' })).toHaveAttribute('href', '/knowledge/settings');
   expect(await screen.findByRole('region', { name: 'Help center' })).toBeInTheDocument();
 });
 
@@ -843,5 +843,5 @@ test('the top bar names the page the person is on', async () => {
   open('/knowledge');
   expect(await screen.findByRole('heading', { level: 1, name: 'Knowledge base' })).toBeInTheDocument();
   // The page has a header of its own; the top bar is the app's, above it.
-  await waitFor(() => expect(document.querySelector('.app-topbar .topbar-title')).toHaveTextContent('Help center'));
+  await waitFor(() => expect(document.querySelector('.app-topbar .topbar-title')).toHaveTextContent('Knowledge base'));
 });

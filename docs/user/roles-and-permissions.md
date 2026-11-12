@@ -29,7 +29,7 @@ There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below
 | Knowledge base articles | `kb_articles:read`, `kb_articles:create`, `kb_articles:update`, `kb_articles:delete`, `kb_articles:publish` |
 | Knowledge base media | `kb_media:read`, `kb_media:create`, `kb_media:update`, `kb_media:delete`; Admin only: `kb_media:purge` |
 | Help center | `help_center:read`; Admin only: `help_center:update` |
-| Results | `results:read`; Admin only: `results:share` |
+| Reports | `results:read`; Admin only: `results:share` |
 | Your profile | `profile:update` |
 | Team | `team:read`, `team:create_tokens`; Admin only: `team:invite`, `team:revoke`, `team:manage_roles` |
 | Channels | `channels:read`; Admin only: `channels:update`, `channels:manage_credentials` |
@@ -73,7 +73,7 @@ gives it and no token follows it; otherwise the page names them. A deleted role 
 ## What a person with a narrow role sees
 
 The app shows only what your roles let you read. The sidebar lists the areas you can open (Inbox
-with `conversations:read`, Help center with `kb_articles:read`, or the media library with only
+with `conversations:read`, Knowledge base with `kb_articles:read`, or the media library with only
 `kb_media:read`, Reports with `results:read`; Settings always). Its saved views need `saved_views:read`, its
 channels `channels:read`, and **Invite teammates** `team:invite`. A role without `conversations:read`
 opens on the first of those instead of the inbox. Opening a screen your roles do not cover says so:

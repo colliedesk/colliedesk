@@ -250,7 +250,7 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   before then opens it, as always.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
-  the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
+  the inbox and in Reports; a teammate who opened it before the notice is not told someone replied.
 - A team member writing in a group on the chat app itself is part of the place, never a customer's
   request: it opens and joins nothing, unless they name a command that opens one.
 

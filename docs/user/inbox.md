@@ -16,7 +16,7 @@ On a computer the sidebar on the left starts open. From the top it has:
 - the logo and the name of your workspace;
 - **Search**, which opens the inbox with its search box ready to type in (from any page, **Ctrl K**, or **⌘K** on a
   Mac, does the same), and the pen, **New conversation**, which opens the inbox and starts one;
-- **Inbox** with the number of open conversations, **Help center** (the [knowledge base](knowledge-base.md)) and
+- **Inbox** with the number of open conversations, **Knowledge base** ([guide](knowledge-base.md)) and
   **Reports** (the [results](results.md));
 - **Views**: your saved views, each opening the inbox on its filters;
 - **Channels**: each channel of the workspace, opening the inbox on its open conversations. A channel that needs
