@@ -293,6 +293,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
   const ccHolds = kind === 'outgoing' && showCc && ccBlocking;
   const canResolve = kind === 'outgoing' && Boolean(onResolve);
+  // The send shortcut as the keyboard writes it: ⌘↵ on a Mac, Ctrl ↵ elsewhere.
+  const sendKeys = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl ↵';
   // Whether the last reply asked to resolve too, so Send anyway after a conflict keeps that choice.
   const resolveAfter = useRef(false);
   const blocked = kind === 'outgoing' && noReplies;
@@ -393,9 +395,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           </div>
           <div className="composer-head-end">
             {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
-            {/* The keys sit up here, where there is room, so the buttons below keep one row. */}
-            <span className="composer-hint composer-keys" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}
-              {canResolve && <span className="composer-keys-resolve">{messages.resolveShortcutAdd} <kbd>Shift</kbd> {messages.resolveShortcut}</span>}</span>
           </div>
         </div>
         {aiWarnings.length > 0 && kind === 'outgoing' && (
@@ -423,7 +422,18 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <div className="composer-actions">
+          {/* Send leads the row with its shortcut, Send and resolve beside it; the tools follow on the right (I1-a, I7-a). */}
+          <button className="primary-action" type="button" disabled={disabled || cannotSend} aria-keyshortcuts="Control+Enter Meta+Enter" onClick={() => submit()}>
+            <span className="send-label">{kind === 'note' ? messages.privateNote : messages.reply}</span><kbd className="send-keys" aria-hidden="true">{sendKeys}</kbd><span className="send-icon"><ArrowUpIcon /></span>
+          </button>
+          {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
+            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
+            {messages.sendAndResolve}</button>}
+          {/* The one-line box on a phone keeps a private note one press away, as its tab is when the box is open. */}
+          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote}
+            onClick={() => { setKind('note'); field.current?.focus(); }}><LockIcon /></button>}
           {/* Attach is the first tool; the chosen files and their notes take a line above the row (components.css). */}
+          <span className="composer-tools-start" aria-hidden="true" />
           <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
           {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
@@ -448,15 +458,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
           )}
-          {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
-            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
-            {messages.sendAndResolve}</button>}
-          {/* The one-line box on a phone keeps a private note one press away, as its tab is when the box is open. */}
-          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote}
-            onClick={() => { setKind('note'); field.current?.focus(); }}><LockIcon /></button>}
-          <button className="primary-action" type="button" disabled={disabled || cannotSend} onClick={() => submit()}>
-            <span className="send-label">{kind === 'note' ? messages.privateNote : messages.reply}</span><span className="send-icon"><ArrowUpIcon /></span>
-          </button>
         </div>
       </div>
     </div>
