@@ -284,6 +284,12 @@ export const inviteSchema = z.object({
   created_at: z.string().datetime(), expires_at: z.string().datetime(), used_at: nullableDate, revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Invite'>>;
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
+// What an invite link is, read without using it (POST /api/v1/auth/invite-preview).
+export const invitePreviewSchema = z.object({
+  state: z.enum(['pending', 'expired', 'revoked', 'used']), workspace_name: z.string(), invited_by: z.string(), email: z.string().email(),
+  roles: z.array(z.string()), expires_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'InvitePreview'>>;
+export type InvitePreview = z.infer<typeof invitePreviewSchema>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema, continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
 const setupStepKeys = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'] as const;

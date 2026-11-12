@@ -2,9 +2,11 @@ import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 // redeemLink opens a one-time link the way a person does: open it, select Continue, land in the inbox.
+// redeemLink opens a one-time link and uses it: Continue on a pairing link's page, Join <workspace> on an
+// invite's page (which names the workspace before it is used).
 export async function redeemLink(page: Page, url: string): Promise<void> {
   await page.goto(url);
-  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await page.getByRole('button', { name: /^(Continue to Colliedesk|Join .+)$/ }).click();
   await expect(page).toHaveURL(`${new URL(url).origin}/`);
 }
 

@@ -33,7 +33,15 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
     data: { token: new URL(inviteURL).searchParams.get('token'), requested_role: 'admin', session_type: 'cookie' },
   });
   expect(escalate.status()).toBe(401);
-  await redeemLink(teammate, inviteURL);
+  // The invite page names the workspace, who invited and the role before the link is used.
+  await teammate.goto(inviteURL);
+  await expect(teammate.getByRole('heading', { level: 1, name: `Join Invite Desk ${suffix}` })).toBeVisible();
+  await expect(teammate.getByText(`${adminEmail} invited you to the support team.`)).toBeVisible();
+  const facts = teammate.getByRole('list', { name: 'Invite' });
+  await expect(facts).toContainText(teammateEmail.toLowerCase());
+  await expect(facts).toContainText('Agent');
+  await teammate.getByRole('button', { name: `Join Invite Desk ${suffix}` }).click();
+  await expect(teammate).toHaveURL(`${baseURL}/`);
   await expect(appNavigationWith(teammate, teammateEmail.toLowerCase())).toHaveCount(1);
   const me = await (await teammate.request.get(`${baseURL}/api/v1/auth/me`)).json() as { agent: { roles: { name: string }[]; email: string }; permissions: string[] };
   expect(me.agent).toMatchObject({ roles: [{ name: 'Agent' }], email: teammateEmail.toLowerCase() });
@@ -109,9 +117,14 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const lateContext = await browser.newContext();
   const latePage = await lateContext.newPage();
   await latePage.goto(lateURL);
-  await latePage.getByRole('button', { name: 'Continue to Colliedesk' }).click();
-  await expect(latePage.getByRole('alert')).toContainText('This link is invalid, expired, or already used.');
+  // The page says the invite was cancelled and whom to ask, and offers no Join.
+  await expect(latePage.getByRole('heading', { level: 1, name: 'This invite no longer works' })).toBeVisible();
+  await expect(latePage.getByText(`This invite to Invite Desk ${suffix} was cancelled. Ask ${adminEmail} if you still need access.`)).toBeVisible();
+  await expect(latePage.getByRole('button', { name: /^Join/ })).toHaveCount(0);
   await expect(latePage).toHaveURL(/\/sign-in\?token=/);
+  const lateRedeem = await latePage.request.post(`${baseURL}/api/v1/auth/redeem`, { data: { token: new URL(lateURL).searchParams.get('token'), session_type: 'cookie' } });
+  expect(lateRedeem.status()).toBe(401);
+  await expectReadablePage(latePage);
 
   await Promise.all([adminContext.close(), teammateContext.close(), lateContext.close()]);
 });
