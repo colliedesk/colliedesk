@@ -133,7 +133,7 @@ export const messages = {
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
-  // Spam: out of the inbox and every view, no clock, not in Results; the sender's later mail goes there too.
+  // Spam: out of the inbox and every view, no clock, not in Reports; the sender's later mail goes there too.
   spam: 'Spam',
   notSpam: 'Not spam',
   spamTip: 'Move to Spam: out of the inbox, no clock, not in Reports. Later mail from this sender goes there too.',
