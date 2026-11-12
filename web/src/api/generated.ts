@@ -353,6 +353,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/invite-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Describes an invite link without using it: the workspace, who invited, the invited email, the roles it gives, when it expires, and whether it still works (`pending`) or was `used`, `revoked` or has `expired`. The invite page shows it before the person joins; redeeming still works afterwards. Any token that is not an invite (unknown, mistyped, a pairing or hand-off link) gets 401 `invalid_link`, the answer an invalid link gets from `POST /api/v1/auth/redeem`, so the preview never tells whether a token exists. The token is already in the address of the page that asks (`/sign-in?token=`), so a query adds no exposure. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's invites are described; another workspace's gets the same 401. Tokens no link has count toward the same limit as redeem. */
+        get: operations["previewInvite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -7220,6 +7237,25 @@ export interface components {
             /** Format: date-time */
             revoked_at: string | null;
         };
+        InvitePreview: {
+            /**
+             * @description `pending` still signs in; `used` already signed someone in (sign in instead); `revoked` was cancelled by the workspace; `expired` passed `expires_at` unused. A used link stays `used`, and a revoked one `revoked`, after it expires.
+             * @enum {string}
+             */
+            state: "pending" | "expired" | "revoked" | "used";
+            workspace_name: string;
+            /** @description The inviter's display name, or their email when they have none. */
+            invited_by: string;
+            /**
+             * Format: email
+             * @description The address the invite was made for; the person signs in with it next time.
+             */
+            email: string;
+            /** @description Names of the roles the invite gives on joining. */
+            roles: string[];
+            /** Format: date-time */
+            expires_at: string;
+        };
         Contact: {
             /** Format: uuid */
             id: string;
@@ -11185,6 +11221,49 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
+            /** @description Error code `rate_limited`. This client address tried 30 tokens that no link has in the last minute (redeem and invite preview count together; a real link never counts, even one that no longer works); `Retry-After` says when to try again. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewInvite: {
+        parameters: {
+            query: {
+                /** @description The token of the link (`token=` in its address). */
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What the invite is and whether it still works */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitePreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Error code `rate_limited`. This client address tried 30 tokens that no link has in the last minute (redeem and invite preview count together; a real link never counts, even one that no longer works); `Retry-After` says when to try again. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     logout: {

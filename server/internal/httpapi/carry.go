@@ -26,6 +26,7 @@ type Carry struct {
 	channelFileLookups                  *webFormLimiter
 	certificateNotes                    *webFormLimiter
 	operatorSignIns, operatorSignInIPs  *webFormLimiter
+	refusedLinks                        *webFormLimiter
 	mailImageLimits                     *mailImageLimiter
 	liveChecks                          *helpcenter.LiveChecks
 	alerted                             *alertedSubscriptions
@@ -73,6 +74,7 @@ func NewCarry(config Config) *Carry {
 		channelFileLookups: newWebFormLimiter(channelFileLookupsPerAddress, webFormMaxKeys),
 		operatorSignIns:    newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),
 		operatorSignInIPs:  newWindowLimiter(operatorSignInsPerAddressPerMinute, webFormMaxKeys, time.Minute),
+		refusedLinks:       newWindowLimiter(refusedLinksPerAddressPerMinute, webFormMaxKeys, time.Minute),
 		mailImageLimits:    newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
 		liveChecks:         helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
 		alerted:            &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},

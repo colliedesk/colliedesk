@@ -7,7 +7,8 @@ Colliedesk has no passwords. You sign in with a one-time link.
 
 Each link works once and expires after 15 minutes. Colliedesk stores only a hash of the link,
 so nobody, including us, can read it back later. If a link is invalid, expired or already used,
-ask your admin for a new one.
+ask your admin for a new one. An invite link names its workspace, who invited you and your roles before
+you join, and says which of these happened when it no longer works ([Invite your team](invites.md)).
 
 Opening a link signs that browser in for 30 days; using Colliedesk extends it. A link for another
 workspace switches the browser to that workspace; a bar at the top of every page always shows which workspace and
