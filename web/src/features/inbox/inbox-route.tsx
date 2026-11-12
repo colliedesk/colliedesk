@@ -31,6 +31,9 @@ import { mayTell, noticesOf } from './status-tell';
 import { PermissionsContext } from '../../lib/permissions-context';
 import { useInboxIntent } from '../shell/inbox-intents';
 import type { TokenPermission } from '../../api/schemas';
+import { MentionsPane, useMarkMentionsRead } from './mentions-pane';
+import { mentionMessages } from './mention-messages';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -90,7 +93,9 @@ const searchSettleMs = 800;
 // Typing changes these on every key, so they replace the address instead of adding to the history.
 const typedKeys: InboxQueryKey[] = ['search', 'organization'];
 
-export function InboxRoute() {
+// list 'mentions' puts the Mentions list in the list column (/mentions); the conversation opens beside it.
+export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
+  const mentionsMode = list === 'mentions';
   const client = useQueryClient();
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
@@ -110,7 +115,7 @@ export function InboxRoute() {
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(filters.search ? query : `${query}&counts=true`, signal), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
-    placeholderData: keepPreviousData });
+    placeholderData: keepPreviousData, enabled: !mentionsMode });
   // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
   const searchTerm = filters.search ?? '';
   const searchSettled = searchTerm !== '' && conversations.isSuccess && !conversations.isPlaceholderData;
@@ -146,7 +151,7 @@ export function InboxRoute() {
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
   const activeID = selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen.
-  const shownID = activeID ?? conversations.data?.items[0]?.id;
+  const shownID = activeID ?? (mentionsMode ? undefined : conversations.data?.items[0]?.id);
   const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
@@ -160,7 +165,7 @@ export function InboxRoute() {
   const detail = opened.data?.id === shownID ? opened.data : undefined;
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
-  const selected = withNotices ?? detail ?? (activeID ? undefined : conversations.data?.items[0]);
+  const selected = withNotices ?? detail ?? (activeID || mentionsMode ? undefined : conversations.data?.items[0]);
   // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
   // The Markdown of replies loads while the list does, before a conversation opens.
   useEffect(() => markdownPart.preload(), []);
@@ -177,6 +182,11 @@ export function InboxRoute() {
   const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID) && reads('messages:read'),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
+  // Opening a note that asked the person marks it read; a Mentions row or a mention email opens at the note.
+  useMarkMentionsRead(openID, timeline.data?.items, me.data?.agent?.id);
+  // Read on each render: opening a row changes the address, which renders the route again.
+  const hash = window.location.hash.slice(1);
+  useScrollToHashWhenReady(Boolean(timeline.data) && hash.startsWith('message-'), hash.startsWith('message-') ? hash : undefined);
   // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
   const viewing = useInboxViewing();
   // Replies an AI agent left for a person to send (written drafts), shown above the composer of the open
@@ -265,6 +275,7 @@ export function InboxRoute() {
   // conversation; a conversation reached by a link has no list behind it, so the list opens with its filters.
   const backToList = () => {
     if (params.conversationId && listIsBehind(params.conversationId)) window.history.back();
+    else if (mentionsMode) void navigate({ to: '/mentions' });
     else void navigate({ to: '/', search: filters });
   };
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
@@ -303,9 +314,10 @@ export function InboxRoute() {
   // A message carries the key of its send: the reply box's own (kept with its draft, so a reload can ask
   // whether it arrived), or one per conversation and text; a retry of the same text reuses it, so the server
   // stores the message once however many times it is asked.
-  type Send = { conversationId: string; kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string; key?: string };
-  const message = useCreateAction(({ conversationId, kind, body, files, cc, seen, aiDraft, key }: Send, pressKey: string) =>
-    api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey));
+  type Send = { conversationId: string; kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string; key?: string; mentions?: string[] };
+  const message = useCreateAction(({ conversationId, kind, body, files, cc, seen, aiDraft, key, mentions }: Send, pressKey: string) =>
+    (mentions?.length ? api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey, undefined, mentions)
+      : api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey)));
   const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
   const sent = useMutation({ mutationFn: message.run,
     // The conversation the message went to, which the person may have left while it was sending.
@@ -349,7 +361,8 @@ export function InboxRoute() {
     onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
+    onMessage={(kind, body, files, cc, seen, aiDraft, key, mentions) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key, mentions })}
+    otherList={mentionsMode ? { label: mentionMessages.mentions, content: <MentionsPane timezone={me.data?.timezone ?? 'UTC'} selectedConversation={activeID} /> } : undefined}
     onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={reads('ai_assist:read') ? me.data?.ai_features?.draft : undefined}
     autofix={autofixPreviewOn() && config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}

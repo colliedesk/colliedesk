@@ -11,7 +11,7 @@ import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
-  inviteCreatedSchema, inviteListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
+  inviteCreatedSchema, inviteListSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
@@ -301,10 +301,12 @@ type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
 const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string, draftFiles?: string[]): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string, draftFiles?: string[], mentions: string[] = []): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
+  // The teammates a note asks, before the files: a mention refused stores none of them.
+  for (const mention of mentions) form.append('mentions', mention);
   if (aiDraft) form.append('ai_draft_id', aiDraft);
   // The draft's files the reply keeps; one empty field keeps none, no field keeps them all.
   if (draftFiles) for (const id of draftFiles.length > 0 ? draftFiles : ['']) form.append('ai_draft_file_ids', id);
@@ -450,11 +452,15 @@ export const api = {
   // key names this submit (Idempotency-Key): a retry with the same key returns the message the first stored.
   // draftFiles names the files of the draft (aiDraft) the reply keeps; left out, it keeps them all.
   createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string,
-    draftFiles?: string[]) =>
+    draftFiles?: string[], mentions: string[] = []) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined,
-      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft, draftFiles)
+      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft, draftFiles, mentions)
         : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}),
-          ...(aiDraft && draftFiles ? { ai_draft_file_ids: draftFiles } : {}) }) }),
+          ...(aiDraft && draftFiles ? { ai_draft_file_ids: draftFiles } : {}), ...(mentions.length > 0 ? { mentions } : {}) }) }),
+  // The notes that ask the person signed in: unread or all, newest first, a page after before.
+  mentions: (status: 'unread' | 'all', before?: string) => request(`/api/v1/mentions?${new URLSearchParams({ status, ...(before ? { before } : {}) })}`, mentionListSchema),
+  markMentionsRead: (value: RequestBody<'markMentionsRead'>) => request('/api/v1/mentions/read', markMentionsResultSchema, { method: 'POST', body: json<'markMentionsRead'>(value) }),
+  setMentionEmail: (email: boolean) => request('/api/v1/agents/me/mention-email', mentionEmailSchema, { method: 'PATCH', body: json<'setMentionEmail'>({ email }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string, key: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),

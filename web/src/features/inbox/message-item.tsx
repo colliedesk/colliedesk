@@ -10,6 +10,7 @@ import { AttachmentList } from './attachment-list';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 import { MarkdownBody } from './markdown-body';
+import { boldMentions, NoteMentionsLine } from './note-mentions';
 
 interface MessageItemProps {
   item: Message;
@@ -26,6 +27,8 @@ interface MessageItemProps {
   channelName?: string;
   // onOpenMedia opens the conversation's gallery at a picture, video or voice clip of this message.
   onOpenMedia?: (attachmentId: string) => void;
+  // The person reading: a note that asks them says who asked.
+  currentAgentId?: string;
 }
 
 export function MessageItem(props: MessageItemProps) {
@@ -51,7 +54,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName, onOpenMedia }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName, onOpenMedia, currentAgentId }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -69,7 +72,8 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
   const noticeAuthor = item.notice_kind ? channelName : undefined;
   return (
-    <article className={`message message-${item.kind}`}>
+    // The anchor a Mentions row or a mention email opens the conversation at.
+    <article className={`message message-${item.kind}`} id={`message-${item.id}`}>
       <header className="message-meta">
         <Avatar name={item.author_name ?? item.email?.from ?? (item.notice_kind ? noticeAuthor || messages.channelNoticeAuthor : kindLabel(item))} />
         <div className="message-byline">
@@ -95,7 +99,8 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
       {item.origin && <OriginLine origin={item.origin} />}
       {showHTML && item.body_html
         ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
-        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.body} />}</div>}
+        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.kind === 'note' ? boldMentions(item.body, item.mentions) : item.body} />}</div>}
+      {item.kind === 'note' && item.mentions && <NoteMentionsLine mentions={item.mentions} writer={item.author_name} currentAgentId={currentAgentId} timezone={timezone} />}
       {files.length > 0 && <AttachmentList items={files} onOpenMedia={onOpenMedia} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />

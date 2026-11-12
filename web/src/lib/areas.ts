@@ -9,6 +9,7 @@ type Session = Parameters<typeof can>[0];
 const screens: Array<{ prefix: string; exact?: boolean; permission: TokenPermission; label: string }> = [
   { prefix: '/', exact: true, permission: 'conversations:read', label: messages.inbox },
   { prefix: '/conversations/', permission: 'conversations:read', label: messages.inbox },
+  { prefix: '/mentions', permission: 'messages:read', label: 'Mentions' },
   { prefix: '/contacts/', permission: 'contacts:read', label: messages.contactArea },
   { prefix: '/knowledge/media', permission: 'kb_media:read', label: messages.knowledge },
   // The help center's settings were a section of Settings: they open with help_center:read, as they did there.

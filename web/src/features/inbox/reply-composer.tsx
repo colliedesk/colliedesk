@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
@@ -17,6 +17,9 @@ import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
 import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
+import { matchingTeammates, mentionAt, mentionedIn, MentionPicker, optionIdOf } from './mention-picker';
+import type { Teammate } from './mention-picker';
+import { mentionMessages } from './mention-messages';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -26,7 +29,10 @@ interface ReplyComposerProps {
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
   // With draftKey, every argument is passed and key (last) is the send's Idempotency-Key, kept with the draft.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string) => void | Promise<unknown>;
+  // A note that asks teammates passes their ids last (mentions), after key.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string, mentions?: string[]) => void | Promise<unknown>;
+  // The teammates a private note can ask by typing @ (askableTeammates); without any, @ is plain text.
+  teammates?: Teammate[];
   // findSent says whether the send under key stored its message; a draft kept with a send's key asks it once
   // when the box opens, and is dropped when it did. Without it such a draft is offered again.
   findSent?: (key: string) => Promise<boolean>;
@@ -74,6 +80,7 @@ const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
 
 const noAddresses: string[] = [];
+const noTeammates: Teammate[] = [];
 
 // inputOf names the files and copies of a send: each list counted first, a file by name, size and date (its
 // bytes are not read), so a changed attachment or Cc after a lost answer is a new message, never a replay.
@@ -93,7 +100,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent, teammates = noTeammates }: ReplyComposerProps) {
   // What the role holds: a reply needs messages:send, the lists under the box their own read.
   const holds = useHolds();
   const mayReply = holds('messages:send');
@@ -198,6 +205,26 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     card.current?.querySelector<HTMLInputElement>('.composer-cc input')?.focus();
   }, [showCc]);
   const field = useRef<HTMLTextAreaElement>(null);
+  // The @ being typed in a private note and the teammate the list marks.
+  const [mention, setMention] = useState<{ start: number; query: string }>();
+  const [mentionActive, setMentionActive] = useState(0);
+  const mentionList = useId();
+  const asksTeammates = kind === 'note' && teammates.length > 0;
+  const mentionOptions = mention && asksTeammates ? matchingTeammates(teammates, mention.query) : [];
+  const mentionOpen = Boolean(mention && asksTeammates) && !disabled;
+  const followCaret = (text: string, caretAt: number | null) => {
+    const found = asksTeammates && caretAt !== null ? mentionAt(text, caretAt) : undefined;
+    setMention((current) => (found && current && found.start === current.start && found.query === current.query ? current : found));
+    if (!found || found.start !== mention?.start) setMentionActive(0);
+  };
+  const pickMention = (person: Teammate) => {
+    if (!mention) return;
+    const end = mention.start + 1 + mention.query.length;
+    const text = `@${person.name} `;
+    caret.current = mention.start + text.length;
+    setBody(body.slice(0, mention.start) + text + body.slice(end));
+    setMention(undefined);
+  };
   const [picking, setPicking] = useState<Picker | null>(null);
   const pickers = replyPickersPart.use();
   const [assist, setAssist] = useState(false);
@@ -316,6 +343,9 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     const sentCc = kind === 'outgoing' ? cc : [];
     const seen = kind === 'outgoing' && latestReplyNumber !== undefined ? mark.current ?? latestReplyNumber : undefined;
     const fromDraft = kind === 'outgoing' ? aiDraft : undefined;
+    // Every active teammate whose @Name the note holds is asked, picked from the list or typed (a draft kept
+    // through a reload included); deleting the name takes the ask back.
+    const mentions = kind === 'note' ? mentionedIn(sent, teammates) : [];
     setConflict(undefined);
     // The kept draft holds the send's key before the request leaves: a reload meanwhile asks the server about
     // that key before offering the text again, and the same text sent again goes under the same key.
@@ -325,7 +355,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       pendingSend.current = { kind, body, key, input };
       writeDraft(draftKey, { kind, body, sendKey: key, sendInput: input });
     }
-    const send = (draftId?: string) => key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
+    const send = (draftId?: string) => mentions.length > 0 ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, undefined, undefined, undefined, key, mentions)
+      : key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
       : draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
       : seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
       : sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
@@ -371,6 +402,13 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   }, [disabled, setKind, maySavedReplies]);
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(event.nativeEvent)) return;
+    // While the @ list is open the arrows move in it, Enter or Tab picks and Esc closes it; the text stays as typed.
+    if (mentionOpen && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const move = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+      if (move && mentionOptions.length > 0) { event.preventDefault(); setMentionActive((index) => (index + move + mentionOptions.length) % mentionOptions.length); return; }
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && mentionOptions[mentionActive]) { event.preventDefault(); pickMention(mentionOptions[mentionActive]); return; }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMention(undefined); return; }
+    }
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(event.shiftKey); }
     if (event.key === '/' && (event.metaKey || event.ctrlKey) && maySavedReplies) { event.preventDefault(); setPicking('replies'); }
   };
@@ -394,14 +432,20 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
               <LockIcon />{messages.noteMode}<kbd aria-hidden="true">N</kbd></button>
           </div>
           <div className="composer-head-end">
-            {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
+            {kind === 'note' && <span className="composer-hint">{asksTeammates ? mentionMessages.noteHint : messages.noteHint}</span>}
           </div>
         </div>
         {aiWarnings.length > 0 && kind === 'outgoing' && (
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
         )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
-          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; }} />
+          aria-autocomplete={asksTeammates ? 'list' : undefined}
+          aria-controls={mentionOpen ? mentionList : undefined} aria-activedescendant={mentionOpen && mentionOptions.length > 0 ? optionIdOf(mentionList, mentionActive) : undefined}
+          onBlur={() => setMention(undefined)}
+          placeholder={kind === 'note' ? (asksTeammates ? mentionMessages.notePlaceholder : messages.notePlaceholder) : noReplies ? messages.replyNotSendable : messages.replyPlaceholder}
+          onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; followCaret(event.target.value, event.target.selectionStart); }} />
+        {mentionOpen && mention && <MentionPicker id={mentionList} options={mentionOptions} query={mention.query} active={mentionActive}
+          onActive={setMentionActive} onPick={pickMention} />}
         {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
           <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}

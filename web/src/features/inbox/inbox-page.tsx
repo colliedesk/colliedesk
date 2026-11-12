@@ -19,6 +19,7 @@ import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
+import { askableTeammates } from './mention-picker';
 import { messageMovesPart } from './message-moves-part';
 import { Part } from '../../ui/lazy-part';
 import { messages } from '../../messages';
@@ -47,7 +48,10 @@ interface InboxPageProps {
   viewsMenu?: ReactNode;
   // seen is the newest reply number on screen when the reply was started.
   // key is the send's Idempotency-Key when the reply box keeps a draft (it is stored with the draft).
-  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string) => void | Promise<unknown>;
+  // mentions (last) are the teammates a note asks.
+  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string, mentions?: string[]) => void | Promise<unknown>;
+  // Another list in the list column instead of the conversations (Mentions), with its name.
+  otherList?: { label: string; content: ReactNode };
   // onFindSent says whether the send under key stored its message in the conversation.
   onFindSent?: (conversationId: string, key: string) => Promise<boolean>;
   // Reply drafts are on in the workspace; undefined until that is known (nothing is shown then).
@@ -158,10 +162,12 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, guide, onTestMessage, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
+  // The people a private note can ask by typing @: the active teammates, never the writer.
+  const teammates = useMemo(() => askableTeammates(agents, currentAgentId), [agents, currentAgentId]);
   const draftKey = selected && workspaceId && currentAgentId ? `${workspaceId}:${currentAgentId}:${selected.id}` : undefined;
   const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -286,7 +292,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   }, []);
   return (
     <main className="inbox-shell" data-view={threadOpen ? 'thread' : 'list'} data-details-open={detailsOpen}>
-      <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}
+      {otherList ? <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={otherList.label}>
+        <h1 className="sr-only">{otherList.label}</h1>{otherList.content}</section>
+      : <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}
         onKeyDown={(event) => { if (event.key === 'Escape' && checkedIds.length > 0 && !event.defaultPrevented && !bulkBusy) endSelection(); }}>
         <header>
           {/* The top bar shows the page's name and the sidebar starts a conversation, so the list starts with its tabs.
@@ -316,9 +324,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>
           {spamToast.undo && <button type="button" className="link-action" disabled={bulkBusy} onClick={() => void applySpam(spamToast.undo ?? [], false)}>{messages.undo}</button>}
           <button type="button" className="icon-button" aria-label={messages.dismiss} onClick={() => setSpamToast(undefined)}><XIcon /></button></div>}
-      </section>
+      </section>}
       <div className="conversation-center panel">
-        <TimelinePanel noticesFailed={noticesFailed} canManageChannels={canManageChannels} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
+        <TimelinePanel currentAgentId={currentAgentId} noticesFailed={noticesFailed} canManageChannels={canManageChannels} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
           afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
             currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           before={selected && <Part part={messageMovesPart} render={(part) => <part.MessageMovesLog key={selected.id} conversation={selected} timeline={timeline}
@@ -346,7 +354,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           onResolve={selected && onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
           resolveTells={selected && noticesOf(selected)?.includes('resolved') ? selected.channel_ref?.name ?? messages.theChannel : undefined}
           aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
-          findSent={selected && onFindSent ? (key) => onFindSent(selected.id, key) : undefined} />
+          findSent={selected && onFindSent ? (key) => onFindSent(selected.id, key) : undefined} teammates={teammates} />
       </div>
       <DetailsPanel autofix={autofix} conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}

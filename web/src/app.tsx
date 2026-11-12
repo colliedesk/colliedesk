@@ -30,7 +30,8 @@ import { useSidebarData } from './features/shell/use-sidebar-data';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon } from './ui/icons';
+import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon } from './ui/icons';
+import { mentionMessages } from './features/inbox/mention-messages';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
@@ -106,6 +107,7 @@ function AppLayout() {
   const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
   // The inbox list on screen (its filters are in the address), so the sidebar marks the view or channel it is.
   const inInbox = path === '/' || path.startsWith('/conversations/');
+  const inMentions = path === '/mentions' || path.startsWith('/mentions/');
   const sidebar = useSidebarData(me.data, !onSignIn && !signedOut && !locked, inInbox ? inboxQueryFromSearch(search) : undefined);
   // Search and New conversation in the sidebar open the inbox (where it is not on screen) and ask it to do them.
   const askTheInbox = (intent: InboxIntent) => {
@@ -141,11 +143,12 @@ function AppLayout() {
   // Knowledge opens on what the session reads of it: the articles, the media or the help center's settings.
   const knowledge = me.data ? knowledgeHome(me.data) : '/knowledge';
   const inboxOpen = sidebar.inboxOpen ?? 0;
+  const mentionsUnread = sidebar.mentionsUnread ?? 0;
   // The page the top bar names: the area the sidebar marks current.
   const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
     : inKnowledge ? { title: messages.helpCenter, icon: <BookIcon /> } : inResults ? { title: messages.reports, icon: <ChartIcon /> }
     // Fixes keeps its wrench in the Autofix chunk; its name is enough here.
-    : inFixes ? { title: messages.autofix, icon: null } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
+    : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
   const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
@@ -161,8 +164,12 @@ function AppLayout() {
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
       {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}
-        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
+        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || inMentions || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
         {inboxOpen > 0 && <span className="rail-badge" aria-hidden="true">{inboxOpen > 999 ? '999+' : inboxOpen}</span>}</Link>}
+      {shows('messages:read') && <Link to="/mentions" className="rail-link" data-tip={mentionMessages.mentions}
+        aria-label={mentionsUnread > 0 ? mentionMessages.mentionsUnread(mentionsUnread) : mentionMessages.mentions} aria-current={inMentions ? 'page' : undefined}>
+        <AtIcon /><span className="rail-label" aria-hidden="true">{mentionMessages.mentions}</span>
+        {mentionsUnread > 0 && <span className="rail-badge" aria-hidden="true">{mentionsUnread > 99 ? '99+' : mentionsUnread}</span>}</Link>}
       {fixes && <Part part={autofixPart} render={({ FixesRailLink }) => <FixesRailLink current={inFixes} />} />}
       {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
         aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
@@ -201,6 +208,9 @@ const rootRoute = createRootRoute({ component: AppLayout, notFoundComponent: Not
 // The inbox filters are in the address, so a link opens the same list (src/lib/inbox-query.ts).
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
+// Mentions: the notes that asked the person, in the inbox's list column; a row opens its conversation beside it.
+const mentionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions', component: () => <InboxRoute list="mentions" /> });
+const mentionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions/$conversationId', component: () => <InboxRoute list="mentions" /> });
 // The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
 const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId',
   component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
@@ -535,7 +545,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

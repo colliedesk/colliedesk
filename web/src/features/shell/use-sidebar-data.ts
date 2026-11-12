@@ -39,8 +39,11 @@ export function useSidebarData(me: Me | undefined, enabled: boolean, current: In
     enabled: asks('conversations:read') });
   const views = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list, enabled: asks('saved_views:read') });
   const channels = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: asks('channels:read') });
+  // The Mentions list's first page, as Mentions asks for it: its unread count is the number beside Mentions.
+  const mentions = useQuery({ queryKey: ['mentions', 'unread'], queryFn: () => api.mentions('unread'), enabled: asks('messages:read') });
   return {
     inboxOpen: inbox.data?.status_counts?.open,
+    mentionsUnread: mentions.data?.unread,
     views: viewItems(views.data?.items ?? [], hrefOf, current),
     channels: channelItems(channels.data?.items ?? [], hrefOf, current),
   };
