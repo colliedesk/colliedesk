@@ -64,7 +64,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 
 ## Remove it
 
-Delete the `colliedesk` server and the `colliedesk-token` input from the file. Then revoke the token in **Settings → AI & agents → Sessions**: it stops working at once, wherever it was
+Delete the `colliedesk` server and the `colliedesk-token` input from the file. Then revoke the token in **Settings → AI & agents → External AI agents** (its **⋯** menu, **Revoke**): it stops working at once, wherever it was
 copied.
 
 ## Other hosts

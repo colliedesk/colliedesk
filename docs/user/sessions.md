@@ -46,14 +46,20 @@ name>" in the conversation.
 ## Agent tokens
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
-with the permissions you choose. It is a session with a label. It appears in **Settings → AI & agents → Sessions**,
-apart from your browser sessions (in Account), with what it was given as a badge and the date it stops working.
-**Revoke** ends it at once, as for any session. Someone with `team:revoke` sees and revokes the
-tokens of every person they do not rank below; AI & agents is in their settings menu even when they may not
-create tokens or read the built-in AI.
+with the permissions you choose. It is a session with a label. **Settings → AI & agents → External AI agents**
+lists your tokens under **Agent tokens**, apart from your browser sessions (in Account): each row has the token's
+name and person, what it may do, **Last used** (when an agent last called with it) and **Expires** (the date it
+stops working). **Sessions**, further down the same page, lists them too. Someone with `team:revoke` sees and
+revokes the tokens of every person they do not rank below; AI & agents is in their settings menu even when they
+may not create tokens or read the built-in AI.
 
-Create a token in **Settings → AI & agents → External AI agents** (it needs `team:create_tokens`, which the Agent
-and Admin roles hold). Give it a name you will recognise in Sessions (1 to 80 characters, for
+To revoke a token, open the **⋯** menu at the end of its row and choose **Revoke**. Colliedesk asks first, naming the token: revoking ends it at once, the agent that uses it is refused on
+its next call, and notes and replies it wrote keep showing "by <your name> via <token label>". A revoked
+token cannot be brought back; its row then reads **Revoked** and has no actions.
+
+Create a token in **Settings → AI & agents → External AI agents**: choose **Create token** (it needs
+`team:create_tokens`, which the Agent and Admin roles hold). In the dialog, give it a name you will recognise in
+the list (1 to 80 characters, for
 example **Claude Code on my laptop**), then under **Access** choose one of:
 
 - **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
@@ -66,19 +72,24 @@ example **Claude Code on my laptop**), then under **Access** choose one of:
   list is fixed when you create the token. An orange dot marks what reaches outside the workspace (a
   customer, the public help center, another service).
 
+When the token may not **Send to customers** but may leave AI drafts, the dialog says so: the agent leaves
+reply drafts above the reply box for a person to send. With Send to customers on, the agent's replies reach
+customers at once; nothing waits for approval.
+
 Either way, a token never does more than you can do right now: if you lose a permission, every
 token of yours loses it too, and if you are deactivated, your tokens stop working. See
 [Roles and permissions](roles-and-permissions.md) for the list of permissions.
 
-Choose **Create token**. The token is shown once, with **Copy token**. Choose **I saved it, hide the
-token** when you have it; leaving the page hides it too, and Colliedesk cannot show it again. If you
-lose it, create a new token and revoke the old one. The new token appears in Sessions at once. Below
-it, **Connect your agent** has the steps for Claude Code, Codex, Cursor, VS Code and Claude Desktop
+Choose **Create token** in the dialog. The token is shown once, with **Copy token**. Choose **I saved it,
+hide the token** when you have it; closing the dialog or leaving the page hides it too, and Colliedesk cannot
+show it again. If you lose it, create a new token and revoke the old one. The new token appears in the list at
+once. Under the token, and under the list on the page, **Connect your agent** has the steps for Claude Code,
+Codex, Cursor, VS Code and Claude Desktop
 with your address filled in, and the way to remove each one; while the token is shown, **Add to
 Cursor** puts it into Cursor in one click. To check that an agent is connected, ask it "Who am I in
 Colliedesk?": it answers with your name, your roles and what the token may do.
 
-In Sessions a token shows one of:
+In the list a token shows one of:
 
 - **Follows role Agent** (or the role it follows); open it to see **What it may do**.
 - **Fixed · 5 permissions**: a token made with a list.
