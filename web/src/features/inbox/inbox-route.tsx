@@ -107,7 +107,7 @@ export function InboxRoute() {
   // Once the inbox is idle, so opening a customer or a new conversation waits for no download.
   useEffect(() => { (window.requestIdleCallback ?? ((load: () => void) => setTimeout(load, 1000)))(contactPart.preload); }, []);
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
-  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(query, signal), refetchOnMount: 'always',
+  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(filters.search ? query : `${query}&counts=true`, signal), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
   // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
@@ -328,7 +328,7 @@ export function InboxRoute() {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);
     }) : undefined}
-    page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
+    statusCounts={conversations.data?.status_counts} page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}

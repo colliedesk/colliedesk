@@ -8477,6 +8477,14 @@ export interface components {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
+            /** @description Only with counts=true. How many conversations each status holds under every filter but the status. */
+            status_counts?: {
+                open: number;
+                pending: number;
+                resolved: number;
+                closed: number;
+                spam: number;
+            };
         };
         ReplyConflict: {
             error: {
@@ -12455,6 +12463,8 @@ export interface operations {
                 updated_before?: string;
                 /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update). */
                 sort?: components["schemas"]["ConversationSort"];
+                /** @description true adds status_counts: how many conversations each status holds under every other filter given (the inbox's status tabs). Leave it out when only the page is needed. */
+                counts?: boolean;
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
                 /** @description Only the conversations one number of the results page counts: `<snapshot id>:<window>.<metric>`, as `GET /results` names them (for example `…:30d.first_response`). Send it without a status filter: a number counts conversations in any status. A snapshot that is no longer kept (numbers are worked out again every hour or so; a replaced one stays 24 hours) answers 410 `results_refreshed`. */

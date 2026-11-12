@@ -58,6 +58,8 @@ type ConversationFilter struct {
 	AgentID          string
 	Page             int
 	PageSize         int
+	// Counts asks for StatusCounts with the page.
+	Counts bool
 }
 
 // Orders of the inbox list. Every order ends with the id, so a page never repeats or skips a row.
@@ -87,6 +89,9 @@ type ConversationPage struct {
 	Items []domain.Conversation `json:"items"`
 	Page  int                   `json:"page"`
 	Size  int                   `json:"page_size"`
+	// StatusCounts is how many conversations each status holds under every filter but the status, when
+	// the filter asked for them (the inbox's status tabs).
+	StatusCounts map[string]int `json:"status_counts,omitempty"`
 }
 
 // CreateConversation opens an empty conversation; channelID, when given, is the channel its replies
@@ -491,6 +496,13 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		}
 		filter.refIDs = ids
 	}
+	var counts map[string]int
+	if filter.Counts {
+		var err error
+		if counts, err = conversationStatusCounts(ctx, tx, workspaceID, filter, now); err != nil {
+			return ConversationPage{}, err
+		}
+	}
 	q := conversationConditions(workspaceID, filter, now)
 	limit, offset := q.arg(filter.PageSize), q.arg((filter.Page-1)*filter.PageSize)
 	// A conversation whose code the search names comes first.
@@ -507,7 +519,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		return ConversationPage{}, fmt.Errorf("scan conversation ids: %w", err)
 	}
 	if len(ids) == 0 {
-		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize}, nil
+		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize, StatusCounts: counts}, nil
 	}
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
@@ -559,7 +571,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	if err := rows.Err(); err != nil {
 		return ConversationPage{}, fmt.Errorf("iterate conversations: %w", err)
 	}
-	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize}, nil
+	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize, StatusCounts: counts}, nil
 }
 
 func conversationTags(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Tag, error) {

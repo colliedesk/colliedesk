@@ -678,12 +678,12 @@ test('the filters in the address are the list, and changing one keeps the open c
   api.messages.mockResolvedValue({ items: [] });
   api.timeEntries.mockResolvedValue({ items: [] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
-  await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50&counts=true', expect.anything()));
   expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting to be sent');
   fireEvent.click(screen.getByRole('button', { name: 'Remove filter Priority: High' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
     search: { priority: 'urgent', has_pending_draft: true, sort: 'waiting_longest' }, replace: false });
-  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50&counts=true', expect.anything()));
   // Opening another conversation carries the filters, so Back and a shared link show the same list.
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
@@ -709,7 +709,7 @@ test('a saved view is saved from the filters on screen and opens them again', as
   fireEvent.click(within(menu).getByRole('button', { name: 'Save view' }));
   await waitFor(() => expect(views.create).toHaveBeenCalledWith({ name: 'Pending, our turn', scope: 'personal', filters: { status: ['pending'], awaiting: 'team' } }, expect.any(String)));
   fireEvent.click(await within(menu).findByRole('button', { name: 'Urgent' }));
-  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&page=1&page_size=50', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&page=1&page_size=50&counts=true', expect.anything()));
 });
 
 test('on the trial with an unverified domain, New conversation says it cannot send yet; once verified it starts the conversation', async () => {

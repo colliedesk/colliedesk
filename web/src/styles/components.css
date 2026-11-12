@@ -1346,3 +1346,5 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .conversation-source .customer-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
 .property-row > .tag-names { color: var(--text-1); font-size: var(--fs-ui); padding-left: var(--space-8); }
 .property-menu .tag-create input { width: 100%; }
+/* A status tab's count (I1-a "Open 23"): quieter than the word, never part of the tab's name. */
+.status-tabs .tab-count { margin-left: var(--space-1); color: var(--text-3); font-weight: 500; font-variant-numeric: tabular-nums; }

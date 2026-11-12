@@ -73,6 +73,10 @@ MCP tool `colliedesk_email_channel_get`.
   showing the new-workspace steps.
 - Pick a **Status** tab (All, Open, Pending, Resolved, Closed, Spam), and narrow further with **Filter** and
   **Sort**; see [Filter and sort](#filter-and-sort) below.
+- **Open** and **Pending** say how many conversations they hold (**Open 23**), and so does the tab you are
+  on; the numbers follow the filters on screen. While you search, the tab counts the results when they fit
+  on one page. The API gives the same numbers with `counts=true` on `GET /api/v1/conversations`
+  (`status_counts`).
 - **Search conversations** matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
   status tab first, so imported closed tickets are found; the view stays on **All** after you clear
   the search. Characters such as `%` and `_` are matched
