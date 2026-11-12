@@ -40,7 +40,8 @@ least one role.
   (**Remove and stop 1 token**). Giving the role back starts the tokens again.
 - A workspace always keeps at least one active person with the Admin role. Taking Admin from the
   last one, or deactivating them, is refused (`last_admin`: "A workspace needs at least one active member with the Admin role"); give
-  Admin to someone else first.
+  Admin to someone else first. In **Change roles** their Admin box is locked: point at, focus or tap the lock beside it
+  to read why.
 
 An AI agent sets a person's roles with `colliedesk_member_roles_set` (`team:manage_roles`), by name or
 id, under the same rules. See [Roles and permissions](roles-and-permissions.md#safety-rules).

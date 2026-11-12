@@ -5,6 +5,9 @@ const listWords = (words: string[]) => (words.length < 2 ? words.join('') : `${w
 
 export const messages = {
   brand: 'Colliedesk',
+  // The name of a HelpTip's button, and of a LockedReason's lock.
+  helpTipAbout: (label: string) => `About ${label}`,
+  lockedReasonOf: (label: string) => `Why ${label} is locked`,
   inbox: 'Inbox',
   contactArea: 'this contact',
   closedScreen: (area: string) => `Your roles do not let you open ${area}.`,

@@ -11,7 +11,7 @@ export function NotificationsSetting() {
       <label className="field-inline"><input type="checkbox" checked={state === 'on'} disabled={state === 'blocked'}
         onChange={(event) => (event.target.checked ? void enableNotifications() : disableNotifications())} />
         <span>{settingsMessages.notificationsLabel}</span></label>
-      {state === 'blocked' && <small className="muted-copy">{settingsMessages.notificationsBlocked}</small>}
+      {state === 'blocked' && <small className="muted-copy" data-quiet="state">{settingsMessages.notificationsBlocked}</small>}
     </div>
   );
 }

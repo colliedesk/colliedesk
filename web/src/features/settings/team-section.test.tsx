@@ -192,6 +192,30 @@ test('the only active admin cannot deactivate or demote themself; with a second 
   expect(screen.getByRole('checkbox', { name: /Admin/ })).not.toHaveAttribute('aria-disabled');
 });
 
+test('why the last admin keeps Admin sits in the tip of its lock, not in a visible line', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole]} myPermissions={permissionsOf('admin')} timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  expect(screen.queryByText(settingsMessages.teamLastAdmin)).not.toBeVisible();
+  const lock = screen.getByRole('button', { name: 'Why Admin is locked' });
+  expect(lock).toHaveAccessibleDescription(settingsMessages.teamLastAdmin);
+  fireEvent.click(lock);
+  expect(screen.getByRole('tooltip')).toHaveTextContent(settingsMessages.teamLastAdmin);
+});
+
+test('Escape on the lock tip closes the tip only: Change roles stays open with its picks', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole]} myPermissions={permissionsOf('admin')} timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  const agent = screen.getByRole('checkbox', { name: /Agent/ });
+  fireEvent.click(agent);
+  expect(agent).toBeChecked();
+  fireEvent.pointerEnter(screen.getByRole('button', { name: 'Why Admin is locked' }), { pointerType: 'mouse' });
+  expect(screen.getByRole('tooltip')).toHaveTextContent(settingsMessages.teamLastAdmin);
+  fireEvent.keyDown(agent, { key: 'Escape' });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  expect(screen.getByRole('group', { name: /Roles of/ })).toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: /Agent/ })).toBeChecked();
+});
+
 test('an admin renames a member from their row, and saving an empty name clears it', () => {
   const onRename = vi.fn();
   render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);

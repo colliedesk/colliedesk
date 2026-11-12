@@ -202,7 +202,7 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {inTrash && <div className="warning-note"><p>{t.inTrashNote}</p><button type="button" disabled={busy} onClick={() => void restore()}>{t.restoreFromTrash}</button></div>}
         {!listed && <p className="warning-note">{t.languageNotListed}</p>}
-        {listed && visible === false && <p className="muted-copy">{t.languageHidden} <a href="/knowledge/languages">{t.languagesTab}</a></p>}
+        {listed && visible === false && <p className="muted-copy" data-quiet="state">{t.languageHidden} <a href="/knowledge/languages">{t.languagesTab}</a></p>}
         {original?.status === 'draft' && <p className="muted-copy">{t.articleDraft}</p>}
         {translation?.outdated && <div className="warning-note kb-outdated-note">
           <p>{t.originalChanged}</p>
