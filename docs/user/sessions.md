@@ -8,9 +8,9 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
 - Select **Revoke** to sign a device out immediately. The device stays in the list as **Revoked**;
   a session that ran out shows **Expired**.
 - On **This device** the button reads **Sign out**: it signs this browser out at once.
-- To sign out of the browser you are using, you can also select your avatar at the foot of the left rail (top
-  right on a phone) and choose **Sign out**. The menu shows your name and roles; the workspace and your address
-  are in the bar above every page.
+- To sign out of the browser you are using, you can also select your name at the foot of the sidebar (your
+  avatar, top right on a phone) and choose **Sign out**. The menu shows your name and roles; the workspace and
+  your address are always on screen, in the sidebar or the top bar.
 - You see your own sessions. Someone with `team:revoke` (the Admin role has it) sees every session in
   the workspace and can revoke those of anyone who does not hold more than they do.
 - A session signed in through the API with `requested_role: agent` shows **Limited to Agent**: it
