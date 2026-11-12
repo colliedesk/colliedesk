@@ -25,7 +25,7 @@ export const messages = {
   notificationReply: 'New customer message',
   notificationSummary: (count: number) => `${count} new updates in your inbox`,
   settings: 'Settings',
-  knowledge: 'Knowledge',
+  knowledge: 'Knowledge base',
   helpCenter: 'Help center',
   signInTagline: 'The open-source helpdesk for small support teams leaving Freshdesk.',
   // The sign-in page links what general availability guarantees and, on Colliedesk Cloud, its status page.
@@ -69,7 +69,6 @@ export const messages = {
   // The app frame: the sidebar's search, its lists and its foot, and the top bar's way to the docs.
   search: 'Search',
   inboxOpenCount: (count: number) => `Inbox, ${count} open`,
-  reports: 'Reports',
   inviteTeammates: 'Invite teammates',
   channelNeedsAttention: (name: string) => `${name}, needs attention`,
   help: 'Help',
@@ -82,11 +81,11 @@ export const messages = {
   signedOutSelfHosted: 'Running your own server? Print a new link with: collie pair --workspace <slug> --email <your email>',
   getStarted: 'Get started',
   conversationsFailed: 'Conversations could not be loaded.',
-  resultsRefreshed: 'These numbers were refreshed. Open Results again.',
-  resultsRefreshedWhy: 'Results works its numbers out again every hour or so, and this list belonged to an older count. Open Results and click the number again, or clear the filter to see every conversation.',
-  openResults: 'Open Results',
+  resultsRefreshed: 'These numbers were refreshed. Open Reports again.',
+  resultsRefreshedWhy: 'Reports works its numbers out again every hour or so, and this list belonged to an older count. Open Reports and click the number again, or clear the filter to see every conversation.',
+  openResults: 'Open Reports',
   clearFilter: 'Clear filter',
-  results: 'Results',
+  results: 'Reports',
   autofix: 'Autofix',
   tryAgain: 'Try again',
   signIn: 'Sign in',
@@ -137,9 +136,9 @@ export const messages = {
   // Spam: out of the inbox and every view, no clock, not in Results; the sender's later mail goes there too.
   spam: 'Spam',
   notSpam: 'Not spam',
-  spamTip: 'Move to Spam: out of the inbox, no clock, not in Results. Later mail from this sender goes there too.',
+  spamTip: 'Move to Spam: out of the inbox, no clock, not in Reports. Later mail from this sender goes there too.',
   notSpamTip: 'Put it back where it was and let mail from this sender reach the inbox again',
-  spamNote: 'Mail from these senders lands here: no notification, no clock, not in Results. Not spam puts a conversation back where it was.',
+  spamNote: 'Mail from these senders lands here: no notification, no clock, not in Reports. Not spam puts a conversation back where it was.',
   movedToSpam: (count: number, senders: string[]) => `${count === 1 ? 'Moved to Spam' : `Moved ${count} conversations to Spam`}. Later mail from ${
     senders.length === 1 ? senders[0] : 'their senders'} goes there too.`,
   movedOutOfSpam: (count: number, senders: string[]) => `${count === 1 ? 'Back where it was' : `${count} conversations back where they were`}. Mail from ${

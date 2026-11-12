@@ -167,7 +167,7 @@ describe('ResultsPage', () => {
   it('says what to do when the page cannot load', () => {
     const onRetry = vi.fn();
     renderPage({ results: undefined, failed: true, onRetry });
-    expect(screen.getByRole('alert')).toHaveTextContent('Results did not load');
+    expect(screen.getByRole('alert')).toHaveTextContent('Reports did not load');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalled();
   });

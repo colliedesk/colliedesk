@@ -17,7 +17,7 @@ interface AppShellProps {
   // appVersion is the server's version, sent with a problem report.
   appVersion?: string;
   brand?: ReactNode;
-  // links are the sidebar's destinations (Inbox, Help center, Reports); footLinks sit at its foot (Settings).
+  // links are the sidebar's destinations (Inbox, Knowledge base, Reports); footLinks sit at its foot (Settings).
   links?: ReactNode;
   footLinks?: ReactNode;
   // page is the icon and name the top bar shows for the page on screen.
