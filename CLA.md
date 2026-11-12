@@ -9,12 +9,9 @@ project can keep one owner of its license and change it when the project needs t
 
 ## How to agree
 
-Read this agreement. Then post this comment on your pull request, exactly:
-
-    I have read the Colliedesk CLA and I agree to it.
-
-The CI check `roadmap` (step "Everyone in this pull request agreed to CLA.md") verifies the comment.
-The agreement covers every contribution you submit to the Colliedesk project from then on.
+When you open your first pull request, CLA Assistant comments on it with a link. Open the link,
+sign in with GitHub, read this agreement and press "I agree". You agree once; the agreement covers
+every contribution you submit to the Colliedesk project from then on.
 
 ## 1. Definitions
 
