@@ -28,6 +28,8 @@ import { AppShell } from './features/shell/app-shell';
 import { askInbox } from './features/shell/inbox-intents';
 import type { InboxIntent } from './features/shell/inbox-intents';
 import { useSidebarData } from './features/shell/use-sidebar-data';
+import { paletteEntries } from './features/shell/palette-entries';
+import { preloadQuickStart, QuickStart } from './features/onboarding/quick-start';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
@@ -119,7 +121,12 @@ function AppLayout() {
   const inInbox = path === '/' || path.startsWith('/conversations/');
   const inMentions = path === '/mentions' || path.startsWith('/mentions/');
   const sidebar = useSidebarData(me.data, !onSignIn && !signedOut && !locked, inInbox ? inboxQueryFromSearch(search) : undefined);
-  // Search and New conversation in the sidebar open the inbox (where it is not on screen) and ask it to do them.
+  // Quick start in the sidebar head reads where setup stands on every page. A guide the session hid is not asked for;
+  // until the session answers it is assumed wanted, so the steps go out with the session, not after it.
+  const readsSetup = !onSignIn && !signedOut && !locked && me.data?.setup_guide_hidden !== true;
+  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: readsSetup });
+  useEffect(() => { if (readsSetup) preloadQuickStart(); }, [readsSetup]);
+  // New conversation (the sidebar's pen and the palette's action) opens the inbox where it is not on screen and asks it.
   const askTheInbox = (intent: InboxIntent) => {
     if (!inInbox) void navigate({ to: '/' });
     askInbox(intent);
@@ -161,10 +168,13 @@ function AppLayout() {
     : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
   const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
+  const onNewConversation = locked || !mayStart || !shows('conversations:read') ? undefined : () => askTheInbox('new-conversation');
+  // The top bar's search: the same places and actions as the sidebar, and the inbox's own searches.
+  const palette = me.data && !locked ? { ...paletteEntries(me.data, { inboxOpen, mentionsUnread, onNewConversation }), onNavigate: (href: string) => router.history.push(href) } : undefined;
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     page={page} views={locked ? undefined : sidebar.views} channels={locked ? undefined : sidebar.channels}
-    onSearch={locked || !shows('conversations:read') ? undefined : () => askTheInbox('search')}
-    onNewConversation={locked || !mayStart || !shows('conversations:read') ? undefined : () => askTheInbox('new-conversation')}
+    palette={palette} onNewConversation={onNewConversation}
+    quickStart={me.data && !locked ? <QuickStart key={String(me.data.setup_guide_hidden)} progress={setup.data} me={me.data} /> : undefined}
     canInvite={!locked && can(me.data, 'team:invite')}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}

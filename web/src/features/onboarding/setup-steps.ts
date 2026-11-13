@@ -2,8 +2,8 @@ import type { SetupProgress, SetupStepKey, TokenPermission } from '../../api/sch
 import { can } from '../../lib/can';
 import type { Permissions } from '../../lib/can';
 
-// The state each step ends in. Kept apart from the checklist so the inbox can decide, without loading
-// it, whether the guide has anything left to show.
+// The state each step ends in. Kept apart from the checklist so Quick start can count, without loading it, what is
+// left to do.
 export const doneStates: Record<SetupStepKey, string> = { email: 'working', import: 'done', ai_drafts: 'on', reply_targets: 'on', invite: 'joined', first_reply: 'sent' };
 
 // The permissions a step's own screen needs, as in Settings: managing channels sets up email and the import,
@@ -18,9 +18,9 @@ const stepPermissions: Partial<Record<SetupStepKey, TokenPermission[]>> = {
 // mayTake is true when the person holds every permission the step's screen needs.
 export const mayTake = (me: Permissions, key: SetupStepKey) => (stepPermissions[key] ?? []).every((needed) => can(me, needed));
 
-// The steps offered on the way: they show their state, but the four core steps alone decide whether the setup
-// has work left, as the server's complete does.
-const offers: ReadonlySet<SetupStepKey> = new Set(['ai_drafts', 'reply_targets']);
+// Quick start's Set up group: what the team needs to receive and answer customer email. Every other step (the
+// invites and the two offers) is in Try more, which the person may skip.
+export const setUpKeys: ReadonlySet<SetupStepKey> = new Set(['email', 'import', 'first_reply']);
 
 // visibleSteps are the steps this person can take, by the permissions of their roles.
 export function visibleSteps(progress: SetupProgress, me: Permissions) {
@@ -33,5 +33,22 @@ export const stepIsDone = (step: { key: SetupStepKey; state: string }) => doneSt
 // provider of the workspace's own. It is neither done nor to do, and is left out of the count.
 export const nothingToDo = (step: { key: SetupStepKey; state: string }) => step.key === 'ai_drafts' && step.state === 'unavailable';
 
-// guideHasWork is true while the person has a core step left to take.
-export const guideHasWork = (progress: SetupProgress, me: Permissions) => visibleSteps(progress, me).some((step) => !offers.has(step.key) && !stepIsDone(step));
+// quickStartCount counts what Quick start shows: every step this person takes, but one with nothing to do here and,
+// once skipped, the Try more steps. setUpLeft is true while a Set up step is still to do (the icon's amber dot).
+export function quickStartCount(progress: SetupProgress, me: Permissions, skipped: boolean) {
+  const counted = visibleSteps(progress, me).filter((step) => !nothingToDo(step) && (!skipped || setUpKeys.has(step.key)));
+  const done = counted.filter(stepIsDone).length;
+  return { done, total: counted.length, left: counted.length - done, setUpLeft: counted.some((step) => setUpKeys.has(step.key) && !stepIsDone(step)) };
+}
+
+// The browser keeps a person's Skip these, per person, so a teammate on the same computer keeps their own.
+const skippedKey = (agentId: string) => `colliedesk.quick-start.skipped.${agentId}`;
+export function readSkipped(agentId: string): boolean {
+  try { return localStorage.getItem(skippedKey(agentId)) === 'yes'; } catch { return false; }
+}
+export function storeSkipped(agentId: string, skipped: boolean) {
+  try {
+    if (skipped) localStorage.setItem(skippedKey(agentId), 'yes');
+    else localStorage.removeItem(skippedKey(agentId));
+  } catch { /* the choice holds for this visit */ }
+}

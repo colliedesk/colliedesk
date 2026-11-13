@@ -14,7 +14,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     // The menu names the person (the address, without a display name) and the role; the bar above names the workspace.
     await expect(page.getByRole('group', { name: 'Account' })).toContainText(email);
     await expect(page.getByRole('group', { name: 'Account' })).toContainText('Admin');
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    // Exact: the top bar's "Search Sign Out Desk …" field holds the same words.
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('You are signed out');
     await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
     await page.goto(`${servers.main}/settings`);

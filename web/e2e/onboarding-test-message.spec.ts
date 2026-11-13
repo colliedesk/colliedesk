@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openQuickStart } from './support/browser';
 import { servers, uniqueSuffix } from './support/cli';
 import { IdentityProvider } from './support/identity-provider';
 import { waitForMail } from './support/mailpit';
@@ -21,7 +22,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
   await page.goto(baseURL);
   await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
 
-  await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Receive customer email/ }).click();
+  await (await openQuickStart(page)).getByRole('link', { name: /Receive customer email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(support);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await expect(page.getByRole('group', { name: 'Forward its mail to Colliedesk' })).toContainText('Step 2 of 4');
@@ -52,7 +53,7 @@ test('the Connection tab sends one test message before an inbound secret exists 
   const adminEmail = `owner-${suffix}@acme.example`;
   expect((await signUp(page, provider, adminEmail, `Connection Test ${suffix}`)).status()).toBe(201);
   await page.goto(baseURL);
-  await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Receive customer email/ }).click();
+  await (await openQuickStart(page)).getByRole('link', { name: /Receive customer email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@acme.example`);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await page.getByRole('link', { name: 'Manage this address' }).click();

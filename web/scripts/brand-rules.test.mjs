@@ -146,17 +146,21 @@ test('the help center palette is ink and paper', () => {
   expect(tinted).toEqual([]);
 });
 
-test('an open menu sits above the setup guide in the corner', () => {
+test('the search palette sits above every popover of the frame, and Quick start above the open menus', () => {
   const layer = (file, selector) => Number(rule(read(file), selector).match(/z-index:\s*(\d+)/)?.[1]);
-  const dock = layer('features/onboarding/setup-checklist.css', '.setup-dock');
-  for (const menu of ['.filter-popover', '.action-popover']) expect(layer('styles/components.css', menu), menu).toBeGreaterThan(dock);
+  const palette = layer('features/shell/command-palette.css', '.palette-backdrop');
+  const quickStart = layer('styles/layout.css', '.quick-start-popover');
+  expect(palette).toBeGreaterThan(quickStart);
+  for (const menu of ['.filter-popover', '.action-popover']) expect(quickStart, menu).toBeGreaterThan(layer('styles/components.css', menu));
 });
 
-test('the setup guide marks a finished step with a stroke check, not a filled disc', () => {
+test('Quick start marks a finished step with the success disc and strikes its title through', () => {
   const css = read('features/onboarding/setup-checklist.css');
   const done = rule(css, '.checklist-step[data-state="done"] .setup-mark');
+  // The disc is drawn in the success colour (currentColor), never a status colour of its own.
   expect(done).not.toMatch(/background|box-shadow/);
   expect(done).toMatch(/(?<![-\w])color:\s*var\(--ok\)/);
+  expect(rule(css, '.checklist-step[data-state="done"] .setup-title')).toMatch(/text-decoration:\s*line-through/);
   // The next step's row is a link styled as a primary action: the link drops the button weight, and its lines
   // keep their own (the title bold, "Needs attention" bold, the rest regular), so no rule reweights a line under it.
   expect(rule(css, '.checklist-step > a.primary-action, .checklist-step > a.primary-action:hover')).toMatch(/font-weight:\s*400/);

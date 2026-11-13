@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import { contactApi } from './contact-api';
 import type { Contact, ContactMerge } from '../../api/schemas';
 import { ContactPage } from './contact-page';
+import { rememberRecent } from '../shell/recent-items';
 
 // A page of history fits a screen; the count on the page says how many there are in all.
 export const contactHistoryPageSize = 25;
@@ -15,6 +16,12 @@ export function ContactRoute() {
   const [paged, setPaged] = useState({ contactId, page: 1 });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const contact = useQuery({ queryKey: ['contact', contactId], queryFn: () => contactApi.contact(contactId) });
+  // A customer whose page was opened heads Recent in the search palette.
+  const workspaceId = me.data?.workspace?.id;
+  const opened = contact.data?.id === contactId ? contact.data : undefined;
+  useEffect(() => {
+    if (workspaceId && opened) rememberRecent(workspaceId, { kind: 'customer', id: opened.id, title: opened.name, detail: opened.organization ?? opened.email ?? undefined });
+  }, [workspaceId, opened?.id, opened?.name, opened?.organization, opened?.email]); // eslint-disable-line react-hooks/exhaustive-deps
   // Another contact's page starts on its first page, and a page past the last one (after an undo, or a
   // merge elsewhere) shows the last page instead of an empty list.
   const pages = Math.max(1, Math.ceil((contact.data?.conversation_count ?? 0) / contactHistoryPageSize));

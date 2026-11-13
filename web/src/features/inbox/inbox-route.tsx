@@ -25,8 +25,7 @@ import { can } from '../../lib/can';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
-import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
-import { guideHasWork } from '../onboarding/setup-steps';
+import { rememberRecent } from '../shell/recent-items';
 import { mayTell, noticesOf } from './status-tell';
 import { PermissionsContext } from '../../lib/permissions-context';
 import { useInboxIntent } from '../shell/inbox-intents';
@@ -140,15 +139,6 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
-  // The setup guide: what is left to receive and answer email. The activity poll refreshes it; it has no
-  // poll of its own. A hidden guide is not even asked for.
-  // Until the session answers the guide is assumed to be wanted, so its data and its chunk go out with the
-  // session and the list instead of after the session; a guide the session says is hidden is dropped at once.
-  const guideHidden = me.data?.setup_guide_hidden ?? false;
-  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: !guideHidden });
-  useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
-  const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
-    onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
   const activeID = selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen.
   const shownID = activeID ?? (mentionsMode ? undefined : conversations.data?.items[0]?.id);
@@ -166,6 +156,12 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
   const selected = withNotices ?? detail ?? (activeID || mentionsMode ? undefined : conversations.data?.items[0]);
+  // A conversation the person opened (a row picked, or its address) heads Recent in the search palette.
+  const workspaceId = me.data?.workspace?.id;
+  const opening = activeID && selected?.id === activeID ? selected : undefined;
+  useEffect(() => {
+    if (workspaceId && opening) rememberRecent(workspaceId, { kind: 'conversation', id: opening.id, title: opening.subject, detail: opening.contact_name });
+  }, [workspaceId, opening?.id, opening?.subject, opening?.contact_name]); // eslint-disable-line react-hooks/exhaustive-deps
   // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
   // The Markdown of replies loads while the list does, before a conversation opens.
   useEffect(() => markdownPart.preload(), []);
@@ -219,11 +215,6 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const defaultMailbox = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel, enabled: reads('channels:read') }).data;
   const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
-  // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
-  // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
-  const guideStartsOpen = checkAny && anyConversation.data?.items.length === 0 && channelTypes !== undefined && mailboxes === 0;
-  const guide = !guideHidden && setup.data && guideHasWork(setup.data, me.data)
-    ? <SetupGuide progress={setup.data} me={me.data} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
   // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
   const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
   const channelLabel = (conversation: Conversation) => {
@@ -345,7 +336,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
   return <PermissionsContext.Provider value={me.data?.permissions}><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
-    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} guide={guide}
+    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);

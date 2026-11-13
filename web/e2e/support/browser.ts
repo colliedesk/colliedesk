@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 // redeemLink opens a one-time link the way a person does: open it, select Continue, land in the inbox.
 // redeemLink opens a one-time link and uses it: Continue on a pairing link's page, Join <workspace> on an
@@ -8,6 +8,14 @@ export async function redeemLink(page: Page, url: string): Promise<void> {
   await page.goto(url);
   await page.getByRole('button', { name: /^(Continue to Colliedesk|Join .+)$/ }).click();
   await expect(page).toHaveURL(`${new URL(url).origin}/`);
+}
+
+// openQuickStart presses Quick start, beside the workspace name, and returns the checklist it opens under it.
+export async function openQuickStart(page: Page): Promise<Locator> {
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /^Quick start/ }).click();
+  const checklist = page.getByRole('dialog', { name: /^Get .+ ready$/ });
+  await expect(checklist).toBeVisible();
+  return checklist;
 }
 
 // expectNoRawJSON fails when the page shows an API error body instead of a sentence.

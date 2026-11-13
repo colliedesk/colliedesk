@@ -1,33 +1,8 @@
-import { useEffect, useId } from 'react';
+import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { messages } from '../../messages';
-import { ChatIcon, FormIcon, MailIcon, PenIcon, SearchIcon, UserPlusIcon } from '../../ui/icons';
+import { ChatIcon, FormIcon, MailIcon, UserPlusIcon } from '../../ui/icons';
 import type { SidebarChannel, SidebarView } from './sidebar-items';
-
-// A Mac names the shortcut ⌘K; every other system Ctrl K.
-const onMac = () => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
-
-// SidebarActions is the row under the workspace name: Search, which opens the inbox with its search box focused
-// (Ctrl K or ⌘K from anywhere), and the pen that starts a new conversation.
-export function SidebarActions({ onSearch, onNewConversation }: { onSearch?: () => void; onNewConversation?: () => void }) {
-  useEffect(() => {
-    if (!onSearch) return;
-    const shortcut = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'k' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
-      event.preventDefault();
-      onSearch();
-    };
-    document.addEventListener('keydown', shortcut);
-    return () => document.removeEventListener('keydown', shortcut);
-  }, [onSearch]);
-  return <div className="sidebar-actions">
-    {onSearch && <button type="button" className="sidebar-search" aria-keyshortcuts="Control+K Meta+K" data-tip={messages.search} onClick={onSearch}>
-      <SearchIcon /><span className="sidebar-search-label">{messages.search}</span>
-      <kbd aria-hidden="true">{onMac() ? '⌘K' : 'Ctrl K'}</kbd></button>}
-    {onNewConversation && <button type="button" className="sidebar-new" aria-label={messages.newConversation} data-tip={messages.newConversation}
-      data-opens="new-conversation" onClick={onNewConversation}><PenIcon /></button>}
-  </div>;
-}
 
 function ChannelIcon({ type }: { type: string }) {
   if (type === 'email') return <MailIcon />;
