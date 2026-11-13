@@ -30,37 +30,38 @@
 .ai-server h2 { margin: 0; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--fs-ui); font-weight: 600; }
 .ai-server p { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
 
-/* Self-hosted server without a provider */
-.ai-empty { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-.ai-empty > header { grid-column: 1 / -1; display: grid; gap: 2px; }
-.ai-empty h2 { margin: 0; font: 600 16px/1.3 var(--font-sans); }
-.ai-empty > header p { margin: 0; color: var(--text-2); font-size: var(--fs-small); }
-.ai-way { display: grid; gap: var(--space-2); align-content: start; padding: var(--space-4); }
-.ai-way h3 { margin: 0; font-size: var(--fs-ui); font-weight: 600; }
-.ai-way p { margin: 0; color: var(--text-2); font-size: var(--fs-small); }
-.ai-way pre { margin: 0; overflow-x: auto; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-2) var(--space-3);
-  color: var(--text-2); font: 12px/1.6 var(--font-mono); }
-.ai-way .button-row button, .ai-way .button-row .button { display: inline-flex; align-items: center; gap: var(--space-1); }
-
 /* Features */
-.ai-slots { overflow: hidden; }
-.ai-slot-head, .ai-slot { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(10rem, 1fr) minmax(10rem, 0.9fr) minmax(8rem, 0.8fr) 4rem; gap: var(--space-4); align-items: center;
-  min-height: 64px; padding: var(--space-3) var(--space-4); }
-.ai-slot-head { min-height: 0; border-bottom: 1px solid var(--line); padding-block: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
-.ai-slot-head span:last-child { justify-self: end; }
-.ai-slot + .ai-slot { border-top: 1px solid var(--line); }
-.ai-slot-what { display: grid; gap: 2px; min-width: 0; }
-.ai-slot-what strong { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
-.ai-slot-what > span { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
-.ai-slot select { width: 100%; }
-.ai-cell-label { display: none; }
-.ai-slot-model-fixed { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-small); }
+/* Features: one row per feature. The row's button covers the row; the switch and its tip sit above it. */
+.ai-rows { margin: 0; padding: 0; list-style: none; overflow: hidden; }
+.ai-row { position: relative; display: flex; align-items: center; gap: var(--space-4); min-height: 64px; padding: var(--space-3) var(--space-4); }
+.ai-row + .ai-row { border-top: 1px solid var(--line); }
+.ai-row:hover { background: var(--surface-2); }
+.ai-row-open { position: absolute; inset: 0; width: 100%; min-height: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.ai-row-open:hover:not(:disabled) { background: none; box-shadow: none; }
+.ai-row-open:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ai-row-text { position: relative; display: grid; flex: 1; gap: 2px; min-width: 0; pointer-events: none; }
+.ai-row-text strong { font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.ai-row-line { color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
+.ai-row-why { font-size: var(--fs-small); }
+.ai-state { position: relative; flex: none; width: 8rem; pointer-events: none; font-size: var(--fs-small); font-weight: 500; }
+.ai-row-switch { position: relative; display: flex; flex: none; align-items: center; gap: var(--space-2); }
+.ai-rows-foot { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
+/* The sheet of a feature: provider, model, limits and levels, one under the other. */
+.ai-sheet-intro { margin: 0; color: var(--text-2); font-size: var(--fs-ui); }
+.sheet .field select { width: 100%; }
+.ai-limits { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.sheet .ai-sends { border: 0; background: var(--surface-2); box-shadow: none; }
+@media (max-width: 44rem) {
+  .ai-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "text switch" "state switch"; gap: var(--space-1) var(--space-3); padding: var(--space-3); }
+  .ai-row-text { grid-area: text; }
+  .ai-state { grid-area: state; width: auto; }
+  .ai-row-switch { grid-area: switch; }
+}
 .ai-select-off { color: var(--text-3); background-color: var(--surface-1); border-style: dashed; }
 .ai-off-text { color: var(--text-3); }
 .ai-tip-anchor { display: block; min-width: 0; }
 .ai-tip-anchor > select { width: 100%; }
 .ai-model-name { overflow-wrap: anywhere; color: var(--text-1); }
-.ai-slot-limit { display: grid; gap: 0; justify-items: start; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .ai-server-meter { grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 22rem); }
 .ai-meter { display: grid; gap: 6px; min-width: 0; }
 .ai-meter-top { display: flex; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; font-size: var(--fs-small); }
@@ -78,13 +79,11 @@
 .ai-usage-table .ai-n { text-align: right; font-variant-numeric: tabular-nums; }
 .ai-usage-table td small { display: block; color: var(--text-3); font-size: var(--fs-label); }
 .ai-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-.ai-slot-why { grid-column: 1 / -1; margin: calc(-1 * var(--space-1)) 0 0; font-size: var(--fs-small); }
 .ai-st-ok { --dot: var(--ok); }
 .ai-st-err { --dot: var(--danger); }
 .ai-st-off { --dot: var(--line-control); }
 .ai-st-warn { --dot: var(--pending); }
 .ai-meter-none { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
-@media (pointer: coarse), (max-width: 30rem) { .ai-slot-limit .link-button { min-height: var(--touch); } }
 
 
 .ai-sends { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); color: var(--text-2); font-size: var(--fs-small); }
@@ -131,17 +130,8 @@
 .ai-danger-solid:hover:not(:disabled) { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 88%, #000); }
 
 @media (max-width: 75rem) {
-  .ai-slot-head { display: none; }
-  .ai-slot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: "what what on" "prov model model" "limit limit limit"; gap: var(--space-2) var(--space-3); }
-  .ai-slot-limit { grid-area: limit; display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--fs-label); }
-  .ai-slot-limit .ai-cell-label { display: inline; }
   .ai-server-meter { grid-template-columns: auto minmax(0, 1fr); }
   .ai-server-meter .ai-meter { grid-column: 1 / -1; }
-  .ai-slot-what { grid-area: what; }
-  .ai-slot-provider { grid-area: prov; }
-  .ai-slot-model { grid-area: model; }
-  .ai-slot > .switch { grid-area: on; }
-  .ai-cell-label { display: block; color: var(--text-3); font-size: var(--fs-label); }
   .ai-prov { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name actions" "state actions"; gap: 2px var(--space-4); }
   .ai-prov-name { grid-area: name; }
   .ai-prov-meta { display: none; }
@@ -150,7 +140,6 @@
 }
 @media (max-width: 44rem) {
   .ai-settings > header p { display: none; }
-  .ai-nothing .ai-slots { display: none; }
   .ai-tabs-row .seg-tabs { flex: 1 1 auto; }
   .ai-tabs-row .seg-tabs button { flex: 1 0 auto; justify-content: center; padding: 0 var(--space-2); }
   .ai-wide, .ai-long { display: none; }
@@ -158,13 +147,10 @@
   .ai-consent { grid-template-columns: 1fr; padding: var(--space-3); }
   .ai-consent-actions { justify-content: stretch; }
   .ai-consent-actions button { flex: 1; }
-  .ai-empty { grid-template-columns: 1fr; }
-  .ai-slot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "what on" "prov model" "limit limit"; padding: var(--space-2) var(--space-3); }
   .ai-usage-top { grid-template-columns: 1fr; gap: var(--space-2); padding: var(--space-3); }
   .ai-usage-table th, .ai-usage-table td { padding: var(--space-2) var(--space-3); }
   .ai-hide-sm { display: none; }
   .ai-two { grid-template-columns: 1fr; }
-  .ai-slot-what > span { display: none; }
   .ai-prov { padding: var(--space-2) var(--space-3); }
   .ai-prov-state p:not(.error-copy) { display: none; }
   .ai-icon-text span { display: none; }
@@ -176,6 +162,12 @@
 @media (max-width: 30rem) {
   .ai-narrow { display: none; }
   .ai-add { width: var(--touch); justify-content: center; padding: 0; }
+  /* The tabs sit close and fade over a short edge, so the first tab the strip cuts is partly in sight: it reads as scrolling. */
+  .ai-tabs-row > .seg-tabs { gap: var(--space-3); }
+  .ai-tabs-row > .seg-tabs button { padding: 0; }
+  .ai-tabs-row > .seg-tabs.fade-end { mask-image: linear-gradient(to right, #000 calc(100% - var(--space-4)), transparent); }
+  .ai-tabs-row > .seg-tabs.fade-start { mask-image: linear-gradient(to right, transparent, #000 var(--space-4)); }
+  .ai-tabs-row > .seg-tabs.fade-start.fade-end { mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
 }
 .ai-meter-left { color: var(--text-3); font-size: var(--fs-label); }
 /* The automatic mode under a feature: its own switch, what it does, the parts it applies and how it went. */
@@ -283,9 +275,10 @@
 .ai-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (pointer: coarse), (max-width: 30rem) { .ai-chip { min-height: var(--touch); } }
 @media (max-width: 44rem) { .ai-differ { padding: 0 var(--space-2); } }
-.ai-sources-consent { display: grid; gap: var(--space-1); grid-column: 1 / -1; min-width: 0; margin: 0; border: 0; padding: 0; }
+.ai-sources-consent { position: relative; display: grid; gap: var(--space-1); grid-column: 1 / -1; min-width: 0; margin: 0; border: 0; padding: 0; }
+.ai-sources-tip { position: absolute; top: calc(-1 * var(--space-1)); right: 0; }
 .ai-sources-consent legend { padding: 0; font-size: var(--fs-small); font-weight: 600; }
 .ai-sources-consent .ai-pick { display: flex; align-items: center; gap: var(--space-2); }
 /* Text links (Change, Setup guide links): a 32px tall target, the line keeps its height. */
-.ai-settings :is(.link-action, .link-button, .ai-slot-limit a) { display: inline-block; margin-block: -7px; padding-block: 7px; }
-@media (pointer: coarse), (max-width: 30rem) { .ai-settings :is(.link-action, .link-button, .ai-slot-limit a) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }
+.ai-settings :is(.link-action, .link-button) { display: inline-block; margin-block: -7px; padding-block: 7px; }
+@media (pointer: coarse), (max-width: 30rem) { .ai-settings :is(.link-action, .link-button) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }

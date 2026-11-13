@@ -38,13 +38,17 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
 
   // Built-in AI: intake has its row now that a chat channel collects messages; turn it on.
   await page.goto(`${origin}/settings/ai`);
+  await page.getByRole('button', { name: 'Chat intake settings' }).click();
   await page.getByRole('combobox', { name: 'Chat intake provider' }).selectOption({ label: 'Office model' });
+  await page.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('switch', { name: 'Chat intake on' }).click();
   await expect(page.getByRole('switch', { name: 'Chat intake on' })).toBeChecked();
+  await page.getByRole('button', { name: 'Chat intake settings' }).click();
   const intakeDefault = page.getByRole('group', { name: 'Intake: default for channels' });
   await expect(intakeDefault.getByRole('radio')).toHaveCount(2);
   await intakeDefault.getByRole('radio', { name: 'Suggest' }).click();
   await expect(intakeDefault.getByRole('radio', { name: 'Suggest' })).toBeChecked();
+  await page.getByRole('button', { name: 'Done' }).click();
 
   // The channel's AI tab: its groups follow the default, so their settings are the default's until the
   // scope has its own level.

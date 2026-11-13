@@ -46,7 +46,7 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
 
     await page.goto(`${baseURL}/settings`);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'AI & agents', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'No AI provider on this server yet' })).toBeVisible();
+    await expect(page.getByText('No AI provider yet.')).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeDisabled();
 
     await page.getByRole('button', { name: 'Add provider' }).first().click();
@@ -69,8 +69,11 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     expect(model.calls).toEqual(['missing', 'llama-4-scout']);
 
     await page.getByRole('tab', { name: 'Features' }).click();
+    // The row opens the feature's sheet: provider and model are set there, the switch stays on the row.
+    await page.getByRole('button', { name: 'Reply drafts settings' }).click();
     await page.getByRole('combobox', { name: 'Reply drafts provider' }).selectOption({ label: 'Office model' });
     await expect(page.getByRole('combobox', { name: 'Reply drafts model' })).toHaveValue('llama-4-scout');
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('switch', { name: 'Reply drafts on' }).click();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeChecked();
 

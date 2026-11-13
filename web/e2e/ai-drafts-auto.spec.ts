@@ -45,6 +45,7 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     // Settings → Built-in AI: raising the drafts' default for channels to Suggest asks first, with what
     // it costs on the team's own key.
     await page.goto(`${baseURL}/settings/ai`);
+    await page.getByRole('button', { name: 'Reply drafts settings' }).click();
     const drafts = page.getByRole('group', { name: 'Reply drafts: default for channels' });
     await drafts.getByRole('radio', { name: 'Suggest' }).click();
     const dialog = page.getByRole('dialog', { name: 'Write a draft for every customer message?' });
@@ -132,6 +133,7 @@ test('on a phone the automatic draft waits on one line: the messages keep the sc
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/draft`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
     await page.goto(`${baseURL}/settings/ai`);
+    await page.getByRole('button', { name: 'Reply drafts settings' }).click();
     await page.getByRole('group', { name: 'Reply drafts: default for channels' }).getByRole('radio', { name: 'Suggest' }).click();
     await page.getByRole('dialog', { name: 'Write a draft for every customer message?' }).getByRole('button', { name: 'Turn on' }).click();
     const inbound = await page.request.post(`${baseURL}/api/v1/channels/email/inbound`, {

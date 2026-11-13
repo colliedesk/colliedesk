@@ -40,6 +40,7 @@ test('an admin lets triage apply by itself; a new ticket gets its tag and priori
 
     // Settings → Built-in AI: raising triage's default for channels to Auto asks first, and says what AI will do.
     await page.goto(`${baseURL}/settings/ai`);
+    await page.getByRole('button', { name: 'Triage suggestions settings' }).click();
     const triage = page.getByRole('group', { name: 'Triage: default for channels' });
     await triage.getByRole('radio', { name: 'Auto' }).click();
     const dialog = page.getByRole('dialog', { name: 'Apply triage suggestions automatically?' });
