@@ -184,7 +184,6 @@ features/settings/import-messages.ts:importMessages.adminsOnly	81
 features/settings/import-messages.ts:importMessages.apiCalls + features/settings/import-messages.ts:importMessages.rateLimitWait	200
 features/settings/import-messages.ts:importMessages.closeNote	69
 features/settings/import-messages.ts:importMessages.connectHelp	107
-features/settings/import-messages.ts:importMessages.freePlanNote	120
 features/settings/import-messages.ts:importMessages.inviteNote	72
 features/settings/import-messages.ts:importMessages.keyHelp	137
 features/settings/import-messages.ts:importMessages.keyHelpAgain	86
