@@ -30,6 +30,18 @@ targets**): it saves the preset's targets, turns them on with business hours Mon
 Nothing is measured until you turn them on, and only conversations opened from then on have targets;
 imported conversations have none. Turning them off hides every target and keeps what was measured.
 
+While they are off, Settings → Response targets is one card, **Response targets are off**, with no hours,
+holidays or targets to edit, so nothing looks live that is not. Under it, one line says what turning them
+on starts with: business hours Monday to Friday, 09:00 to 18:00 in the workspace's timezone, and the
+first-reply targets of the preset the [setup flow](setup-guide.md#setup-flow) would pick (**Same day**:
+Urgent 1 h, High 2 h, Normal 8 h, Low 1 day), with **Due soon** at 30 minutes. It is the same hours and
+the same targets the setup flow saves. **Turn on response targets** saves them and starts measuring in
+one step, so the clock never runs against a week with no open day. Business hours or targets saved
+earlier are never replaced: the line then names them ("Starts with your saved hours: …") and turning on
+keeps them. Late conversations show in the inbox (the row marks and the Targets filter). Once they are
+on, the page is the editor below, and the **Measure response targets** switch turns them off again with
+every saved value kept.
+
 For AI agents and the API: `GET /api/v1/response-targets` and `PUT /api/v1/response-targets` (one
 document; an agent token asks a person first), MCP `colliedesk_response_targets_get` and
 `colliedesk_response_targets_set`. A wrong part answers 400 with its path, such as `hours.2.to`.
