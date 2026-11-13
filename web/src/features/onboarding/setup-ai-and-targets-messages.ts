@@ -66,8 +66,9 @@ export const replyTargetsMessages = {
   resolve: 'Resolve',
   priority: { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' },
   dayNote: (day: string) => `In business hours. A day is one business day of your hours: ${day}.`,
-  hours: (zone: string, fromBrowser: boolean) => `Business hours: Monday to Friday, 09:00 to 18:00, ${zone}${fromBrowser ? ' (from your browser)' : ''}`,
-  ownHours: (zone: string) => `Business hours: as set in Settings → Response targets, ${zone}`,
+  // The hours come from the server (what a workspace without any starts with), the same text Settings gives.
+  hours: (hours: string, zone: string, fromBrowser: boolean) => `Will set these business hours: ${hours}, ${zone}${fromBrowser ? ' (from your browser)' : ''}`,
+  ownHours: (hours: string, zone: string) => `Uses your saved business hours: ${hours}, ${zone}`,
   change: 'Change',
   exampleLabel: (preset: string) => `Example: what your team sees in Today with ${preset}`,
   example: [
