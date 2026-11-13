@@ -1,6 +1,6 @@
 // Strings of saved replies: their Settings section, history and trash, the reply box picker and the requests that propose a change. They load with those parts, not with the first screen.
 export const savedReplyMessages = {
-  savedRepliesDescription: 'Text your whole team inserts into a reply. Anyone can add, edit or delete them. {{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
+  savedRepliesDescription: 'Anyone can add, edit or delete them. {{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
   searchSavedReplies: 'Search saved replies',
   loadingSavedReplies: 'Loading saved replies…',
   savedRepliesFailed: 'Saved replies could not be loaded. Close this and try again.',

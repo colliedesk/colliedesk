@@ -30,8 +30,6 @@ export const settingsMessages = {
     data: 'Bring your Freshdesk history in, or take all your data out.',
     index: 'Your account first, then what the workspace shares.',
   },
-  helpCenterMoved: 'Now in Knowledge.',
-  openHelpCenterSettings: 'Open Help center settings',
   profileDescription: 'Dates and times show in your timezone.',
   yourTimezone: 'Your timezone',
   displayName: 'Display name',

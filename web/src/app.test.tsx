@@ -729,7 +729,7 @@ test('a role that reads only media lands in the media library, and the rail take
 
 // The help center's settings moved from Settings to Knowledge base → Settings (#528); they still need only
 // help_center:read to open, as the section of Settings did, not the articles' permission.
-test('a role that runs the help center without reading articles opens its settings from Knowledge and from General', async () => {
+test('a role that runs the help center without reading articles opens its settings from Knowledge, and still has General', async () => {
   forgetPermissions();
   serve({
     '/api/v1/auth/me': () => json(200, narrow(['help_center:read', 'help_center:update', 'kb_media:read', 'profile:update'])),
@@ -748,13 +748,12 @@ test('a role that runs the help center without reading articles opens its settin
   expect(await within(card).findByRole('checkbox', { name: 'Publish the help center' })).toBeEnabled();
   expect(screen.queryByText(/Your roles do not let you open/)).not.toBeInTheDocument();
 
-  // Settings → General points there, and is in the menu for this role.
+  // Settings → General is in the menu for this role; it no longer repeats the way to the help center settings.
   await act(async () => { await router.navigate({ to: '/settings/account' }); });
   fireEvent.click(within(await screen.findByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'General' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
-  fireEvent.click(await screen.findByRole('link', { name: 'Open Help center settings' }));
-  await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
-  expect(await screen.findByRole('region', { name: 'Help center' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { level: 1, name: 'General' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Open Help center settings' })).not.toBeInTheDocument();
 });
 
 // A role that reads only the help center still reaches its settings from the rail.
