@@ -20,8 +20,8 @@
   --space-12: 48px;
   --space-16: 64px;
   --space-24: 96px;
-  --touch: 44px;                     /* min touch target */
   --control-sm: 28px;                /* the top bar's search field */
+  --touch: 44px;                     /* min touch target */
 
   /* Type */
   --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
