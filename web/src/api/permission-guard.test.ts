@@ -81,3 +81,17 @@ test('signing out forgets the remembered permissions', async () => {
   forgetPermissions();
   expect(localStorage.getItem('colliedesk:permissions')).toBeNull();
 });
+
+// A page that goes away while its read still waits for the session cancels that read: it never reaches the network,
+// even when the wait ends later (the session becomes known, or is dropped at sign-out).
+test('a read cancelled while it waits for the session is never sent', async () => {
+  forgetPermissions();
+  fetchMock.mockImplementation(async () => answer({ items: [], next_cursor: null }));
+  const leaving = new AbortController();
+  const read = api.conversations('status=open', leaving.signal).catch((error: unknown) => error);
+  leaving.abort();
+  forgetPermissions();
+  const outcome = await read;
+  expect((outcome as Error).name).toBe('AbortError');
+  expect(paths()).not.toContain('/api/v1/conversations?status=open');
+});

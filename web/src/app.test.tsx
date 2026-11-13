@@ -26,7 +26,14 @@ vi.mock('./lib/product-analytics', async (original) => ({ ...(await original<typ
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
-afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); clerk.signedIn = false; clerk.signOut.mockReset(); });
+// A test ends with its own requests: unmount it, release reads still waiting for the session (they belong to this
+// test, not the next one), let them settle, then reset. Otherwise a late read lands in the next test's fetch calls.
+afterEach(async () => {
+  cleanup();
+  forgetPermissions();
+  await new Promise((settle) => setTimeout(settle, 0));
+  fetchMock.mockReset(); window.sessionStorage.clear(); clerk.signedIn = false; clerk.signOut.mockReset();
+});
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const locked = { error: { code: 'workspace_locked', message: 'This workspace is locked because its trial or subscription ended.' } };

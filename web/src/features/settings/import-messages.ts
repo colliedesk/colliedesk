@@ -11,7 +11,6 @@ export const importMessages = {
   domainPlaceholder: 'acme.freshdesk.com',
   keyLabel: 'API key of a Freshdesk admin',
   keyHelp: 'In Freshdesk: your profile picture → Profile settings → Your API Key. The key is encrypted on the server and erased when the import ends.',
-  freePlanNote: 'The Freshdesk Free plan has no API. Start a 14-day trial of a higher Freshdesk plan first, then import during the trial.',
   readAccount: 'Read account',
   reading: (domain: string) => `Reading ${domain}… This takes a few seconds, up to a minute on a large account.`,
   domainMissing: 'Enter the address of your Freshdesk account, for example acme.freshdesk.com.',

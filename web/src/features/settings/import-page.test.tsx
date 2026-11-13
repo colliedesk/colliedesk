@@ -36,7 +36,8 @@ test('an agent is told to ask an admin and sees no form', () => {
 test('the account is read only from a Freshdesk address and a key, and the key is never shown', () => {
   const { onPreview } = page();
   expect(screen.getByLabelText('API key of a Freshdesk admin')).toHaveAttribute('type', 'password');
-  expect(screen.getByText(/Free plan has no API. Start a 14-day trial/)).toBeInTheDocument();
+  // The Free plan has no API, but only a Free account needs to hear it: Read account says so when it happens.
+  expect(screen.queryByText(/Free plan has no API/)).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Freshdesk address'), { target: { value: 'acme.zendesk.com' } });
   fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'secret' } });
   fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
@@ -357,4 +358,10 @@ test('the import has no title or settings menu of its own, and the import itself
   expect(screen.queryByRole('main')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Freshdesk address')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Read account' })).toBeInTheDocument();
+});
+
+test('a Free plan account hears that it has no API when Read account fails on it, with the way forward', () => {
+  page({ job: job({ state: 'failed', phase: 'preview', error_code: 'freshdesk_plan_no_api', error_message: 'this Freshdesk plan has no API calls' }) });
+  expect(screen.getByRole('heading', { name: 'Your Freshdesk plan has no API access' })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Start a 14-day trial of a higher Freshdesk plan, then try again during the trial.');
 });
