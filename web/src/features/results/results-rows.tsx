@@ -24,6 +24,8 @@ export interface Row {
   // how is the tip of the name: how the number is counted. note ends it with the days the number counts.
   how: string;
   note: string;
+  // resolved: the row counts the window that opens 7 days before the one heading the columns.
+  resolved: boolean;
   before: ReactNode;
   after: ReactNode;
   change?: Change;
@@ -46,6 +48,9 @@ export interface RowsInput {
 
 // A row is its name, a value and one short line under it. A number that cannot be shown yet says what it needs in
 // that line; the way it is counted is in the tip beside the name.
+// lineLimit is the length of a line under a value (docs/internals/design.md, Quiet by default).
+const lineLimit = 60;
+
 export function resultsRows(input: RowsInput): Row[] {
   const { before, after, timezone, link, sourceName, helpScout, oldImport, available, withBaseline, comparable } = input;
   const line = (children: ReactNode) => <p className="results-muted">{children}</p>;
@@ -56,14 +61,21 @@ export function resultsRows(input: RowsInput): Row[] {
   const blocked = (side: Side) => side.blocked ? line(side.blocked) : null;
   // noValue is the value of a number that cannot be worked out yet; a screen reader hears why the dash is there.
   const noValue = <p className="results-value"><span aria-hidden="true">–</span><span className="sr-only">{m.noValue}</span></p>;
-  const needs = (side: Side, metric: string, what: string, have: number) => <>{noValue}{line(<>{m.needs(minSample, what)}{count(side, metric, m.soFar(have))}</>)}</>;
+  // needs says what a number waits for, the count so far and, when the row has one, the link a person already had to the
+  // conversations left out (waiting, unresolved). The prose gives way before a link does: first its noun, then the sentence.
+  const needs = (side: Side, metric: string, what: { full: string; short: string }, have: number, also?: { metric: string; text: string }) => {
+    const tail = also ? ` · ${also.text}` : '';
+    const fits = (prose: string) => (prose + m.soFar(have) + tail).length <= lineLimit;
+    const prose = [m.needs(minSample, what.full), m.needs(minSample, what.short)].find(fits) ?? '';
+    return <>{noValue}{line(<>{prose}{count(side, metric, m.soFar(have))}{also && <> · {count(side, also.metric, also.text)}</>}</>)}</>;
+  };
   const availableCell = () => available ? <>{noValue}{line(m.availableLine(day(available, timezone), day(after.window!.resolved_created.from, timezone)))}</> : null;
 
   const firstResponse = (side: Side) => {
     const value = side.window?.first_response;
     if (blocked(side)) return blocked(side);
     if (!value) return null;
-    if (value.median_seconds === null) return needs(side, 'first_response', m.firstResponse.what, value.answered);
+    if (value.median_seconds === null) return needs(side, 'first_response', m.firstResponse.what, value.answered, { metric: 'first_response_waiting', text: m.firstResponse.waiting(value.waiting) });
     return <>
       {number(side, 'first_response', formatDuration(value.median_seconds))}
       {line(<>{value.p90_seconds !== null && `${m.firstResponse.p90(formatDuration(value.p90_seconds))} · `}{count(side, 'first_response', m.firstResponse.answered(value.answered))} · {count(side, 'first_response_waiting', m.firstResponse.waiting(value.waiting))}</>)}
@@ -77,7 +89,7 @@ export function resultsRows(input: RowsInput): Row[] {
     const value = side.window?.resolution;
     if (!value) return null;
     return <>
-      {value.median_seconds === null ? needs(side, 'resolution', m.resolution.what, value.resolved) : <>
+      {value.median_seconds === null ? needs(side, 'resolution', m.resolution.what, value.resolved, { metric: 'unresolved', text: m.resolution.unresolved(value.unresolved) }) : <>
         {number(side, 'resolution', formatDuration(value.median_seconds))}
         {line(<>{count(side, 'resolution', m.resolution.resolved(value.resolved))} · {count(side, 'unresolved', m.resolution.unresolved(value.unresolved))}</>)}</>}
       {value.without_resolve_time > 0 && line(count(side, 'without_resolve_time', m.resolution.without(value.without_resolve_time, sourceName)))}
@@ -124,13 +136,13 @@ export function resultsRows(input: RowsInput): Row[] {
   const bWeekly = weekly(b);
   const aWeekly = weekly(a);
   return [
-    { name: m.firstResponse.name, how: m.firstResponse.how, note: '', before: firstResponse(before), after: firstResponse(after),
+    { name: m.firstResponse.name, how: m.firstResponse.how, note: '', resolved: false, before: firstResponse(before), after: firstResponse(after),
       change: comparable && b?.first_response.median_seconds != null && a?.first_response.median_seconds != null ? timeChange(b.first_response.median_seconds, a.first_response.median_seconds) : undefined },
-    { name: m.resolution.name, how: m.resolution.how, note: note(true), before: resolution(before), after: resolution(after),
+    { name: m.resolution.name, how: m.resolution.how, note: note(true), resolved: true, before: resolution(before), after: resolution(after),
       change: comparable && !available && !oldImport && b?.resolution?.median_seconds != null && a?.resolution?.median_seconds != null ? timeChange(b.resolution.median_seconds, a.resolution.median_seconds) : undefined },
-    { name: m.reopened.name, how: m.reopened.how, note: note(true), before: reopened(before), after: reopened(after) },
-    { name: m.volume.name, how: m.volume.how, note: '', before: volume(before), after: volume(after),
+    { name: m.reopened.name, how: m.reopened.how, note: note(true), resolved: true, before: reopened(before), after: reopened(after) },
+    { name: m.volume.name, how: m.volume.how, note: '', resolved: false, before: volume(before), after: volume(after),
       change: comparable && bWeekly !== undefined && aWeekly !== undefined ? volumeChange(bWeekly, aWeekly) : undefined },
-    { name: m.handle.name, how: m.handle.how, note: note(true), before: handle(before), after: handle(after) },
+    { name: m.handle.name, how: m.handle.how, note: note(true), resolved: true, before: handle(before), after: handle(after) },
   ];
 }

@@ -77,7 +77,7 @@ resolved conversations; the median. Colliedesk does not record time yet
 
 **Small samples.** A median, a 90th percentile or a reopen rate needs at least 5 conversations; with
 fewer the row says what it needs and how many there are so far, for example "Needs 5 answered
-conversations · 0 so far".
+conversations · 0 so far · 0 waiting": the counts stay links to the conversations they name.
 
 **Status history.** Colliedesk records every status change since your server was updated to a
 version with this page (or since the workspace was created). A window that needs resolutions from

@@ -74,10 +74,13 @@ export function ResultsPage(props: ResultsPageProps) {
   const available = after.window?.available_on ?? undefined;
   const oldImport = withBaseline && !helpScout && (baseline.stats_read ?? 0) === 0 && status !== 'FAILED';
 
-  const cellLabel = (side: Side) => <p className="results-cell-label">{side === before ? sourceName : 'Colliedesk'}
-    {side.badge && <span className="results-badge">{side.badge}</span>}
-    {side.window && <span className="results-muted results-narrow">{m.created(range(side.window.created.from, side.window.created.to, timezone))}</span>}</p>;
-
+  // The window is in the label because the column heads are hidden on a phone; a resolve row counts another window.
+  const cellLabel = (side: Side, resolved: boolean) => {
+    const span = resolved ? side.window?.resolved_created : side.window?.created;
+    return <p className="results-cell-label">{side === before ? sourceName : 'Colliedesk'}
+      {side.badge && <span className="results-badge">{side.badge}</span>}
+      {span && <span className="results-muted results-narrow">{m.created(range(span.from, span.to, timezone))}</span>}</p>;
+  };
   const showBaseline = results.baseline_state !== 'none';
   const number = (metric: string, value: string) => after.snapshot
     ? link({ result: `${after.snapshot.id}:${after.key}.${metric}`, className: 'results-number', children: value }) : <span className="results-number">{value}</span>;
@@ -134,8 +137,8 @@ export function ResultsPage(props: ResultsPageProps) {
       </div>
       {rows.map((row) => <section key={row.name} className="results-row" aria-label={row.name}>
         <div className="results-metric heading-with-tip"><h2>{row.name}</h2><HelpTip label={row.name} text={`${how(row.how)} ${row.note}`.trim()} /></div>
-        {showBaseline && <div className="results-cell">{cellLabel(before)}{withBaseline ? row.before : <p className="results-muted">{m.ai.needsBaseline}</p>}</div>}
-        <div className="results-cell">{cellLabel(after)}{current ? row.after : <p className="results-muted">{m.calculating}</p>}</div>
+        {showBaseline && <div className="results-cell">{cellLabel(before, row.resolved)}{withBaseline ? row.before : <p className="results-muted">{m.ai.needsBaseline}</p>}</div>}
+        <div className="results-cell">{cellLabel(after, row.resolved)}{current ? row.after : <p className="results-muted">{m.calculating}</p>}</div>
         {showBaseline && <div className="results-cell results-change-cell"><p className="results-cell-label">{m.change}</p>
           {current ? <ChangeCell change={row.change} /> : <p className="results-change-none">{m.waitingForNumbers}</p>}</div>}
       </section>)}

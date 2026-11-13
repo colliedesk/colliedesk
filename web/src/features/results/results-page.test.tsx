@@ -135,7 +135,7 @@ describe('ResultsPage', () => {
     expect(screen.getByText(/Colliedesk has recorded when conversations are resolved since Oct 2/)).toBeVisible();
     expect(screen.queryByText(/start on Nov 8/)).toBeNull();
     const first = screen.getByRole('region', { name: 'First response time' });
-    expect(line('Needs 5 answered conversations · 3 so far')).toBeVisible();
+    expect(line('Needs 5 answered conversations · 3 so far · 0 waiting')).toBeVisible();
     expect(within(first).queryByText(/Too few/)).toBeNull();
   });
 
@@ -144,9 +144,44 @@ describe('ResultsPage', () => {
     thin.current!.windows['30d'] = window({ first_response: { median_seconds: null, p90_seconds: null, answered: 0, waiting: 0 },
       reopened: { rate: null, reopened: 0, resolutions: 2 }, resolution: { median_seconds: null, resolved: 4, unresolved: 1, without_resolve_time: 0 } });
     renderPage({ results: thin });
-    expect(line('Needs 5 answered conversations · 0 so far')).toBeVisible();
-    expect(line('Needs 5 resolved conversations · 4 so far')).toBeVisible();
+    expect(line('Needs 5 answered conversations · 0 so far · 0 waiting')).toBeVisible();
+    expect(line('Needs 5 resolved · 4 so far · 1 open or settling')).toBeVisible();
     expect(line('Needs 5 resolutions · 2 so far')).toBeVisible();
+  });
+
+  it('keeps the links to the conversations waiting for a reply and to the unresolved ones while a median is not there yet', () => {
+    const thin = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    thin.current!.windows['30d'] = window({ first_response: { median_seconds: null, p90_seconds: null, answered: 3, waiting: 8 },
+      resolution: { median_seconds: null, resolved: 2, unresolved: 6, without_resolve_time: 0 } });
+    renderPage({ results: thin });
+    const current = '11111111-1111-4111-8111-111111111111';
+    const first = screen.getByRole('region', { name: 'First response time' });
+    expect(within(first).getByRole('link', { name: '8 waiting' })).toHaveAttribute('href', `/?status=all&result=${current}:30d.first_response_waiting`);
+    expect(within(first).getByRole('link', { name: '3 so far' })).toHaveAttribute('href', `/?status=all&result=${current}:30d.first_response`);
+    const resolve = screen.getByRole('region', { name: 'Time to resolve' });
+    expect(within(resolve).getByRole('link', { name: '6 open or settling' })).toHaveAttribute('href', `/?status=all&result=${current}:30d.unresolved`);
+  });
+
+  it('keeps a line with a large count to 60 characters, and the waiting link wins over the prose', () => {
+    const busy = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    busy.current!.windows['30d'] = window({ first_response: { median_seconds: null, p90_seconds: null, answered: 4, waiting: 123456 },
+      resolution: { median_seconds: null, resolved: 4, unresolved: 12345, without_resolve_time: 0 } });
+    renderPage({ results: busy });
+    for (const name of ['First response time', 'Time to resolve']) {
+      const row = screen.getByRole('region', { name });
+      for (const text of Array.from(row.querySelectorAll('.results-muted')).map((node) => node.textContent ?? '')) expect(text.length, text).toBeLessThanOrEqual(60);
+    }
+    expect(within(screen.getByRole('region', { name: 'First response time' })).getByRole('link', { name: '123456 waiting' })).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Time to resolve' })).getByRole('link', { name: '12345 open or settling' })).toBeVisible();
+  });
+
+  it('a phone card names the days its own number counts: resolve rows start 7 days before the others', () => {
+    renderPage();
+    // Created Sep 23 – Oct 23 for what customers started; Sep 16 – Oct 16 for what had 7 days to settle.
+    const labelOf = (name: string) => Array.from(screen.getByRole('region', { name }).querySelectorAll('.results-cell-label .results-narrow')).map((node) => node.textContent);
+    expect(labelOf('First response time')).toEqual(['Created Aug 2 – Sep 1', 'Created Sep 23 – Oct 23']);
+    expect(labelOf('Conversations per week')).toEqual(['Created Aug 2 – Sep 1', 'Created Sep 23 – Oct 23']);
+    for (const name of ['Time to resolve', 'Reopened within 7 days', 'Handle time']) expect(labelOf(name), name).toEqual(['Created Jul 26 – Aug 25', 'Created Sep 16 – Oct 16']);
   });
 
   it('keeps how a number is counted in a tip beside its name, not in the row', () => {
