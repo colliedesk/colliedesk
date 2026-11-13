@@ -367,7 +367,9 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-hint { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .composer-card[data-kind="note"] .composer-hint { color: var(--warn); }
 .composer textarea { display: block; width: 100%; min-height: 3.5rem; max-height: 40vh; resize: vertical; border: 0; background: transparent; padding: var(--space-2) var(--space-4); line-height: 1.55; transition: min-height var(--dur) var(--ease); }
-.composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 7rem; }
+/* The box grows when the person writes in it (data-writing), not when a tab or a tool takes the focus: Chrome focuses a
+   button on mousedown, and a box that grew then would move the button away before mouseup, losing the click. */
+.composer-card[data-writing="true"] textarea, .composer textarea:not(:placeholder-shown) { min-height: 7rem; }
 .composer textarea:focus-visible { outline: none; }
 .composer-attachments { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
 .attach-button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
@@ -1300,7 +1302,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .composer-head-end { margin-left: auto; }
   /* 16 px: a smaller box makes iOS zoom the page when it is focused. */
   .composer textarea { font-size: 16px; }
-  .composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 5.5rem; }
+  .composer-card[data-writing="true"] textarea, .composer textarea:not(:placeholder-shown) { min-height: 5.5rem; }
   .composer-card[data-compact="true"] { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1); box-shadow: inset 0 0 0 1px var(--line-control); }
   .composer-card[data-compact="true"] > :not(textarea, .composer-actions),
   .composer-card[data-compact="true"] .composer-actions > :not(.primary-action, .compact-note, .ai-tool) { display: none; }
@@ -1333,7 +1335,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 44rem) and (max-height: 34rem) {
   .app-shell:has(.composer-card[data-writing="true"]) .app-rail,
   .conversation-center:has(.composer-card[data-writing="true"]) :is(.timeline-meta, .timeline-actions > .status-button, .timeline-actions > .status-split) { display: none; }
-  .composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 3.5rem; }
+  .composer-card[data-writing="true"] textarea, .composer textarea:not(:placeholder-shown) { min-height: 3.5rem; }
   /* What waits above the box (an AI draft, the not-emailed line) comes back when the keyboard goes down. */
   .conversation-center:has(.composer-card[data-writing="true"]) .composer > .ai-auto-draft,
   .conversation-center:has(.composer-card[data-writing="true"]) > :is(.composer-notice[role="status"], .composer-from) { display: none; }

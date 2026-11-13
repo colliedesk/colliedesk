@@ -1,7 +1,8 @@
-/* Mentions (I9-a, I9-b, I9-c): the @ list under a private note, the line under a posted note, the Mentions list. */
+/* Mentions (I9-a, I9-b, I9-c): the @ list of a private note, the line under a posted note, the Mentions list. */
 
-/* I9-a: the list under the note box, 280px, the teammate the keys mark tinted. */
-.mention-picker { width: min(280px, calc(100% - 2 * var(--space-3))); margin: 0 var(--space-3) var(--space-3); padding: var(--space-1);
+/* I9-a: the list at the @ of a note (reply-composer.tsx places it), 280px or the screen less 8px a side, the teammate
+   the keys mark tinted. It floats over the page, like the tooltips. */
+.mention-picker { position: fixed; z-index: 50; width: min(280px, calc(100vw - 16px)); padding: var(--space-1);
   border-radius: var(--radius); background: var(--surface-1); box-shadow: 0 0 0 1px var(--line), var(--shadow-2); }
 .mention-picker-label, .mention-picker-empty { margin: 0; padding: var(--space-1) var(--space-2); color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
 .mention-picker ul { display: grid; gap: 2px; max-height: min(15rem, 25dvh); margin: 0; padding: 0; overflow-y: auto; list-style: none; }

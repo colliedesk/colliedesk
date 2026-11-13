@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
@@ -20,6 +21,7 @@ import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 import { matchingTeammates, mentionAt, mentionedIn, MentionPicker, optionIdOf } from './mention-picker';
 import type { Teammate } from './mention-picker';
 import { mentionMessages } from './mention-messages';
+import { useCaretAnchor } from './caret-anchor';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -219,6 +221,9 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     setMention((current) => (found && current && found.start === current.start && found.query === current.query ? current : found));
     if (!found || found.start !== mention?.start) setMentionActive(0);
   };
+  // The list opens at the @, like a chat app's: under its line from the @ on, above the line when the screen has no room
+  // under it, and never past an edge of the screen. It lives on the page's body, so a reply box that scrolls never cuts it.
+  const mentionAnchor = useCaretAnchor(field, mentionOpen ? mention : undefined);
   const pickMention = (person: Teammate) => {
     if (!mention) return;
     const end = mention.start + 1 + mention.query.length;
@@ -303,10 +308,14 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [active, setActive] = useState(false);
   useEffect(() => {
     if (!active) return;
-    const onPress = (event: PointerEvent) => { if (!card.current?.contains(event.target as Node)) setActive(false); };
+    // The @ list floats outside the card: a press on it is still in the box.
+    const onPress = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!card.current?.contains(target) && !mentionAnchor.ref.current?.contains(target)) setActive(false);
+    };
     document.addEventListener('pointerdown', onPress);
     return () => document.removeEventListener('pointerdown', onPress);
-  }, [active]);
+  }, [active, mentionAnchor.ref]);
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -446,8 +455,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           onBlur={() => setMention(undefined)}
           placeholder={kind === 'note' ? (asksTeammates ? mentionMessages.notePlaceholder : messages.notePlaceholder) : noReplies ? messages.replyNotSendable : messages.replyPlaceholder}
           onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; followCaret(event.target.value, event.target.selectionStart); }} />
-        {mentionOpen && mention && <MentionPicker id={mentionList} options={mentionOptions} query={mention.query} active={mentionActive}
-          onActive={setMentionActive} onPick={pickMention} />}
+        {mentionOpen && mention && createPortal(<MentionPicker id={mentionList} options={mentionOptions} query={mention.query} active={mentionActive}
+          onActive={setMentionActive} onPick={pickMention} ref={mentionAnchor.ref} style={mentionAnchor.style} />, document.body)}
         {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
           <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}
