@@ -3,9 +3,9 @@
 
 Review runs before the pull request opens. The reader needs the current state, so a line that
 pairs "review" with rounds, finding counts, finding codes, severities or "separate session" is
-refused. One outcome line is enough:
+refused. One line says who reviewed it, with the outcome:
 
-    Review: no open findings.
+    Reviewed by <model>, in <harness>; no open findings.
 
 HTML comments and fenced code are not read. Usage: pr-body-review-log-check.py BODY_FILE.
 """
@@ -32,8 +32,8 @@ def main(path):
     quoted = "\n".join(f"  {line.strip()[:160]}" for line in lines)
     print("The description retells how review went (rounds, finding counts, severities):\n"
           f"{quoted}\n"
-          'Review is done before the pull request opens; state the result instead, for example '
-          '"Review: no open findings."', file=sys.stderr)
+          'Review is done before the pull request opens; say who reviewed it and the result, for example '
+          '"Reviewed by <model>, in <harness>; no open findings."', file=sys.stderr)
     return 1
 
 

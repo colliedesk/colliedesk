@@ -30,6 +30,7 @@ REFUSED = (
 )
 ALLOWED = (
     "Review: no open findings.",
+    "- Reviewed by GPT-6.1 Sol, in Codex, and by Claude Opus 5.5, each on its own",
     '**Not in this PR:** the draft card with "Review and send" (known gap).',
     "`TestPrivilegedPathsMatchTheReviewedAllowlist` keeps passing.",
     "**Copy to review:** the new paragraph is product text a model reads; please check the wording.",
