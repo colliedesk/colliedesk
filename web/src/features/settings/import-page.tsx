@@ -137,7 +137,6 @@ function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & 
       <small id={ids.oldHelpCenterHelp} className="muted-copy">{m.oldHelpCenterHelp}</small>
       <div className="button-row import-actions"><button type="submit" className="primary-action" disabled={busy}>{m.readAccount}</button></div>
     </form>
-    <p className="muted-copy">{m.freePlanNote}</p>
   </Heading>;
 }
 
