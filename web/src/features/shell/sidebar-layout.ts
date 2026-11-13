@@ -1,7 +1,10 @@
 import { useCallback, useState } from 'react';
 
 // The desktop sidebar's width and whether it is folded into an icon rail, kept per browser like the theme.
-export const sidebarStorageKey = 'colliedesk.sidebar';
+export const sidebarStorageKey = 'colliedesk.sidebar.v2';
+// Until 11/11/2026 the sidebar started folded, so a fold kept under this key was often the old default, not a choice:
+// only its width is carried over, and every such browser starts open once.
+const foldedByDefaultKey = 'colliedesk.sidebar';
 export const sidebarWidth = { min: 200, max: 360, initial: 248 } as const;
 // Dragged narrower than this, the sidebar folds into the rail; dragged wider from the rail, it opens again.
 export const foldBelow = 160;
@@ -14,7 +17,13 @@ export const clampWidth = (width: number) => Math.round(Math.min(sidebarWidth.ma
 
 export function readSidebarLayout(storage: Pick<Storage, 'getItem'> | undefined = defaultStorage()): SidebarLayout {
   try {
-    const stored: unknown = JSON.parse(storage?.getItem(sidebarStorageKey) ?? 'null');
+    const current = storage?.getItem(sidebarStorageKey);
+    if (current == null) {
+      const earlier: unknown = JSON.parse(storage?.getItem(foldedByDefaultKey) ?? 'null');
+      const width = earlier && typeof earlier === 'object' ? (earlier as Partial<SidebarLayout>).width : undefined;
+      return { width: typeof width === 'number' && Number.isFinite(width) ? clampWidth(width) : sidebarWidth.initial, collapsed: collapsedByDefault };
+    }
+    const stored: unknown = JSON.parse(current);
     if (stored && typeof stored === 'object') {
       const { width, collapsed } = stored as Partial<SidebarLayout>;
       return { width: typeof width === 'number' && Number.isFinite(width) ? clampWidth(width) : sidebarWidth.initial, collapsed: typeof collapsed === 'boolean' ? collapsed : collapsedByDefault };
