@@ -495,10 +495,21 @@ test('an empty inbox offers an admin the first undone setup step, the one Quick 
   expect(await within(start).findByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/setup/email');
 });
 
-test('an empty inbox is text only for a person whose roles cannot do the step', async () => {
+test('an empty inbox names the step Quick start highlights: an address waiting for its first email is still that step', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('admin') });
+  api.setupProgress.mockResolvedValue(setupSteps({ email: 'waiting' }));
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  expect(await within(start).findByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/setup/email');
+});
+
+test('an empty inbox is text only when the person has no step left to take', async () => {
   quietApis();
   api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('agent') });
-  api.setupProgress.mockResolvedValue(setupSteps());
+  api.setupProgress.mockResolvedValue(setupSteps({ first_reply: 'sent' }));
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
   renderRoute();

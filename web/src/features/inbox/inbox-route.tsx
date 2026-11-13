@@ -22,7 +22,8 @@ import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { aiDraftApi, earlierWritten, waitingWritten } from './ai-draft-api';
 import { can } from '../../lib/can';
-import { emptyInboxStep, stepPath } from '../onboarding/setup-flow-path';
+import { stepPath } from '../onboarding/setup-flow-path';
+import { highlightedStep, readSkipped } from '../onboarding/setup-steps';
 import { setupMessages } from '../onboarding/setup-messages';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
@@ -219,7 +220,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // An empty list is where the next setup step is offered; Quick start asks for the same steps, so this is one request.
   const listEmpty = conversations.data?.items.length === 0 && !filtered;
   const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: Boolean(listEmpty && me.data) });
-  const emptyStep = emptyInboxStep(setup.data, me.data);
+  const emptyStep = highlightedStep(setup.data, me.data, me.data?.agent?.id ? readSkipped(me.data.agent.id) : false);
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
   // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
   const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
@@ -343,7 +344,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   };
   return <PermissionsContext.Provider value={me.data?.permissions}><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
-    nextStep={emptyStep ? { label: setupMessages.emptyInboxAction[emptyStep], href: stepPath(emptyStep) } : undefined}
+    nextStep={emptyStep ? { label: setupMessages.emptyInboxAction[emptyStep] ?? setupMessages.title[emptyStep], href: stepPath(emptyStep) } : undefined}
     onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);

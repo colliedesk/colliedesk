@@ -33,6 +33,16 @@ export const stepIsDone = (step: { key: SetupStepKey; state: string }) => doneSt
 // provider of the workspace's own. It is neither done nor to do, and is left out of the count.
 export const nothingToDo = (step: { key: SetupStepKey; state: string }) => step.key === 'ai_drafts' && step.state === 'unavailable';
 
+// highlightedStep is the step to do next, the one Quick start highlights and the empty inbox offers: the first of Set up,
+// then of Try more (left out once skipped), that is neither done nor without anything to do here.
+export function highlightedStep(progress: SetupProgress | undefined, me: Permissions, skipped: boolean): SetupStepKey | undefined {
+  if (!progress) return undefined;
+  const steps = visibleSteps(progress, me);
+  const setUp = steps.filter((step) => setUpKeys.has(step.key));
+  const shown = skipped ? setUp : [...setUp, ...steps.filter((step) => !setUpKeys.has(step.key))];
+  return shown.find((step) => !stepIsDone(step) && !nothingToDo(step))?.key;
+}
+
 // quickStartCount counts what Quick start shows: every step this person takes, but one with nothing to do here and,
 // once skipped, the Try more steps. setUpLeft is true while a Set up step is still to do (the icon's amber dot).
 export function quickStartCount(progress: SetupProgress, me: Permissions, skipped: boolean) {

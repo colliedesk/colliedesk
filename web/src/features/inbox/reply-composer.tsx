@@ -211,6 +211,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [mention, setMention] = useState<{ start: number; query: string }>();
   const [mentionIndex, setMentionActive] = useState(0);
   const mentionList = useId();
+  const aiOffHintId = useId();
   const asksTeammates = kind === 'note' && teammates.length > 0;
   const mentionOptions = mention && asksTeammates ? matchingTeammates(teammates, mention.query) : [];
   const mentionOpen = Boolean(mention && asksTeammates) && !disabled;
@@ -507,8 +508,9 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           {!aiDraftsFor && aiDraftsOff && canManage && (
             // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
             // drafts on is its description.
-            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} aria-description={messages.aiDraftsOffAdmin} data-tip={messages.aiDraftsOffAdmin}>
-              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>)}
+            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} aria-describedby={aiOffHintId} data-tip={messages.aiDraftsOffAdmin}>
+              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span>
+              <span id={aiOffHintId} className="sr-only">{messages.aiDraftsOffAdmin}</span></a>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>

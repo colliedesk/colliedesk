@@ -29,6 +29,13 @@ test('the off AI draft control names the feature and its state, and says how to 
   const off = screen.getByRole('link', { name: 'Draft with AI (off)' });
   expect(off).toHaveAttribute('data-tip', 'Reply drafts are off. Turn them on in Settings → Built-in AI.');
   expect(off).not.toHaveAttribute('title');
+  // The hint is read through an element the link points at: aria-description is not read in Safari with VoiceOver.
+  expect(off).not.toHaveAttribute('aria-description');
+  const hint = document.getElementById(off.getAttribute('aria-describedby') ?? '');
+  expect(hint).toHaveTextContent('Reply drafts are off. Turn them on in Settings → Built-in AI.');
+  expect(hint).toHaveClass('sr-only');
+  expect(off).toHaveAccessibleDescription('Reply drafts are off. Turn them on in Settings → Built-in AI.');
+  expect(off).toHaveAccessibleName('Draft with AI (off)');
   // The words on the control read as the name does, so a person never sees a bare "Off".
   expect(off).toHaveTextContent('Draft with AI');
   expect(off).toHaveTextContent('Off');
