@@ -1,7 +1,10 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { AppShell } from './app-shell';
+import type { PaletteSource } from './palette-entries';
 import type { SidebarChannel, SidebarView } from './sidebar-items';
 import { sidebarStorageKey } from './sidebar-layout';
 
@@ -194,23 +197,61 @@ test('the top bar names the page and links to the docs', () => {
   expect(help).toHaveAttribute('target', '_blank');
 });
 
-test('Search opens the inbox search, from its button and from Ctrl K or ⌘K anywhere', () => {
-  const onSearch = vi.fn();
-  render(<AppShell me={me} onSearch={onSearch}><p>inbox</p></AppShell>);
-  const search = screen.getByRole('button', { name: 'Search' });
-  expect(search).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K');
-  fireEvent.click(search);
-  fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
-  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
-  // A plain k is typing, not the shortcut.
-  fireEvent.keyDown(document.body, { key: 'k' });
-  expect(onSearch).toHaveBeenCalledTimes(3);
+// What the palette offers; its own tests cover the rows. Nothing is asked of the server while nothing is typed.
+const palette: PaletteSource = { places: [{ key: 'inbox', label: 'Inbox', href: '/', icon: null }], actions: [], searchConversations: true, searchCustomers: true, onNavigate: () => {} };
+const withQueries = (ui: ReactNode) => <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>;
+
+test('the top bar holds one search field named for the workspace, with its shortcut at the end, and the sidebar has none', () => {
+  render(withQueries(<AppShell me={me} palette={palette} page={{ title: 'Inbox', icon: null }}><p>inbox</p></AppShell>));
+  const field = within(screen.getByRole('banner')).getByRole('button', { name: 'Search Beta Desk' });
+  expect(field).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K');
+  expect(field).toHaveAttribute('aria-haspopup', 'dialog');
+  // Not a Mac in the tests: the shortcut reads Ctrl K.
+  expect(field).toHaveTextContent('Ctrl K');
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).queryByRole('button', { name: /Search/ })).not.toBeInTheDocument();
 });
 
-test('the pen beside Search starts a new conversation and says so in its tooltip; without the right to start one it is not there', () => {
+test('Ctrl K and ⌘K open the search palette from anywhere, and Escape closes it and gives the focus back', async () => {
+  render(withQueries(<AppShell me={me} palette={palette}><input aria-label="Reply" /></AppShell>));
+  const reply = screen.getByRole('textbox', { name: 'Reply' });
+  reply.focus();
+  // A plain k is typing, not the shortcut.
+  fireEvent.keyDown(reply, { key: 'k' });
+  expect(screen.queryByRole('dialog', { name: 'Search' })).not.toBeInTheDocument();
+  fireEvent.keyDown(reply, { key: 'k', ctrlKey: true });
+  const input = await screen.findByRole('combobox', { name: 'Search conversations, customers and pages' });
+  expect(input).toHaveFocus();
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Search' })).not.toBeInTheDocument();
+  expect(reply).toHaveFocus();
+  fireEvent.keyDown(document.body, { key: 'K', metaKey: true });
+  expect(await screen.findByRole('combobox', { name: 'Search conversations, customers and pages' })).toHaveFocus();
+});
+
+test('a click on the field opens the palette, and closing it returns the focus to the field', async () => {
+  render(withQueries(<AppShell me={me} palette={palette}><p>inbox</p></AppShell>));
+  const field = screen.getByRole('button', { name: 'Search Beta Desk' });
+  field.focus();
+  fireEvent.click(field);
+  const input = await screen.findByRole('combobox', { name: 'Search conversations, customers and pages' });
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(field).toHaveFocus();
+});
+
+test('without a search to offer, the top bar has no field and the shortcut does nothing', () => {
+  render(<AppShell me={me}><p>inbox</p></AppShell>);
+  expect(screen.queryByRole('button', { name: /^Search/ })).not.toBeInTheDocument();
+  fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+test('the sidebar head holds the workspace, then Quick start, then the pen that starts a new conversation', () => {
   const onNewConversation = vi.fn();
-  const { rerender } = render(<AppShell me={me} onNewConversation={onNewConversation}><p>inbox</p></AppShell>);
-  const start = screen.getByRole('button', { name: 'New conversation' });
+  const { container, rerender } = render(<AppShell me={me} quickStart={<button type="button">Quick start, 2 steps left</button>} onNewConversation={onNewConversation}><p>inbox</p></AppShell>);
+  const head = container.querySelector('.rail-head') as HTMLElement;
+  const start = within(head).getByRole('button', { name: 'New conversation' });
+  expect(within(head).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent).slice(0, 2))
+    .toEqual(['Quick start, 2 steps left', 'New conversation']);
   expect(start).toHaveAttribute('data-tip', 'New conversation');
   // The window it opens gives the focus back to it.
   expect(start).toHaveAttribute('data-opens', 'new-conversation');
@@ -256,9 +297,10 @@ test('Invite teammates is at the foot of the sidebar for someone who may invite,
   expect(screen.queryByRole('link', { name: 'Invite teammates' })).not.toBeInTheDocument();
 });
 
-test('signed out, the sidebar offers no search, no new conversation, no lists and no invite', () => {
-  render(<AppShell signedOut onSearch={() => {}} onNewConversation={() => {}} views={views} channels={channels} canInvite><p>inbox</p></AppShell>);
-  expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
+test('signed out, the frame offers no search, no Quick start, no new conversation, no lists and no invite', () => {
+  render(<AppShell signedOut palette={palette} quickStart={<button type="button">Quick start</button>} onNewConversation={() => {}} views={views} channels={channels} canInvite><p>inbox</p></AppShell>);
+  expect(screen.queryByRole('button', { name: /^Search/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Quick start' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
   expect(screen.queryByRole('list', { name: 'Views' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Invite teammates' })).not.toBeInTheDocument();

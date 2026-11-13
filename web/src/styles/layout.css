@@ -1,5 +1,5 @@
 /* App shell: a sidebar on the grey app background beside one white sheet; the sheet's top bar names the page. */
-:root { --sidebar-width: 248px; }   /* things fixed to the viewport (the setup dock) start beside it */
+:root { --sidebar-width: 248px; }
 .app-shell { height: 100dvh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); background: var(--surface-0); }
 .app-sidebar {
   position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
@@ -14,43 +14,54 @@
 /* Sign-in and an AI app's consent page stand alone, outside the shell: their page is the whole window, no inset. */
 .app-main:has(> .redeem-page) { padding: 0; }
 .app-main:has(> .redeem-page) > .app-sheet, .app-main > .app-sheet:has(> .app-content > .redeem-page) { border-radius: 0; box-shadow: none; }
-/* The top bar of the sheet: the page's icon and name, and Help. */
+/* The top bar of the sheet: the page's icon and name, the search field, and Help. */
 .app-topbar {
   flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 44px; padding: 0 var(--space-3) 0 var(--space-4);
   background: var(--surface-1); box-shadow: inset 0 -1px 0 var(--line);
 }
-.topbar-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.topbar-title { flex: 0 1 340px; min-width: 0; display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
 .topbar-title svg { flex: none; width: 14px; height: 14px; color: var(--text-3); stroke-width: 1.75; }
 .topbar-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The search field: 540 px at 1440 px, giving up width before the page's name does on a narrower screen. It looks
+   like a field (a ring of the text colour at 10 %, a light fill) and opens the search palette. */
+.topbar-search { --control: var(--control-sm); flex: 0 1 540px; min-width: 0; justify-content: flex-start; gap: var(--space-2); height: var(--control-sm);
+  padding: 0 var(--space-1) 0 var(--space-2); border: 0; background: color-mix(in srgb, var(--surface-2) 30%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-1) 10%, transparent);
+  color: var(--text-3); font-size: var(--fs-small); font-weight: 400; cursor: text; }
+.topbar-search:hover:not(:disabled) { border: 0; background: var(--surface-2); }
+.topbar-search svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
+.topbar-search-label { flex: 1; min-width: 0; overflow: hidden; line-height: 20px; text-align: left; text-overflow: ellipsis; }
+.topbar-search kbd { flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--space-1); border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); font: 500 var(--fs-key)/20px var(--font-sans); }
+.topbar-end { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .topbar-help { flex: none; display: inline-flex; align-items: center; min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius);
   color: var(--text-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
 .topbar-help:hover { color: var(--text-1); }
 /* Where the sidebar does not name them, the top bar does: always visible, never a tooltip, it is what tells a person
    which workspace this browser acts in. */
 .identity-bar { flex: 0 1 auto; display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--fs-label); }
-.topbar-title + .identity-bar { max-width: 60%; }
-.identity-bar:first-child { flex: 1; }
 .identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
 .app-rail { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-0); }
 .rail-brand { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius); }
 .rail-brand .logo-mark { width: 24px; height: 24px; }
-/* The head: the logo and the workspace, as the design's workspace switcher (one workspace per session, so no menu). */
+/* The head: the logo and the workspace (one line), then Quick start and the pen that starts a new conversation. */
 .workspace-name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-actions { flex: none; display: flex; gap: var(--space-2); padding: var(--space-1) 0 var(--space-3); }
-.sidebar-search { flex: 1; min-width: 0; justify-content: flex-start; gap: var(--space-2); padding: 0 var(--space-1) 0 var(--space-2); border-color: transparent;
-  color: var(--text-3); font-size: var(--fs-ui); }
-.sidebar-search:hover:not(:disabled) { border-color: transparent; color: var(--text-1); }
-.sidebar-search svg, .sidebar-new svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
-.sidebar-search-label { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; }
-.sidebar-search kbd { flex: none; padding: 0 var(--space-1); border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3);
-  font-family: var(--font-mono); font-size: var(--fs-label); line-height: 20px; }
-.sidebar-new { flex: none; width: var(--control, 32px); padding: 0; border-color: transparent; }
-.sidebar-new:hover:not(:disabled) { border-color: transparent; }
-/* The visible label says it: the tooltips of the open sidebar would only repeat it. */
-:is(.sidebar-search, .sidebar-new)[data-tip]::after { display: none; }
-.sidebar-new[data-tip]:is(:hover, :focus-visible)::after { display: block; left: auto; right: 0; translate: 0 0; }
+.quick-start { position: relative; flex: none; display: flex; }
+:is(.quick-start-button, .sidebar-new) { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); padding: 0; border-color: transparent;
+  background: transparent; box-shadow: none; color: var(--text-1); }
+:is(.quick-start-button, .sidebar-new):hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.quick-start-button[aria-pressed="true"], .quick-start-button[aria-pressed="true"]:hover:not(:disabled) { background: var(--surface-3); }
+.quick-start-button svg { width: 16px; height: 16px; }
+.sidebar-new svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
+/* A Set up step is left: the amber dot at the ring's corner (the name says how many steps are left). */
+.quick-start-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--warn); }
+/* Under the icon, inside the sidebar: a tooltip never scrolls the page sideways. Hidden while the checklist is open. */
+:is(.quick-start-button, .sidebar-new)[data-tip]::after { left: auto; right: 0; translate: 0 0; }
+.quick-start-button[aria-pressed="true"][data-tip]::after { display: none; }
+/* Its checklist: fixed to the screen where the icon opened it (quick-start.tsx), so the sidebar never clips it. */
+.quick-start-popover { position: fixed; z-index: 30; width: min(360px, calc(100vw - 2 * var(--space-2))); max-height: calc(100dvh - var(--space-12));
+  overflow-y: auto; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-3); }
 .sidebar-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .rail-links { display: flex; flex-direction: column; }
 .sidebar-section-title { margin: 0; padding: var(--space-5) var(--space-2) var(--space-2); color: var(--text-3); font: 500 var(--fs-label)/16px var(--font-sans); letter-spacing: 0; }
@@ -76,7 +87,8 @@
 .rail-link[data-tip]::after { display: none; }
 .app-rail .rail-badge { position: static; flex: none; width: var(--space-6); min-width: 0; padding: 0; border-radius: 0; background: none; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; text-align: right; }
 /* Desktop: the sidebar's width is the person's (sidebar-layout.ts): dragged at its edge, or folded into the icon rail. */
-.rail-head { flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 48px; padding: 0 var(--space-1); }
+.rail-head { flex: none; display: flex; align-items: center; gap: var(--space-1); min-width: 0; height: 48px; margin-bottom: var(--space-2); padding: 0 var(--space-1); }
+.rail-head .workspace-name { margin-left: var(--space-1); }
 .sidebar-toggle { --control: 28px; flex: none; width: 28px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
 .sidebar-toggle:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
 .sidebar-toggle svg { width: 16px; height: 16px; transform: scaleX(-1); }   /* the panel on the left */
@@ -95,13 +107,11 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-shell[data-sidebar="collapsed"] { --sidebar-width: 56px; }
   .app-shell[data-sidebar="collapsed"] .app-sidebar { padding: var(--space-2) 0; overflow: visible; }
   .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links, .sidebar-foot) { align-items: center; }
-  .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; justify-content: center; gap: var(--space-2); height: auto; margin-bottom: var(--space-2); padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; justify-content: center; gap: var(--space-1); height: auto; margin-bottom: var(--space-2); padding: 0; }
   .app-shell[data-sidebar="collapsed"] .sidebar-scroll { overflow: visible; }
-  .app-shell[data-sidebar="collapsed"] :is(.workspace-name, .sidebar-section, .sidebar-search-label, .sidebar-search kbd) { display: none; }
-  .app-shell[data-sidebar="collapsed"] .sidebar-actions { flex-direction: column; align-items: center; gap: var(--space-1); padding: 0 0 var(--space-2); }
-  .app-shell[data-sidebar="collapsed"] :is(.sidebar-search, .sidebar-new) { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
-  .app-shell[data-sidebar="collapsed"] :is(.sidebar-search, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
-  .app-shell[data-sidebar="collapsed"] :is(.sidebar-search, .sidebar-new)[data-tip]:is(:hover, :focus-visible)::after { display: block; }
+  .app-shell[data-sidebar="collapsed"] :is(.workspace-name, .sidebar-section) { display: none; }
+  .app-shell[data-sidebar="collapsed"] :is(.quick-start-button, .sidebar-new) { width: 40px; height: 40px; }
+  .app-shell[data-sidebar="collapsed"] :is(.quick-start-button, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
   .app-shell[data-sidebar="collapsed"] .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .app-shell[data-sidebar="collapsed"] .rail-avatar { width: 40px; justify-content: center; padding: 0; }
   .app-shell[data-sidebar="collapsed"] .rail-brand { width: 40px; height: 40px; }
@@ -266,11 +276,9 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .rail-links { align-items: center; gap: var(--space-1); }
   .rail-head { justify-content: center; height: auto; margin-bottom: var(--space-2); padding: 0; }
   .sidebar-scroll { overflow: visible; }
-  :is(.workspace-name, .sidebar-section, .sidebar-search-label, .sidebar-search kbd) { display: none; }
-  .sidebar-actions { flex-direction: column; align-items: center; gap: var(--space-1); padding: 0 0 var(--space-2); }
-  :is(.sidebar-search, .sidebar-new) { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
-  :is(.sidebar-search, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
-  :is(.sidebar-search, .sidebar-new)[data-tip]:is(:hover, :focus-visible)::after { display: block; }
+  :is(.workspace-name, .sidebar-section) { display: none; }
+  :is(.quick-start-button, .sidebar-new) { width: 40px; height: 40px; }
+  :is(.quick-start-button, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
   .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .rail-avatar { width: 40px; justify-content: center; padding: 0; }
   .rail-brand { width: 40px; height: 40px; }
@@ -312,12 +320,12 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-sidebar { display: contents; }
   .app-rail { position: sticky; top: 0; z-index: 3; flex: none; flex-direction: row; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .rail-brand { flex: none; margin: 0 var(--space-2) 0 0; }
-  /* The phone's top bar holds the logo, the pen, the places, Settings and the person: the inbox has its own search
-     box, and the lists and the invite are a tap away in the inbox's filters and in Settings. */
+  /* The phone's top bar holds the logo, Quick start, the pen, the places, Settings and the person: search is the icon
+     of the bar under it, and the lists and the invite are a tap away in the inbox's filters and in Settings. */
   .sidebar-scroll, .sidebar-foot { display: contents; }
-  :is(.workspace-name, .sidebar-section, .sidebar-search, .sidebar-invite) { display: none; }
-  .sidebar-actions { flex: none; padding: 0; }
-  .sidebar-new { width: var(--touch); height: var(--touch); }
+  :is(.workspace-name, .sidebar-section, .sidebar-invite) { display: none; }
+  :is(.quick-start-button, .sidebar-new) { width: var(--touch); height: var(--touch); }
+  :is(.quick-start-button, .sidebar-new)[data-tip]::after { display: none; }
   .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   /* Labelled links can be wider than a small tablet: scroll, never push the page. */
   .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; gap: var(--space-1); padding-top: 0; overflow-x: auto; scrollbar-width: none; }
@@ -370,8 +378,14 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); width: 16rem; }
   /* The top bar is the phone's identity bar: it stays under the row of places while the page scrolls. The row
      already marks the page, so the bar names the workspace and the person instead. */
-  .app-topbar { position: sticky; top: var(--top-bar); z-index: 2; height: auto; min-height: 40px; padding: var(--space-2) var(--space-3); }
+  .app-topbar { position: sticky; top: var(--top-bar); z-index: 2; height: auto; min-height: 40px; padding: var(--space-1) var(--space-3); }
   .topbar-title { display: none; }
+  /* Search is an icon here, a fingertip wide, before the workspace and the person. */
+  .topbar-search { flex: none; order: 2; width: var(--touch); height: var(--touch); justify-content: center; padding: 0; background: transparent; box-shadow: none; }
+  .topbar-search svg { width: 18px; height: 18px; }
+  .topbar-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .topbar-search kbd { display: none; }
+  .topbar-end { order: 1; justify-content: space-between; }
   .app-content > .inbox-shell { height: auto; }
   .list-pane > header { padding-inline: var(--space-4); }
   .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; overflow: visible; }

@@ -237,11 +237,10 @@ test('shows where an imported conversation came from', () => {
   expect(within(details).getByText('Type: Problem')).toBeInTheDocument();
 });
 
-test('an empty new workspace explains itself and shows the guide it is given', () => {
-  render(<InboxPage conversations={[]} canManage guide={<section aria-label="Finish setting up">steps</section>} />);
+test('an empty new workspace explains itself', () => {
+  render(<InboxPage conversations={[]} canManage />);
   const start = screen.getByRole('region', { name: /get started/i });
   expect(start).toHaveTextContent('No conversations yet');
-  expect(screen.getByRole('region', { name: 'Finish setting up' })).toBeInTheDocument();
 });
 
 test('an empty filtered list says no conversation matches', () => {
@@ -324,14 +323,6 @@ test('the list of a results number that was refreshed says so and leads back to 
   expect(screen.queryByText('Conversations could not be loaded.')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
   expect(onQuery).toHaveBeenCalled();
-});
-
-test('the guide floats outside the conversation list, so it never pushes the rows down', () => {
-  render(<InboxPage conversations={[conversation]} guide={<section aria-label="Finish setting up">steps</section>} />);
-  const list = screen.getByRole('region', { name: 'Conversation list' });
-  expect(screen.getByRole('region', { name: 'Finish setting up' })).toBeInTheDocument();
-  expect(within(list).queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-  expect(within(list).getByRole('button', { name: /example/i })).toBeInTheDocument();
 });
 
 test('details drawer takes focus when opened and returns it on Escape', () => {
