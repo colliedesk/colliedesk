@@ -1,0 +1,35 @@
+name: Agent context budget
+
+# AGENTS.md and CLAUDE.md load into every agent session. A pull request may not make them larger
+# than its base unless a maintainer adds the agent-context-increase label; label events re-run it.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  budget:
+    name: Agent context budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check rules
+        run: python3 -I tests/agent-context-budget-test.py
+      - name: Compare agent instructions with the base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'agent-context-increase') }}
+        run: |
+          set -eu
+          if [ "$ALLOW" = true ]; then
+            python3 -I .github/scripts/agent-context-budget.py "$BASE_SHA" "$HEAD_SHA" --allow-growth
+          else
+            python3 -I .github/scripts/agent-context-budget.py "$BASE_SHA" "$HEAD_SHA"
+          fi
