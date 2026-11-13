@@ -4,6 +4,9 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+A conversation opens at its newest message, and a reply or note you just sent is in view. A message
+that arrives while you read stays out of your way if you scrolled up, and comes into view if you were at the end.
+
 The details list **Status**, **Priority**, **Assignee**, **Tags** and, while a reply target runs, **Due**,
 one row each, then the **Customer**: their name, their organization and **All conversations of** *name*.
 **Tags** names the conversation's tags (**None** without any); select it to tick or untick tags or create
