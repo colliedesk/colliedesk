@@ -265,6 +265,7 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
   if (!response.ok) noteFailure(path, init, response);
   // Signed out: there is no session to go by, so nothing waits for one.
   if (response.status === 401 && path === '/api/v1/auth/me') knowPermissions(null);
+  await noteRevoked(response);
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
@@ -280,6 +281,7 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
 // keeps its code and message instead of becoming a bare failure.
 async function trialOfferCall<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+  await noteRevoked(response);
   if (response.status === 401) throw new UnauthorizedError();
   if (!response.ok) {
     const refused = await invalidRequest(response);
@@ -292,6 +294,7 @@ async function trialOfferCall<T>(path: string, schema: z.ZodType<T>, init?: Requ
 export async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
   if (!response.ok) noteFailure(path, init, response);
+  await noteRevoked(response);
   if (!response.ok) throw failure(response.status);
 }
 
@@ -357,6 +360,13 @@ async function listCloudWorkspaces(token: string) {
   const response = await fetch('/api/v1/auth/cloud/workspaces', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`API ${response.status}`);
   return cloudWorkspacesSchema.parse(await response.json()).workspaces;
+}
+
+// noteRevoked remembers a 401 session_revoked as the person's Sign out: someone revoked this browser's session,
+// so the sign-in page ends the identity provider's session too. Whichever call learns it first counts, since the
+// server clears the cookie with that answer and later calls are plain 401s.
+async function noteRevoked(response: Response) {
+  if (response.status === 401 && (await errorCode(response.clone())) === 'session_revoked') rememberSignOut();
 }
 
 async function errorCode(response: Response): Promise<unknown> {

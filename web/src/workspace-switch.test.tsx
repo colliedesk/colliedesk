@@ -5,11 +5,16 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { createQueryClient } from './query-client';
 import { leaveTo } from './lib/leave-to';
+import { forgetSignOut } from './lib/sign-out-intent';
 import { permissionsOf, rolesOf } from './test-roles';
 
 // A person signed in to one workspace switches to another of theirs from the account menu. Clerk (the identity
 // provider) and leaving the page are external boundaries here.
-const clerk = vi.hoisted(() => ({ signedIn: true, signOut: vi.fn(() => Promise.resolve()) }));
+// Signing out of Clerk ends its session, as the real one does.
+const clerk = vi.hoisted(() => {
+  const state = { signedIn: true, signOut: vi.fn(() => { state.signedIn = false; return Promise.resolve(); }) };
+  return state;
+});
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
   SignIn: () => <div>Clerk widget</div>,
@@ -20,7 +25,8 @@ vi.mock('./lib/leave-to', () => ({ leaveTo: vi.fn() }));
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
-afterEach(() => { fetchMock.mockReset(); vi.mocked(leaveTo).mockReset(); clerk.signedIn = true; clerk.signOut.mockClear(); });
+// A Sign out is remembered in the page until a session answers; each test starts as a fresh page.
+afterEach(() => { fetchMock.mockReset(); vi.mocked(leaveTo).mockReset(); clerk.signedIn = true; clerk.signOut.mockClear(); forgetSignOut(); });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const me = {
@@ -43,12 +49,20 @@ const thisDevice = { id: '44444444-4444-4444-8444-444444444444', agent_id: me.ag
   token: null, role: null, permissions: [],
   created_at: '2026-11-13T00:00:00Z', last_seen_at: '2026-11-13T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
 
-function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: { slug: string; name: string }[] }) {
+// ended is why a missing session answers 401: revoked by someone, or expired (plain unauthorized).
+function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: { slug: string; name: string }[]; ended?: 'session_revoked' | 'unauthorized' }) {
   let signedIn = options.signedIn;
+  let ended = options.ended ?? 'unauthorized';
   fetchMock.mockImplementation((url: string) => {
     const path = url.split('?')[0];
     if (path === '/api/v1/config') return Promise.resolve(json(200, config(options.onAppHost)));
-    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, me) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
+    if (path === '/api/v1/auth/me') {
+      if (signedIn) return Promise.resolve(json(200, me));
+      // The server clears the cookie with its first refusal: later calls are plain unauthorized.
+      const code = ended;
+      ended = 'unauthorized';
+      return Promise.resolve(json(401, { error: { code, message: 'Sign in.' } }));
+    }
     if (path === '/api/v1/auth/cloud/workspaces') return Promise.resolve(json(200, { workspaces: options.workspaces ?? [alpha, beta] }));
     if (path === '/api/v1/auth/cloud/exchange') return Promise.resolve(json(200, { agent: me.agent, workspace: { ...me.workspace, slug: 'alpha-desk', name: 'Alpha Desk' }, continue_url: continueURL }));
     if (path === '/api/v1/auth/logout') { signedIn = false; return Promise.resolve(new Response(null, { status: 204 })); }
@@ -141,4 +155,21 @@ test('Sign out of this device in Sessions ends the identity provider session too
   await waitFor(() => expect(router.state.location.pathname).toBe('/sign-in'));
   expect(router.state.location.search).toMatchObject({ signed_out: true });
   await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
+});
+
+test('a session someone revoked ends the identity provider session too, so the next sign-in asks for a code', async () => {
+  serve({ signedIn: false, onAppHost: false, ended: 'session_revoked' });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/sign-in'));
+  expect(router.state.location.search).toMatchObject({ signed_out: true });
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
+  expect(calls('/api/v1/auth/cloud/exchange')).toHaveLength(0);
+});
+
+test('an expired session keeps the identity provider session and signs straight back in', async () => {
+  serve({ signedIn: false, onAppHost: false, ended: 'unauthorized' });
+  const router = open('/');
+  await waitFor(() => expect(calls('/api/v1/auth/cloud/exchange')).toHaveLength(1));
+  expect(router.state.location.search).not.toHaveProperty('signed_out');
+  expect(clerk.signOut).not.toHaveBeenCalled();
 });

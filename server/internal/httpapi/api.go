@@ -884,6 +884,12 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			if viaCookie && errors.Is(err, auth.ErrInvalidCredential) {
 				clearSessionCookie(response)
 			}
+			// Only the browser holding the cookie learns that its own session was revoked; the web app then
+			// ends the sign-in provider's session too, as on Sign out.
+			if errors.Is(err, auth.ErrSessionRevoked) {
+				writeError(response, http.StatusUnauthorized, "session_revoked", "This session was signed out from another device or by an admin. Sign in again.")
+				return
+			}
 			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
 			return
 		}

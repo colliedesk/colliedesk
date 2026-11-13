@@ -134,10 +134,10 @@ function AppLayout() {
   const buying = signedOut && inBilling ? readCheckoutIntent() : undefined;
   if (buying && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ buy: buying }} replace />;
   if (buying && config.isPending) return <div className="app-main" />;
-  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link. Only a
-  // person's own Sign out ends the identity provider session too (the marker), so the next sign-in asks for
-  // a code. A session that ended any other way (expired, revoked, or none yet on APP_ORIGIN, whose desks run
-  // on their own hosts) keeps it: the page signs the person straight back in or asks which workspace.
+  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link. A person's
+  // own Sign out, or a session someone revoked, ends the identity provider session too (the marker), so the
+  // next sign-in asks for a code. An expired session, or none yet on APP_ORIGIN (whose desks run on their own
+  // hosts), keeps it: the page signs the person straight back in or asks which workspace.
   if (signedOut && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={signedOutByPerson() ? { signed_out: true } : {}} replace />;
   if (signedOut && config.isPending) return <div className="app-main" />;
   // Signed out or locked, the setup flow gets the same screens as any page, in the frame of every page.

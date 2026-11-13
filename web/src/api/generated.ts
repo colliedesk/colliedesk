@@ -10655,7 +10655,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Authentication failed */
+        /** @description Authentication failed. Error code `session_revoked` when a browser's session cookie was revoked (signed out from another device, by an admin, or by deactivating its person); it is said only to the browser holding that cookie, on its own workspace's host or APP_ORIGIN. Every other refusal (expired, unknown, another host's cookie, any bearer) is `unauthorized`. */
         Error401: {
             headers: {
                 [name: string]: unknown;

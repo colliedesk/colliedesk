@@ -24,9 +24,10 @@ On instances with cloud sign-in, a browser without a valid session opens the sig
 - After you choose **Sign out** (in the account menu, or for **This device** in Sessions), the page says
   **You are signed out** and also signs the browser out of the sign-in provider. The next sign-in asks
   for a code again.
-- A session that ended any other way (it expired, or someone revoked it) does not sign you out of the
-  sign-in provider. While that sign-in is still valid in this browser, the page signs you back in
-  without a code. A deactivated person, or someone no longer in the workspace, is not signed back in.
+- The same happens on a device whose session was revoked: from **Revoke** in Sessions on another device,
+  by an admin, or because the person was deactivated. That device needs a new code to sign in again.
+- A session that expired does not sign you out of the sign-in provider. While that sign-in is still valid
+  in this browser, the page signs you back in without a code.
 
 ## Connected AI apps
 

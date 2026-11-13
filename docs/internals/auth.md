@@ -296,13 +296,19 @@ workspaces, and choosing one signs them in there without a new code. Code: `list
 - **The switch is the existing chooser and hand-off.** Each entry links to `APP_ORIGIN/sign-in?workspace=<slug>`;
   that page exchanges the live Clerk session with `workspace_slug` and hands the browser off to the chosen
   host (one-minute `handoff` link). The session on the host it came from is untouched.
-- **Only the person's own Sign out ends the Clerk session.** The account menu's Sign out and Sessions' Sign out
-  of this device remember it (`web/src/lib/sign-out-intent.ts`) and open `/sign-in?signed_out=true`, which signs
-  Clerk out, so the next sign-in asks for a code. A session that ended any other way (expired, revoked, or
-  none on `APP_ORIGIN`, whose desks run on their own hosts) opens `/sign-in` without the marker: a live Clerk
-  session signs the person straight back in, or shows the chooser. A revoked session therefore does not lock a
-  browser whose Clerk session is still valid out; deactivating the person (or removing them) does, because
-  the exchange skips deactivated agents.
+- **Sign out and revoke end the Clerk session; expiry does not.** The account menu's Sign out, Sessions' Sign
+  out of this device, and a 401 `session_revoked` from any call are remembered (`web/src/lib/sign-out-intent.ts`)
+  and open `/sign-in?signed_out=true`, which signs Clerk out in that browser, so the next sign-in asks for a code.
+  An expired session, or none on `APP_ORIGIN` (whose desks run on their own hosts), opens `/sign-in` without the
+  marker: a live Clerk session signs the person straight back in, or shows the chooser.
+- **`session_revoked` tells only the browser holding the cookie.** `Authenticate` answers `ErrSessionRevoked`
+  (still an `ErrInvalidCredential`) when a cookie's own person session has `revoked_at` set (Sessions revoke,
+  sign-out from another device) or its person is deactivated (which also revokes the sessions). It reads that in
+  the session's workspace after the main lookup failed, and says it only on that workspace's host or `APP_ORIGIN`:
+  on another workspace's host, for a bearer, or for an expired or unknown session the answer stays 401
+  `unauthorized`. Whichever call learns it first counts, because that answer also clears the cookie. Tests:
+  `TestARevokedSessionIsToldItWasRevokedAndAnExpiredOneIsNot`, `TestADeactivatedPersonsSessionIsToldItWasRevoked`,
+  `TestAnotherWorkspaceHostNeverSaysASessionWasRevoked`.
 
 ### Cloud sign-up (hosted cloud only)
 
