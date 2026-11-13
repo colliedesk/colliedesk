@@ -88,8 +88,9 @@ MCP tool `colliedesk_email_channel_get`.
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
   showing the new-workspace steps.
-- Pick a **Status** tab (All, Open, Pending, Resolved, Closed, Spam), and narrow further with **Filter** and
-  **Sort**; see [Filter and sort](#filter-and-sort) below.
+- Pick a **Status** tab, and narrow further with **Filter** and **Sort**; see [Filter and sort](#filter-and-sort)
+  below. **Open**, **Pending** and **Resolved** are always there. **All** and **Closed** join them while you search
+  or a filter is on, and **Spam** once it holds a conversation.
 - **Open** and **Pending** say how many conversations they hold (**Open 23**), and so does the tab you are
   on; the numbers follow the filters on screen. While you search, the tab counts the results when they fit
   on one page. The API gives the same numbers with `counts=true` on `GET /api/v1/conversations`

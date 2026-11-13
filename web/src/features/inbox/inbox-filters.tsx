@@ -56,6 +56,15 @@ function FilterChipsPart(props: FilterPartProps) {
 const statusTabs = [[allStatuses, messages.allConversations], ...Object.entries(messages.statuses)] as const;
 // Keys with controls of their own; any other filter shows as a chip.
 const ownControls = ['status', 'sort', 'search'];
+// The tabs an agent needs every day stay; the rest show when they mean something (Paper "15 Inbox": I1-a, I4-a,
+// I4-b, I10-d). All and Closed join a search or a filter, whose results span every status; Spam shows once it
+// holds a conversation; the tab on screen always shows, so a link to any status keeps its tab.
+function showsTab(value: string, status: string, narrowed: boolean, counts?: Partial<Record<string, number>>) {
+  if (value === status) return true;
+  if (value === allStatuses || value === 'closed') return narrowed;
+  if (value === 'spam') return (counts?.spam ?? 0) > 0;
+  return true;
+}
 
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; everything else shares one
@@ -80,6 +89,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
   }, [focusSignal]);
   const part = { query, onChange, tags, agents, timezone, conversations, currentAgentId };
   const status = query.status ?? defaultStatus;
+  const narrowed = Object.keys(query).some((key) => key !== 'status' && key !== 'sort');
   return (
     // A search region, not a form: the saved views menu inside it has forms of its own, and a form inside a
     // form makes the browser submit the outer one as a page load.
@@ -93,7 +103,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
         {views}
       </div>
       {selection ?? <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
-        {statusTabs.map(([value, label]) => {
+        {statusTabs.filter(([value]) => showsTab(value, status, narrowed, counts)).map(([value, label]) => {
           // Open and Pending always say how many they hold, the tab on screen too; a zero says nothing.
           const count = (value === 'open' || value === 'pending' || value === status) ? counts?.[value] : undefined;
           return <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => setStatus(value)} /><span>{label}</span>

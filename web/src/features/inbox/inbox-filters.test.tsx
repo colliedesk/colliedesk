@@ -32,11 +32,32 @@ const openMenu = async () => {
   return screen.getByRole('group', { name: 'Filter' });
 };
 
-test('status is a row of tabs, All first, Spam last, Open selected so the inbox starts on what needs an answer', () => {
-  render(<Harness />);
-  const status = screen.getByRole('radiogroup', { name: 'Status' });
-  expect(within(status).getAllByRole('radio').map((item) => item.getAttribute('value'))).toEqual(['all', 'open', 'pending', 'resolved', 'closed', 'spam']);
-  expect(within(status).getByRole('radio', { name: 'Open' })).toBeChecked();
+const tabValues = () => within(screen.getByRole('radiogroup', { name: 'Status' })).getAllByRole('radio').map((item) => item.getAttribute('value'));
+
+test('the status tabs start as Open, Pending and Resolved, Open selected so the inbox starts on what needs an answer', () => {
+  render(<InboxFilters tags={tags} query={{}} counts={{ open: 23, pending: 4, resolved: 7, closed: 120, spam: 0 }} />);
+  expect(tabValues()).toEqual(['open', 'pending', 'resolved']);
+  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
+});
+
+test('a search or a filter adds All first and Closed after Resolved, as results span every status', () => {
+  const { unmount } = render(<InboxFilters tags={tags} query={{ search: 'hana', status: 'all' }} />);
+  expect(tabValues()).toEqual(['all', 'open', 'pending', 'resolved', 'closed']);
+  unmount();
+  render(<InboxFilters tags={tags} query={{ priority: 'urgent' }} />);
+  expect(tabValues()).toEqual(['all', 'open', 'pending', 'resolved', 'closed']);
+});
+
+test('Spam shows last once it holds a conversation, and any status a link opens keeps its tab', () => {
+  const { unmount } = render(<InboxFilters tags={tags} query={{}} counts={{ open: 22, pending: 4, resolved: 0, closed: 0, spam: 2 }} />);
+  expect(tabValues()).toEqual(['open', 'pending', 'resolved', 'spam']);
+  unmount();
+  const { unmount: again } = render(<InboxFilters tags={tags} query={{ status: 'spam' }} counts={{ open: 22, pending: 4, resolved: 0, closed: 0, spam: 0 }} />);
+  expect(tabValues()).toEqual(['open', 'pending', 'resolved', 'spam']);
+  again();
+  render(<InboxFilters tags={tags} query={{ status: 'closed' }} />);
+  expect(tabValues()).toEqual(['open', 'pending', 'resolved', 'closed']);
+  expect(screen.getByRole('radio', { name: 'Closed' })).toBeChecked();
 });
 
 test('choosing a status tab filters the list', () => {
@@ -203,7 +224,7 @@ test('a sort set by a link that the menu does not offer still shows as chosen', 
 test('search and Filter come before the status tabs in tab order, as they do on screen', () => {
   render(<Harness />);
   const search = screen.getByRole('searchbox', { name: 'Search conversations' });
-  const firstTab = screen.getByRole('radio', { name: 'All' });
+  const firstTab = screen.getAllByRole('radio')[0];
   expect(search.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -308,9 +329,7 @@ test('the status tabs count Open and Pending, and the tab on screen, under the o
   expect(tab('Open')).toHaveTextContent('Open23');
   expect(tab('Pending')).toHaveTextContent('Pending4');
   expect(tab('Resolved')).toHaveTextContent('Resolved7');
-  expect(tab('Closed')).toHaveTextContent(/^Closed$/);
   expect(tab('Spam')).toHaveTextContent(/^Spam$/);
-  expect(tab('All')).toHaveTextContent(/^All$/);
 });
 
 test('a zero count shows nothing', () => {
