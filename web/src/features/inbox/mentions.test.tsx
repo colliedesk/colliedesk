@@ -19,7 +19,7 @@ test('the people a note can ask are the active teammates, never the writer or so
   expect(askableTeammates([me, long, loan, gone], me.id).map((person) => person.name)).toEqual(['Long Bui', 'Loan Pham']);
 });
 
-test('@ in a private note lists teammates under the box: arrows, Enter and Esc work, and the note asks the person picked', async () => {
+test('@ in a private note lists teammates at the @: arrows, Enter and Esc work, and the note asks the person picked', async () => {
   const onSubmit = vi.fn();
   render(<ReplyComposer onSubmit={onSubmit} teammates={askableTeammates([me, long, loan, gone], me.id)} />);
   fireEvent.click(screen.getByRole('button', { name: /Private note/ }));

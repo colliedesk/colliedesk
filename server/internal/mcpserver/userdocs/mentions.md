@@ -7,8 +7,8 @@ read it.
 ## Ask a teammate
 
 1. Open the conversation and choose **Private note** (or press N).
-2. Type **@**. A list of your active teammates opens under the box. Keep typing to filter it by name or
-   email.
+2. Type **@**. A list of your active teammates opens at the **@**, under its line (above it when the screen has
+   no room below). Keep typing to filter it by name or email.
 3. Pick a person with the arrow keys and Enter (or Tab), or click them. **Esc** closes the list and keeps
    what you typed. Their name goes into the note as **@Name**.
 4. Press **Add private note**.
