@@ -348,6 +348,10 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .rail-link { gap: var(--space-1); }
   /* Inbox, Mentions, Help center and Reports touch edge to edge, each still 44 px to tap. */
   .rail-links { gap: 0; }
+  /* The logo, Quick start and the pen give up a little width (still 44 px tall) so the places fit beside them. */
+  .app-rail { gap: 0; }
+  .rail-brand { width: 36px; }
+  :is(.quick-start-button, .sidebar-new) { width: var(--space-8); }
 }
 /* A short wide screen (a phone on its side): the reply box and what stands above it (a reply warning, a
    draft) scroll on their own instead of being cut below the pane. */
