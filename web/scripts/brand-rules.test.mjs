@@ -154,14 +154,20 @@ test('an open menu sits above the setup guide in the corner', () => {
 
 test('the setup guide marks a finished step with a stroke check, not a filled disc', () => {
   const css = read('features/onboarding/setup-checklist.css');
-  const done = rule(css, '.setup-step[data-state="done"] .setup-mark');
+  const done = rule(css, '.checklist-step[data-state="done"] .setup-mark');
   expect(done).not.toMatch(/background|box-shadow/);
   expect(done).toMatch(/(?<![-\w])color:\s*var\(--ok\)/);
   // The next step's row is a link styled as a primary action: the link drops the button weight, and its lines
   // keep their own (the title bold, "Needs attention" bold, the rest regular), so no rule reweights a line under it.
-  expect(rule(css, '.setup-step > a.primary-action, .setup-step > a.primary-action:hover')).toMatch(/font-weight:\s*400/);
+  expect(rule(css, '.checklist-step > a.primary-action, .checklist-step > a.primary-action:hover')).toMatch(/font-weight:\s*400/);
   expect(css).not.toMatch(/\.primary-action \.setup-state/);
   expect(rule(css, '.setup-state[data-attention]')).toMatch(/font-weight:\s*600/);
+});
+
+test('the setup guide never styles .setup-step, the class of the email setup steps', () => {
+  // Shared once: after the inbox had shown the guide, its grid squeezed each email step head into a 20 px column.
+  const shared = read('features/onboarding/setup-checklist.css').split('\n').filter((line) => /\.setup-step(?![-\w])/.test(line));
+  expect(shared).toEqual([]);
 });
 
 test('the email setup wizard styles only its own steps, never the setup guide rows that share the class name', () => {

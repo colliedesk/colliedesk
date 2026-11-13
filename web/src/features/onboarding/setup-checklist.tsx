@@ -103,7 +103,7 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
           <span style={{ width: `${share * 100}%` }} />
         </div>
         <ol>
-          {goal === 'ai_agents' && <li className="setup-step" data-state="todo">
+          {goal === 'ai_agents' && <li className="checklist-step" data-state="todo">
             <span className="setup-mark" aria-hidden="true" />
             <a href={messages.mcpURL} target="_blank" rel="noreferrer">
               <span className="setup-title">{setupMessages.mcp.title}</span>
@@ -116,7 +116,7 @@ export function SetupChecklist({ progress, me, goal, defaultOpen = false, onHide
             const idle = nothingToDo(step);
             const primary = step.key === firstTodo;
             return (
-              <li key={step.key} className="setup-step" data-state={finished ? 'done' : idle ? 'none' : 'todo'} data-step={step.key}>
+              <li key={step.key} className="checklist-step" data-state={finished ? 'done' : idle ? 'none' : 'todo'} data-step={step.key}>
                 <span className="setup-mark" aria-hidden="true">{finished && <CheckIcon />}</span>
                 <a href={target(step.key)} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
                   onPointerEnter={() => preloadSetupStep(client, step.key)} onFocus={() => preloadSetupStep(client, step.key)}>
