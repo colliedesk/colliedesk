@@ -8,6 +8,7 @@ import { useBillingShown } from '../billing/billing-shown';
 import { saveState } from './save-feedback';
 import { SettingsPage } from './settings-page';
 import { MentionEmailSetting } from './mention-email-setting';
+import { storeSkipped } from '../onboarding/setup-steps';
 
 // Settings → Account: the profile, this browser's preferences, the devices signed in and the AI apps
 // connected with OAuth. It asks for who is signed in and the sessions only.
@@ -28,7 +29,11 @@ export function AccountRoute() {
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
   // Your name also shows in the team list and the assignee lists.
   const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
-  const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: () => { void refresh('me'); void refresh('setup'); } });
+  // Showing the setup guide again shows all of Quick start, Try more too if this browser skipped it.
+  const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: (answer) => {
+    if (!answer.hidden && me.data) storeSkipped(me.data.agent.id, false);
+    void refresh('me'); void refresh('setup');
+  } });
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
   const loading = me.isPending || sessions.isPending;
   // A link to a section (a pasted address, an old anchor) arrives before the sections do.

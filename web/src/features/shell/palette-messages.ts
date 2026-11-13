@@ -1,0 +1,21 @@
+// Strings of the search palette. It loads from its own chunk when first opened, and its words with it.
+export const paletteMessages = {
+  dialog: 'Search',
+  placeholder: 'Search conversations, customers and pages',
+  results: 'Results',
+  recent: 'Recent',
+  goTo: 'Go to',
+  actions: 'Actions',
+  conversations: 'Conversations',
+  customers: 'Customers',
+  conversation: 'Conversation',
+  customer: 'Customer',
+  page: 'Page',
+  action: 'Action',
+  seeAll: (words: string) => `See all results for “${words}” in the inbox`,
+  conversationCount: (count: number) => `${count} ${count === 1 ? 'conversation' : 'conversations'}`,
+  nothingFound: 'Nothing found',
+  move: 'Move',
+  open: 'Open',
+  close: 'Close',
+};

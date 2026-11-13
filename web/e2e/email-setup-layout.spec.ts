@@ -1,16 +1,17 @@
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
-import { redeemLink } from './support/browser';
+import { openQuickStart, redeemLink } from './support/browser';
 
-// The setup checklist on the inbox ("Finish setting up") and the email setup on Settings → Email both list steps.
+// Quick start's checklist and the email setup on Settings → Email both list steps.
 // Opened one after the other in the same page, each keeps its own layout: an email step's head (number, title,
 // "Step 1 of 4") runs across the step, its title on one line, and the step's fields sit under it.
 test.use({ viewport: { width: 1440, height: 900 } });
 
-test('email setup steps keep their layout after the inbox has shown the setup checklist', async ({ page }) => {
+test('email setup steps keep their layout after Quick start has shown the setup checklist', async ({ page }) => {
   const suffix = uniqueSuffix();
   await redeemLink(page, createWorkspace(`Layout Desk ${suffix}`, `admin-${suffix}@acme.example`));
-  await expect(page.getByText('Finish setting up').first()).toBeVisible();
+  await openQuickStart(page);
+  await page.keyboard.press('Escape');
 
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Email', exact: true }).click();

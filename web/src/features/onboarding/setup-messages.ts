@@ -1,12 +1,13 @@
 import type { SetupStepKey } from '../../api/schemas';
 
 export const setupMessages = {
-  heading: 'Finish setting up',
   progress: (done: number, total: number) => `${done} of ${total}`,
   progressLabel: 'Setup progress',
-  hide: 'Hide',
-  minimize: 'Minimize',
-  hideHint: 'Hide the setup guide. You can show it again in Preferences.',
+  // Quick start's two groups, and the link that leaves the second one out.
+  setUp: 'Set up',
+  tryMore: 'Try more',
+  skip: 'Skip these',
+  unskip: 'Show these',
   recommended: 'Recommended',
   done: 'Done',
   title: {

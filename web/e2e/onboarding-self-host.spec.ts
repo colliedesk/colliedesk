@@ -2,7 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { colliedesk, databaseURL, mustColliedesk, psql, startServer, stopServer, uniqueSuffix, withDatabase } from './support/cli';
 import { ports } from './support/checkout';
-import { appNavigationWith, expectReadablePage, redeemLink } from './support/browser';
+import { appNavigationWith, expectReadablePage, openQuickStart, redeemLink } from './support/browser';
 
 // Journey 1: a self-hoster follows docs/self-host/README.md "From a clone" on an empty database.
 const port = ports.fresh;
@@ -44,7 +44,9 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
 
   const empty = page.getByRole('region', { name: 'Get started' });
   await expect(empty).toContainText('No conversations yet');
-  const guide = page.getByRole('region', { name: 'Finish setting up' });
+  // Quick start, beside the workspace name, carries the amber dot while a Set up step is left, and opens the steps.
+  await expect(page.locator('.quick-start-dot')).toBeVisible();
+  const guide = await openQuickStart(page);
   await expect(guide.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/setup/email');
   await expect(guide.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/setup/import');
   await expect(guide.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/setup/invite');
@@ -61,7 +63,7 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
 
   // Next steps open inside the app (no full page load).
   await page.evaluate(() => { (window as unknown as { stillHere: boolean }).stillHere = true; });
-  await guide.getByRole('link', { name: /Receive customer email/ }).click();
+  await (await openQuickStart(page)).getByRole('link', { name: /Receive customer email/ }).click();
   // The email step of the setup flow.
   await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email', exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true);

@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { askInbox } from '../shell/inbox-intents';
+import { readRecent } from '../shell/recent-items';
 import { testRouter } from './test-router';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
@@ -1145,83 +1146,33 @@ test('a reply that lands after the person opened another conversation reloads th
   expect(api.messages).not.toHaveBeenCalledWith(beta.id);
 });
 
-const unfinished = { steps: [
-  { key: 'email', state: 'none', detail: null }, { key: 'import', state: 'none', detail: null },
-  { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null },
-], complete: false, recommended: null };
-const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', roles: rolesOf('admin'), email: 'ann@example.com', display_name: 'Ann' }, permissions: permissionsOf('admin'), onboarding_goal: null, setup_guide_hidden: hidden });
+const adminMe = () => ({ timezone: 'UTC', agent: { id: 'a-1', roles: rolesOf('admin'), email: 'ann@example.com', display_name: 'Ann' }, permissions: permissionsOf('admin'),
+  onboarding_goal: null, setup_guide_hidden: false, workspace: { id: 'w-1', slug: 'ann', name: 'Ann Desk', timezone: 'UTC' } });
 
-test('a workspace with conversations keeps the setup guide folded in the corner until the agent opens it', async () => {
-  localStorage.clear();
+test('the inbox floats no setup guide over its list: Quick start in the sidebar holds the steps', async () => {
   quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
-  renderRoute();
-  const launcher = await screen.findByRole('button', { name: /Finish setting up/ });
-  expect(launcher).toHaveTextContent('0 of 4');
-  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
-  fireEvent.click(launcher);
-  const guide = screen.getByRole('region', { name: 'Finish setting up' });
-  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/setup/email');
-});
-
-test('a brand-new workspace without an email channel opens the setup guide by itself: there is nothing for it to cover', async () => {
-  localStorage.clear();
-  quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.channelCounts.mockResolvedValue({ types: [] });
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
-  renderRoute();
-  const guide = await screen.findByRole('region', { name: 'Finish setting up' });
-  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toBeInTheDocument();
-  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
-});
-
-test('a brand-new workspace that can send itself a test message keeps the guide folded, so it never covers that button', async () => {
-  localStorage.clear();
-  quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
-  renderRoute();
-  expect(await screen.findByRole('button', { name: 'Send yourself a test message' })).toBeInTheDocument();
-  expect(await screen.findByRole('button', { name: /Finish setting up/ })).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-});
-
-test('Hide removes the guide and asks the server to remember it for this agent', async () => {
-  quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
-  renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: /Finish setting up/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-  await waitFor(() => expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument());
-  expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
-  expect(api.setSetupGuideHidden).toHaveBeenCalledWith(true);
-});
-
-test('a hidden guide shows nothing, even though its data left with the session', async () => {
-  quietApis();
+  api.me.mockResolvedValue(adminMe());
   api.setupProgress.mockClear();
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.me.mockResolvedValue(adminMe(true));
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
   renderRoute();
   await screen.findByRole('button', { name: /alpha conversation/i });
-  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
-  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
+  expect(screen.queryByText('Finish setting up')).not.toBeInTheDocument();
+  expect(api.setupProgress).not.toHaveBeenCalled();
+});
+
+test('a conversation the person opens heads Recent in the search palette', async () => {
+  localStorage.clear();
+  quietApis();
+  api.me.mockResolvedValue(adminMe());
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), conversation('22222222-2222-4222-8222-222222222222', 'Beta conversation')], page: 1, page_size: 50 });
+  renderRoute();
+  // The first row on screen by itself is not one the person opened.
+  await screen.findByRole('button', { name: /beta conversation/i });
+  expect(readRecent('w-1')).toEqual([]);
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  await waitFor(() => expect(readRecent('w-1')).toEqual([expect.objectContaining({ kind: 'conversation', id: '22222222-2222-4222-8222-222222222222', title: 'Beta conversation' })]));
 });
 
 // A chat conversation's replies leave through its chat channel: no email settings are asked for it.

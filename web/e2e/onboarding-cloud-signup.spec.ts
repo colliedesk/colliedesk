@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, request as playwrightRequest, test } from '@playwright/test';
-import { appNavigationWith } from './support/browser';
+import { appNavigationWith, openQuickStart } from './support/browser';
 import { databaseFor, psql, servers, uniqueSuffix } from './support/cli';
 import { IdentityProvider } from './support/identity-provider';
 import { newClientAddress, signUp } from './support/signup';
@@ -51,8 +51,8 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   await expect(appNavigationWith(page, name)).toHaveCount(1);
   await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
   await expect(page.getByRole('button', { name: 'Choose a plan' })).toBeVisible();
-  // The goal given at sign-up picks the first step of the empty inbox.
-  const firstStep = page.getByRole('region', { name: 'Finish setting up' }).getByRole('listitem').first();
+  // The goal given at sign-up picks the first step of Quick start.
+  const firstStep = (await openQuickStart(page)).getByRole('listitem').first();
   await expect(firstStep).toContainText('Import from Freshdesk');
   await expect(firstStep).toContainText('Recommended');
   // An unknown answer is refused before anything is created.
