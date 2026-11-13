@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { AppShell } from './app-shell';
 import type { SidebarChannel, SidebarView } from './sidebar-items';
+import { sidebarStorageKey } from './sidebar-layout';
 
 const me = {
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('agent'), timezone_override: null },
@@ -120,21 +121,30 @@ test('Report a problem in the account menu opens the dialog, and closing it retu
 });
 
 test('the sidebar starts open with page names, folds into its rail and opens again, and the browser keeps the choice', () => {
-  localStorage.removeItem('colliedesk.sidebar');
+  localStorage.removeItem(sidebarStorageKey);
   const { container, unmount } = render(<AppShell me={me}><p>inbox</p></AppShell>);
   expect(container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'expanded');
   fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
   expect(container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'collapsed');
-  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: true });
+  expect(JSON.parse(localStorage.getItem(sidebarStorageKey)!)).toEqual({ width: 248, collapsed: true });
   unmount();
   const again = render(<AppShell me={me}><p>inbox</p></AppShell>);
   expect(again.container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'collapsed');
   fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
-  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
+  expect(JSON.parse(localStorage.getItem(sidebarStorageKey)!)).toEqual({ width: 248, collapsed: false });
+});
+
+test('a browser that kept a folded sidebar from before the sidebar opened by default starts open, with its width', () => {
+  localStorage.removeItem(sidebarStorageKey);
+  localStorage.setItem('colliedesk.sidebar', JSON.stringify({ width: 300, collapsed: true }));
+  const { container } = render(<AppShell me={me}><p>inbox</p></AppShell>);
+  expect(container.querySelector('.app-shell')).toHaveAttribute('data-sidebar', 'expanded');
+  expect(screen.getByRole('separator', { name: 'Resize sidebar' })).toHaveAttribute('aria-valuenow', '300');
+  localStorage.removeItem('colliedesk.sidebar');
 });
 
 test('the sidebar edge resizes with the keyboard within its limits and remembers the width', () => {
-  localStorage.setItem('colliedesk.sidebar', JSON.stringify({ width: 9999, collapsed: false }));
+  localStorage.setItem(sidebarStorageKey, JSON.stringify({ width: 9999, collapsed: false }));
   const { container } = render(<AppShell me={me}><p>inbox</p></AppShell>);
   const edge = screen.getByRole('separator', { name: 'Resize sidebar' });
   expect(edge).toHaveAttribute('aria-valuenow', '360');
@@ -144,12 +154,12 @@ test('the sidebar edge resizes with the keyboard within its limits and remembers
   fireEvent.keyDown(edge, { key: 'Home' });
   expect(edge).toHaveAttribute('aria-valuenow', '56');
   fireEvent.doubleClick(edge);
-  expect(JSON.parse(localStorage.getItem('colliedesk.sidebar')!)).toEqual({ width: 248, collapsed: false });
-  localStorage.removeItem('colliedesk.sidebar');
+  expect(JSON.parse(localStorage.getItem(sidebarStorageKey)!)).toEqual({ width: 248, collapsed: false });
+  localStorage.removeItem(sidebarStorageKey);
 });
 
 test('the sidebar head names the workspace beside the logo, and the person at its foot shows their name and address', () => {
-  localStorage.removeItem('colliedesk.sidebar');
+  localStorage.removeItem(sidebarStorageKey);
   render(<AppShell me={{ ...me, agent: { ...me.agent, display_name: 'Sam Lee' } }} brand={<a href="/">Colliedesk</a>}><p>inbox</p></AppShell>);
   const identity = screen.getByRole('region', { name: 'Signed in as' });
   const rail = screen.getByRole('navigation', { name: 'Main' });
@@ -163,7 +173,7 @@ test('the sidebar head names the workspace beside the logo, and the person at it
 });
 
 test('folded into its rail, the sidebar leaves the workspace and the address to the top bar', () => {
-  localStorage.setItem('colliedesk.sidebar', JSON.stringify({ width: 248, collapsed: true }));
+  localStorage.setItem(sidebarStorageKey, JSON.stringify({ width: 248, collapsed: true }));
   render(<AppShell me={me} page={{ title: 'Inbox', icon: null }}><p>inbox</p></AppShell>);
   const identity = screen.getByRole('region', { name: 'Signed in as' });
   expect(identity).not.toContainElement(screen.getByRole('navigation', { name: 'Main' }));
@@ -171,7 +181,7 @@ test('folded into its rail, the sidebar leaves the workspace and the address to 
   expect(identity).toHaveTextContent('Beta Desk');
   expect(identity).toHaveTextContent('sam@example.com');
   expect(screen.getAllByRole('region', { name: 'Signed in as' })).toHaveLength(1);
-  localStorage.removeItem('colliedesk.sidebar');
+  localStorage.removeItem(sidebarStorageKey);
 });
 
 test('the top bar names the page and links to the docs', () => {
