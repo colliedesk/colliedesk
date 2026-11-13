@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
+import { askInbox } from '../shell/inbox-intents';
 import { testRouter } from './test-router';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
@@ -120,6 +121,7 @@ test('a status tab reports inbox_filtered with the filter kind', async () => {
 test('a finished search reports whether it found anything and never the words', async () => {
   await open();
   api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  act(() => askInbox('search'));
   fireEvent.change(screen.getByRole('searchbox', { name: /search/i }), { target: { value: 'refund for Mai' } });
   await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('inbox_searched', { has_results: false }), { timeout: 3000 });
   expect(analytics.track).toHaveBeenCalledTimes(1);

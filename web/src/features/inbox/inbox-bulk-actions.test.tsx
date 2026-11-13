@@ -105,7 +105,8 @@ test('resolve changes the selection in one press', async () => {
 test('the filters stay in view while rows are selected', () => {
   renderInbox();
   pick(/alpha request/i);
-  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+  // Select all and the actions take the tabs' place; Sort and Filter stay beside them.
+  for (const tool of [screen.getByRole('combobox', { name: 'Sort' }), screen.getByText('Filter')]) expect(tool).toBeVisible();
 });
 
 test('Escape in the action bar clears the selection and returns focus to the list', () => {
