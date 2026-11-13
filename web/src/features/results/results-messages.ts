@@ -59,7 +59,7 @@ export const resultsMessages = {
   handle: {
     name: 'Handle time',
     how: 'Time your team logged on a conversation, added up. Half of the resolved conversations took less than this. Same conversations as Time to resolve.',
-    live: 'Colliedesk does not record time yet (issue #119).',
+    live: 'Colliedesk does not record time yet.',
     logged: (n: number) => `${n} conversations with time logged`,
     what: 'Conversations with time logged',
   },
