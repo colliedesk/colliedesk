@@ -371,6 +371,39 @@ test('signing out forgets the agent for analytics only after the server ended th
   await waitFor(() => expect(resetProductAnalytics).toHaveBeenCalledTimes(1));
 });
 
+const keptBeforeSettings = 'colliedesk:before-settings';
+const samInWorkspace = '22222222-2222-4222-8222-222222222222/11111111-1111-4111-8111-111111111111';
+
+test('signing out forgets the page kept for Back to app', async () => {
+  let loggedOut = false;
+  fetchMock.mockImplementation((url: string) => {
+    const path = url.split('?')[0];
+    if (path === '/api/v1/auth/logout') { loggedOut = true; return Promise.resolve(new Response(null, { status: 204 })); }
+    if (path === '/api/v1/auth/me') return Promise.resolve(loggedOut ? json(401, { error: { code: 'unauthorized', message: 'no' } }) : json(200, meBody('agent', null)));
+    if (path === '/api/v1/config') return Promise.resolve(json(200, config));
+    return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
+  });
+  sessionStorage.setItem(keptBeforeSettings, JSON.stringify({ href: '/conversations/c1', owner: samInWorkspace }));
+  open('/settings');
+  fireEvent.click(await screen.findByRole('button', { name: /account|sam@example.com/i }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+  await waitFor(() => expect(sessionStorage.getItem(keptBeforeSettings)).toBeNull());
+});
+
+test('Back to app offers the page the same person left, and the inbox for a page another person left', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', null)),
+    '/api/v1/config': () => json(200, config),
+  });
+  sessionStorage.setItem(keptBeforeSettings, JSON.stringify({ href: '/conversations/c1', owner: samInWorkspace }));
+  open('/settings/account');
+  expect(await screen.findByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/conversations/c1');
+  cleanup();
+  sessionStorage.setItem(keptBeforeSettings, JSON.stringify({ href: '/conversations/c1', owner: '22222222-2222-4222-8222-222222222222/99999999-9999-4999-8999-999999999999' }));
+  open('/settings/account');
+  expect(await screen.findByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/');
+});
+
 test('signing out forgets every unsent reply and note kept in this browser, and nothing else', async () => {
   let loggedOut = false;
   fetchMock.mockImplementation((url: string) => {

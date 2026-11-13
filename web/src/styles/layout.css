@@ -198,6 +198,8 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .settings-exit span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-exit kbd { flex: none; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-1); color: var(--text-3); font: 500 var(--fs-label)/20px var(--font-mono); }
 .settings-rail .settings-nav { position: static; padding-top: var(--space-2); }
+/* The workspace, above the person: the foot is where Settings names who this browser acts as. */
+.settings-rail .sidebar-foot .workspace-name { flex: none; padding: var(--space-1) var(--space-2) 0; }
 /* A card puts its heading beside its controls only where both get room; the column it sits in decides, not the window. */
 .settings-sections { container-type: inline-size; }
 .settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-4); }

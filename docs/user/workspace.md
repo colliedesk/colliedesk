@@ -24,8 +24,9 @@ you can use:
 
 While you are in Settings, its menu takes the place of the sidebar, under **Back to app**. The sheet shows
 the page alone. **Back to app** returns to the page you were on before Settings: the conversation you
-had open, or the inbox when there was none. **Esc** does the same, except while the cursor is in a text
-field, a menu list or a dialog, so nothing you type is lost. You can still drag the sidebar's edge to
+had open, or the inbox when there was none. **Esc** does the same when nothing on the page has the focus
+or when the focus is in the Settings menu. When the focus is in a page's own controls, or something is open
+(a dialog, a menu, the account menu, a role picker), Esc only closes that, so nothing you type is lost. You can still drag the sidebar's edge to
 resize it, or fold it: folded, it keeps **Back to app** as an arrow, and the menu comes back when you
 open it again.
 

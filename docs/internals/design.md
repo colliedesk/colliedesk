@@ -120,10 +120,14 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   On a wide screen Settings takes the sidebar: **Back to app** (and Esc) at its head, the menu under it, the
   account row at its foot, and none of the app's places (`app-shell.tsx`, `back-to-app.tsx`). Traps: each
   page still draws its own menu from what its roles show, into the sidebar's slot (`SettingsMenuSlot` in
-  `settings-nav.tsx`), so a page tested alone keeps its menu inline; the top bar, not the sidebar, names the
-  workspace and the person there (the sidebar has no workspace row); Back to app goes to the last address
-  outside `/settings` kept in `sessionStorage`, the inbox when none; Esc never leaves while a text field,
-  select, dialog or menu has it; folded, the sidebar keeps only the Back to app arrow. A test or a page that
+  `settings-nav.tsx`), so a page tested alone keeps its menu inline; the sidebar is the "Signed in as" region
+  (the workspace name sits above the account row at its foot, as the head has no workspace row) and the top
+  bar repeats nothing until the sidebar is folded or a tablet; Back to app goes to the last address outside
+  `/settings` kept in `sessionStorage` with the workspace and person it was kept for (a sign-out clears it, and
+  another person's is ignored), the inbox when none; Esc leaves only with focus on the page body or in the
+  settings menu, looked at in the capture phase with nothing open that owns Esc (dialog, menu, account menu,
+  role picker, confirm panel), because React closes those before a bubbling listener runs; folded, the sidebar
+  keeps only the Back to app arrow. A test or a page that
   needs the app's places from Settings goes through Back to app first.
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
   screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow

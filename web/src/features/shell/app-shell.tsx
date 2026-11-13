@@ -133,8 +133,8 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
   const session = me && !signedOut ? me : undefined;
   const inSettings = Boolean(session && settingsExit && !lockedScreen);
   // The open sidebar shows the workspace and the person; it is then the region that names them. Settings has no
-  // room for the workspace at its head: the top bar names them there.
-  const sidebarNames = Boolean(session) && wide && !collapsed && !inSettings;
+  // workspace row at its head, so it shows the name above the account row at its foot.
+  const sidebarNames = Boolean(session) && wide && !collapsed;
   const search = usePalette(Boolean(session && palette));
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
@@ -156,7 +156,7 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
           <div className="rail-head settings-rail-head"><BackToApp {...settingsExit} />{toggle}</div>
           {/* Each Settings page puts its menu here (settings-nav.tsx). Folded into the rail there is no room for its names. */}
           <div className="sidebar-scroll" ref={setMenuSlot} />
-          <div className="sidebar-foot">{account}</div>
+          <div className="sidebar-foot">{session && <strong className="workspace-name">{session.workspace.name}</strong>}{account}</div>
         </div> : <nav className="app-rail" aria-label={messages.mainNavigation}>
           <div className="rail-head">
             {brand}
