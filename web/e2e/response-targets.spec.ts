@@ -9,7 +9,27 @@ import { redeemLink } from './support/browser';
 // the Targets filter finds it. Zalo is this test: a signed one-to-one message opens the conversation.
 const baseURL = servers.main;
 
+// The test's hours are open 00:00 to 23:59 every day and the first reply target is 1 h, so a message that
+// arrives within the last hour of the agent's day is due the next calendar day (the clock stops at 23:59 and
+// goes on at 00:00): its row reads "Due Sat 12:02 AM", not "today". The case is decided here from the
+// browser's own clock and that rule, never from what the product shows. The page and the product share one
+// machine, so one clock; the agent's zone is the browser's (a workspace starts in its creator's browser zone).
+const targetSeconds = 60 * 60;
+const closeSeconds = 23 * 3600 + 59 * 60;
+// Within this many seconds of the turning point, the product's receipt of the message and the test's clock
+// could fall on different sides of it: the test waits it out.
+const edgeMarginSeconds = 30;
+const localClock = (page: Page) => page.evaluate(() => {
+  const at = (date: Date, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-US', { hourCycle: 'h23', ...options }).formatToParts(date);
+  const now = new Date();
+  const part = (type: string) => Number(at(now, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).find((item) => item.type === type)?.value);
+  // Two hours on is the next calendar day whenever the message is in the last hour of its day.
+  const tomorrow = at(new Date(now.getTime() + 2 * 3600 * 1000), { weekday: 'short' }).find((item) => item.type === 'weekday')?.value ?? '';
+  return { secondsOfDay: part('hour') * 3600 + part('minute') * 60 + part('second'), tomorrow };
+});
+
 test('response targets: an admin turns them on, a new conversation is due soon on its row, in its header and details, and the filter finds it', async ({ page }) => {
+  test.setTimeout(120_000);
   const suffix = uniqueSuffix();
   const oa = `45${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const app = '1188200455';
@@ -48,6 +68,13 @@ test('response targets: an admin turns them on, a new conversation is due soon o
     return stored.ok ? 'ok' : `credential ${stored.status}`;
   }, { oa, app, secret, suffix });
   expect(added).toBe('ok');
+  // Not at the turning point: wait until the case is clear, then decide it from the clock.
+  let clock = await localClock(page);
+  while (Math.abs(clock.secondsOfDay - (closeSeconds - targetSeconds)) < edgeMarginSeconds) {
+    await page.waitForTimeout(1000);
+    clock = await localClock(page);
+  }
+  const dueToday = clock.secondsOfDay + targetSeconds <= closeSeconds;
   const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),
     sender: { id: '7800001029' }, recipient: { id: oa }, message: { msg_id: `m-${suffix}`, text: 'Máy in không in được' } });
   const timestamp = (JSON.parse(body) as { timestamp: string }).timestamp;
@@ -61,7 +88,9 @@ test('response targets: an admin turns them on, a new conversation is due soon o
     await expect(mark).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expect(mark).toHaveText(/^Due /);
-  await expect(mark).toHaveAccessibleName(/^First reply due .* today, counted in business hours$/);
+  // Due today reads "today"; due on the next day names that weekday and a time in the first hour after midnight.
+  await expect(mark).toHaveAccessibleName(dueToday ? /^First reply due .* today, counted in business hours$/
+    : new RegExp(`^First reply due ${clock.tomorrow} (12:\\d{2}|1:00) AM, counted in business hours$`));
 
   await page.locator('.conversation-row').first().click();
   await expect(page.locator('.timeline-meta .sla-mark')).toHaveText(/^Reply by /);
@@ -71,7 +100,7 @@ test('response targets: an admin turns them on, a new conversation is due soon o
   // Due is one row of the details; its menu holds each clock in full.
   await page.locator('.due-pick summary').click();
   const details = page.getByRole('region', { name: 'Targets' });
-  await expect(details).toContainText(/Due .* today/);
+  await expect(details).toContainText(dueToday ? /Due .* today/ : new RegExp(`Due ${clock.tomorrow} (12:\\d{2}|1:00) AM`));
   await expect(details).toContainText(/of business time left/);
 
   await page.goto(`${baseURL}/?sla=due_soon`);
@@ -84,6 +113,7 @@ test('response targets: an admin turns them on, a new conversation is due soon o
 // What the API holds, read as the signed-in browser does.
 const stored = (page: Page) => page.evaluate(async () => (await fetch('/api/v1/response-targets')).json() as Promise<{
   enabled: boolean; hours: { day: string; open: boolean; from?: string; to?: string }[]; warn_before_minutes: number;
+  timezone: string | null; holidays: { date: string; name: string }[]; channel_ids: string[] | null; alert_email: boolean;
   targets: Record<string, { first_response_minutes: number | null; resolution_minutes: number | null }> }>);
 const openDesk = async (page: Page, label: string) => {
   const suffix = uniqueSuffix();
@@ -127,7 +157,24 @@ test('response targets off and on again: hours and targets saved earlier are kep
   await targets.getByLabel('First reply target for Normal, in business time').fill('3');
   await targets.getByRole('button', { name: 'Save targets' }).click();
   await expect(targets.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  // Values on every part of the document, so a turn-on that dropped one would show.
+  // The zone is committed on Enter, where the person stops.
+  await hours.getByLabel('Time zone').selectOption('Europe/Paris');
+  await hours.getByLabel('Time zone').press('Enter');
+  await hours.getByRole('button', { name: 'Save business hours' }).click();
+  await expect(hours.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  // The Saved line of the first save may still be up: the API says when this one is stored.
+  await expect.poll(async () => (await stored(page)).timezone).toBe('Europe/Paris');
+  const holidays = page.getByRole('region', { name: 'Holidays' });
+  await holidays.getByLabel('Date').fill('2027-01-01');
+  await holidays.getByLabel('Name').fill('New Year');
+  await holidays.getByRole('button', { name: 'Add holiday' }).click();
+  await expect(holidays.getByText('New Year')).toBeVisible();
+  const alerts = page.getByRole('region', { name: 'Alerts' });
+  await alerts.getByRole('switch', { name: 'Email reminders and overdue alerts' }).uncheck();
+  await expect(alerts.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   const before = await stored(page);
+  expect(before).toMatchObject({ timezone: 'Europe/Paris', holidays: [{ date: '2027-01-01', name: 'New Year' }], alert_email: false });
 
   // Off keeps every saved value, and the card says which hours the next turn-on uses.
   await page.getByRole('switch', { name: 'Measure response targets' }).uncheck();
@@ -135,11 +182,61 @@ test('response targets off and on again: hours and targets saved earlier are kep
   await expect(card).toContainText('Starts with your saved hours: Monday, 07:30 to 18:00; Tuesday to Friday, 09:00 to 18:00');
   await expect(card).toContainText('Normal 3 h');
   await expect(editor(page)).toHaveCount(0);
-  expect(await stored(page)).toMatchObject({ enabled: false, hours: before.hours, targets: before.targets });
+  expect(await stored(page)).toMatchObject({ enabled: false, hours: before.hours, targets: before.targets, holidays: before.holidays, channel_ids: before.channel_ids, alert_email: before.alert_email, timezone: before.timezone });
 
   await card.getByRole('button', { name: 'Turn on response targets' }).click();
   await expect(page.getByRole('region', { name: 'Business hours' })).toBeVisible();
-  expect(await stored(page)).toMatchObject({ enabled: true, hours: before.hours, targets: before.targets, warn_before_minutes: before.warn_before_minutes });
+  expect(await stored(page)).toMatchObject({ enabled: true, hours: before.hours, targets: before.targets, warn_before_minutes: before.warn_before_minutes,
+    holidays: before.holidays, channel_ids: before.channel_ids, alert_email: before.alert_email, timezone: before.timezone });
+});
+
+test('response targets off: a channel deleted since is refused on turn-on, the editor opens to fix the scope, and measuring turns on after', async ({ page }) => {
+  await openDesk(page, 'Targets Scope Desk');
+  // Two channels, so Applies to shows; the targets are limited to the first, measured, then turned off.
+  const made = await page.evaluate(async () => {
+    const out: { id: string; name: string }[] = [];
+    for (const oa of [`46${Date.now()}1`, `46${Date.now()}2`]) {
+      const response = await fetch('/api/v1/channels', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `scope-${oa}` },
+        body: JSON.stringify({ type: 'zalo', enabled: true, config: { oa_id: oa, app_id: '1188200456' } }) });
+      out.push(await response.json() as { id: string; name: string });
+    }
+    return out;
+  });
+  const [first, second] = made;
+  await page.reload();
+  await page.getByRole('button', { name: 'Turn on response targets' }).click();
+  const applies = page.getByRole('region', { name: 'Applies to' });
+  await applies.getByRole('checkbox', { name: second.name, exact: true }).uncheck();
+  await applies.getByRole('button', { name: 'Save channels' }).click();
+  await expect(applies.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  expect((await stored(page)).channel_ids).toEqual([first.id]);
+  await page.getByRole('switch', { name: 'Measure response targets' }).uncheck();
+  await expect(page.getByRole('region', { name: 'Response targets are off' })).toBeVisible();
+
+  // The first channel goes away while measuring is off.
+  const deleted = await page.evaluate(async (id) => (await fetch(`/api/v1/channels/${id}`, { method: 'DELETE', headers: { 'Idempotency-Key': `delete-${id}` } })).status, first.id);
+  expect(deleted).toBeLessThan(300);
+  await page.reload();
+  const turnOn = page.getByRole('button', { name: 'Turn on response targets' });
+  await expect(turnOn).toBeEnabled();
+  await turnOn.click();
+
+  // The refusal is shown beside the scope, nothing was dropped, and measuring is still off.
+  const scope = page.getByRole('region', { name: 'Applies to' });
+  await expect(scope.getByText('This workspace has no such channel.')).toBeVisible();
+  await expect(scope.getByRole('checkbox', { name: /^Deleted channel/ })).toBeChecked();
+  expect(await stored(page)).toMatchObject({ enabled: false, channel_ids: [first.id] });
+  await expect(page.getByRole('region', { name: 'Response targets are off' })).toBeVisible();
+
+  await scope.getByRole('checkbox', { name: /^Deleted channel/ }).uncheck();
+  await scope.getByRole('checkbox', { name: second.name, exact: true }).check();
+  await scope.getByRole('button', { name: 'Save channels' }).click();
+  await expect(scope.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  // The one live channel ticked is every channel.
+  expect((await stored(page)).channel_ids).toBeNull();
+  await page.getByRole('button', { name: 'Turn on response targets' }).click();
+  await expect(page.getByRole('switch', { name: 'Measure response targets' })).toBeChecked();
+  expect(await stored(page)).toMatchObject({ enabled: true, channel_ids: null });
 });
 
 test.describe('on a phone', () => {
