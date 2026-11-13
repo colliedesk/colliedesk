@@ -525,6 +525,7 @@ func Routes() []Route {
 	return []Route{
 		{http.MethodGet, "/api/v1/config", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
+		{http.MethodGet, cloudWorkspacesPath, auth.PermissionPublic},
 		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/auth/invite-preview", auth.PermissionPublic},
@@ -882,6 +883,12 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			// workspace host) is dropped, so the browser stops sending it.
 			if viaCookie && errors.Is(err, auth.ErrInvalidCredential) {
 				clearSessionCookie(response)
+			}
+			// Only the browser holding the cookie learns that its own session was revoked; the web app then
+			// ends the sign-in provider's session too, as on Sign out.
+			if errors.Is(err, auth.ErrSessionRevoked) {
+				writeError(response, http.StatusUnauthorized, "session_revoked", "This session was signed out from another device or by an admin. Sign in again.")
+				return
 			}
 			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
 			return

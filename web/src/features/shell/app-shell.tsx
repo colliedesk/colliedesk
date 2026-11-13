@@ -5,6 +5,7 @@ import { messages } from '../../messages';
 import { PanelRightIcon, PenIcon } from '../../ui/icons';
 import { lazyPart, Part } from '../../ui/lazy-part';
 import { AccountMenu } from './account-menu';
+import type { WorkspaceSwitch } from './account-menu';
 import type { PaletteSource } from './palette-entries';
 import { useSidebarLayout } from './sidebar-layout';
 import type { SidebarChannel, SidebarView } from './sidebar-items';
@@ -42,6 +43,8 @@ interface AppShellProps {
   onSignOut?: () => void;
   signOutFailed?: boolean;
   signingOut?: boolean;
+  // workspaceSwitch lets the account menu offer the person's other workspaces.
+  workspaceSwitch?: WorkspaceSwitch;
   children: ReactNode;
 }
 
@@ -115,7 +118,7 @@ function usePalette(enabled: boolean) {
 }
 
 export function AppShell({ me, appVersion, signedOut = false, brand, links, footLinks, page, palette, quickStart, onNewConversation, views, channels, canInvite = false,
-  notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
+  notice, lockedScreen, onSignOut, signOutFailed, signingOut, workspaceSwitch, children }: AppShellProps) {
   useDismissibleTooltips();
   const sidebar = useSidebarLayout();
   const { collapsed } = sidebar.layout;
@@ -156,7 +159,8 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
           {session && <div className="sidebar-foot">
             {canInvite && <InviteLink />}
             {footLinks}
-            <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />
+            <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut}
+              workspaceSwitch={workspaceSwitch} />
           </div>}
           {!session && !signedOut && footLinks}
         </nav>

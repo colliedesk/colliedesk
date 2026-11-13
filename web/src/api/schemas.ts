@@ -22,6 +22,7 @@ export const workspaceSchema = z.object({
 export const renamedWorkspaceSchema = workspaceSchema.extend({ continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'RenamedWorkspace'>>;
 export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
+export const cloudWorkspacesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema) }) satisfies z.ZodType<Generated<'CloudWorkspaces'>>;
 export const serverFeatures = ['gmail', 'microsoft', 'autofix', 'ai_server', 'hosted_mail', 'cloud_sign_in', 'billing', 'signup'] as const;
 export type ServerFeature = (typeof serverFeatures)[number];
 const featureSchema = z.object({ enabled: z.boolean() });

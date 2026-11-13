@@ -19,6 +19,11 @@ import (
 // failure of the system, and a caller must not tell the client its credential is bad.
 var ErrInvalidCredential = errors.New("invalid credential")
 
+// ErrSessionRevoked is the refusal of a browser's session cookie whose session was revoked or whose person was
+// deactivated, on its own workspace's host or APP_ORIGIN. It is an ErrInvalidCredential too. The web app ends
+// the sign-in provider's session on it, as on Sign out, so a revoked browser needs a new code.
+var ErrSessionRevoked = fmt.Errorf("%w: the session was revoked", ErrInvalidCredential)
+
 // lastSeenInterval is how old last_seen_at must be before a request writes it again. One agent tool call
 // authenticates several times in a moment; writing the row each time made those requests queue on it.
 const lastSeenInterval = time.Minute
@@ -90,6 +95,15 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 				&principal.Agent.TimezoneOverride, &principal.Agent.SetupGuideHidden, &principal.SessionID, &trialEndsAt, &scope, &tokenPermissions, &legacy,
 				&trialExtended, &createdAt, &lastSeenAt, &activeAgents, &roles, &limit.ID, &limit.Name, &limit.System, &limit.Permissions, &principal.Resource)
 		if errors.Is(err, pgx.ErrNoRows) {
+			if viaCookie && !oauthAccess {
+				revoked, err := sessionRevokedHere(ctx, tx, workspaceID, hash)
+				if err != nil {
+					return err
+				}
+				if revoked {
+					return ErrSessionRevoked
+				}
+			}
 			return fmt.Errorf("%w: session revoked, expired or not found", ErrInvalidCredential)
 		}
 		if err != nil {
@@ -325,4 +339,25 @@ func (s *Service) Logout(ctx context.Context, principal Principal) error {
 		return fmt.Errorf("logout: %w", err)
 	}
 	return nil
+}
+
+// sessionRevokedHere reports whether the person's session with hash was revoked, or its person deactivated,
+// read in the session's own workspace. It is told only on that workspace's own host (or APP_ORIGIN), so a
+// cookie carried to another workspace's host learns nothing there. An expired session is not revoked.
+func sessionRevokedHere(ctx context.Context, tx pgx.Tx, workspaceID string, hash []byte) (bool, error) {
+	var slug string
+	var revoked bool
+	err := tx.QueryRow(ctx, `SELECT w.slug, s.revoked_at IS NOT NULL OR a.deactivated_at IS NOT NULL
+		FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
+		WHERE s.workspace_id=$1 AND s.token_hash=$2 AND s.scope IS NULL`, workspaceID, hash).Scan(&slug, &revoked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read why the session ended: %w", err)
+	}
+	if host, onWorkspaceHost := workspacehost.Slug(ctx); onWorkspaceHost && host != slug {
+		return false, nil
+	}
+	return revoked, nil
 }

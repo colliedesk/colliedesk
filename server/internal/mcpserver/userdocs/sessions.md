@@ -17,9 +17,17 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
   acts with the Agent role only, even if you hold more. Any other sign-in acts with all your roles.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
-shows **You are signed out** instead of the inbox. On instances with cloud sign-in it opens the
-sign-in page instead and signs the browser out of the sign-in provider too, so the next sign-in
-asks for a code again. To sign in again on a revoked device, ask an admin for a new link.
+shows **You are signed out** instead of the inbox. To sign in again on a revoked device, ask an admin for
+a new link.
+
+On instances with cloud sign-in, a browser without a valid session opens the sign-in page instead.
+- After you choose **Sign out** (in the account menu, or for **This device** in Sessions), the page says
+  **You are signed out** and also signs the browser out of the sign-in provider. The next sign-in asks
+  for a code again.
+- The same happens on a device whose session was revoked: from **Revoke** in Sessions on another device,
+  by an admin, or because the person was deactivated. That device needs a new code to sign in again.
+- A session that expired does not sign you out of the sign-in provider. While that sign-in is still valid
+  in this browser, the page signs you back in without a code.
 
 ## Connected AI apps
 

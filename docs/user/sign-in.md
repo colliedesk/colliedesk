@@ -29,6 +29,24 @@ agent in at least one workspace. If it belongs to several workspaces, choose the
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does
 not receive or manage that Colliedesk session.
 
+Where each workspace has its own address (`<workspace>.colliedesk.com` on Colliedesk Cloud), the main
+address (`app.colliedesk.com`) takes a person with one workspace straight to it. A person with several
+workspaces is asked which one to open every time.
+
+### Switch workspace
+
+When your email belongs to more than one workspace, the account menu (your name at the foot of the
+sidebar, or your avatar on a phone) lists your other workspaces under **Switch workspace**.
+
+1. Open the account menu.
+2. Select the workspace to open.
+
+It opens signed in, without a new code, while your cloud sign-in in this browser is still valid. You
+stay signed in to the workspace you came from. The list comes from the email you verified with the
+sign-in provider. It leaves out a workspace where you were deactivated. If you signed in with a link
+and not with cloud sign-in, the menu has no list. In that case, open `app.colliedesk.com/sign-in` to
+choose a workspace.
+
 ## Create a workspace (hosted cloud)
 
 New to Colliedesk Cloud? Use the same sign-in form. When the

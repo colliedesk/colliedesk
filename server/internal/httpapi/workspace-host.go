@@ -79,7 +79,13 @@ func (a *API) finishBrowserSignIn(response http.ResponseWriter, request *http.Re
 	result.Token = ""
 	result.ContinueURL = &address
 	clearSessionCookie(response)
-	setWorkspaceHint(response, result.Workspace.Slug)
+	// A person with another workspace is asked which one each time APP_ORIGIN opens, so no hint sends them
+	// into this one, and a hint left by an earlier sign-in goes.
+	if result.OtherWorkspaces {
+		clearWorkspaceHint(response)
+	} else {
+		setWorkspaceHint(response, result.Workspace.Slug)
+	}
 	return true
 }
 

@@ -437,6 +437,28 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CloudWorkspaceChoices'}
+  /api/v1/auth/cloud/workspaces:
+    get:
+      operationId: listCloudWorkspaces
+      summary: List the workspaces of a verified identity
+      security:
+        - bearerAuth: []
+      x-permission: public
+      description: >-
+        Lists, by name, the workspaces where the verified email of the identity provider's bearer token is
+        an active agent, so a person signed in to one workspace can switch to another. The email comes
+        from the identity token only, never from a Colliedesk session or agent token, and deactivated
+        agents are left out. On a workspace's own host the token's authorized party may be that host's
+        origin. Reads nothing else and writes nothing.
+      responses:
+        '200':
+          description: The verified email's workspaces, sorted by slug; empty when it has none.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CloudWorkspaces'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/auth/cloud/signup:
     post:
       operationId: signUpCloud
@@ -8937,7 +8959,11 @@ components:
         attachments and export keep working.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error401:
-      description: Authentication failed
+      description: >-
+        Authentication failed. Error code `session_revoked` when a browser's session cookie was revoked
+        (signed out from another device, by an admin, or by deactivating its person); it is said only to the
+        browser holding that cookie, on its own workspace's host or APP_ORIGIN. Every other refusal (expired,
+        unknown, another host's cookie, any bearer) is `unauthorized`.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error403:
       description: >
@@ -10593,6 +10619,13 @@ components:
         workspaces:
           type: array
           minItems: 2
+          items: {$ref: '#/components/schemas/WorkspaceChoice'}
+    CloudWorkspaces:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
           items: {$ref: '#/components/schemas/WorkspaceChoice'}
     SignInRole:
       type: string

@@ -20,6 +20,9 @@ type Redeemed struct {
 	// ContinueURL is where a browser that signed in on APP_ORIGIN continues: its workspace's own host,
 	// signed in there by a one-time token in the address's fragment. Absent everywhere else.
 	ContinueURL *string `json:"continue_url,omitempty"`
+	// OtherWorkspaces is true when a cloud sign-in's verified email is also an active agent of another
+	// workspace: APP_ORIGIN then asks which workspace to open instead of sending the browser to this one.
+	OtherWorkspaces bool `json:"-"`
 }
 
 // ErrLinkOfAnotherWorkspace refuses a one-time link on the host of a workspace it does not belong to.

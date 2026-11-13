@@ -350,6 +350,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/cloud/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the workspaces of a verified identity
+         * @description Lists, by name, the workspaces where the verified email of the identity provider's bearer token is an active agent, so a person signed in to one workspace can switch to another. The email comes from the identity token only, never from a Colliedesk session or agent token, and deactivated agents are left out. On a workspace's own host the token's authorized party may be that host's origin. Reads nothing else and writes nothing.
+         */
+        get: operations["listCloudWorkspaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/cloud/signup": {
         parameters: {
             query?: never;
@@ -6893,6 +6913,9 @@ export interface components {
         CloudWorkspaceChoices: {
             workspaces: components["schemas"]["WorkspaceChoice"][];
         };
+        CloudWorkspaces: {
+            workspaces: components["schemas"]["WorkspaceChoice"][];
+        };
         /**
          * @description Kept for older clients that redeem a pairing link: `agent` limits the new session to the Agent role; `admin` is refused unless the link's person may sign in unrestricted.
          * @enum {string}
@@ -10632,7 +10655,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Authentication failed */
+        /** @description Authentication failed. Error code `session_revoked` when a browser's session cookie was revoked (signed out from another device, by an admin, or by deactivating its person); it is said only to the browser holding that cookie, on its own workspace's host or APP_ORIGIN. Every other refusal (expired, unknown, another host's cookie, any bearer) is `unauthorized`. */
         Error401: {
             headers: {
                 [name: string]: unknown;
@@ -11365,6 +11388,29 @@ export interface operations {
                     "application/json": components["schemas"]["CloudWorkspaceChoices"];
                 };
             };
+        };
+    };
+    listCloudWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The verified email's workspaces, sorted by slug; empty when it has none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudWorkspaces"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     signUpCloud: {

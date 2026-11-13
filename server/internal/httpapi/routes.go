@@ -5,7 +5,7 @@ import "net/http"
 func (a *API) routeSpecs() []routeSpec {
 	routes := Routes()
 	handlers := []http.HandlerFunc{
-		a.getConfig, a.exchangeCloudSession, a.signUpCloud,
+		a.getConfig, a.exchangeCloudSession, a.listCloudWorkspaces, a.signUpCloud,
 		a.redeem, a.previewInvite, a.redeemOperatorLink, a.confirmOperatorCode, a.signInOperatorWithCloud, a.getOperatorMe, a.operatorLogout, a.createOperatorToken,
 		a.getOperatorStatus, a.getOperatorConfig, a.changeOperatorConfig, a.checkOperatorConfig, a.listOperatorConfigVersions, a.restoreOperatorConfigVersion,
 		a.confirmOperatorConfigTrial, a.revertOperatorConfigTrial, a.listOperatorProducts, a.addOperatorProduct, a.setOperatorProductOnSale,

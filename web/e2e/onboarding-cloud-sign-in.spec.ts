@@ -41,13 +41,14 @@ test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk 
   expect((await exchange(provider.token({ email }), 'https://evil.example')).status(), 'foreign origin').toBe(403);
   expect((await page.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
 
-  // A visitor whose cloud session ended lands on the sign-in page, not on a self-host pairing hint,
-  // from the inbox address and from one that matches no page alike.
+  // A visitor without a Colliedesk session lands on the sign-in page, not on a self-host pairing hint,
+  // from the inbox address and from one that matches no page alike. Only Sign out marks the page signed
+  // out and ends the identity provider session (onboarding-cloud-signup.spec.ts).
   const visitor = await page.context().browser()!.newPage();
   for (const path of ['/', '/no-such-route']) {
     await visitor.goto(`${baseURL}${path}`);
-    await expect(visitor).toHaveURL(`${baseURL}/sign-in?signed_out=true`);
-    await expect(visitor.getByRole('alert')).toContainText('You are signed out');
+    await expect(visitor).toHaveURL(`${baseURL}/sign-in`);
+    await expect(visitor.getByText('You are signed out.')).toHaveCount(0);
     await expect(visitor.getByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeVisible();
     await expect(visitor.getByText(/collie pair/)).toHaveCount(0);
   }

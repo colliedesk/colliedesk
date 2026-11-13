@@ -10,10 +10,11 @@ import { browserTimeZone } from '../lib/format-date';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
-  cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
+  cloudWorkspaceChoicesSchema, cloudWorkspacesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
+import { forgetSignOut, rememberSignOut } from '../lib/sign-out-intent';
 import type { Message, WorkspaceChoice } from './schemas';
 
 // UnauthorizedError means the browser has no valid session: never signed in, expired, or revoked.
@@ -264,6 +265,7 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
   if (!response.ok) noteFailure(path, init, response);
   // Signed out: there is no session to go by, so nothing waits for one.
   if (response.status === 401 && path === '/api/v1/auth/me') knowPermissions(null);
+  await noteRevoked(response);
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
@@ -279,6 +281,7 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
 // keeps its code and message instead of becoming a bare failure.
 async function trialOfferCall<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+  await noteRevoked(response);
   if (response.status === 401) throw new UnauthorizedError();
   if (!response.ok) {
     const refused = await invalidRequest(response);
@@ -291,6 +294,7 @@ async function trialOfferCall<T>(path: string, schema: z.ZodType<T>, init?: Requ
 export async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
   if (!response.ok) noteFailure(path, init, response);
+  await noteRevoked(response);
   if (!response.ok) throw failure(response.status);
 }
 
@@ -350,6 +354,21 @@ async function exchangeCloudSession(token: string, workspaceSlug?: string, next?
   return redeemedSchema.parse(await response.json());
 }
 
+// The workspaces of the identity provider's verified email, for the account menu's switch. The token is the
+// only proof sent: the workspace's cookie stays home, since its agent's address is not proven.
+async function listCloudWorkspaces(token: string) {
+  const response = await fetch('/api/v1/auth/cloud/workspaces', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`API ${response.status}`);
+  return cloudWorkspacesSchema.parse(await response.json()).workspaces;
+}
+
+// noteRevoked remembers a 401 session_revoked as the person's Sign out: someone revoked this browser's session,
+// so the sign-in page ends the identity provider's session too. Whichever call learns it first counts, since the
+// server clears the cookie with that answer and later calls are plain 401s.
+async function noteRevoked(response: Response) {
+  if (response.status === 401 && (await errorCode(response.clone())) === 'session_revoked') rememberSignOut();
+}
+
 async function errorCode(response: Response): Promise<unknown> {
   try {
     return ((await response.json()) as { error?: { code?: unknown } }).error?.code;
@@ -395,14 +414,15 @@ export const api = {
   exchangeCloudSession,
   signUpCloud,
   requestExportLink,
-  logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
+  listCloudWorkspaces,
+  logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }).then(rememberSignOut),
   // next is the page a sign-in on APP_ORIGIN opens on the workspace's own host (continue_url).
   redeem: (token: string, label: string, next?: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   }),
   // What an invite link is, without using it; any other token answers 401 like an invalid link.
   previewInvite: (token: string) => request(`/api/v1/auth/invite-preview?${new URLSearchParams({ token }).toString()}`, invitePreviewSchema),
-  me: () => request('/api/v1/auth/me', meSchema),
+  me: () => request('/api/v1/auth/me', meSchema).then((me) => { forgetSignOut(); return me; }),
   // The AI app a consent page shows, and whether redirect_uri is its own (only then may the page go there).
   describeOAuthClient: (client_id: string, redirect_uri: string) =>
     request(`/api/v1/oauth/client?${new URLSearchParams({ client_id, redirect_uri }).toString()}`, oauthClientSchema),
