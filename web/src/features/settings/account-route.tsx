@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { can } from '../../lib/can';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
+import { rememberSignOut } from '../../lib/sign-out-intent';
 import { messages } from '../../messages';
 import { useBillingShown } from '../billing/billing-shown';
 import { saveState } from './save-feedback';
@@ -18,8 +19,12 @@ export function AccountRoute() {
   const mcpAddress = `${config.data?.app_origin || window.location.origin}/mcp`;
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
   const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
-  // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
-  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); void refresh('roles'); } });
+  // Revoking this device's own session is the person's Sign out: reloading me leads to the sign-in page, which
+  // ends the identity provider's session too.
+  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: (_, id) => {
+    if (sessions.data?.items.some((session) => session.current && session.id === id)) rememberSignOut();
+    void refresh('sessions'); void refresh('me'); void refresh('roles');
+  } });
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
   // Your name also shows in the team list and the assignee lists.
   const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });

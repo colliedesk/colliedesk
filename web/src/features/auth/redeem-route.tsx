@@ -28,7 +28,8 @@ export function returnToConsent(next: string | undefined): string | undefined {
   return next?.startsWith('/oauth/authorize?') || next?.startsWith('/trial-offer?') ? next : undefined;
 }
 
-export function RedeemRoute({ token, buy, trial = false, signedOut = false, next: asked }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean; next?: string }) {
+// workspace is the workspace chosen ahead, by the account menu's switch: the sign-in opens it without the chooser.
+export function RedeemRoute({ token, buy, trial = false, signedOut = false, next: asked, workspace }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean; next?: string; workspace?: string }) {
   const consent = returnToConsent(asked);
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -59,7 +60,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   // The website's trial and buy links only lead to cloud sign-in: its chunk downloads beside the config
   // instead of after it. A page without a sign-in form lets what waited for one go.
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);
-  const [workspaceSlug, setWorkspaceSlug] = useState<string>();
+  const [workspaceSlug, setWorkspaceSlug] = useState<string | undefined>(workspace);
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);

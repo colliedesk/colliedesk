@@ -4,6 +4,7 @@ import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { PanelRightIcon } from '../../ui/icons';
 import { AccountMenu } from './account-menu';
+import type { WorkspaceSwitch } from './account-menu';
 import { useSidebarLayout } from './sidebar-layout';
 import type { SidebarChannel, SidebarView } from './sidebar-items';
 import { InviteLink, SidebarActions, SidebarLists } from './sidebar-parts';
@@ -35,6 +36,8 @@ interface AppShellProps {
   onSignOut?: () => void;
   signOutFailed?: boolean;
   signingOut?: boolean;
+  // workspaceSwitch lets the account menu offer the person's other workspaces.
+  workspaceSwitch?: WorkspaceSwitch;
   children: ReactNode;
 }
 
@@ -70,7 +73,7 @@ const subscribeNames = (change: () => void) => {
 };
 
 export function AppShell({ me, appVersion, signedOut = false, brand, links, footLinks, page, onSearch, onNewConversation, views, channels, canInvite = false,
-  notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
+  notice, lockedScreen, onSignOut, signOutFailed, signingOut, workspaceSwitch, children }: AppShellProps) {
   useDismissibleTooltips();
   const sidebar = useSidebarLayout();
   const { collapsed } = sidebar.layout;
@@ -108,7 +111,8 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
           {session && <div className="sidebar-foot">
             {canInvite && <InviteLink />}
             {footLinks}
-            <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />
+            <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut}
+              workspaceSwitch={workspaceSwitch} />
           </div>}
           {!session && !signedOut && footLinks}
         </nav>

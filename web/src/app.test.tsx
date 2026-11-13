@@ -223,7 +223,9 @@ for (const path of ['/settings/billing', '/no-such-route']) {
     const router = open(path);
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/sign-in');
-    expect(screen.getByRole('alert')).toHaveTextContent('You are signed out.');
+    // Only the person's own Sign out says so (and ends the identity provider session); a visit without a
+    // session signs straight back in when the identity provider still has one.
+    expect(screen.queryByText('You are signed out.')).not.toBeInTheDocument();
     expect(screen.queryByText(/ask your workspace admin for a new link/i)).not.toBeInTheDocument();
   });
 }

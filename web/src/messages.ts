@@ -56,6 +56,7 @@ export const messages = {
   privacyURL: 'https://colliedesk.com/privacy',
   pricingURL: 'https://colliedesk.com/pricing',
   chooseWorkspace: 'Choose a workspace',
+  switchWorkspace: 'Switch workspace',
   loadingCloudSignIn: 'Loading sign in…',
   handoffFailed: 'This sign-in link has expired or was already used. Sign in again.',
   cloudSignInFailed: 'Cloud sign-in failed. Try again.',

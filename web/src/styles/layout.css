@@ -139,6 +139,8 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .account-popover strong, .account-popover span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-popover span { color: var(--text-3); font-size: var(--fs-small); }
 .account-popover button { width: 100%; }
+.account-workspaces { display: grid; gap: var(--space-1); min-width: 0; }
+.account-workspaces a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* A panel is the white working surface: list, thread, details, settings. */
 .panel { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }

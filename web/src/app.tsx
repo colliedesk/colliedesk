@@ -3,6 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { Link, Navigate, Outlet, createRootRouteWithContext, redirect, rootRouteId, createRoute, createRouter, useRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
+import { signedOutByPerson } from './lib/sign-out-intent';
 import { ContactsPart, contactPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
@@ -133,10 +134,11 @@ function AppLayout() {
   const buying = signedOut && inBilling ? readCheckoutIntent() : undefined;
   if (buying && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ buy: buying }} replace />;
   if (buying && config.isPending) return <div className="app-main" />;
-  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
-  // The marker makes that page end the identity provider session too, so the next sign-in is a
-  // deliberate one (sign out, a revoked or an expired session alike).
-  if (signedOut && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ signed_out: true }} replace />;
+  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link. Only a
+  // person's own Sign out ends the identity provider session too (the marker), so the next sign-in asks for
+  // a code. A session that ended any other way (expired, revoked, or none yet on APP_ORIGIN, whose desks run
+  // on their own hosts) keeps it: the page signs the person straight back in or asks which workspace.
+  if (signedOut && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={signedOutByPerson() ? { signed_out: true } : {}} replace />;
   if (signedOut && config.isPending) return <div className="app-main" />;
   // Signed out or locked, the setup flow gets the same screens as any page, in the frame of every page.
   if (inSetup && !signedOut && !locked && !notFound) return <Outlet />;
@@ -161,6 +163,11 @@ function AppLayout() {
     : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
   const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
+  // Where each desk runs on its own host and the identity provider proves who the person is, the account menu
+  // offers their other workspaces.
+  const cloud = config.data?.cloud_sign_in;
+  const workspaceSwitch = config.data?.workspace_hosts && cloud?.enabled && cloud.publishable_key
+    ? { publishableKey: cloud.publishable_key, appOrigin: config.data.app_origin } : undefined;
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     page={page} views={locked ? undefined : sidebar.views} channels={locked ? undefined : sidebar.channels}
     onSearch={locked || !shows('conversations:read') ? undefined : () => askTheInbox('search')}
@@ -170,7 +177,7 @@ function AppLayout() {
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
       {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
         && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
-    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
+    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
       {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}
@@ -538,19 +545,21 @@ const resultsShareRoute = createRoute({
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
-  // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
+  // `signed_out` marks the arrival right after the person signed out (see AppLayout). `workspace` is the
+  // workspace the account menu's switch chose: the sign-in on APP_ORIGIN opens it without asking again. `intent=trial` is the
   // website's "Start free trial" link: the page is titled for a new team. `next` is the page a hand-off
   // from APP_ORIGIN opens once its token (in the fragment, `#handoff=…`) signs in on this workspace host.
   // Without a hand-off, `next` is an AI app's consent page (/oauth/authorize?…) the sign-in returns to.
   // `plan=team25` is the plan the website's trial link came for: the trial starts as usual and the plan
   // picker puts that plan first. Any other plan is dropped here.
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; plan?: PlanIntent; signed_out?: true; intent?: 'trial'; next?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; plan?: PlanIntent; signed_out?: true; intent?: 'trial'; next?: string; workspace?: string } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
     ...(parsePlanIntent(search.plan) ? { plan: 'team25' as const } : {}),
     ...(search.signed_out === true ? { signed_out: true as const } : {}),
     ...(search.intent === 'trial' ? { intent: 'trial' as const } : {}),
     ...(typeof search.next === 'string' ? { next: search.next } : {}),
+    ...(typeof search.workspace === 'string' && search.workspace !== '' ? { workspace: search.workspace } : {}),
   }),
   // `buy` and `plan` stay in the address through the identity provider's round trip, so the address decides
   // which plan, if any, this sign-in is for (see signInCheckoutIntent, signInPlanIntent). The utm_* keys and
@@ -558,10 +567,10 @@ const signInRoute = createRoute({
   // would turn `utm_content=07` into a number (see rememberSignupAttribution).
   beforeLoad: ({ search, location, preload }) => { if (preload) return; signInCheckoutIntent(search); signInPlanIntent(search); rememberSignupAttribution(location.searchStr); },
   component: function SignIn() {
-    const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
+    const { token, buy, signed_out: signedOut, intent, next, workspace } = signInRoute.useSearch();
     const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });
     if (handoff) return <HandoffSignIn token={handoff} next={next} />;
-    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} next={next} />;
+    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} next={next} workspace={workspace} />;
   },
 });
 

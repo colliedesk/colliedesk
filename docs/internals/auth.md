@@ -275,6 +275,35 @@ email claim defaults
 to `email`. `CLERK_PUBLISHABLE_KEY` is returned only by the public config endpoint and is safe for the
 browser; no Clerk Secret Key is required because Colliedesk never calls Clerk's Backend API.
 
+### Switching workspace
+
+Decided 2026-11-13 (owner: "best practice"): inside a workspace, the account menu lists the person's other
+workspaces, and choosing one signs them in there without a new code. Code: `listCloudWorkspaces`
+(`httpapi/cloud-auth-handlers.go`), `auth.Service.CloudWorkspaces`, `web/src/features/shell/other-workspaces.tsx`.
+
+- **The proof is the identity token, never the session.** `GET /api/v1/auth/cloud/workspaces` takes the
+  Clerk session token as bearer, verifies it like the exchange (its `azp` must be `APP_ORIGIN` or this
+  host's own origin) and answers the active workspaces of that email, from the same lookup as the 409
+  `workspaces` chooser. A workspace session's email is not proven: an admin can invite any address and use
+  the link, so a lookup by it would tell an outsider whether an address uses Colliedesk elsewhere. The route
+  is `notForPeople` (no session or agent token reaches it); the web sends it with `credentials: 'omit'`.
+  Tests: `TestTheVerifiedEmailListsOnlyItsOwnWorkspaces`, `TestOnlyAVerifiedIdentityTokenOfThisHostListsWorkspaces`.
+- **A workspace host can get that token.** Cloud's Clerk is a production instance on the root domain (its
+  publishable key names `clerk.colliedesk.com`), so one Clerk session serves `app.` and every
+  `<slug>.colliedesk.com`; the host's own sign-in page already exchanges it. The menu loads Clerk in its own
+  chunk when the pointer or the focus reaches the avatar, only where `workspace_hosts` and cloud sign-in are
+  both on.
+- **The switch is the existing chooser and hand-off.** Each entry links to `APP_ORIGIN/sign-in?workspace=<slug>`;
+  that page exchanges the live Clerk session with `workspace_slug` and hands the browser off to the chosen
+  host (one-minute `handoff` link). The session on the host it came from is untouched.
+- **Only the person's own Sign out ends the Clerk session.** The account menu's Sign out and Sessions' Sign out
+  of this device remember it (`web/src/lib/sign-out-intent.ts`) and open `/sign-in?signed_out=true`, which signs
+  Clerk out, so the next sign-in asks for a code. A session that ended any other way (expired, revoked, or
+  none on `APP_ORIGIN`, whose desks run on their own hosts) opens `/sign-in` without the marker: a live Clerk
+  session signs the person straight back in, or shows the chooser. A revoked session therefore does not lock a
+  browser whose Clerk session is still valid out; deactivating the person (or removing them) does, because
+  the exchange skips deactivated agents.
+
 ### Cloud sign-up (hosted cloud only)
 
 `POST /api/v1/auth/cloud/signup {workspace_name}` starts a 14-day trial for a Clerk-verified email
