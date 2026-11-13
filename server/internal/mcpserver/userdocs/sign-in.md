@@ -45,7 +45,7 @@ usual, and [Plan and billing](billing.md) then shows Team 25 first. No other `pl
 
 The same page asks three short questions, each with a fixed list of answers: what you want
 Colliedesk to do for you first, your role, and where you heard of Colliedesk. Your first goal decides
-which step [Quick start](setup-guide.md) (the setup guide) lists and recommends first (for example **Import from Freshdesk** when you are moving
+which step the [setup guide](setup-guide.md) in the inbox lists and recommends first (for example **Import from Freshdesk** when you are moving
 off a helpdesk), and the answers help us send you emails that fit. On the trial page the web form needs
 an answer to each. A visitor who came to buy (`/sign-in?buy=founding`) or for a plan
 (`plan=team25`) is asked for the workspace name only: the three questions sit under "Tell us about your

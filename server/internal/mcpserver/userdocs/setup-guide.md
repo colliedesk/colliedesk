@@ -1,27 +1,29 @@
 # Setup guide
 
-**Quick start**, the ring icon beside your workspace name at the top of the sidebar, shows what is left before
-your team can receive and answer customer email, and what else is worth trying. It is on every page while a step
-is left. Its name says how many ("Quick start, 4 steps left"), and an amber dot on it says a **Set up** step is
-among them. Each step is read again every time, so a step that comes undone (an import that is undone, or the
-only teammate deactivated) brings it back.
+The setup guide sits in the bottom-left corner of the inbox and shows what is left before your team
+can receive and answer customer email. It stays in the inbox, also when conversations exist, until
+the four core steps are done (receive email, import, invite, answer the first email) or you hide it.
+**Turn on AI drafts** and **Set reply targets** are offers: their rows show where they stand, but
+they never keep the guide open or the setup unfinished. The guide stays hidden while the four core
+steps are done. Each step is read again every time, so a step that comes undone (an import that is
+undone, or the only teammate deactivated) brings the guide back.
 
-Press it to open the checklist under it; press it again, press **Esc** or click elsewhere to close it.
-Nothing floats over the conversation list: the checklist opens only when you ask.
-
-- The head: **Get *your workspace* ready**, how many steps are done (for example "2 of 6"), and a bar with one
-  segment per step, the done ones in green.
-- **Set up**: **Receive customer email**, **Import from Freshdesk** and **Answer your first email**.
-- **Try more**: **Turn on AI drafts**, **Set reply targets**, **Invite your team**, and **Connect an AI agent**
-  (a page of the docs; it is not counted).
-- A done step is ticked and struck through. The next step to do is highlighted. A step still to do shows the
-  minutes it takes.
-- **Skip these** beside **Try more** leaves those steps out of the list and the count; **Show these** brings them
-  back. Your browser keeps this choice.
-- Once every step is done or skipped, the icon goes. In the folded sidebar it sits under the logo; on a phone,
-  in the top row beside the logo.
-
+Heading: **Finish setting up**, with how many steps are done (for example "1 of 6") and a progress bar.
 Each step opens its screen of the [setup flow](#setup-flow).
+
+## Open and folded
+
+The guide floats over the foot of the conversation list, clear of the reply box and its **Send reply**
+button on the right.
+
+- **Folded**, it is one button: **Finish setting up** with a progress ring and the count. Press it to
+  open the steps.
+- **Open**, it shows every step. **Minimize** (the arrow in its header) or **Esc** folds it again.
+- A new workspace with no conversation and no mailbox yet opens the guide on its own: there is
+  nothing for it to cover. Once a mailbox or a conversation exists it starts folded, so it never
+  covers **Send yourself a test message** or a conversation.
+- Your browser remembers whether you left it open or folded. This is separate from **Hide**.
+- On a phone the guide shows on the conversation list and steps aside while a conversation is open.
 
 | Step | Done when | Opens | More |
 |---|---|---|---|
@@ -32,8 +34,8 @@ Each step opens its screen of the [setup flow](#setup-flow).
 | **Invite your team** | A teammate joined. An invite that was sent but not used yet reads "Invite sent". | `/setup/invite` | [Invites](invites.md) |
 | **Answer your first email** | A reply was delivered to a customer. A note does not count, and neither does a reply marked "Delivery failed". The reply to your own test message counts. | `/setup/first_reply` | The inbox |
 
-The step that fits your sign-up goal comes first in its group and is marked as the recommended one.
-The row you should do next is highlighted.
+The step that fits your sign-up goal comes first and is marked as the recommended one. The row
+you should do next has the main button.
 
 ## Setup flow
 
@@ -116,20 +118,20 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
 ## Who sees it
 
 - **Admins** see all six steps.
-- **Everyone else** sees only the steps their roles can take, in Quick start and in the setup flow:
+- **Everyone else** sees only the steps their roles can take, in the guide and in the setup flow:
   email and the import need `channels:update`, AI drafts `ai_settings:update` and `ai_settings:read`
   (to read the AI settings), reply targets `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
   Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email is everyone's step.
-- To hide Quick start for you only, open **Settings → Preferences** and turn off **Show the setup guide**; turn
-  it on to bring it back (with **Try more**, if this browser skipped it). Other team members keep their own choice.
+- **Hide** removes the guide from your inbox only. Other team members keep their own choice.
+  To bring it back, open **Preferences** and turn on **Show the setup guide**.
 
-Quick start refreshes when the inbox changes; it does not poll on its own.
+The guide refreshes when the inbox changes; it does not poll on its own.
 
 ## Brand-new inbox
 
-An empty inbox says so and, once a mailbox exists, offers **Send yourself a test message**: it puts a first
-conversation in the inbox so you can answer it. Quick start's amber dot points at what to set up first.
+In an empty inbox without a mailbox the guide opens on its own and replaces the old list of buttons. **Send yourself a
+test message** stays: it puts a first conversation in the inbox so you can answer it.
 
 ## API and AI agents
 

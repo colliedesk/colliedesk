@@ -17,7 +17,8 @@ cancel the subscription in the billing portal (**Open billing portal**).
 Every new cloud workspace starts a 14-day free trial with every feature, for up to 25 agents. No card is needed.
 
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
-  button in it, a plain one: [Quick start](setup-guide.md) keeps the next setup step.
+  button in it. In a new workspace the [setup guide](setup-guide.md)'s next step stays the main button; Choose a plan is
+  a plain one.
 - A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
   The banner then says the trial was extended.
 - One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does

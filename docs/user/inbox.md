@@ -25,7 +25,7 @@ On a computer the sidebar on the left starts open. From the top it has:
   you: your name and address, which open the account menu.
 
 The top bar over each page names the page. In its middle is the search field, "Search *your workspace*" with
-**Ctrl K** (**⌘K** on a Mac) at its end: it opens the [search palette](#search-from-any-page). **Help**, on the
+**Ctrl K** (**⌘K** on a Mac) at its end: it opens the search palette (see **Search from any page** below). **Help**, on the
 right, opens the Colliedesk docs in a new tab. On a phone the search field is the search icon of that bar.
 
 The sidebar can be made wider or narrower: drag its right edge, or focus the
@@ -413,7 +413,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 
 **Start a new conversation**
 - Select **New conversation**, the pen at the top of the sidebar beside the workspace name (on a phone, in the top
-  row beside the logo), or **New conversation** under **Actions** in the [search palette](#search-from-any-page).
+  row beside the logo), or **New conversation** under **Actions** in the search palette.
 - **To**: find the customer by name or email, or select **Add a new customer** and enter a name and an
   email address. The new customer is saved together with the conversation: if the email is refused,
   neither is stored. An address that is already a customer says so under the email field, with
