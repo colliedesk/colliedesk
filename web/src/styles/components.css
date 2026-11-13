@@ -1,8 +1,8 @@
 /* List header: status tabs, then search beside one Filter menu. */
 .inbox-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
-.status-tabs { display: flex; gap: 10px; margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
+.status-tabs { display: flex; gap: var(--space-2); margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
 .status-tabs::-webkit-scrollbar { display: none; }
-.status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: var(--control, 32px); min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
+.status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: var(--control, 32px); min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
 .status-tabs input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
 .status-tabs label:hover { color: var(--text-1); }
 .status-tabs label:has(input:checked) { color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
@@ -651,11 +651,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Row time: the short form for a mouse (the full stamp in the tooltip and for keyboard focus), the full stamp
    for a screen reader. Without hover there is no tooltip: a row from today shows its time (the Today heading
    gives the day), an earlier row its date and time. */
-.conversation-row[data-tip]::after { left: auto; right: var(--space-3); top: auto; bottom: calc(100% - var(--space-1)); translate: 0 0; }   /* above the row, never over its subject */
+/* Hovering a row shows only its select box (I1-d): the full time is the time's own tooltip, right-aligned under it, so it
+   stays inside its row and is never clipped by the list. Keyboard focus on the row shows it too. */
+.conversation-row :is(time, .row-due)[data-tip]::after { left: auto; right: 0; top: calc(100% + var(--space-1)); translate: 0 0; }
+.conversation-row:focus-visible time[data-tip]::after { opacity: 1; }
 .conversation-row .time-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .conversation-row .time-touch { display: none; }
 @media (hover: none) {
-  .conversation-row[data-tip]::after { display: none; }
+  .conversation-row time[data-tip]::after { display: none; }
   .conversation-row .time-short { display: none; }
   .conversation-row .time-touch { display: inline; }
 }
@@ -1346,8 +1349,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .conversation-source .customer-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
 .property-row > .tag-names { color: var(--text-1); font-size: var(--fs-ui); padding-left: var(--space-8); }
 .property-menu .tag-create input { width: 100%; }
-/* A status tab's count (I1-a "Open 23"): quieter than the word, never part of the tab's name. */
-.status-tabs .tab-count { margin-left: var(--space-1); color: var(--text-3); font-weight: 500; font-variant-numeric: tabular-nums; }
+/* A status tab's count reads with its word (I1-a "Open 23"), in the same colour and weight, never part of the tab's name. */
+.status-tabs .tab-count { margin-left: var(--space-1); font-variant-numeric: tabular-nums; }
 /* The composer's row (I1-a, I7-a, I2-b): Send with its shortcut first, Send and resolve beside it, the tools on the right. */
 .composer-actions .composer-tools-start { margin-left: auto; }
 .primary-action .send-keys { margin-left: var(--space-2); border: 0; background: none; padding: 0; color: inherit; font: inherit; font-size: var(--fs-label); opacity: 0.72; }
@@ -1356,8 +1359,5 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .composer-card[data-kind="note"] .composer-actions .saved-reply-button kbd { display: inline; }
 @media (pointer: coarse) { .primary-action .send-keys { display: none; } }
 .composer-card[data-compact="true"] .send-keys { display: none; }
-/* With counts, six tabs share the list column: a tighter gap; the row still scrolls when it must. */
-.list-pane .status-tabs { gap: var(--space-2); }
-.status-tabs .tab-count { margin-left: 3px; }
 /* AI drafts write replies, so a private note leaves their tool out and keeps one row (I2-b). */
 .composer-card[data-kind="note"] .composer-actions :is(.ai-tool, a.saved-reply-button[href="/settings/ai"]) { display: none; }

@@ -20,13 +20,16 @@ const row = (updated_at: string): Conversation => ({ latest_reply_number: 0,
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-test('a row exposes its full timestamp to a screen reader and to keyboard focus, not only to a mouse hover', () => {
+test('a row exposes its full timestamp to a screen reader, and its time shows it as a tooltip; the row itself has none (I1-d)', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} />);
   const button = screen.getByRole('button', { name: /example request/i });
   expect(button).toHaveAccessibleName(/Oct 15, 9:05 AM/);
-  expect(button).toHaveAttribute('data-tip', 'Oct 15, 9:05 AM');
+  expect(button).not.toHaveAttribute('data-tip');
   expect(button).not.toHaveAttribute('title');
+  const time = button.querySelector('time')!;
+  expect(time).toHaveAttribute('data-tip', 'Oct 15, 9:05 AM');
+  expect(time).not.toHaveAttribute('title');
 });
 
 test('the Today group becomes Earlier when midnight passes while the page stays open', () => {

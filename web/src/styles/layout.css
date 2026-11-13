@@ -245,11 +245,10 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .details-section { padding-inline: var(--space-4); }
   .details-panel .property-row { --label: 64px; }
 }
-/* Every status tab stays in sight in the narrower list, on the rows' left edge: smaller words, tabs closer (each keeps
-   4 px of padding on both sides and a 32 px minimum width, so they still read apart and stay easy to hit). */
+/* The narrower list keeps the tabs' words apart (12 px between them) with smaller type; a search's five tabs scroll. */
 @media (min-width: 64.01rem) and (max-width: 89.99rem) {
-  .list-pane .status-tabs { gap: 2px; }
-  .list-pane .status-tabs label { min-width: var(--control, 32px); justify-content: center; font-size: var(--fs-small); }
+  .list-pane .status-tabs { gap: var(--space-1); }
+  .list-pane .status-tabs label { font-size: var(--fs-small); }
 }
 /* With the sidebar or rail beside it the thread of a 705–1439 px screen is narrow: the reply box keeps its tools and both send
    buttons on one row by giving up some padding and spacing. */
