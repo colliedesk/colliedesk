@@ -20,11 +20,13 @@ International from day one. Target customers are in the US, EU, UK and Australia
 - No country-specific defaults (currency, phone format, timezone, holidays) in code.
 - Data residency: hosted regions will be US and EU; nothing in the design may assume one region.
 
-## Clean-room rule
+## Learning from other projects
 
-Feature ideas may come from public product descriptions of other helpdesks (Freshdesk, Zendesk,
-Help Scout). Code must not. Nobody working on this repository may open, copy, translate or
-paraphrase the source code of another helpdesk, especially a copyleft-licensed one. Everything here is written from this spec.
+Feature ideas may come from other helpdesks (Freshdesk, Zendesk, Help Scout, open-source ones):
+their product descriptions and, for open-source ones, their source code. Ideas only: never copy,
+translate or port code line by line from a copyleft-licensed project or from code under a
+non-open-source license. Everything here is written from this spec. The rule is in AGENTS.md
+("Learning from other projects").
 
 ## Authentication (modelled on T3 Code's environment auth)
 

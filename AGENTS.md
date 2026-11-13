@@ -209,8 +209,10 @@ the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; foll
 - Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
   logged in). Add `ROADMAP_CLOSING="N"` to check a PR that closes issue N.
 
-## Clean room
+## Learning from other projects
 
-Do not open, copy, translate or paraphrase the source code of other helpdesks, especially
-copyleft-licensed ones. Product ideas come from public descriptions only. Code copied from
-MIT-licensed projects needs its notice in `THIRD-PARTY-NOTICES.md`.
+Reading the public source code of other helpdesks and tools to learn how they solve a problem is
+fine; take the idea, then write Colliedesk's own code for it. Never copy, translate or port code
+line by line from a copyleft-licensed project (GPL, AGPL) or from code under a non-open-source
+license (for example an `enterprise/` folder). Code copied from MIT- or Apache-licensed projects
+keeps its notice in `THIRD-PARTY-NOTICES.md`.
