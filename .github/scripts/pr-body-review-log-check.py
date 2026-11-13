@@ -33,7 +33,7 @@ def main(path):
     print("The description retells how review went (rounds, finding counts, severities):\n"
           f"{quoted}\n"
           'Review is done before the pull request opens; say who reviewed it and the result, for example '
-          '"Reviewed by <model>, in <harness>; no open findings."', file=sys.stderr)
+          '"Reviewed by <model>, in <harness>; no open findings." Then re-run the roadmap job.', file=sys.stderr)
     return 1
 
 
