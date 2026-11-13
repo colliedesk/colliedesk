@@ -1,10 +1,9 @@
-import { useId, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
+import { api } from '../../../api/client';
 import { channelsApi } from '../../../api/channels';
-import { responseTargetsApi, responseTargetsSchema, weekdays } from '../../../api/response-targets';
-import type { ResponseTargets, ResponseTargetsChange, Weekday } from '../../../api/response-targets';
+import { responseTargetsApi, weekdays } from '../../../api/response-targets';
+import type { ResponseTargets, Weekday } from '../../../api/response-targets';
 import { messages } from '../../../messages';
 import { useBillingShown } from '../../billing/billing-shown';
 import { saveState, useSaveFeedback } from '../save-feedback';
@@ -14,57 +13,18 @@ import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
 import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
 import type { Duration, Unit } from './target-duration';
+import { OffCard } from './targets-off-card';
+import { Card, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
 
-// Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
-// the document with the rest as it was read; admins change it, agents read it.
+// Settings → Response targets: one document the server keeps whole. While measuring is off the page is one
+// card; on, each card edits its part and saves the document with the rest as it was read. Admins change it,
+// agents read it.
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
 type Priority = (typeof priorities)[number];
-
-function fieldErrors(error: unknown): Record<string, string> {
-  if (!(error instanceof InvalidRequestError)) return {};
-  const fields = error.detail?.fields;
-  return fields && typeof fields === 'object' ? Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
-}
-
-// What a PUT takes: the document without what only the server writes or what is the reader's own, with the
-// version it was read at (updated_at): a save after someone else's is refused, 409 changed_elsewhere.
-const withoutStamp = ({ enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
-
-// A card's save state: someone else's save in between is said in words of this page.
-const cardState = (save: Parameters<typeof saveState>[0]) => {
-  const state = saveState(save);
-  return save.isError && save.error instanceof ChangedElsewhereError ? { ...state, error: m.changedElsewhere } : state;
-};
-
-function useSave() {
-  const client = useQueryClient();
-  return useMutation({
-    // Refused for someone else's save: the page shows theirs; what is being typed stays (the cards keep an edited form).
-    onError: (error) => {
-      if (!(error instanceof ChangedElsewhereError)) return;
-      const current = responseTargetsSchema.safeParse(error.detail?.current);
-      if (current.success) client.setQueryData<ResponseTargets>(['response-targets'], (old) => ({ ...current.data, my_alert_email: current.data.my_alert_email ?? old?.my_alert_email }));
-      else void client.invalidateQueries({ queryKey: ['response-targets'] });
-    },
-    mutationFn: (value: ResponseTargetsChange) => responseTargetsApi.set(value),
-    // A save answers the workspace's document; the reader's own email choice is not in it, so it is kept.
-    onSuccess: (saved) => {
-      client.setQueryData<ResponseTargets>(['response-targets'], (current) => ({ ...saved, my_alert_email: saved.my_alert_email ?? current?.my_alert_email }));
-      void client.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
-}
-
-function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
-  return <section className="settings-card" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>
-    <div className="settings-body">{children}</div>
-  </section>;
-}
 
 export function TargetsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -76,6 +36,14 @@ export function TargetsRoute() {
   const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
+  // What the server refused when measuring was turned on, kept so the editor opens to fix it while still off.
+  // Its words go as soon as the document changed (any card saved), the editor stays until measuring is on.
+  const [refusal, setRefusal] = useState<{ fields: Record<string, string>; at: string | null }>();
+  const measuring = doc.data?.enabled;
+  const refused = refusal && refusal.at === (doc.data?.updated_at ?? null) ? refusal.fields : undefined;
+  const deleted = channels.data ? (doc.data?.channel_ids ?? []).filter((id) => !live.some((item) => item.id === id)) : [];
+  const canChoose = live.length >= 2 || deleted.length > 0 || Boolean(refusal);
+  useEffect(() => { if (measuring) setRefusal(undefined); }, [measuring]);
   return <main className="settings-page panel targets-page">
     <header><h1>{m.heading}</h1><p>{m.description}</p></header>
     <div className="settings-layout">
@@ -84,21 +52,24 @@ export function TargetsRoute() {
         {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
         {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
           : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
+          : !doc.data.enabled && !refusal ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />
           : <>
-              <OnCard doc={doc.data} canManage={isAdmin} />
-              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} />
-              <HolidaysCard doc={doc.data} canManage={isAdmin} />
-              <TargetsCard doc={doc.data} canManage={isAdmin} />
+              {doc.data.enabled ? <OnCard doc={doc.data} canManage={isAdmin} />
+                : <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} repairing onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />}
+              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} refused={refused} />
+              <HolidaysCard doc={doc.data} canManage={isAdmin} refused={refused} />
+              <TargetsCard doc={doc.data} canManage={isAdmin} refused={refused} />
               <AlertsCard doc={doc.data} canManage={isAdmin} />
-              {/* One channel: nothing to choose (design rule: only real choices). */}
-              {live.length >= 2 && <AppliesCard doc={doc.data} canManage={isAdmin} channels={live.map((item) => ({ id: item.id, name: item.name }))} />}
+              {/* One channel: nothing to choose (design rule: only real choices), unless the scope names a deleted one. */}
+              {canChoose && <AppliesCard doc={doc.data} canManage={isAdmin} channels={live.map((item) => ({ id: item.id, name: item.name }))} refused={refused} />}
             </>}
       </div>
     </div>
   </main>;
 }
 
-interface CardProps { doc: ResponseTargets; canManage: boolean }
+// refused: what the server refused on the turn-on that opened the editor, by field, shown beside it.
+interface CardProps { doc: ResponseTargets; canManage: boolean; refused?: Record<string, string> }
 
 function OnCard({ doc, canManage }: CardProps) {
   const save = useSave();
@@ -112,7 +83,7 @@ function OnCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZone: string }) {
+function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { workspaceZone: string }) {
   // What is typed here lies over the document, field by field: a field nobody touched always shows the
   // document as it is now (after another card's save, or someone else's), a touched one keeps its words.
   const [zoneEdit, setZoneEdit] = useState<string>();
@@ -121,7 +92,7 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
-  const server = fieldErrors(save.error);
+  const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
   const byDay = (day: Weekday) => ({ ...(doc.hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' }), ...dayEdits[day] });
   const change = (day: Weekday, part: Partial<ResponseTargets['hours'][number]>) => {
@@ -175,13 +146,13 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
   </Card>;
 }
 
-function HolidaysCard({ doc, canManage }: CardProps) {
+function HolidaysCard({ doc, canManage, refused }: CardProps) {
   const [date, setDate] = useState('');
   const [name, setName] = useState('');
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
-  const server = fieldErrors(save.error);
+  const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
   const sorted = [...doc.holidays].sort((a, b) => a.date.localeCompare(b.date));
   const local = !date ? m.dateRequired : doc.holidays.some((item) => item.date === date) ? m.holidayTaken : undefined;
@@ -219,7 +190,7 @@ function DurationField({ id, label, unitLabel, value, errorId, onChange }: { id?
   </>;
 }
 
-function TargetsCard({ doc, canManage }: CardProps) {
+function TargetsCard({ doc, canManage, refused }: CardProps) {
   // Typed values lie over the document box by box ("urgent.first", "warn"), number and unit together;
   // an untouched box follows the document.
   const [edits, setEdits] = useState<Partial<Record<string, Duration>>>({});
@@ -229,7 +200,7 @@ function TargetsCard({ doc, canManage }: CardProps) {
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
-  const server = fieldErrors(save.error);
+  const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
   const priorityName = (priority: Priority) => messages.priorities[priority];
   const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
@@ -282,14 +253,18 @@ function TargetsCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id: string; name: string }[] }) {
+function AppliesCard({ doc, canManage, channels, refused }: CardProps & { channels: { id: string; name: string }[] }) {
   const every = channels.map((item) => item.id);
+  // Ids of the scope that name no channel any more: listed ticked, for the person to untick. None is dropped on its own.
+  const deleted = (doc.channel_ids ?? []).filter((id) => !every.includes(id));
   // The choice follows the document until someone here changes it.
   const [chosenEdit, setChosenEdit] = useState<string[]>();
   const chosen = chosenEdit ?? doc.channel_ids ?? every;
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
+  const server = { ...refused, ...fieldErrors(save.error) };
+  const refusedScope = Object.entries(server).find(([field]) => field.startsWith('channel_ids'))?.[1];
   const id = useId();
   if (!canManage) return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}><ul className="muted-copy">{channels.filter((item) => chosen.includes(item.id)).map((item) => <li key={item.id}>{item.name}</li>)}</ul></Card>;
   return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}>
@@ -298,12 +273,13 @@ function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id:
       setChecked(true);
       if (chosen.length === 0 || feedback.pending) return;
       // Every channel is null: a channel added later is measured too.
-      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
+      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length && every.every((item) => chosen.includes(item)) ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
     }}>
       <fieldset className="tg-channels"><legend className="sr-only">{m.appliesHeading}</legend>
-        {channels.map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
+        {[...deleted.map((id) => ({ id, name: m.deletedChannel(id) })), ...channels].map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
           onChange={(event) => { feedback.touch(); setChosenEdit(event.target.checked ? [...chosen, item.id] : chosen.filter((other) => other !== item.id)); }} /><span>{item.name}</span></label>)}
       </fieldset>
+      {refusedScope && <p className="error-copy" role="alert">{refusedScope}</p>}
       {checked && chosen.length === 0 && <p className="error-copy" role="alert">{m.pickOne}</p>}
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveApplies)}</button>{feedback.status}</span>
     </form>
