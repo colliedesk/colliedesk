@@ -1,0 +1,27 @@
+name: PR body
+
+# The description states the result of review, not how review went. Runs on `edited` too, so
+# fixing the description re-checks it without a new push. The body is read from the event file,
+# never interpolated into the shell.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  review-log:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check rules (bodies from merged pull requests)
+        run: python3 -I tests/pr-body-review-log-check-test.py
+      - name: The description states the review result, not its rounds
+        run: |
+          set -eu
+          jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.md"
+          python3 -I .github/scripts/pr-body-review-log-check.py "$RUNNER_TEMP/pr-body.md"
