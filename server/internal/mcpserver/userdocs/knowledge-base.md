@@ -324,7 +324,7 @@ articles that fit a conversation by themselves, in their own language and in eac
 are never read.
 
 To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
-AI**. From then on drafts and suggestions skip it in every language; people and the help center
+AI** (on the right; on a phone, under the text). From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
 it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
 token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
