@@ -122,7 +122,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   on; the numbers follow the filters on screen. While you search, the tab counts the results when they fit
   on one page. The API gives the same numbers with `counts=true` on `GET /api/v1/conversations`
   (`status_counts`).
-- Start a search with **Search** (from any page, **Ctrl K**, or **⌘K** on a Mac). The list then shows its search
+- Start a search from the top bar's search field (from any page, **Ctrl K**, or **⌘K** on a Mac): type your words and
+  choose **See all results** (see **Search from any page** above). The list then shows its search
   box, **Search conversations**, above the status tabs, with your words in it, for as long as the search is on;
   refine the words there, or select its **×** to clear the search. An empty box closes again when you press
   **Esc** or move on.
@@ -246,8 +247,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 ## Saved views
 
 **Views** (the bookmark icon next to Sort, beside the search box) keeps sets of filters under a name. It shows
-while you search or a filter is on; with neither, open the search box with **Search** to reach it. The sidebar
-lists your views at all times.
+while you search or a filter is on; with neither, search from the top bar or turn a filter on to reach it. The
+sidebar lists your views at all times.
 - Set the filters, sort and search you want, then under **Save these filters** type a name, choose **Only
   me** or **Everyone in the workspace**, and select **Save view**.
 - Select a view to open its filters. The view that matches the list on screen is marked.
