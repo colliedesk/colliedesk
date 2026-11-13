@@ -372,9 +372,9 @@ test('the hours line says what the preset will set and names the hours the serve
   expect(sent[0].body).toMatchObject({ hours: week('10:00', '19:00') });
 });
 
-test('hours already saved are named as the hours in effect, not as something the preset sets', async () => {
+test('hours already saved are named as the saved hours the preset uses, not as hours in effect while measuring is off', async () => {
   serve({ setup: progress({}, undefined, { kept: true, day_minutes: 540, hours: week('08:00', '17:00') }), doc: () => ({ ...targetsDoc, hours: week('08:00', '17:00') }) });
   open('/setup/reply_targets');
   expect(await title('Choose when a reply is due')).toBeInTheDocument();
-  expect(await screen.findByText('Business hours in effect, kept by the preset: Monday to Friday, 08:00 to 17:00, Europe/Berlin')).toBeInTheDocument();
+  expect(await screen.findByText('Uses your saved business hours: Monday to Friday, 08:00 to 17:00, Europe/Berlin')).toBeInTheDocument();
 });

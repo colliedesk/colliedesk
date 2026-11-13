@@ -8,6 +8,8 @@ export const targetsMessages = {
   startsWith: (kept: boolean, hours: string, zone: string, replies: string) => `Starts with${kept ? ' your saved hours' : ''}: ${hours}, ${zone} · first reply ${replies}. You can change all of it.`,
   noTargetShort: 'no target',
   turnOn: 'Turn on response targets',
+  fixFirst: 'Fix what is marked below, then turn on again.',
+  deletedChannel: (id: string) => `Deleted channel (${id.slice(0, 8)})`,
   startLoadFailed: 'The hours it starts with could not be loaded.',
   onHeading: 'Targets on',
   onLead: 'Turning off hides every target; your settings stay saved.',

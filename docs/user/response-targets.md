@@ -38,7 +38,7 @@ Urgent 1 h, High 2 h, Normal 8 h, Low 1 day), with **Due soon** at 30 minutes. I
 the same targets the setup flow saves. **Turn on response targets** saves them and starts measuring in
 one step, so the clock never runs against a week with no open day. Business hours or targets saved
 earlier are never replaced: the line then names them ("Starts with your saved hours: …") and turning on
-keeps them. Late conversations show in the inbox (the row marks and the Targets filter). Once they are
+keeps them, and a reminder saved as none stays none. If the server refuses the turn-on because something saved is no longer valid (a channel in **Applies to** that was deleted, holidays that close every open day), the page opens the editor under the card, still off, with the server's words beside the field: fix it, then press the button again. A deleted channel is listed ticked as "Deleted channel"; nothing is dropped from the scope unless you untick it. Late conversations show in the inbox (the row marks and the Targets filter). Once they are
 on, the page is the editor below, and the **Measure response targets** switch turns them off again with
 every saved value kept.
 

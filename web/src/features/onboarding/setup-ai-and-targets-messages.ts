@@ -68,7 +68,7 @@ export const replyTargetsMessages = {
   dayNote: (day: string) => `In business hours. A day is one business day of your hours: ${day}.`,
   // The hours come from the server (what a workspace without any starts with), the same text Settings gives.
   hours: (hours: string, zone: string, fromBrowser: boolean) => `Will set these business hours: ${hours}, ${zone}${fromBrowser ? ' (from your browser)' : ''}`,
-  ownHours: (hours: string, zone: string) => `Business hours in effect, kept by the preset: ${hours}, ${zone}`,
+  ownHours: (hours: string, zone: string) => `Uses your saved business hours: ${hours}, ${zone}`,
   change: 'Change',
   exampleLabel: (preset: string) => `Example: what your team sees in Today with ${preset}`,
   example: [

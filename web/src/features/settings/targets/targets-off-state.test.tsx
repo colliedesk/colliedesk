@@ -7,7 +7,10 @@ import type { ResponseTargets } from '../../../api/response-targets';
 // Settings → Response targets while measuring is off (docs/user/response-targets.md): one card, no editor,
 // and a turn-on that starts with sensible hours.
 const mocks = vi.hoisted(() => {
-  class InvalidRequestError extends Error { detail?: Record<string, unknown> }
+  class InvalidRequestError extends Error {
+    detail?: Record<string, unknown>;
+    constructor(message: string, detail?: Record<string, unknown>) { super(message); this.detail = detail; }
+  }
   class ConflictError extends InvalidRequestError {}
   class ChangedElsewhereError extends ConflictError {}
   const api = { me: vi.fn(), config: vi.fn(), billing: vi.fn(), setupProgress: vi.fn() };
@@ -85,7 +88,7 @@ test('hours saved earlier are kept: the card names them, and turning on sends th
   const saved = week('08:00', '17:00');
   const targets = { urgent: target(30, 120), high: none, normal: target(240, 540), low: none };
   api.setupProgress.mockResolvedValue({ ...setup(), reply_target_hours: { kept: true, day_minutes: 540, hours: saved } });
-  responseTargetsApi.get.mockResolvedValue(off({ hours: saved, targets, warn_before_minutes: 60, timezone: 'Europe/Paris' }));
+  responseTargetsApi.get.mockResolvedValue(off({ hours: saved, targets, warn_before_minutes: 60, timezone: 'Europe/Paris', updated_at: '2026-11-10T00:00:00Z' }));
   show();
   const card = await screen.findByRole('region', { name: 'Response targets are off' });
   expect(await within(card).findByText('Starts with your saved hours: Monday to Friday, 08:00 to 17:00, Europe/Paris · first reply Urgent 30 min · High no target · Normal 4 h · Low no target. You can change all of it.')).toBeInTheDocument();
@@ -122,4 +125,68 @@ test('the holiday help does not contradict itself', async () => {
   const holidays = await screen.findByRole('region', { name: 'Holidays' });
   expect(within(holidays).queryByText(/Days off count as business hours/)).not.toBeInTheDocument();
   expect(within(holidays).getByText('No holidays added: every open weekday counts.')).toBeInTheDocument();
+});
+
+// A document the server refuses on turn-on (a channel deleted since, holidays that close every open day) has
+// to stay fixable while measuring is off.
+const refusal = (fields: Record<string, string>) => new mocks.InvalidRequestError('The response targets are not valid.', { fields });
+const gone = '33333333-3333-4333-8333-333333333333';
+const live = '44444444-4444-4444-8444-444444444444';
+const channel = (id: string, name: string) => ({ id, name, type: 'zalo', deleted_at: undefined });
+
+test('a turn-on refused for a channel deleted since opens the editor with the server\'s words, still off, and drops no id on its own', async () => {
+  const saved = week('08:00', '17:00');
+  api.setupProgress.mockResolvedValue({ ...setup(), reply_target_hours: { kept: true, day_minutes: 540, hours: saved } });
+  responseTargetsApi.get.mockResolvedValue(off({ hours: saved, channel_ids: [gone, live], updated_at: '2026-11-10T00:00:00Z' }));
+  channelsApi.list.mockResolvedValue({ items: [channel(live, 'Hảo Đạt OA')], types: [] });
+  responseTargetsApi.set.mockRejectedValueOnce(refusal({ 'channel_ids.0': 'This workspace has no such channel.' }));
+  show();
+  const button = await screen.findByRole('button', { name: 'Turn on response targets' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  const applies = await screen.findByRole('region', { name: 'Applies to' });
+  expect(within(applies).getByText('This workspace has no such channel.')).toBeInTheDocument();
+  expect(responseTargetsApi.set).toHaveBeenCalledTimes(1);
+  expect(sent()).toMatchObject({ enabled: true, channel_ids: [gone, live] });
+  // Still off: the off card stays, the switch that turns it off does not show, and the editor is there.
+  expect(screen.getByRole('region', { name: 'Response targets are off' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Business hours' })).toBeInTheDocument();
+  expect(screen.queryByRole('switch', { name: 'Measure response targets' })).not.toBeInTheDocument();
+  // The deleted channel is listed, ticked, for the person to untick; the live one is there too.
+  const deleted = within(applies).getByRole('checkbox', { name: /^Deleted channel/ });
+  expect(deleted).toBeChecked();
+  fireEvent.click(deleted);
+  fireEvent.click(within(applies).getByRole('button', { name: 'Save channels' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
+  // Every live channel ticked is the scope "every channel" (null); the deleted one is gone only because it was unticked.
+  expect(sent()).toMatchObject({ enabled: false, channel_ids: null });
+  // The refusal's words go once the document changed; turning on again sends the corrected scope.
+  await waitFor(() => expect(within(screen.getByRole('region', { name: 'Applies to' })).queryByText('This workspace has no such channel.')).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Turn on response targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(3));
+  expect(sent()).toMatchObject({ enabled: true, channel_ids: null });
+});
+
+test('a turn-on refused for holidays that close every open day shows the server\'s words on the Holidays card', async () => {
+  const saved = week('08:00', '17:00');
+  api.setupProgress.mockResolvedValue({ ...setup(), reply_target_hours: { kept: true, day_minutes: 540, hours: saved } });
+  responseTargetsApi.get.mockResolvedValue(off({ hours: saved, holidays: [{ date: '2026-12-25', name: 'Christmas' }], updated_at: '2026-11-10T00:00:00Z' }));
+  const words = 'The holidays close every open day for the next two years: no target could ever be due.';
+  responseTargetsApi.set.mockRejectedValueOnce(refusal({ holidays: words }));
+  show();
+  const button = await screen.findByRole('button', { name: 'Turn on response targets' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  expect(await within(await screen.findByRole('region', { name: 'Holidays' })).findByText(words)).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Response targets are off' })).toBeInTheDocument();
+});
+
+test('a reminder saved as none stays none on turn-on; only a workspace that never saved the targets gets the preset\'s 30 minutes', async () => {
+  responseTargetsApi.get.mockResolvedValue(off({ warn_before_minutes: 0, updated_at: '2026-11-10T00:00:00Z' }));
+  show();
+  const button = await screen.findByRole('button', { name: 'Turn on response targets' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent()).toMatchObject({ enabled: true, warn_before_minutes: 0, targets: { normal: target(480, 1620) } });
 });

@@ -22,8 +22,10 @@ export function turnOn(doc: ResponseTargets, progress: SetupProgress, workspaceZ
     return `${messages.priorities[priority]} ${minutes ? targetText(minutes, day) : m.noTargetShort}`;
   }).join(' · ');
   const { enabled_at: _enabled, my_alert_email: _mine, ...rest } = doc;
+  // Only a workspace that never saved gets the preset's reminder; a saved 0 is its choice of none.
+  const warn = doc.updated_at === null ? 30 : doc.warn_before_minutes;
   return {
-    change: { ...rest, enabled: true, hours, targets, warn_before_minutes: doc.warn_before_minutes || (savedTargets ? 0 : 30) },
+    change: { ...rest, enabled: true, hours, targets, warn_before_minutes: warn },
     line: m.startsWith(kept, hoursText(hours), doc.timezone ?? workspaceZone, replies),
   };
 }
