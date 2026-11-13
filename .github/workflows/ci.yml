@@ -506,6 +506,21 @@ jobs:
           python3 -I .github/scripts/plugin-version-check.py "$BASE_SHA"
       - name: A closed milestone opens its AGENTS.md issue
         run: sh tests/milestone-agents-md-test.sh
+      - name: Agent context budget rules (throwaway repositories)
+        run: python3 -I tests/agent-context-budget-test.py
+      - name: AGENTS.md and CLAUDE.md do not grow without the agent-context-increase label
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'agent-context-increase') }}
+        run: |
+          set -eu
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if [ "$ALLOW" = true ]; then
+            python3 -I .github/scripts/agent-context-budget.py "$BASE_SHA" HEAD --allow-growth
+          else
+            python3 -I .github/scripts/agent-context-budget.py "$BASE_SHA" HEAD
+          fi
       - name: Release tags follow Semantic Versioning from v1.0.0
         run: sh tests/release-tag-test.sh
       - name: Release button picks the Cloud commit and the next tag

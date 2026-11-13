@@ -3,7 +3,8 @@
 
 Every AGENTS.md and CLAUDE.md in the tree loads into agent sessions, so each byte costs every
 session. Growth needs the owner's agent-context-increase label (--allow-growth); moving text
-between files or cutting it always passes. Compares the merge base with the PR head.
+between files or cutting it always passes. CI passes the base branch commit and the merge commit it
+checked out, so the difference is exactly what the PR brings; no history is needed.
 
 Usage: agent-context-budget.py BASE HEAD [--allow-growth]
 """
@@ -36,7 +37,7 @@ def main():
     parser.add_argument('head')
     parser.add_argument('--allow-growth', action='store_true')
     args = parser.parse_args()
-    before = sizes(git('merge-base', args.base, args.head).strip())
+    before = sizes(args.base)
     after = sizes(args.head)
     total_before, total_after = sum(before.values()), sum(after.values())
     for path in sorted(set(before) | set(after)):
@@ -50,7 +51,8 @@ def main():
         print(f'growth accepted by the {LABEL} label')
         return 0
     print(f'Agent instructions grew by {total_after - total_before} bytes. Cut or move text so the total does '
-          f'not grow, or ask the owner to add the {LABEL} label. Agents never add that label.', file=sys.stderr)
+          f'not grow, or ask a maintainer to add the {LABEL} label and re-run the roadmap job. '
+          'Agents never add that label.', file=sys.stderr)
     return 1
 
 
