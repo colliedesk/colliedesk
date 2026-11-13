@@ -246,7 +246,12 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   // Only a read is skipped: a change goes to the server, which decides it and says why. A known session is
   // checked at once, so a read goes out in the same tick as before.
   const permission = (init?.method ?? 'GET').toUpperCase() === 'GET' ? permissionOf(path) : undefined;
-  if (permission && !(held === undefined && remembered?.has(permission))) refuseUnheld(held === undefined ? await sessionPermissions() : held, permission);
+  if (permission && !(held === undefined && remembered?.has(permission))) {
+    const mine = held === undefined ? await sessionPermissions() : held;
+    // The page that asked may have gone while the read waited for the session: a cancelled read is never sent.
+    init?.signal?.throwIfAborted();
+    refuseUnheld(mine, permission);
+  }
   const parsed = await send(path, schema, init);
   if (path === '/api/v1/auth/me') knowPermissions((parsed as { permissions?: string[] }).permissions ?? null);
   return parsed;
