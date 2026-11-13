@@ -13,9 +13,9 @@ priority are in the details.
 
 On a computer the sidebar on the left starts open. From the top it has:
 
-- the logo and the name of your workspace;
-- **Search**, which opens the inbox with its search box ready to type in (from any page, **Ctrl K**, or **⌘K** on a
-  Mac, does the same), and the pen, **New conversation**, which opens the inbox and starts one;
+- the logo and the name of your workspace (one line, cut with "…" when it is long), then
+  [Quick start](setup-guide.md) (the ring icon, while setup has a step left) and the pen, **New conversation**,
+  which opens the inbox and starts one;
 - **Inbox** with the number of open conversations, **Knowledge base** ([guide](knowledge-base.md)) and
   **Reports** (the [results](results.md));
 - **Views**: your saved views, each opening the inbox on its filters;
@@ -24,14 +24,17 @@ On a computer the sidebar on the left starts open. From the top it has:
 - at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members**), **Settings**, and
   you: your name and address, which open the account menu.
 
-The top bar over each page names the page, with **Help**, which opens the Colliedesk docs in a new tab.
+The top bar over each page names the page. In its middle is the search field, "Search *your workspace*" with
+**Ctrl K** (**⌘K** on a Mac) at its end: it opens the [search palette](#search-from-any-page). **Help**, on the
+right, opens the Colliedesk docs in a new tab. On a phone the search field is the search icon of that bar.
 
 The sidebar can be made wider or narrower: drag its right edge, or focus the
 edge and use the arrow keys. Double-click the edge to restore the default width. **Collapse sidebar** (the
 panel icon at the top) folds it into a row of icons, as does dragging the edge far to the left, and each icon is
 named when you point at it; **Expand sidebar** or dragging the edge to the right opens it again. The browser remembers the width and the choice.
 Folded, on a tablet and on a phone, the workspace name and your address move to the top bar, so you always see
-which workspace you are working in.
+which workspace you are working in. Quick start and the pen stay: stacked under the logo in the folded rail, and
+in the top row of a phone, beside the logo.
 
 On a phone the list and the conversation take turns. A conversation you open fills the screen, and its
 messages take most of it. The top row has **Back to Inbox** (the arrow), the subject (two lines at most)
@@ -49,10 +52,10 @@ page shrinks above the keyboard, the top bar and the status row step aside to ma
 waits above the box folded to one line with **Show draft** and **Use draft** (while you write, **Show draft**);
 **Insert below**, **Replace** and **Discard** are in the open draft.
 
-The [setup guide](setup-guide.md) waits in the bottom-left corner while setup is unfinished, also when
-conversations exist; folded to one button, it does not cover them. It lists **Receive customer email**,
-**Import from Freshdesk**, **Invite your team** and **Answer your first email**, each with its state. A new workspace has no conversations yet; the list then explains
-that and the guide shows what to do next. A workspace
+While setup is unfinished, [Quick start](setup-guide.md) waits beside the workspace name at the top of the
+sidebar; nothing floats over the list. Its amber dot says a step of **Set up** is left (**Receive customer email**,
+**Import from Freshdesk**, **Answer your first email**), and a press opens the steps. A new workspace has no
+conversations yet; the list then explains that. A workspace
 with an email channel also offers **Send yourself a test message**: it opens a conversation from your
 own address that you can answer, and the reply comes to your mailbox (see
 [Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list
@@ -83,6 +86,26 @@ your own, not only the default one: "support@acme.com and billing@acme.com" when
 Agents read the same in one call: `mail_switch` (the mailboxes, each with `old_help_desk`, and whether
 the workspace finished an import), `mail_through_mailbox` and `answers_before_forwarding` of `GET /api/v1/channels/email`, or of the
 MCP tool `colliedesk_email_channel_get`.
+
+**Search from any page**
+
+The search field in the top bar (or **Ctrl K**, **⌘K** on a Mac, from any page) opens the search palette over the
+page. Close it with **Esc**: the focus goes back to where it was.
+
+- With nothing typed it shows **Recent** (the last five conversations and customers you opened in this browser,
+  the newest first; nothing yet, no Recent), **Go to** (**Inbox** with its open count, **Mentions** with its unread
+  count, **Knowledge base**, **Reports**, **Settings**) and **Actions** (**New conversation**, **Invite teammates**).
+  Only the places and actions your roles allow are listed, as in the sidebar.
+- Type a name, an email address or words from a subject: **Conversations** (with their status) and **Customers**
+  that match are listed, the matching words in bold, the first row chosen. They are the same searches as the inbox
+  search box and its **Customers** list. A place or action whose name matches is listed too.
+- The last row, **See all results for "*words*" in the inbox**, opens the inbox list searched for those words in
+  every status (`/?search=words&status=all`), with the number of conversations that match.
+- **↑** and **↓** move the chosen row, **Enter** opens it, a click opens any row.
+- Recent is kept by this browser only, for each workspace; clearing the browser's site data empties it.
+
+AI agents search the same way with `colliedesk_inbox_search` (conversations) and `colliedesk_contacts_find`
+(customers); see [MCP](mcp.md).
 
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
@@ -389,7 +412,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   as a page inside Colliedesk.
 
 **Start a new conversation**
-- Select **New conversation**, the pen next to **Search** at the top of the sidebar (on a phone, next to the logo).
+- Select **New conversation**, the pen at the top of the sidebar beside the workspace name (on a phone, in the top
+  row beside the logo), or **New conversation** under **Actions** in the [search palette](#search-from-any-page).
 - **To**: find the customer by name or email, or select **Add a new customer** and enter a name and an
   email address. The new customer is saved together with the conversation: if the email is refused,
   neither is stored. An address that is already a customer says so under the email field, with
