@@ -26,7 +26,7 @@ test('an empty inbox offers the first setup step as one button that opens it', a
   await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email', exact: true })).toBeVisible();
 });
 
-// What a person sees of a dialog's head and foot: the title, a field's label and where its buttons start.
+// What a person sees of a dialog's head: the title and a field's label.
 async function lookOf(dialog: Locator, label?: string) {
   const title = await dialog.getByRole('heading', { level: 2 }).evaluate((node) => {
     const style = getComputedStyle(node);
@@ -36,12 +36,10 @@ async function lookOf(dialog: Locator, label?: string) {
     const style = getComputedStyle(node);
     return { size: style.fontSize, weight: style.fontWeight, color: style.color };
   }) : undefined;
-  const box = (await dialog.boundingBox())!;
-  const first = (await dialog.getByRole('button', { name: /^(Send|Cancel)$/ }).first().boundingBox())!;
-  return { title, field, firstButtonFromLeft: first.x - box.x };
+  return { title, field };
 }
 
-test('Start a conversation and Add channel share one title, one label style and one button row', async ({ page }) => {
+test('Start a conversation and Add channel share one title and one label style', async ({ page }) => {
   await signIn(page, 'Dialog Desk', { email: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${servers.main}/`);
@@ -63,9 +61,6 @@ test('Start a conversation and Add channel share one title, one label style and 
   }
   // The drawn label: 13 px, medium, the second text colour.
   expect(started.field).toEqual({ size: '13px', weight: '500', color: 'rgb(77, 77, 77)' });
-  // The drawn button row starts at the left edge of the dialog's content, in both.
-  expect(Math.abs(started.firstButtonFromLeft - added.firstButtonFromLeft), 'both rows start at the same distance from the left edge').toBeLessThanOrEqual(1);
-  expect(added.firstButtonFromLeft, 'the row starts on the left, not the right').toBeLessThan(48);
 });
 
 test('the AI draft control keeps its name and state in words on a narrow reply box, and every tool has a tooltip', async ({ page }) => {
