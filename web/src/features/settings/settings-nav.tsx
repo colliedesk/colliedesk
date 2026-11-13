@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { QueryClientContext } from '@tanstack/react-query';
 import { can } from '../../lib/can';
 import type { Permissions } from '../../lib/can';
@@ -36,6 +37,11 @@ const plainLink: RenderLink = (item) =>
 
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
+
+// Where the app's sidebar shows the menu while Settings has it (app-shell.tsx): an element once it is on screen, null
+// until then. Each page draws its own menu, from what its roles let it show, and this is where it goes. Without a
+// sidebar to hold it (a phone, where the list is the /settings page, or a page tested alone) the menu stays in the page.
+export const SettingsMenuSlot = createContext<HTMLElement | null | undefined>(undefined);
 
 export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean; autofix?: boolean; roles?: boolean; invites?: boolean; conversations?: boolean }
 
@@ -121,13 +127,16 @@ export function SettingsNav({ shown: given, page }: { shown: Shown; page: Settin
   // On a phone the menu is a page of its own (/settings), as the inbox list is: every other settings page
   // shows the way back to it where the menu would be (layout.css).
   const index = page === '/settings';
-  return <>
-    {!index && <a className="settings-back" href="/settings" onClick={(event) => rememberOpening(event, page)}><ChevronLeftIcon />{messages.allSettings}</a>}
+  const slot = useContext(SettingsMenuSlot);
+  const menu =
     <nav ref={nav} onClick={(event) => rememberOpening(event, page)} className={index ? 'settings-nav settings-nav-index' : 'settings-nav'} aria-label={messages.settingsSections}>
       {settingsNavGroups(shown, page).map((group, at) => <div key={group.label ?? at}>{group.label && <p className="settings-group-label">{group.label}</p>}
         <ul>{group.items.map((item) => <li key={item.label} className={item.sub ? 'settings-nav-parent' : undefined} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}
           {item.sub && <ul className="settings-nav-sub" aria-label={item.label}>{item.sub.map((sub) => <li key={sub.label}>{renderLink(sub, page)}</li>)}</ul>}</li>)}</ul>
       </div>)}
-    </nav>
+    </nav>;
+  return <>
+    {!index && <a className="settings-back" href="/settings" aria-label={messages.allSettings} onClick={(event) => rememberOpening(event, page)}><ChevronLeftIcon />{messages.settings}</a>}
+    {slot === undefined ? menu : slot && createPortal(menu, slot)}
   </>;
 }

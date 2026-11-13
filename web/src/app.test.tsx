@@ -334,7 +334,7 @@ test('going back to the billing page after the checkout was started does not sta
   expect(checkouts()).toBe(1);
 });
 
-test('billing lives in Settings: the rail keeps Settings current, the settings nav marks Plan and billing, and the trial strip is not repeated on the page that says the same', async () => {
+test('billing lives in Settings: the sidebar holds the settings menu, which marks Plan and billing, and the trial strip is not repeated on the page that says the same', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
     '/api/v1/config': () => json(200, config),
@@ -343,9 +343,10 @@ test('billing lives in Settings: the rail keeps Settings current, the settings n
   });
   open('/settings/billing');
   await screen.findByRole('heading', { name: 'Plan and billing' });
-  const rail = screen.getByRole('navigation', { name: 'Main' });
-  expect(within(rail).queryByRole('link', { name: 'Billing' })).not.toBeInTheDocument();
-  expect(within(rail).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  // Settings has the sidebar: its menu under Back to app, and none of the app's own places beside it.
+  expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Billing' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Back to app' })).toBeInTheDocument();
   const sections = screen.getByRole('navigation', { name: 'Settings sections' });
   expect(within(sections).getByRole('link', { name: 'Plan and billing' })).toHaveAttribute('aria-current', 'page');
   expect(within(sections).getByRole('link', { name: 'Members' })).toHaveAttribute('href', '/settings/members');
@@ -639,7 +640,7 @@ test('with the browser\'s key on, Autofix shows: the Fixes link with its badge',
       '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
       '/api/v1/autofix/status': () => json(200, { connected_repos: 1, needs_person: 2, running: 0 }),
     });
-    open('/settings');
+    open('/mentions');
     expect(await screen.findByRole('link', { name: 'Fixes, 2 need a person' })).toHaveAttribute('href', '/fixes');
   } finally {
     localStorage.removeItem('colliedesk.autofix');
@@ -654,7 +655,7 @@ test('Review is on the rail only where a chat channel collects messages, with th
     '/api/v1/config': () => json(200, config),
     '/api/v1/intake/summary': () => json(200, { available: true, waiting: 4, deciding: 0, scopes: [] }),
   });
-  open('/settings');
+  open('/mentions');
   expect(await screen.findByRole('link', { name: 'Review, 4 waiting' })).toHaveAttribute('href', '/review');
   cleanup();
   serve({
@@ -662,7 +663,7 @@ test('Review is on the rail only where a chat channel collects messages, with th
     '/api/v1/config': () => json(200, config),
     '/api/v1/intake/summary': () => json(200, { available: false, waiting: 0, deciding: 0, scopes: [] }),
   });
-  open('/settings');
+  open('/mentions');
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/intake/summary')).toBe(true));
   // The answer is in: nothing left to render from it.
   await act(async () => { await Promise.resolve(); });

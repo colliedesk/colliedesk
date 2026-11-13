@@ -9,7 +9,8 @@ import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
 import { closedScreen, firstOpenArea, knowledgeHome, railAreasFor } from './lib/areas';
-import { isPhone } from './lib/use-phone';
+import { isPhone, usePhone } from './lib/use-phone';
+import { beforeSettings, rememberBeforeSettings } from './features/settings/back-to-app';
 import { keepContentScroll } from './lib/content-scroll';
 import { PermissionsContext } from './lib/permissions-context';
 import type { TokenPermission } from './api/schemas';
@@ -97,6 +98,11 @@ function AppLayout() {
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
   const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
+  // Settings takes the sidebar on a wide screen: Back to app (and Esc) return to the page that was on screen before it.
+  const phone = usePhone();
+  const here = useRouterState({ select: (state) => state.location.href });
+  useEffect(() => { if (!onSignIn && !path.startsWith('/settings')) rememberBeforeSettings(here); }, [onSignIn, path, here]);
+  const backToApp = useCallback(() => router.history.push(beforeSettings()), [router]);
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const client = useQueryClient();
   // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
@@ -188,6 +194,7 @@ function AppLayout() {
       {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
         && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
+    settingsExit={inSettings && !phone && !locked && !closed && !notFound ? { href: beforeSettings(), onBack: backToApp } : undefined}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
       {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}

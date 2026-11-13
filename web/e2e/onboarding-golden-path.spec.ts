@@ -93,6 +93,8 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     // gets the reply by SMTP from the support address.
     const subject = ticketSubject(296);
     const customer = requesterEmail(296)!;
+    // Back to app returns to Reports, where the team was before Settings; the inbox is one place over.
+    await page.getByRole('link', { name: 'Back to app' }).click();
     await page.getByRole('link', { name: 'Inbox' }).click();
     await page.getByRole('button', { name: new RegExp(subject) }).click();
     const reply = `Thanks for your patience, this is Golden Desk (${suffix}).`;

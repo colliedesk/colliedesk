@@ -60,7 +60,7 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await expect(page.getByRole('switch', { name: 'Email' })).not.toBeChecked();
 
   // The composer says the reply waits; nothing written is lost.
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await page.getByRole('button', { name: new RegExp(`Web form: third-${suffix}`) }).click();
   await expect(page.getByText('Email is off: this reply is saved but not sent until the channel is on.')).toBeVisible();
 
@@ -70,7 +70,7 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await page.getByRole('table', { name: 'Support addresses' }).getByRole('link', { name: `Manage support-${suffix}@example.com` }).click();
   await page.getByRole('switch', { name: 'Email' }).click();
   await expect(page.getByRole('switch', { name: 'Email' })).toBeChecked();
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await page.getByRole('button', { name: new RegExp(`Web form: third-${suffix}`) }).click();
   await expect(page.getByText('Email is off: this reply is saved but not sent until the channel is on.')).toHaveCount(0);
 });
@@ -125,7 +125,7 @@ test('channels: a second mailbox is its own channel, a new conversation leaves f
 
   // A new conversation asks which mailbox sends it, the default chosen; it leaves from the one picked.
   const prospect = `pat-${suffix}@prospect.example`;
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await page.getByRole('button', { name: 'New conversation' }).click();
   const start = page.getByRole('dialog', { name: 'Start a conversation' });
   const from = start.getByRole('combobox', { name: 'Send from' });
