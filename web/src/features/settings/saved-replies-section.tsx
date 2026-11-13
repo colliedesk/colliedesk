@@ -75,7 +75,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
   };
   return (
     <section className="settings-card saved-replies" aria-labelledby="saved-replies-heading">
-      <div className="section-heading"><h2 id="saved-replies-heading">{messages.savedReplies}</h2><p>{savedReplyMessages.savedRepliesDescription}</p></div>
+      <div className="section-heading"><h2 id="saved-replies-heading" className="sr-only">{messages.savedReplies}</h2><p>{savedReplyMessages.savedRepliesDescription}</p></div>
       <div className="settings-body">
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {stale && <div className="saved-reply-bar"><button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{settingsMessages.reload}</button></div>}

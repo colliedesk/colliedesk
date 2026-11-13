@@ -40,4 +40,6 @@
   .role-confirm { max-height: 4.5rem; }
 }
 @media (pointer: coarse) { .role-row-actions .button, .role-row-actions button { min-height: var(--touch); } .role-save-bar:has(~ * :focus) { position: static; } }
+/* The link inside the sentence is a fingertip tall on a phone too. */
+@media (pointer: coarse), (max-width: 30rem) { .roles-make { display: inline-flex; align-items: center; min-height: var(--touch); } }
 @media (pointer: coarse) { .role-form:focus-within .role-save-bar { position: static; } }

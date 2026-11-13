@@ -116,11 +116,13 @@ test('an admin renames the workspace in General and the new name is read back', 
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
 });
 
-test('General holds the conversation numbers and points to the help center settings in the Help center area', async () => {
+test('General holds the conversation numbers, with no leftover note sending people to the help center settings', async () => {
   show('admin', [], GeneralRoute);
   const numbers = await screen.findByRole('region', { name: 'Conversation numbers' });
   expect(await within(numbers).findByText('Next: #32')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Open Help center settings' })).toHaveAttribute('href', '/knowledge/settings');
+  // The help center's settings are in Knowledge base → Settings, which the sidebar opens.
+  expect(screen.queryByText(/Now in Knowledge/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Open Help center settings' })).not.toBeInTheDocument();
 });
 
 test('an agent reads General without the workspace controls', async () => {

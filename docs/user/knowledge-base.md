@@ -395,7 +395,7 @@ it. Deleted translations are listed there too. Articles in the trash count towar
 
 ## Help center settings
 
-Open **Knowledge base → Settings**, or **Settings → General → Open Help center settings**. It needs only
+Open **Knowledge base → Settings**. It needs only
 `help_center:read` (Agent and Admin hold it), not the articles' permission: a role without
 `kb_articles:read` still finds the **Settings** tab beside **Media**, and Knowledge base in the sidebar opens it when the
 role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn

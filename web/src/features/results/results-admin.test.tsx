@@ -61,14 +61,16 @@ describe('ResultsAdmin', () => {
     expect(handlers.onWeekly).toHaveBeenCalledWith(false);
   });
 
-  it('explains why the weekly email cannot be turned on without mail settings, and still lets it be turned off', () => {
-    const handlers = renderAdmin({ weekly: { ...weekly, can_send: false } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Email me on Mondays' }));
-    expect(handlers.onWeekly).toHaveBeenCalledWith(false);
-    cleanup();
-    renderAdmin({ weekly: { ...weekly, subscribed: false, can_send: false } });
-    expect(screen.getByRole('switch', { name: 'Email me on Mondays' })).toBeDisabled();
-    expect(screen.getByText(/This server cannot send email yet\. Ask whoever runs it to set up outgoing email\./)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'How to set up outgoing email' })).toBeVisible();
+  it('shows no switch while the server cannot send the weekly email, only why and how to fix it', () => {
+    // A switch shown on beside "this server cannot send email" promises an email that never comes; one shown off
+    // would hide a choice that comes back once mail works. Until then the card says only what is true.
+    for (const subscribed of [true, false]) {
+      renderAdmin({ weekly: { ...weekly, subscribed, can_send: false } });
+      expect(screen.queryByRole('switch', { name: 'Email me on Mondays' })).toBeNull();
+      expect(screen.queryByText(/Next email/)).toBeNull();
+      expect(screen.getByText(/This server cannot send email yet\. Ask whoever runs it to set up outgoing email\./)).toBeVisible();
+      expect(screen.getByRole('link', { name: 'How to set up outgoing email' })).toBeVisible();
+      cleanup();
+    }
   });
 });

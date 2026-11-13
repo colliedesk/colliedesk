@@ -123,7 +123,7 @@ test('settings is one page per menu item, each holding its own sections', () => 
   expect(within(nav).getAllByRole('link').filter((link) => link.getAttribute('href')!.includes('#'))).toEqual([]);
   expect(within(nav).getByRole('link', { name: 'Autofix' })).toHaveAttribute('href', '/settings/autofix');
   unmount();
-  const general = render(<SettingsPage page="general" sessions={[]} invites={[]} timezone="UTC" canManageWorkspace numbersSection={<section aria-labelledby="numbers-heading"><h2 id="numbers-heading">Conversation numbers</h2></section>} showHelpCenterLink />);
+  const general = render(<SettingsPage page="general" sessions={[]} invites={[]} timezone="UTC" canManageWorkspace numbersSection={<section aria-labelledby="numbers-heading"><h2 id="numbers-heading">Conversation numbers</h2></section>} />);
   expect(screen.getByRole('heading', { level: 1, name: 'General' })).toBeInTheDocument();
   expect(regions()).toEqual(['general-heading', 'numbers-heading']);
   general.unmount();

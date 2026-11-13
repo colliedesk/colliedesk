@@ -6,6 +6,9 @@
    no action is ever below the window or inside an area that has to be scrolled to reach it. */
 .kb-frame { display: flex; flex-direction: column; gap: var(--space-3); height: 100%; min-height: 0; padding: var(--space-3) var(--space-6) var(--space-4) var(--space-4); }
 .kb-frame > * { flex: none; min-width: 0; }
+/* Settings holds a .settings-card, which puts its heading beside its fields only where its container gives both
+   room (layout.css); this page is that container, so on a phone the card folds to one column. */
+.kb-settings-page { container-type: inline-size; }
 .kb-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-width: 0; }
 /* The page title, set like the other pages' titles (IBM Plex Serif). */
 .kb-page-title { font: 500 24px/1.1 var(--font-display); letter-spacing: -0.02em; }

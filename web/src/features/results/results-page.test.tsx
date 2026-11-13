@@ -68,7 +68,10 @@ describe('ResultsPage', () => {
     const reopened = screen.getByRole('region', { name: 'Reopened within 7 days' });
     expect(within(reopened).getByText('Freshdesk does not share reopen history, so there is nothing to compare.')).toBeVisible();
     expect(within(reopened).getByRole('link', { name: '6%' })).toBeVisible();
-    expect(within(screen.getByRole('region', { name: 'Handle time' })).getByText('Colliedesk does not record time yet (issue #119).')).toBeVisible();
+    const handle = screen.getByRole('region', { name: 'Handle time' });
+    expect(within(handle).getByText('Colliedesk does not record time yet.')).toBeVisible();
+    // Customers read this page: it never points them at the project's issue tracker.
+    expect(handle).not.toHaveTextContent(/issue #\d+/);
     expect(within(screen.getByRole('region', { name: 'Conversations per week' })).getByText('6% fewer')).toBeVisible();
 
     const ai = screen.getByRole('region', { name: 'AI drafts' });

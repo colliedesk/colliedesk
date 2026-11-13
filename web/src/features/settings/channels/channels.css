@@ -208,3 +208,5 @@ a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; 
    padding grows the box, the same negative margin gives the line its height back. */
 .channels-settings :is(.notice a, .link-action, .link-button, .ch-reason a) { display: inline-block; margin-block: -7px; padding-block: 7px; }
 @media (pointer: coarse), (max-width: 30rem) { .channels-settings :is(.notice a, .link-action, .link-button, .ch-reason a) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }
+/* The guide link under the web form's submit URL is a fingertip tall on a phone. */
+@media (pointer: coarse), (max-width: 30rem) { .web-form-guide { display: inline-flex; align-items: center; min-height: var(--touch); } }

@@ -7,8 +7,8 @@ import { NumbersSection } from './numbers/numbers-section';
 import { saveState } from './save-feedback';
 import { SettingsPage } from './settings-page';
 
-// Settings → General: the workspace's name and timezone, how conversations are numbered, and the way to
-// the help center's settings, which live in the Help center area.
+// Settings → General: the workspace's name and timezone, and how conversations are numbered. The help center's
+// settings are in Knowledge base → Settings.
 export function GeneralRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -22,5 +22,5 @@ export function GeneralRoute() {
     workspaceTimezoneSave={saveState(workspaceTimezone)} workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)}
     onSetWorkspaceName={(name) => workspaceName.mutate(name)} workspaceTimezone={me.data?.workspace.timezone}
     onSetWorkspaceTimezone={(value) => workspaceTimezone.mutate(value)}
-    numbersSection={can(me.data, 'conversations:read') ? <NumbersSection /> : undefined} showHelpCenterLink={can(me.data, 'help_center:read')} />;
+    numbersSection={can(me.data, 'conversations:read') ? <NumbersSection /> : undefined} />;
 }

@@ -85,7 +85,8 @@
 .sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 2px; background: transparent; transition: background-color var(--dur-fast) var(--ease); }
 .sidebar-resizer:hover::after { background: color-mix(in srgb, var(--line-control) 55%, var(--line)); }   /* a light hint, not a bar */
 .sidebar-resizer:is([data-dragging], :focus-visible)::after { background: var(--line-control); }
-.sidebar-resizer:focus-visible { outline: none; }
+/* The ring every control shows, drawn inside the handle: the sidebar's edge would cut one drawn outside. */
+.sidebar-resizer:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 html[data-sidebar-resizing], html[data-sidebar-resizing] * { cursor: col-resize; user-select: none; }
 html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (min-width: 64.01rem) {
