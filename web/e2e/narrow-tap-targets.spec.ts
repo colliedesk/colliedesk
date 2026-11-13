@@ -82,6 +82,27 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   await expectTapSized(page.getByRole('complementary', { name: 'Customers see' }), 'email setup preview');
 });
 
+test('on a 375 px screen the Mentions tabs and Mark all read are tap-sized, and the empty list draws no line under its message', async ({ page }) => {
+  await newDesk(page, 'Mentions Tap');
+  await page.goto(`${servers.main}/mentions`);
+  const empty = page.getByText(/No unread mentions/);
+  await expect(empty).toBeVisible();
+  // The page under the message is blank: no border of the list, its pane or the inbox runs across it.
+  const below = (await empty.boundingBox())!.y + (await empty.boundingBox())!.height;
+  const lines = await page.locator('.inbox-shell').evaluate((shell, below) => [shell, ...Array.from(shell.querySelectorAll<HTMLElement>('*'))].flatMap((element) => {
+    const style = getComputedStyle(element);
+    const box = element.getBoundingClientRect();
+    // The setup guide floats over the page; its own rows are not lines of the list.
+    if (box.width === 0 || box.height === 0 || element.closest('.setup-dock')) return [];
+    const drawn = (side: 'Top' | 'Bottom') => parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none' && style[`border${side}Color`] !== 'rgba(0, 0, 0, 0)';
+    const name = `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}`;
+    return [...(drawn('Top') && box.top > below ? [`${name} top at ${Math.round(box.top)}`] : []), ...(drawn('Bottom') && box.bottom > below ? [`${name} bottom at ${Math.round(box.bottom)}`] : [])];
+  }), below);
+  expect.soft(lines, 'no line under the empty Mentions message').toEqual([]);
+  await expectTapSized(page.locator('.mentions-toolbar'), 'Mentions tabs and Mark all read');
+  await page.screenshot({ path: test.info().outputPath('mentions-empty-375.png') });
+});
+
 test('on a 375 px screen the test message conversation, its email links and the contact history link are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Mail');
   await page.goto(`${servers.main}/settings/channels/type/email`);

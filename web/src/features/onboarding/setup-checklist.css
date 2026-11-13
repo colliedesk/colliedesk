@@ -1,9 +1,12 @@
-/* The setup guide floats in the bottom-left corner of the inbox, over the foot of the conversation list:
-   the reply box and its Send button own the bottom right. Folded it is one button with the count. */
+/* The setup guide sits in the bottom-left corner of the conversation list, never over the conversation beside it:
+   the inbox grid makes the list's column its box, so open it ends inside the list border. Folded it is one button
+   with the count. The reply box and its Send button own the bottom right. */
 /* Above the list (sticky headers, row checks, tooltips) and below an open menu (16) and the account menu (20), which opens over the same corner. */
-.setup-dock { position: fixed; z-index: 15; left: calc(var(--sidebar-width) + var(--space-4)); bottom: var(--space-4); max-width: calc(100vw - var(--sidebar-width) - 2 * var(--space-4)); }
-/* The last rows scroll clear of the folded button. */
-.inbox-shell:has(> .setup-dock) .conversation-scroll { padding-bottom: calc(var(--touch) + var(--space-6)); }
+.setup-dock { position: absolute; z-index: 15; grid-column: 1 / 2; left: var(--space-4); bottom: var(--space-4);
+  display: flex; flex-direction: column; max-width: calc(100% - 2 * var(--space-4)); max-height: calc(100% - 2 * var(--space-4)); }
+.inbox-shell:has(> .setup-dock) { position: relative; }
+/* The list ends above the folded button, so the button never covers a row. */
+.inbox-shell:has(> .setup-dock) > .list-pane { padding-bottom: calc(var(--touch) + 2 * var(--space-4)); }
 
 .setup-launcher { display: flex; align-items: center; gap: var(--space-2); min-height: var(--touch); max-width: 100%; padding: 0 var(--space-4) 0 var(--space-3);
   border: 0; border-radius: var(--radius-full); background: var(--surface-1); box-shadow: var(--shadow-2); color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
@@ -14,7 +17,7 @@
   background: conic-gradient(var(--accent) calc(var(--share, 0) * 1turn), var(--line-control) 0);
   mask: radial-gradient(circle, transparent 5px, #000 5.5px); }
 
-.setup-dock .setup-guide { width: min(22rem, calc(100vw - 2 * var(--space-3))); max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto;
+.setup-dock .setup-guide { width: 22rem; max-width: 100%; min-height: 0; overflow-y: auto;
   padding: var(--space-2) var(--space-4) var(--space-3); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-3); }
 .setup-guide header { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
 .setup-guide header button { min-height: 44px; padding: 0 var(--space-2); }
@@ -47,8 +50,12 @@
 .checklist-step[data-state="none"] .setup-title { color: var(--text-2); font-weight: 500; }
 .setup-time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 
-/* One pane at a time: the guide waits on the list and steps aside for an open conversation and its reply box. */
+/* One pane at a time: the guide waits on the list and steps aside for an open conversation and its reply box. The
+   list scrolls with the page there, so the guide stays in the corner of the screen and the last rows scroll clear of it. */
 @media (max-width: 44rem) {
-  .setup-dock { left: var(--space-3); bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); max-width: calc(100vw - 2 * var(--space-3)); }
+  .setup-dock { position: fixed; left: var(--space-3); bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); max-width: calc(100vw - 2 * var(--space-3));
+    max-height: calc(100dvh - 2 * var(--space-3)); }
+  .inbox-shell:has(> .setup-dock) > .list-pane { padding-bottom: 0; }
+  .inbox-shell:has(> .setup-dock) .conversation-scroll { padding-bottom: calc(var(--touch) + var(--space-6)); }
   .inbox-shell[data-view="thread"] > .setup-dock { display: none; }
 }

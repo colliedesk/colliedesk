@@ -36,3 +36,8 @@
 .mention-row[data-unread] .mention-dot { background: var(--accent); }
 .mention-row[data-unread] :is(.row-customer, .conversation-subject) { font-weight: 600; }
 .mentions-older { margin: var(--space-3) var(--space-8); }
+/* A fingertip finds Unread and All on a narrow screen or a touch screen. */
+@media (pointer: coarse), (max-width: 30rem) { .mentions-tab { min-height: var(--touch); } }
+/* On a phone the list pane draws a line along its foot; an empty Mentions list has no rows to close, so no line runs
+   under its message. */
+@media (max-width: 44rem) { .list-pane:has(.mentions-list > .conversation-scroll > .empty-copy) { border-bottom: 0; } }

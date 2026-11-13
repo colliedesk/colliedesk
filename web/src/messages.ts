@@ -200,6 +200,7 @@ export const messages = {
   previousPage: 'Previous page',
   nextPage: 'Next page',
   selectConversation: 'Select a conversation to read its timeline.',
+  nothingToOpen: 'Nothing to open here.',
   messageBody: 'Message body',
   messageKind: 'Message type',
   savedReplies: 'Saved replies',
