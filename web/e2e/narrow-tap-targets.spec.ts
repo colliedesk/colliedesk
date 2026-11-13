@@ -111,6 +111,26 @@ test('on a 375 px screen every control of the setup flow\'s email step is tap-si
   await expectIdentityVisible(page, name, email);
 });
 
+test('on a 375 px screen the links inside a sentence on Members and on a web form channel are tap-sized', async ({ page }) => {
+  await newDesk(page, 'Narrow Links');
+  // A new workspace holds only the two built-in roles, so Roles offers to make one in a sentence.
+  await page.goto(`${servers.main}/settings/members`);
+  const makeRole = page.getByRole('link', { name: 'Make a role' });
+  await expect(makeRole).toBeVisible();
+  expect((await makeRole.boundingBox())?.height, 'Make a role').toBeGreaterThanOrEqual(44);
+  await makeRole.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: test.info().outputPath('members-375.png') });
+
+  const site = 'https://narrow-links.example';
+  const form = await page.request.post(`${servers.main}/api/v1/channels`, { headers: { Origin: servers.main }, data: { type: 'web_form', name: 'Website form', config: { allowed_origins: [site] } } });
+  expect(form.status()).toBe(201);
+  await page.goto(`${servers.main}/settings/channels/type/web_form`);
+  const guide = page.getByRole('link', { name: 'Read the web form guide' });
+  await expect(guide).toBeVisible();
+  expect((await guide.boundingBox())?.height, 'Read the web form guide').toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: test.info().outputPath('web-form-375.png'), fullPage: true });
+});
+
 test('on a 375 px screen the setup flow\'s AI drafts and reply targets steps are tap-sized, each preset row included', async ({ page }) => {
   await newDesk(page, 'Narrow Offers');
   // This server has no built-in AI: the drafts step offers to add a provider.
