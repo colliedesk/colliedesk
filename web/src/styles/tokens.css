@@ -20,7 +20,6 @@
   --space-12: 48px;
   --space-16: 64px;
   --space-24: 96px;
-  --control-sm: 28px;                /* the top bar's search field */
   --touch: 44px;                     /* min touch target */
 
   /* Type */
@@ -29,7 +28,6 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --fs-ui: 14px;                     /* app body */
   --fs-label: 12px;                  /* meta, labels, kbd */
-  --fs-key: 10px;                    /* a key cap inside a small control (the search field's ⌘K) */
   --fs-small: 13px;                  /* secondary rows */
   --fs-body: 16px;                   /* site body */
   --fs-heading: 24px;                /* app page titles (design token, serif) */

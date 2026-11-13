@@ -23,15 +23,17 @@
 .topbar-title svg { flex: none; width: 14px; height: 14px; color: var(--text-3); stroke-width: 1.75; }
 .topbar-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The search field: 540 px at 1440 px, giving up width before the page's name does on a narrower screen. It looks
-   like a field (a ring of the text colour at 10 %, a light fill) and opens the search palette. */
-.topbar-search { --control: var(--control-sm); flex: 0 1 540px; min-width: 0; justify-content: flex-start; gap: var(--space-2); height: var(--control-sm);
+   like a field (a ring of the text colour at 10 %, a light fill) and opens the search palette. It is 28 px tall and
+   its key cap's text 10 px, built from the spacing and type tokens: tokens.css is also the operator console's, whose
+   bundle budget has no room for new ones. */
+.topbar-search { --control: calc(var(--space-6) + var(--space-1)); flex: 0 1 540px; min-width: 0; justify-content: flex-start; gap: var(--space-2); height: var(--control);
   padding: 0 var(--space-1) 0 var(--space-2); border: 0; background: color-mix(in srgb, var(--surface-2) 30%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-1) 10%, transparent);
   color: var(--text-3); font-size: var(--fs-small); font-weight: 400; cursor: text; }
 .topbar-search:hover:not(:disabled) { border: 0; background: var(--surface-2); }
 .topbar-search svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
 .topbar-search-label { flex: 1; min-width: 0; overflow: hidden; line-height: 20px; text-align: left; text-overflow: ellipsis; }
 .topbar-search kbd { flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--space-1); border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); font: 500 var(--fs-key)/20px var(--font-sans); }
+  box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); font: 500 calc(var(--fs-label) - var(--space-1) / 2)/20px var(--font-sans); }
 .topbar-end { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .topbar-help { flex: none; display: inline-flex; align-items: center; min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius);
   color: var(--text-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
