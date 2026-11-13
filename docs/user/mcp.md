@@ -440,6 +440,9 @@ approves it in the console with their authenticator code.
 
 ## Limits and errors
 
+- Every tool call writes one line to the server log with the workspace, the tool, the kind of token and
+  how the call ended, never its arguments or answer. The line stays on the server; see
+  [which MCP tools an AI app called](../self-host/troubleshooting.md#see-which-mcp-tools-an-ai-app-called).
 - A locked workspace (hosted cloud, trial over, nothing paid) answers every tool except `whoami` and
   `docs_search`, which read no workspace data, with a message that only exporting data works.
 - A conversation id from another workspace answers "No conversation <id> in this workspace".

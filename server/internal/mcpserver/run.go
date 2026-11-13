@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -43,28 +44,35 @@ func register(server *mcp.Server, spec Spec, rest *restClient) {
 
 func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input *jsonschema.Resolved, rest *restClient) (result *mcp.CallToolResult) {
 	c := &call{rest: rest, spec: spec}
+	who, started, end := callerOf(ctx), time.Now(), ending{outcome: outcomeOK}
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			result = failure(failureText(c, fmt.Errorf("panic: %v", recovered)))
+			end = ending{outcome: outcomeError, errorType: "panic", err: fmt.Errorf("panic: %v", recovered)}
+			result = failure(failureText(c, end.err))
 		}
+		end.log(ctx, who, spec.Name, time.Since(started))
 	}()
 	token, ok := bearerFrom(request)
 	if !ok {
+		end = refusedAs("no_bearer")
 		return failure("This request carries no bearer token. Connect to Colliedesk with an agent token.")
 	}
 	arguments, err := parseArguments(request.Params.Arguments, input)
 	if err != nil {
+		end = refusedAs("invalid_arguments")
 		return failure("Invalid arguments for " + spec.Name + ": " + err.Error())
 	}
-	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	runCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	c.ctx, c.token = ctx, token
+	c.ctx, c.token = runCtx, token
 	output, err := spec.run(c, arguments)
 	var filed *agentRequested
 	if errors.As(err, &filed) {
 		output, err = requestedOutput(filed), nil
+		end.outcome = outcomeAgentRequest
 	}
 	if err != nil {
+		end = c.ended(err)
 		return failure(failureText(c, err))
 	}
 	image, isImage := output.(*imageResult)
@@ -73,6 +81,7 @@ func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input
 	}
 	data, err := json.Marshal(output)
 	if err != nil {
+		end = c.ended(err)
 		return failure(failureText(c, err))
 	}
 	content := []mcp.Content{&mcp.TextContent{Text: string(data)}}

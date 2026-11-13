@@ -22,6 +22,8 @@ type call struct {
 	notFound string
 	// wrote is set once a call of this tool has changed data, so a later failure can say so.
 	wrote bool
+	// refusals is the kind of each planned refusal refuse made, for the tool call log line.
+	refusals map[*toolError]string
 
 	session *restMe
 	agents  []restAgent

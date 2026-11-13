@@ -46,7 +46,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 ## Direction
 
 - Modelled on Plain (primary) and Front (views), studied from public Mobbin screens; mechanisms
-  only, no copied visuals. See the clean-room rule.
+  only, no copied visuals. See "Learning from other projects" in AGENTS.md.
 - White working panels on a cool grey app background (`--surface-0`), separated by an 8 px gap
   and hairline borders, not by heavy outlines. No cream or beige, no decorative gradients, glass,
   blur or emoji. Desktop views use the full width; no narrow centred column.

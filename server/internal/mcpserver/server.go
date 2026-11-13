@@ -130,7 +130,7 @@ func requireOperatorBearer(service *auth.OperatorService, next http.Handler) htt
 			unauthorized(response)
 			return
 		}
-		next.ServeHTTP(response, request)
+		next.ServeHTTP(response, withCaller(response, request, caller{token: "operator"}))
 	})
 }
 
@@ -226,6 +226,11 @@ func requireBearer(service *auth.Service, origin string, next http.Handler) http
 			refuse()
 			return
 		}
+		token := "agent_token"
+		if principal.IsOAuth() {
+			token = "oauth"
+		}
+		request = withCaller(response, request, caller{workspace: principal.Workspace.ID, token: token})
 		next.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), workspaceKey{}, principal.Workspace.ID)))
 	})
 }
