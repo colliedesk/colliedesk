@@ -21,8 +21,9 @@ Each feature is one row there: its name, a short line, its state (**On · Sugges
 its switch. The switch turns the feature on or off and saves at once. The rest of the row opens the
 feature's settings in a panel beside the list: its provider and model, its automatic runs, its **Default for
 channels** and the channels that differ. Choices in the panel save at once; **Done** closes it. Without a
-provider yet, one notice offers **Add provider** and the setup guide, and the switches are off with the
-reason in the lock beside each. On a phone the tabs (Features, Providers, AI chat, Usage, History) scroll
+provider yet, one notice offers **Add provider** and the setup guide. A switch that is off has its reason in
+the lock beside it: no provider yet, no provider picked for that feature (open its row and pick one), or you
+are not an admin. On a phone the tabs (Features, Providers, AI chat, Usage, History) scroll
 sideways, with a fade at the edge that hides some.
 
 The [setup flow](setup-guide.md#setup-flow) offers one of them to a new team: its **Turn on AI drafts** step
