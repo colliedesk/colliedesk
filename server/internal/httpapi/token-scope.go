@@ -444,9 +444,11 @@ var routeAccess = map[string]TokenAccess{
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
 	"GET " + gmailCallbackPath: notForPeople,
 	// Microsoft's redirects: the consent finishes like Gmail's; the admin consent stores nothing.
-	"GET " + microsoftCallbackPath:                  notForPeople,
-	"GET " + microsoftAdminConsentPath:              notForPeople,
-	"POST /api/v1/auth/cloud/exchange":              notForPeople,
+	"GET " + microsoftCallbackPath:     notForPeople,
+	"GET " + microsoftAdminConsentPath: notForPeople,
+	"POST /api/v1/auth/cloud/exchange": notForPeople,
+	// The account menu's switch: it takes the identity provider's token, never a session or an agent token.
+	"GET " + cloudWorkspacesPath:                    notForPeople,
 	"POST " + cloudSignupPath:                       notForPeople,
 	"POST /api/v1/auth/redeem":                      notForPeople,
 	"GET /api/v1/auth/invite-preview":               notForPeople,

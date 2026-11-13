@@ -525,6 +525,7 @@ func Routes() []Route {
 	return []Route{
 		{http.MethodGet, "/api/v1/config", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
+		{http.MethodGet, cloudWorkspacesPath, auth.PermissionPublic},
 		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/auth/invite-preview", auth.PermissionPublic},

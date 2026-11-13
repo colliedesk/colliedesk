@@ -34,11 +34,7 @@ func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label
 		return Redeemed{}, nil, ErrCloudAgentNotFound
 	}
 	if workspaceSlug == "" && len(agents) > 1 {
-		choices := make([]WorkspaceChoice, 0, len(agents))
-		for _, agent := range agents {
-			choices = append(choices, WorkspaceChoice{Slug: agent.WorkspaceSlug, Name: agent.WorkspaceName})
-		}
-		return Redeemed{}, choices, nil
+		return Redeemed{}, workspaceChoices(agents), nil
 	}
 	selected := agents[0]
 	if workspaceSlug != "" {
@@ -65,6 +61,25 @@ func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label
 	redeemed, err := s.Redeem(ctx, link.Token, "", label, true)
 	redeemed.OtherWorkspaces = len(agents) > 1
 	return redeemed, nil, err
+}
+
+// CloudWorkspaces lists the workspaces where the verified cloud email is an active agent, sorted by slug:
+// the same lookup and choices as ExchangeCloud's, so a person signed in to one workspace can switch to
+// another. The email must come from a verified identity token, never from a session's agent.
+func (s *Service) CloudWorkspaces(ctx context.Context, email string) ([]WorkspaceChoice, error) {
+	agents, err := s.cloudAgents(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	return workspaceChoices(agents), nil
+}
+
+func workspaceChoices(agents []cloudAgent) []WorkspaceChoice {
+	choices := make([]WorkspaceChoice, 0, len(agents))
+	for _, agent := range agents {
+		choices = append(choices, WorkspaceChoice{Slug: agent.WorkspaceSlug, Name: agent.WorkspaceName})
+	}
+	return choices
 }
 
 // cloudAgents lists every workspace where the verified cloud email is an agent, so the person can

@@ -203,6 +203,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/operator/operators/{id}":                {"/api/v1/operator/operators/00000000-0000-4000-8000-000000000000", nil, f.operatorToken, 202, ""},
 		"DELETE /api/v1/operator/sessions/{id}":                 {"/api/v1/operator/sessions/00000000-0000-4000-8000-000000000000", nil, f.operatorToken, 202, ""},
 		"POST /api/v1/auth/cloud/exchange":                      {"/api/v1/auth/cloud/exchange", map[string]any{}, "disabled-cloud-token", 404, ""},
+		"GET /api/v1/auth/cloud/workspaces":                     {"/api/v1/auth/cloud/workspaces", nil, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/cloud/signup":                        {"/api/v1/auth/cloud/signup", map[string]any{"workspace_name": "Acme"}, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/redeem":                              {"/api/v1/auth/redeem", map[string]any{"token": f.redeemToken}, "", 200, ""},
 		"GET /api/v1/auth/invite-preview":                       {"/api/v1/auth/invite-preview?token=" + url.QueryEscape(f.usedInviteToken), nil, "", 200, ""},
