@@ -1,5 +1,14 @@
-/* List header: status tabs, then search beside one Filter menu. */
-.inbox-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+/* List header: while a search or a filter is on, the search box beside one Filter menu, then the status tabs and the chips. */
+.inbox-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+/* At rest the status tabs, Sort and Filter share one row of 40 px (4 px above and below the 32 px controls), 8 px
+   from the list's right edge. When the tabs cannot fit beside the tools they scroll sideways; the tools stay put.
+   A menu opens under the whole row, lined up with its button on the right. */
+.inbox-filters:not([data-search-row]) { position: relative; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 0; }
+.inbox-filters:not([data-search-row]) > .filter-bar { position: static; margin-right: calc(var(--space-2) - var(--space-4)); }
+.inbox-filters:not([data-search-row]) .filter-popover { left: auto; right: 0; }
+.inbox-filters:not([data-search-row]) .status-tabs label:has(input:checked) { box-shadow: none; }
+.list-pane > header > .list-head:has(> .inbox-filters:not([data-search-row])) { margin-top: calc(var(--space-1) - var(--space-3)); }
+.list-pane > header > .mail-switch + .list-head { margin-top: 0; }
 .status-tabs { display: flex; gap: var(--space-2); margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
 .status-tabs::-webkit-scrollbar { display: none; }
 .status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: var(--control, 32px); min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
@@ -7,13 +16,12 @@
 .status-tabs label:hover { color: var(--text-1); }
 .status-tabs label:has(input:checked) { color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
 .status-tabs label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
-/* Search takes the first row; Filter, Sort and Views share the second. The menus open under the whole bar. */
+/* With a search or a filter on, the search box, Filter, Sort and Views share the first row. The menus open under the whole bar. */
 .filter-bar { position: relative; display: flex; align-items: center; gap: var(--space-1); }
-.search-field { position: relative; display: block; flex: 1 1 auto; min-width: 0; margin-right: var(--space-1); }
+.search-field { position: relative; display: block; flex: 1 1 auto; min-width: 0; }
 .search-field svg { position: absolute; top: 50%; left: 10px; translate: 0 -50%; color: var(--text-3); pointer-events: none; }
-/* A narrower list cuts the placeholder with an ellipsis. */
-.search-field input { width: 100%; padding-left: 32px; border-color: transparent; background: var(--surface-2); text-overflow: ellipsis; }
-.search-field input:hover:not(:disabled) { border-color: transparent; background: var(--surface-3); }
+/* A field: white with a control line, the words 32 px in from its edge. A narrower list cuts the placeholder with an ellipsis. */
+.search-field input { width: 100%; padding-left: 32px; padding-right: var(--space-2); border-color: var(--line-control); background: var(--surface-1); text-overflow: ellipsis; }
 /* An empty box has nothing to clear: its placeholder gets the clear button's room, so it reads in full. */
 .search-field input:placeholder-shown::-webkit-search-cancel-button { display: none; }
 .filter-menu { position: static; }
@@ -33,7 +41,9 @@
 .filter-menu summary::-webkit-details-marker { display: none; }
 .filter-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
 .filter-menu summary svg { color: var(--text-3); }
-.filter-count { min-width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; }
+/* With filters on, Filter is a filled button that says how many: the count reads as text beside the icon. */
+.filter-bar .filter-menu summary:has(.filter-count) { padding: 0 var(--space-2); background: var(--surface-3); color: var(--text-1); }
+.filter-count { color: var(--text-1); font-size: var(--fs-label); font-weight: 600; line-height: 16px; font-variant-numeric: tabular-nums; }
 /* An open menu sits above the setup guide in the corner (15) and below the account menu (20). */
 .filter-popover {
   position: absolute; z-index: 16; top: calc(100% + var(--space-1)); left: 0; width: min(100%, 15rem); display: grid; gap: 0;
@@ -108,11 +118,11 @@
 .sort-field:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); color: var(--text-1); }
 /* Active filters: one chip each, wrapping onto a second line rather than scrolling sideways. */
 .filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.filter-chips-pending { min-height: 26px; }
+.filter-chips-pending { min-height: 24px; }
 .filter-chips ul { display: contents; list-style: none; margin: 0; padding: 0; }
 .filter-chips li {
-  display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-height: 26px; border: 1px solid var(--line-strong); border-radius: var(--radius-full);
-  background: var(--surface-0); padding: 0 2px 0 var(--space-3); color: var(--text-1); font-size: var(--fs-label); font-weight: 500;
+  display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-height: 24px; border: 0; border-radius: var(--radius-full);
+  background: var(--surface-2); padding: 0 2px 0 var(--space-2); color: var(--text-1); font-size: var(--fs-label); font-weight: 500;
 }
 .chip-remove { width: 32px; min-height: 32px; margin-block: -5px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; box-shadow: none; color: var(--text-3); }
 .chip-remove:hover:not(:disabled) { background: var(--surface-3); color: var(--text-1); }

@@ -367,6 +367,7 @@ test('typing in search keeps the previous rows until the new response arrives', 
   api.timeEntries.mockResolvedValue({ items: [] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await screen.findByRole('button', { name: /alpha conversation/i });
+  act(() => askInbox('search'));
   fireEvent.change(screen.getByRole('searchbox', { name: /search/i }), { target: { value: 'beta' } });
   await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
   expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();

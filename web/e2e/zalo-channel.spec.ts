@@ -173,7 +173,7 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await expect(page.getByRole('button', { name: `Copy reference ${code}` })).toBeVisible();
 
   // The code, typed another way, finds it; a link with it says so in a chip.
-  await page.getByRole('searchbox').first().fill(code.toLowerCase().replace('0142', '142'));
+  await page.goto(`${baseURL}/?search=${encodeURIComponent(code.toLowerCase().replace('0142', '142'))}&status=all`);
   await expect(page.locator('.conversation-row').first()).toContainText(code);
   await page.goto(`${baseURL}/?ref=${encodeURIComponent(code)}`);
   await expect(page.getByRole('list', { name: 'Active filters' })).toContainText(`Reference: ${code}`);
