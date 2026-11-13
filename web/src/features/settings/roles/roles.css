@@ -17,7 +17,7 @@
 .role-row-meta { display: grid; gap: 2px; color: var(--text-2); font-size: var(--fs-small); min-width: 0; }
 .role-meta-narrow { display: none; }
 .role-row-actions { justify-content: flex-end; }
-.role-row-actions .button { min-height: var(--control); }
+.role-row-actions .button { min-height: var(--control, 32px); }
 .role-form .settings-body { display: grid; gap: var(--space-3); padding-bottom: var(--space-8); }
 .role-permissions { margin: 0; border: 0; padding: 0; min-width: 0; display: grid; gap: var(--space-2); }
 .role-permissions legend { font-weight: 600; padding: 0; margin-bottom: var(--space-2); }
