@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
-import type { Results, ResultsSnapshot, ResultsWindow, WindowKey } from '../../api/results';
+import type { Results, WindowKey } from '../../api/results';
 import { formatMinutes } from '../../lib/format-minutes';
+import { HelpTip } from '../../ui/help-tip';
 import { resultsMessages as m } from './results-messages';
-import { formatDuration, perWeek, timeChange, volumeChange, weeks } from './results-format';
+import { ago, day, range } from './results-dates';
 import type { Change } from './results-format';
+import { resultsRows } from './results-rows';
+import type { NumberLink, Side } from './results-rows';
 
-// NumberLink opens the conversations a number counts: `result` is `<snapshot id>:<window>.<metric>`.
-export type NumberLink = (props: { result: string; className?: string; children: ReactNode }) => ReactNode;
+export type { NumberLink };
 
 export interface ResultsPageProps {
   results?: Results;
@@ -26,31 +28,6 @@ export interface ResultsPageProps {
   shared?: { workspace: string };
 }
 
-const dayFormat = (timezone: string, withYear: boolean) => {
-  try {
-    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}), timeZone: timezone });
-  } catch {
-    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' });
-  }
-};
-
-function day(value: string, timezone: string, withYear = false): string {
-  return dayFormat(timezone, withYear).format(new Date(value));
-}
-
-// range writes a window's days; the year only once, at the end.
-function range(from: string, to: string, timezone: string, withYear = false): string {
-  return `${day(from, timezone)} – ${day(to, timezone, withYear)}`;
-}
-
-function ago(value: string, now: Date): string {
-  const minutes = Math.max(0, Math.round((now.getTime() - new Date(value).getTime()) / 60000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
-}
-
 function ChangeCell({ change }: { change?: Change }) {
   if (!change) return <p className="results-change-none">{m.notCompared}</p>;
   return <div className="results-change" data-direction={change.direction}>
@@ -60,30 +37,12 @@ function ChangeCell({ change }: { change?: Change }) {
   </div>;
 }
 
-interface Side {
-  label: string;
-  window?: ResultsWindow;
-  snapshot?: ResultsSnapshot;
-  key: WindowKey;
-  // blocked replaces every number of the side (a failed import).
-  blocked?: string;
-  badge?: string;
-}
-
-interface Row {
-  name: string;
-  how: string;
-  before: ReactNode;
-  after: ReactNode;
-  change?: Change;
-}
-
 export function ResultsPage(props: ResultsPageProps) {
   const { results, loading, failed, onRetry, window: key, onWindow, timezone, isAdmin, now, link, importLink, admin, shared } = props;
   const header = <header className="results-header">
     <div className="results-title">
       <h1>{shared ? m.share.title(shared.workspace) : m.heading}</h1>
-      <p>{shared ? m.share.about(shared.workspace) : m.description}</p>
+      <p>{shared ? m.share.about(shared.workspace) : results?.baseline_state === 'none' ? m.descriptionAlone : m.description}</p>
       <p className="results-muted">{results?.current && <span>{shared ? m.share.updated(day(results.current.computed_at, timezone, true)) : m.updated(ago(results.current.computed_at, now))}</span>}
         <span>{shared ? m.share.timezone : m.timezone(timezone)}</span></p>
     </div>
@@ -115,97 +74,17 @@ export function ResultsPage(props: ResultsPageProps) {
   const available = after.window?.available_on ?? undefined;
   const oldImport = withBaseline && !helpScout && (baseline.stats_read ?? 0) === 0 && status !== 'FAILED';
 
-  const number = (side: Side, metric: string, value: ReactNode) => side.snapshot
-    ? link({ result: `${side.snapshot.id}:${side.key}.${metric}`, className: 'results-number', children: value }) : <span className="results-number">{value}</span>;
-  const count = (side: Side, metric: string, text: string) => side.snapshot
-    ? link({ result: `${side.snapshot.id}:${side.key}.${metric}`, className: 'results-sublink', children: text }) : text;
-  const windowLine = (side: Side, resolved: boolean) => {
-    const window = side.window;
-    if (!window) return null;
-    const span = resolved ? window.resolved_created : window.created;
-    // The window everything is created in heads its column; a card on a narrow screen repeats it.
-    return <p className={resolved ? 'results-muted' : 'results-muted results-narrow'}>{m.created(range(span.from, span.to, timezone, !resolved))}</p>;
-  };
-  const tooFew = (n: number, what: string) => <><p className="results-value">{m.tooFew(n)}</p><p className="results-muted">{m.tooFewWhy(what, n)}</p></>;
-  const blocked = (side: Side) => side.blocked ? <p className="results-muted">{side.blocked}</p> : null;
   const cellLabel = (side: Side) => <p className="results-cell-label">{side === before ? sourceName : 'Colliedesk'}
-    {side.badge && <span className="results-badge">{side.badge}</span>}</p>;
+    {side.badge && <span className="results-badge">{side.badge}</span>}
+    {side.window && <span className="results-muted results-narrow">{m.created(range(side.window.created.from, side.window.created.to, timezone))}</span>}</p>;
 
-  const firstResponse = (side: Side) => {
-    const value = side.window?.first_response;
-    if (blocked(side)) return blocked(side);
-    if (!value) return null;
-    return <>
-      {windowLine(side, false)}
-      {value.median_seconds === null ? tooFew(value.answered, m.firstResponse.what) : <>
-        {number(side, 'first_response', formatDuration(value.median_seconds))}
-        {value.p90_seconds !== null && <p className="results-muted">{m.firstResponse.p90(formatDuration(value.p90_seconds))}</p>}</>}
-      <p className="results-muted">{count(side, 'first_response', m.firstResponse.answered(value.answered))} · {count(side, 'first_response_waiting', m.firstResponse.waiting(value.waiting))}</p>
-    </>;
-  };
-  const availableCell = () => available && current?.history_since ? <>
-    <p className="results-value">{m.availableOn(day(available, timezone))}</p>
-    <p className="results-muted">{m.availableWhy(day(current.history_since, timezone, true), day(after.window!.resolved_created.from, timezone))}</p></> : null;
-  const resolution = (side: Side) => {
-    if (blocked(side)) return blocked(side);
-    if (side === after && available) return availableCell();
-    if (side === before && helpScout) return <>{windowLine(side, true)}<p className="results-muted">{m.resolution.helpScout}</p></>;
-    if (side === before && oldImport) return <>{windowLine(side, true)}<p className="results-muted">{m.resolution.oldImport}</p></>;
-    const value = side.window?.resolution;
-    if (!value) return null;
-    return <>
-      {windowLine(side, true)}
-      {value.median_seconds === null ? tooFew(value.resolved, m.resolution.what) : number(side, 'resolution', formatDuration(value.median_seconds))}
-      <p className="results-muted">{count(side, 'resolution', m.resolution.resolved(value.resolved))} · {count(side, 'unresolved', m.resolution.unresolved(value.unresolved))}</p>
-      {value.without_resolve_time > 0 && <p className="results-muted">{count(side, 'without_resolve_time', m.resolution.without(value.without_resolve_time, sourceName))}</p>}
-    </>;
-  };
-  const reopened = (side: Side) => {
-    if (side === before) return blocked(side) ?? <>{windowLine(side, true)}<p className="results-muted">{m.reopened.baseline(sourceName)}</p></>;
-    if (available) return availableCell();
-    const value = side.window?.reopened;
-    if (!value) return null;
-    return <>
-      {windowLine(side, true)}
-      {value.rate === null ? tooFew(value.resolutions, m.reopened.what) : number(side, 'reopened', `${Math.round(value.rate * 100)}%`)}
-      <p className="results-muted">{count(side, 'reopened', m.reopened.of(value.reopened, value.resolutions))}</p>
-    </>;
-  };
-  const volume = (side: Side) => {
-    if (blocked(side)) return blocked(side);
-    const value = side.window?.volume;
-    if (!value) return null;
-    return <>
-      {value.per_week === null ? <><p className="results-value">{value.count}</p><p className="results-muted">{value.count === 0 ? m.volume.none : m.volume.tooShort}</p></>
-        : number(side, 'volume', m.volume.value(perWeek(value.per_week)))}
-      {value.per_week !== null && <p className="results-muted">{m.volume.detail(value.count, weeks(value.days), range(value.from, side.window!.created.to, timezone))}</p>}
-    </>;
-  };
-  const handle = (side: Side) => {
-    if (side === after) return <>{windowLine(side, true)}<p className="results-muted">{m.handle.live}</p></>;
-    if (blocked(side)) return blocked(side);
-    const value = side.window?.handle;
-    if (!value) return null;
-    return <>
-      {windowLine(side, true)}
-      {value.median_minutes === null ? tooFew(value.conversations, m.handle.what) : number(side, 'handle', formatMinutes(value.median_minutes))}
-      {value.median_minutes !== null && <p className="results-muted">{count(side, 'handle', m.handle.logged(value.conversations))}</p>}
-    </>;
-  };
-
+  const showBaseline = results.baseline_state !== 'none';
+  const number = (metric: string, value: string) => after.snapshot
+    ? link({ result: `${after.snapshot.id}:${after.key}.${metric}`, className: 'results-number', children: value }) : <span className="results-number">{value}</span>;
   const comparable = withBaseline && status !== 'FAILED';
   const b = before.window;
   const a = after.window;
-  const rows: Row[] = [
-    { name: m.firstResponse.name, how: m.firstResponse.how, before: firstResponse(before), after: firstResponse(after),
-      change: comparable && b?.first_response.median_seconds != null && a?.first_response.median_seconds != null ? timeChange(b.first_response.median_seconds, a.first_response.median_seconds) : undefined },
-    { name: m.resolution.name, how: m.resolution.how, before: resolution(before), after: resolution(after),
-      change: comparable && !available && !oldImport && b?.resolution?.median_seconds != null && a?.resolution?.median_seconds != null ? timeChange(b.resolution.median_seconds, a.resolution.median_seconds) : undefined },
-    { name: m.reopened.name, how: m.reopened.how, before: reopened(before), after: reopened(after) },
-    { name: m.volume.name, how: m.volume.how, before: volume(before), after: volume(after),
-      change: comparable && b?.volume.per_week != null && a?.volume.per_week != null ? volumeChange(b.volume.per_week, a.volume.per_week) : undefined },
-    { name: m.handle.name, how: m.handle.how, before: handle(before), after: handle(after) },
-  ];
+  const rows = resultsRows({ before, after, timezone, link, sourceName, helpScout, oldImport, available, withBaseline, comparable });
 
   // The share page speaks of the team in the third person and says nothing the team must act on.
   const how = (text: string) => (shared ? text.replace(/your team/g, 'the team').replace(/Your team/g, 'The team') : text);
@@ -218,12 +97,12 @@ export function ResultsPage(props: ResultsPageProps) {
     : <div key="unverified" className="results-notice results-notice-warn"><p>{m.unverified}</p>{importLink}</div>);
   if (withBaseline && status === 'FAILED') notices.push(<div key="failed" className="results-notice results-notice-danger"><p>{m.failed}</p>{importLink}</div>);
   if (oldImport) notices.push(<div key="old" className="results-notice"><p>{m.oldImport}</p>{importLink}</div>);
-  if (available && key === '30d' && current?.history_since) {
+  // Without an import there is no comparison to wait for: each row says its own state.
+  if (showBaseline && available && key === '30d' && current?.history_since) {
     notices.push(<div key="available" className="results-notice"><p>{m.availableNotice(day(available, timezone), day(current.history_since, timezone, true))}</p>
       {!current.windows['7d'].available_on && <button type="button" onClick={() => onWindow('7d')}>{m.showLast7}</button>}</div>);
   }
 
-  const showBaseline = results.baseline_state !== 'none';
   const aiWindow = a?.ai;
   const saved = results.hours_saved[key];
   const savedCell = (() => {
@@ -254,7 +133,7 @@ export function ResultsPage(props: ResultsPageProps) {
         {showBaseline && <div><p className="results-head-title">{m.change}</p></div>}
       </div>
       {rows.map((row) => <section key={row.name} className="results-row" aria-label={row.name}>
-        <div className="results-metric"><h2>{row.name}</h2><p><strong>{m.howWeCount}</strong> {how(row.how)}</p></div>
+        <div className="results-metric heading-with-tip"><h2>{row.name}</h2><HelpTip label={row.name} text={`${how(row.how)} ${row.note}`.trim()} /></div>
         {showBaseline && <div className="results-cell">{cellLabel(before)}{withBaseline ? row.before : <p className="results-muted">{m.ai.needsBaseline}</p>}</div>}
         <div className="results-cell">{cellLabel(after)}{current ? row.after : <p className="results-muted">{m.calculating}</p>}</div>
         {showBaseline && <div className="results-cell results-change-cell"><p className="results-cell-label">{m.change}</p>
@@ -262,13 +141,12 @@ export function ResultsPage(props: ResultsPageProps) {
       </section>)}
     </section>
     <section className="results-card results-ai" aria-labelledby="results-ai">
-      <header><h2 id="results-ai">{m.ai.heading}</h2>{a && <p className="results-muted">{m.decided(range(a.created.from, a.created.to, timezone, true))}</p>}</header>
-      <p className="results-ai-how"><strong>{m.howWeCount}</strong> {m.ai.how}</p>
+      <header><div className="heading-with-tip"><h2 id="results-ai">{m.ai.heading}</h2><HelpTip label={m.ai.heading} text={m.ai.how} /></div>{a && <p className="results-muted">{m.decided(range(a.created.from, a.created.to, timezone, true))}</p>}</header>
       <div className="results-ai-grid">
-        <div><p className="results-cell-title">{m.ai.unchanged}</p>{aiWindow ? <>{number(after, 'ai_sent_unchanged', String(aiWindow.sent_unchanged))}
+        <div><p className="results-cell-title">{m.ai.unchanged}</p>{aiWindow ? <>{number('ai_sent_unchanged', String(aiWindow.sent_unchanged))}
           <p className="results-muted">{m.ai.unchangedDetail(aiWindow.conversations_sent_unchanged)}</p></> : <p className="results-muted">{m.calculating}</p>}</div>
-        <div><p className="results-cell-title">{m.ai.edited}</p>{aiWindow && number(after, 'ai_sent_edited', String(aiWindow.sent_edited))}</div>
-        <div><p className="results-cell-title">{m.ai.discarded}</p>{aiWindow && number(after, 'ai_discarded', String(aiWindow.discarded))}</div>
+        <div><p className="results-cell-title">{m.ai.edited}</p>{aiWindow && number('ai_sent_edited', String(aiWindow.sent_edited))}</div>
+        <div><p className="results-cell-title">{m.ai.discarded}</p>{aiWindow && number('ai_discarded', String(aiWindow.discarded))}</div>
         <div className="results-saved"><p className="results-cell-title">{m.ai.hoursSaved}</p>{savedCell}</div>
       </div>
     </section>
