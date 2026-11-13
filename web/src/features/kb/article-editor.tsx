@@ -544,8 +544,6 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
       </div>}
-      {/* On a phone the box stands at the top of the page, as the note does on a wide screen: the way out and back is never behind Details. */}
-      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); submit.current(); }}>
         <div className="kb-editor-main">
           <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
@@ -582,6 +580,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         </div>
         {!phone && <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>{details}</aside>}
       </form>
+      {/* On a phone the page opens on the title and the text; the AI box follows them, and visibility and placement open from Details. */}
+      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {phone && <div className="kb-phone-bar" role="region" aria-label={kbMessages.articleActions}>
         <span className="kb-phone-state">
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
