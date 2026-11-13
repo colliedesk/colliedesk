@@ -1,5 +1,6 @@
 import './mentions.css';
 import { useId } from 'react';
+import type { CSSProperties, Ref } from 'react';
 import type { TeamMember } from '../../api/schemas';
 import { initials } from '../../ui/avatar';
 import { mentionMessages } from './mention-messages';
@@ -41,16 +42,19 @@ interface MentionPickerProps {
   onActive: (index: number) => void;
   // The list's id, for the box's aria-controls and aria-activedescendant.
   id: string;
+  // Where it floats: the composer anchors it at the @ (useCaretAnchor's ref and style).
+  ref?: Ref<HTMLDivElement>;
+  style?: CSSProperties;
 }
 
 export const optionIdOf = (list: string, index: number) => `${list}-option-${index}`;
 
-// MentionPicker is the list under the note box while an @ is typed: the box keeps the focus and its keys (arrows,
+// MentionPicker is the list at the @ of a note while it is typed: the box keeps the focus and its keys (arrows,
 // Enter, Esc) move in the list, so writing never stops.
-export function MentionPicker({ options, query, active, onPick, onActive, id }: MentionPickerProps) {
+export function MentionPicker({ options, query, active, onPick, onActive, id, ref, style }: MentionPickerProps) {
   const label = useId();
   return (
-    <div className="mention-picker">
+    <div className="mention-picker" ref={ref} style={style}>
       <p id={label} className="mention-picker-label">{mentionMessages.pickerLabel}</p>
       {options.length === 0 ? <p className="mention-picker-empty" role="status">{mentionMessages.noTeammateMatches}</p>
         : <ul id={id} role="listbox" aria-labelledby={label} onMouseDown={(event) => event.preventDefault()}>
