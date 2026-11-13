@@ -9,6 +9,7 @@ import { setupMessages } from './setup-messages';
 import { nothingToDo, quickStartCount, setUpKeys, stepIsDone, visibleSteps } from './setup-steps';
 import type { Permissions } from '../../lib/can';
 import './setup-checklist.css';
+import { frameMessages } from '../shell/frame-messages';
 
 // Each step is done on its screen of the setup flow.
 const target = (step: SetupStepKey) => `/setup/${step}`;
@@ -92,7 +93,7 @@ export function SetupChecklist({ progress, me, goal, workspaceName, skipped = fa
   const offered = tryMore.some((step) => !nothingToDo(step));
   return <>
     <header className="quick-start-head">
-      <div className="quick-start-title"><h2>{messages.getReady(workspaceName)}</h2><span className="setup-count">{setupMessages.progress(done, total)}</span></div>
+      <div className="quick-start-title"><h2>{frameMessages.getReady(workspaceName)}</h2><span className="setup-count">{setupMessages.progress(done, total)}</span></div>
       <div className="setup-segments" role="progressbar" aria-label={setupMessages.progressLabel} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         {Array.from({ length: total }, (_, index) => <span key={index} data-done={index < done || undefined} />)}
       </div>

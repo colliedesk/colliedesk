@@ -66,15 +66,8 @@ export const messages = {
   collapseSidebar: 'Collapse sidebar',
   expandSidebar: 'Expand sidebar',
   resizeSidebar: 'Resize sidebar',
-  // The app frame: the top bar's search field and its palette, the sidebar's Quick start, lists and foot, and the way to the docs.
+  // The app frame: the sidebar's search, its lists and its foot, and the top bar's way to the docs.
   search: 'Search',
-  searchWorkspace: (name: string) => `Search ${name}`,
-  openCount: (count: number) => `${count} open`,
-  unreadCount: (count: number) => `${count} unread`,
-  settingsDetail: 'Channels, members, plan',
-  quickStart: 'Quick start',
-  quickStartLeft: (count: number) => `Quick start, ${count} ${count === 1 ? 'step' : 'steps'} left`,
-  getReady: (workspace: string) => `Get ${workspace} ready`,
   inboxOpenCount: (count: number) => `Inbox, ${count} open`,
   inviteTeammates: 'Invite teammates',
   channelNeedsAttention: (name: string) => `${name}, needs attention`,

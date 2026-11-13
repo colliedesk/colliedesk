@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Me, SetupProgress } from '../../api/schemas';
-import { messages } from '../../messages';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { quickStartCount, readSkipped, storeSkipped } from './setup-steps';
+import { frameMessages } from '../shell/frame-messages';
 
 // The checklist loads from its own chunk: the first bundle has no room for it. It starts loading as soon as there is
 // a step left, so the press that opens it finds it there.
@@ -48,13 +48,13 @@ export function QuickStart({ progress, me }: { progress?: SetupProgress; me: Me 
   return (
     <div className="quick-start" ref={root}
       onKeyDown={(event) => { if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false); button.current?.focus(); } }}>
-      <button type="button" ref={button} className="quick-start-button" aria-label={messages.quickStartLeft(count.left)} aria-pressed={open}
-        data-tip={messages.quickStart} onClick={() => setOpen(!open)}>
+      <button type="button" ref={button} className="quick-start-button" aria-label={frameMessages.quickStartLeft(count.left)} aria-pressed={open}
+        data-tip={frameMessages.quickStart} onClick={() => setOpen(!open)}>
         <Ring share={count.total === 0 ? 0 : count.done / count.total} />
         {count.setUpLeft && <span className="quick-start-dot" aria-hidden="true" />}
       </button>
       {/* A chosen step opens its page: the checklist steps aside for it. */}
-      {open && <div className="quick-start-popover" role="dialog" aria-label={messages.getReady(me.workspace.name)} style={at}
+      {open && <div className="quick-start-popover" role="dialog" aria-label={frameMessages.getReady(me.workspace.name)} style={at}
         onClick={(event) => { if ((event.target as Element).closest('a')) setOpen(false); }}>
         {part.status === 'ready' ? <part.module.SetupChecklist progress={progress} me={me} goal={me.onboarding_goal} workspaceName={me.workspace.name}
           skipped={skipped} onSkip={skip} /> : part.status === 'error' ? <PartUnavailable /> : null}

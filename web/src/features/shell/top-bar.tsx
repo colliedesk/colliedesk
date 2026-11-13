@@ -2,6 +2,7 @@ import type { ReactNode, Ref } from 'react';
 import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { SearchIcon } from '../../ui/icons';
+import { frameMessages } from './frame-messages';
 
 export interface PageTitle { title: string; icon: ReactNode }
 
@@ -21,7 +22,7 @@ export function TopBar({ page, identity, search }: { page?: PageTitle; identity?
     <p className="topbar-title">{page && <>{page.icon}<span>{page.title}</span></>}</p>
     {search && <button type="button" ref={search.field} className="topbar-search" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"
       onClick={search.onOpen} onPointerEnter={search.onNear} onFocus={search.onNear}>
-      <SearchIcon /><span className="topbar-search-label">{messages.searchWorkspace(search.workspace)}</span>
+      <SearchIcon /><span className="topbar-search-label">{frameMessages.searchWorkspace(search.workspace)}</span>
       <kbd aria-hidden="true">{onMac() ? '⌘K' : 'Ctrl K'}</kbd></button>}
     <div className="topbar-end">
       {identity && <section className="identity-bar" aria-label={messages.signedInAs}>

@@ -6,6 +6,7 @@ import { knowledgeHome } from '../../lib/areas';
 import { messages } from '../../messages';
 import { AtIcon, BookIcon, ChartIcon, InboxIcon, PenIcon, SettingsIcon, UserPlusIcon } from '../../ui/icons';
 import { mentionMessages } from '../inbox/mention-messages';
+import { frameMessages } from './frame-messages';
 
 // A row the palette offers without searching: a page to go to (href) or an action to run (run).
 export interface PaletteEntry { key: string; label: string; detail?: string; icon: ReactNode; href?: string; run?: () => void }
@@ -35,11 +36,11 @@ export function paletteEntries(me: Me, { inboxOpen = 0, mentionsUnread = 0, onNe
   const reads = (permission: Parameters<typeof can>[1]) => can(me, permission);
   const knowledge = knowledgeHome(me);
   const places: PaletteEntry[] = [
-    ...(reads('conversations:read') ? [{ key: 'inbox', label: messages.inbox, detail: inboxOpen > 0 ? messages.openCount(inboxOpen) : undefined, icon: icon(InboxIcon), href: '/' }] : []),
-    ...(reads('messages:read') ? [{ key: 'mentions', label: mentionMessages.mentions, detail: mentionsUnread > 0 ? messages.unreadCount(mentionsUnread) : undefined, icon: icon(AtIcon), href: '/mentions' }] : []),
+    ...(reads('conversations:read') ? [{ key: 'inbox', label: messages.inbox, detail: inboxOpen > 0 ? frameMessages.openCount(inboxOpen) : undefined, icon: icon(InboxIcon), href: '/' }] : []),
+    ...(reads('messages:read') ? [{ key: 'mentions', label: mentionMessages.mentions, detail: mentionsUnread > 0 ? frameMessages.unreadCount(mentionsUnread) : undefined, icon: icon(AtIcon), href: '/mentions' }] : []),
     ...(knowledge ? [{ key: 'knowledge', label: messages.knowledge, icon: icon(BookIcon), href: knowledge }] : []),
     ...(reads('results:read') ? [{ key: 'results', label: messages.results, icon: icon(ChartIcon), href: '/results' }] : []),
-    { key: 'settings', label: messages.settings, detail: messages.settingsDetail, icon: icon(SettingsIcon), href: '/settings' },
+    { key: 'settings', label: messages.settings, detail: frameMessages.settingsDetail, icon: icon(SettingsIcon), href: '/settings' },
   ];
   const actions: PaletteEntry[] = [
     ...(onNewConversation ? [{ key: 'new-conversation', label: messages.newConversation, icon: icon(PenIcon), run: onNewConversation }] : []),
