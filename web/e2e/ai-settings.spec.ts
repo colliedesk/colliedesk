@@ -49,7 +49,7 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     await expect(page.getByText('No AI provider yet.')).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeDisabled();
 
-    await page.getByRole('button', { name: 'Add provider' }).first().click();
+    await page.getByRole('button', { name: 'Add provider' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add a provider' });
     await dialog.getByText('Other or self-hosted', { exact: true }).click();
     await dialog.getByLabel('Name', { exact: true }).fill('Office model');

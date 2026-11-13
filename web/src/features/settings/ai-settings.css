@@ -7,6 +7,8 @@
 
 .ai-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
 .ai-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
+/* The notice's button keeps its words at every width (the tab row's, .ai-add, shrinks to its icon on a phone). */
+.ai-add-inline { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
 /* S7-a: underline tabs, 36px tall, 20px apart; the open one underlined in text-1. */
 .ai-tabs-row { box-shadow: inset 0 -1px var(--line); }
 .ai-tabs-row > .seg-tabs { display: flex; flex: 1 1 auto; gap: var(--space-5); border: 0; border-radius: 0; background: none; padding: 0; }

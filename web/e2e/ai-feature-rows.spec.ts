@@ -66,3 +66,36 @@ test('ai features: on a phone every tab is reachable and a strip that scrolls sh
   expect(sheetBox.width, 'the sheet fills a phone').toBeGreaterThanOrEqual(388);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('ai features: with no provider the one Add provider button is whole on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signedIn(page);
+  await page.goto(`${baseURL}/settings/ai`);
+  await expect(page.getByText('No AI provider yet.')).toBeVisible();
+  const add = page.getByRole('button', { name: 'Add provider' });
+  await expect(add).toHaveCount(1);
+  await expect(add).toHaveText('Add provider');
+  expect(await add.evaluate((element) => element.scrollWidth <= element.clientWidth), 'the label is not clipped').toBe(true);
+  const at = (await add.boundingBox())!;
+  expect(at.x + at.width, 'the button is inside the screen').toBeLessThanOrEqual(390);
+  // The Providers tab keeps its own Add provider.
+  await page.getByRole('tab', { name: /^Providers/ }).click();
+  await expect(page.getByRole('button', { name: 'Add provider' })).toHaveCount(1);
+});
+
+test('ai features: the keyboard stays inside an open sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signedIn(page);
+  await page.goto(`${baseURL}/settings/ai`);
+  await page.getByRole('button', { name: 'Reply drafts settings' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Reply drafts' });
+  await expect(sheet).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(sheet.getByRole('button', { name: 'Done' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'Close' })).toBeFocused();
+  for (let step = 0; step < 12; step += 1) {
+    await page.keyboard.press('Tab');
+    expect(await sheet.evaluate((element) => element.contains(document.activeElement)), `Tab ${step + 1} stays in the sheet`).toBe(true);
+  }
+});

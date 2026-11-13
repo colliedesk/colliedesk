@@ -13,6 +13,7 @@ test('a server without any provider explains the two ways to start, and every fe
   expect(screen.queryByText(/AI_SERVER_PROVIDER/)).toBeNull();
   for (const name of ['Triage suggestions on', 'Reply drafts on']) expect(screen.getByRole('switch', { name })).toBeDisabled();
   expect(screen.getAllByText('Add a provider first, then turn this on.')).toHaveLength(2);
+  expect(screen.getByRole('switch', { name: 'Reply drafts on' })).toHaveAccessibleDescription('Add a provider first, then turn this on.');
 });
 
 test('an agent reads the settings and cannot change them', () => {
@@ -380,7 +381,8 @@ test('an admin lowers triage to on demand at once, without a dialog', () => {
   page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })] }), onSetSlot });
   openSheet('Triage suggestions');
   fireEvent.click(within(triageLevel()).getByRole('radio', { name: 'Off' }));
-  expect(screen.queryByRole('dialog', { name: /automatically/ })).not.toBeInTheDocument();
+  // Only the sheet is open: no confirmation dialog came up.
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
   expect(onSetSlot).toHaveBeenCalledWith('triage', expect.objectContaining({ default_level: 'off' }));
 });
 

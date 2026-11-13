@@ -52,7 +52,7 @@ export function Features(props: AIPageProps & SheetActions & { settings: AISetti
     {nothing && <div className="notice" role="status">
       <span><strong>{m.noProviderYet}</strong> {m.noProviderBody} <HelpTip label={m.noProviderYet} text={m.noProviderWhy} /></span>
       <div className="notice-actions">
-        {isAdmin && <button type="button" className="primary-action ai-add" onClick={props.onOpenAdd}><PlusIcon />{m.addProvider}</button>}
+        {isAdmin && <button type="button" className="primary-action ai-add-inline" onClick={props.onOpenAdd}><PlusIcon />{m.addProvider}</button>}
         <a className="button" href={selfHostGuide('environment-variables.md', 'ai-provider')} target="_blank" rel="noopener noreferrer">{m.setupGuide}</a>
       </div>
     </div>}

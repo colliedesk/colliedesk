@@ -47,6 +47,8 @@ export function AIPage(props: AIPageProps) {
   const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage' | 'auto-draft'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
   const ids = { tabs: useId() };
   const full = settings ? settings.providers.length >= settings.provider_limit : false;
+  // With no provider at all the Features tab carries its own Add provider in a notice, so the tab row does not repeat it.
+  const noProvider = Boolean(settings) && settings?.providers.length === 0 && !settings?.server;
   const tabs: { id: AITab; label: string; count?: number }[] = [
     { id: 'features', label: m.tabFeatures }, { id: 'providers', label: m.tabProviders, count: settings ? settings.providers.length + (settings.server ? 1 : 0) : undefined },
     { id: 'chat', label: chatMessages.tab }, ...(isAdmin ? [{ id: 'usage' as const, label: m.tabUsage }] : []), { id: 'history', label: m.tabHistory },
@@ -65,7 +67,7 @@ export function AIPage(props: AIPageProps) {
           {props.builtIn === false ? null : !settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">
               <Tabs label={m.tabs} tabs={tabs} value={tab} onChange={show} prefix={ids.tabs} />
-              {isAdmin && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
+              {isAdmin && !(tab === 'features' && noProvider) && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
                 aria-describedby={full ? 'ai-limit-why' : undefined}><PlusIcon /><span className="ai-wide">{m.addProvider}</span><span className="ai-narrow">{m.addShort}</span></button>}
             </div>
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}

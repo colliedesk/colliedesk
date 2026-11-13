@@ -73,3 +73,48 @@ test('with no provider one notice offers Add provider and the operator guide, an
     expect(off.closest('li')?.querySelector('.help-tip-button')).toHaveAccessibleDescription('Add a provider first, then turn this on.');
   }
 });
+
+test('a switch that is off for a missing provider says so, also once a provider exists and the feature has none picked', () => {
+  page({ settings: settings({ providers: [provider()], slots: [slot(), slot({ slot: 'draft' })] }) });
+  for (const name of ['Triage suggestions on', 'Reply drafts on']) {
+    const off = screen.getByRole('switch', { name });
+    expect(off).toBeDisabled();
+    expect(off).toHaveAccessibleDescription('Open this row and pick a provider first.');
+    expect(off.closest('li')?.querySelector('.help-tip-button')).toBeInTheDocument();
+  }
+});
+
+test('a switch of a feature set to a server provider that is off says to pick another provider', () => {
+  page({ settings: settings({ server_off: { label: 'Colliedesk AI' }, providers: [provider()],
+    slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: false, off_reason: 'server_provider_off' }), slot({ slot: 'draft' })] }) });
+  expect(screen.getByRole('switch', { name: 'Triage suggestions on' })).toHaveAccessibleDescription('Open this row and pick a provider first.');
+});
+
+test('every switch that is off for a person who is not an admin says who may turn it on', () => {
+  page({ isAdmin: false, settings: onTeamKey() });
+  expect(screen.getByRole('switch', { name: 'Reply drafts on' })).toHaveAccessibleDescription('Only admins can turn this on or off.');
+});
+
+test('a switch that works has no lock', () => {
+  page({ settings: onTeamKey() });
+  const on = screen.getByRole('switch', { name: 'Triage suggestions on' });
+  expect(on).toBeEnabled();
+  expect(on.closest('li')?.querySelector('.help-tip-button')).toBeNull();
+});
+
+test('the row button says that it opens a dialog', () => {
+  page({ settings: onTeamKey() });
+  expect(screen.getByRole('button', { name: 'Reply drafts settings' })).toHaveAttribute('aria-haspopup', 'dialog');
+});
+
+test('with no provider Add provider is offered once on Features, and stays on the Providers tab', () => {
+  page();
+  expect(screen.getAllByRole('button', { name: /Add provider/ })).toHaveLength(1);
+  fireEvent.click(screen.getByRole('tab', { name: /Providers/ }));
+  expect(screen.getAllByRole('button', { name: /Add provider/ })).toHaveLength(1);
+});
+
+test('with a provider the tab row keeps its Add provider on the Features tab', () => {
+  page({ settings: onTeamKey() });
+  expect(screen.getAllByRole('button', { name: /Add provider/ })).toHaveLength(1);
+});

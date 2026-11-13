@@ -25,10 +25,12 @@ export function FeatureRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpe
   const { chosen, choice, choices } = slotChoices(slot, settings);
   const saving = busySlot === slot.slot;
   const state = saving ? undefined : stateOf(slot, settings);
-  const why = !isAdmin ? m.autoAdminsOnly : choices.length === 0 ? m.addFirst : undefined;
+  // A switch is off for one of three reasons, and each says which: not an admin, no provider at all, or none picked for this feature.
+  const why = !isAdmin ? m.autoAdminsOnly : choices.length === 0 ? m.addFirst : !choice ? m.pickProviderFirst : undefined;
+  const whyID = `${line}-why`;
   return (
     <li className="ai-row">
-      <button type="button" className="ai-row-open" aria-label={m.openFeature(name)} aria-describedby={line} onClick={() => onOpen(slot.slot)} />
+      <button type="button" className="ai-row-open" aria-label={m.openFeature(name)} aria-haspopup="dialog" aria-describedby={line} onClick={() => onOpen(slot.slot)} />
       <div className="ai-row-text">
         <strong>{name}</strong>
         <span className="ai-row-line" id={line}>{m.slotShort[slot.slot]}</span>
@@ -36,8 +38,8 @@ export function FeatureRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpe
       </div>
       {state ? <span className={`status ai-state ai-st-${state.tone}`}>{state.text}</span> : <span className="ai-state" role="status">{m.saving}</span>}
       <span className="ai-row-switch">
-        {why && <LockedReason label={name} text={why} />}
-        <label className="switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} checked={slot.enabled} disabled={!isAdmin || saving || !choice}
+        {why && <LockedReason label={name} text={why} id={whyID} />}
+        <label className="switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} aria-describedby={why ? whyID : undefined} checked={slot.enabled} disabled={!isAdmin || saving || !choice}
           onChange={(event) => onSetSlot(slot.slot, slotChange(slot, chosen, { enabled: event.target.checked }))} /></label>
       </span>
     </li>

@@ -147,6 +147,7 @@ export const aiMessages = {
   rowsFoot: 'The switch saves at once. A row opens its settings.',
   sheetSaves: 'Choices save at once',
   sheetDone: 'Done',
+  pickProviderFirst: 'Open this row and pick a provider first.',
   noProviderYet: 'No AI provider yet.',
   noProviderBody: 'Add your own key, or ask whoever runs this server.',
   noProviderWhy: 'Suggestions and drafts need a model to run on. Your workspace pays a provider directly with its own key, or the server operator sets one provider for every workspace; both keep working if you move to another server.',
