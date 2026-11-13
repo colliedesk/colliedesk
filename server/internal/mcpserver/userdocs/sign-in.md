@@ -29,6 +29,12 @@ agent in at least one workspace. If it belongs to several workspaces, choose the
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does
 not receive or manage that Colliedesk session.
 
+Where each workspace has its own address (`<workspace>.colliedesk.com` on Colliedesk Cloud), the main
+address (`app.colliedesk.com`) takes a person with one workspace straight to it. A person with several
+workspaces is asked which one to open every time. To move to another of your workspaces, open the
+main address's sign-in page (`app.colliedesk.com/sign-in`) and choose it: you stay signed in to the
+workspace you came from.
+
 ## Create a workspace (hosted cloud)
 
 New to Colliedesk Cloud? Use the same sign-in form. When the

@@ -145,6 +145,12 @@ the request then acts on that workspace only:
   ends it. `APP_ORIGIN` keeps the cookie `colliedesk_workspace` with the slug, which is no credential: a
   page load there redirects to the same page on that host. A session on `APP_ORIGIN` from before the
   move hands off once; the page load that hands it off revokes it and clears its cookie.
+- The hint is kept only for a cloud email of one workspace. When the verified email is an active agent
+  of another workspace too (`Redeemed.OtherWorkspaces`, from the same lookup as the 409 `workspaces`
+  chooser), the sign-in clears the hint instead, so `APP_ORIGIN` asks again next time rather than sending
+  the person into the last workspace (`TestAPersonWithSeveralWorkspacesIsNotSentIntoTheLastOneFromTheAppHost`).
+  A sign-in by link and the hand-off of a pre-move session still set it: their email is not verified, so
+  the server does not look it up in other workspaces.
 - `Authenticate` checks the host before it refreshes `last_seen_at` and `expires_at`, so a session sent
   to another workspace's host is not extended.
 - A path a sign-in opens (`next`) is refused when it holds a control character: a browser drops tabs
@@ -153,7 +159,7 @@ the request then acts on that workspace only:
   `script-src 'none'`.
 
 Tests: `workspace_host_test.go`, `workspace_host_sign_in_test.go`, `workspace_host_sign_out_test.go`,
-`workspace_host_hardening_test.go` in `internal/httpapi`.
+`workspace_host_switch_test.go`, `workspace_host_hardening_test.go` in `internal/httpapi`.
 
 ## Privileged allowlist
 

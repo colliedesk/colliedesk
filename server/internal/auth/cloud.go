@@ -63,6 +63,7 @@ func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label
 		return Redeemed{}, nil, fmt.Errorf("cloud pairing: %w", err)
 	}
 	redeemed, err := s.Redeem(ctx, link.Token, "", label, true)
+	redeemed.OtherWorkspaces = len(agents) > 1
 	return redeemed, nil, err
 }
 

@@ -19,6 +19,15 @@ func setWorkspaceHint(response http.ResponseWriter, slug string) {
 	})
 }
 
+// clearWorkspaceHint removes the hint, so a page load of APP_ORIGIN reaches the sign-in page and its
+// workspace chooser.
+func clearWorkspaceHint(response http.ResponseWriter) {
+	http.SetCookie(response, &http.Cookie{
+		Name: workspaceHintCookie, Value: "", Path: "/", HttpOnly: true,
+		Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: -1,
+	})
+}
+
 // workspaceHintAddress is the same page on the host of the workspace the request's hint names, or ""
 // without a hint that names a workspace host.
 func (a *API) workspaceHintAddress(request *http.Request) string {
