@@ -44,18 +44,28 @@ for (const width of [1440, 1280]) {
     for (const gap of await gapsOf()) expect.soft(gap, 'space between two tabs').toBeGreaterThanOrEqual(12);
     expect.soft(await status.evaluate((row) => row.scrollWidth <= row.clientWidth), 'the three tabs fit without scrolling').toBe(true);
 
+    // Hovering a row only shows its select box (I1-d); the full time shows on its own time, inside that row, so no
+    // tooltip covers another row or hides behind the top edge of the list.
     const first = page.locator('.conversation-scroll > .conversation-item').first();
+    await first.locator('.conversation-row').hover({ position: { x: 40, y: 40 } });
+    expect.soft(await first.locator('.conversation-row').evaluate((button) => getComputedStyle(button, '::after').content), 'the row has no tooltip').toBe('none');
+    await first.locator('.conversation-row time').hover();
+    await page.waitForTimeout(300);
     const placement = await first.evaluate((item) => {
-      const button = item.querySelector('.conversation-row')!;
+      const time = item.querySelector('.conversation-row time')!;
+      const tip = getComputedStyle(time, '::after');
+      const box = time.getBoundingClientRect();
+      const row = item.getBoundingClientRect();
       const list = item.closest('.conversation-scroll')!.getBoundingClientRect();
-      const box = button.getBoundingClientRect();
-      const tip = getComputedStyle(button, '::after');
       const top = box.top + parseFloat(tip.top);
-      return { top: Math.round(top), bottom: Math.round(top + parseFloat(tip.height)), listTop: Math.round(list.top), listBottom: Math.round(list.bottom) };
+      const left = box.left + parseFloat(tip.left);
+      return { opacity: tip.opacity, top, bottom: top + parseFloat(tip.height), left, right: left + parseFloat(tip.width), row: { top: row.top, bottom: row.bottom }, list: { left: list.left, right: list.right } };
     });
-    expect.soft(placement.top, 'the top row\'s tooltip starts inside the list').toBeGreaterThanOrEqual(placement.listTop);
-    expect.soft(placement.bottom, 'the top row\'s tooltip ends inside the list').toBeLessThanOrEqual(placement.listBottom);
-    await first.locator('.conversation-row').hover();
+    expect.soft(placement.opacity, 'the time shows its tooltip').toBe('1');
+    expect.soft(placement.top, 'the tooltip starts inside its row').toBeGreaterThanOrEqual(placement.row.top);
+    expect.soft(placement.bottom, 'the tooltip ends inside its row').toBeLessThanOrEqual(placement.row.bottom);
+    expect.soft(placement.left, 'the tooltip starts inside the list').toBeGreaterThanOrEqual(placement.list.left);
+    expect.soft(placement.right, 'the tooltip ends inside the list').toBeLessThanOrEqual(placement.list.right);
     await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-${width}.png`) });
 
     // A search adds All and Closed (I4-a): five tabs never squeeze their words together; the row scrolls instead.

@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { Conversation, ConversationViewer } from '../../api/schemas';
-import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from '../../lib/format-date';
+import { dayGroup, formatDate, formatListTime, formatShortDate, zoneSuffix } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
@@ -125,7 +125,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
             <input type="checkbox" aria-label={messages.selectRow(item.contact_name, item.subject, full)} checked={checkedIds?.has(item.id) ?? false}
               onClick={(event) => { shift.current = event.shiftKey; }} onChange={() => { onToggle?.(item.id, shift.current); shift.current = false; }} />
           </label>
-          <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
+          <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} onClick={() => onSelect?.(item.id)}>
             <span className="row-top">
               <span className={`row-dot row-dot-${dot.tone}`}>{dot.words}</span>
               <span className="row-customer">{item.contact_name}</span>
@@ -133,7 +133,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
               {open && open.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ViewerStack viewers={open} timezone={timezone} />} />}
               {due ? <span className={`row-due${due.late ? ' row-due-late' : ''}`} aria-label={due.full} data-tip={due.full}>{due.text}</span>
-                : <time dateTime={stamp} title={stampTitle(stamp, timezone)}>
+                : <time dateTime={stamp} data-tip={full}>
                   <span aria-hidden="true" className="time-short">{formatShortDate(stamp, timezone, now)}</span>
                   <span aria-hidden="true" className="time-touch">{formatListTime(stamp, timezone, now)}</span>
                 </time>}
