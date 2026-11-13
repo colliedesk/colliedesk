@@ -22,9 +22,17 @@ you can use:
 - **Data** (`/settings/data`): import from Freshdesk and export all data.
 - **Plan and billing**, on Colliedesk Cloud.
 
-The help center's settings are in the knowledge base, under **Knowledge base → Settings**. An old link
-to a section of Settings, such as `/settings#invites-heading`, opens the page that holds it now. On a
-phone, **Settings** shows the menu; open a page from it, and **All settings** goes back.
+While you are in Settings, its menu takes the place of the sidebar, under **Back to app**. The sheet shows
+the page alone. **Back to app** returns to the page you were on before Settings: the conversation you
+had open, or the inbox when there was none. **Esc** does the same, except while the cursor is in a text
+field, a menu list or a dialog, so nothing you type is lost. You can still drag the sidebar's edge to
+resize it, or fold it: folded, it keeps **Back to app** as an arrow, and the menu comes back when you
+open it again.
+
+The help center's settings are in the knowledge base, under **Knowledge base → Settings**, which is not a
+Settings page and keeps the app's sidebar. An old link to a section of Settings, such as
+`/settings#invites-heading`, opens the page that holds it now. On a phone, **Settings** shows the menu;
+open a page from it, and **‹ Settings** above its title goes back.
 
 ## Rename the workspace
 
