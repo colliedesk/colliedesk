@@ -250,7 +250,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if telemetryConfig.OffReason == "DISABLE_TELEMETRY is set" && os.Getenv("DISABLE_TELEMETRY") == "" {
 		telemetryConfig.OffReason = "telemetry.enabled is false"
 	}
-	usage := telemetry.New(db, telemetryConfig, nil)
+	// The cloud's workspace snapshots read each workspace's email step through the channel types this server runs.
+	usage := telemetry.New(db, telemetryConfig, nil).WithStore(channelStore)
 	g.Go(func(ctx context.Context) { usage.Run(ctx, logger) })
 	// Trials and first payments of sign-ups from Meta ads are reported to Meta from the hosted cloud only;
 	// a self-hosted server reads no variable for it (docs/internals/ad-conversions.md).

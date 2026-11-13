@@ -23,9 +23,14 @@ type snapshot struct {
 	properties  map[string]any
 }
 
+// emailStateFunc reads a workspace's email step as its setup guide shows it (store.EmailSetupState).
+type emailStateFunc func(ctx context.Context, workspaceID string) (state string, detail *string, err error)
+
 // readSnapshots counts every workspace's activity inside the privileged telemetry transaction.
-// Each metric family is one grouped query over all workspaces; only the counts leave it.
-func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, error) {
+// Each metric family is one grouped query over all workspaces; only the counts leave it. The email
+// state is the exception: emailState reads it per workspace, in that workspace's own scope, so the
+// snapshot and the setup guide cannot disagree on whether email works.
+func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time, emailState emailStateFunc) ([]snapshot, error) {
 	type workspace struct {
 		id, name, slug   string
 		created, trialTo time.Time
@@ -67,15 +72,17 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 	if err != nil {
 		return nil, fmt.Errorf("count tokens: %w", err)
 	}
-	// Replies imported from another helpdesk keep their original time; only replies sent here count.
-	replies, err := countsByWorkspace(ctx, tx, 3, `SELECT workspace_id::text,
-		count(*) FILTER (WHERE created_at >= $1::timestamptz - interval '7 days'),
-		count(*),
-		count(*) FILTER (WHERE created_at >= $1::timestamptz - interval '7 days' AND agent_token_id IS NOT NULL)
-		FROM messages WHERE kind = 'outgoing' AND origin IS NULL AND notice_kind IS NULL AND created_at >= $1::timestamptz - interval '30 days'
+	// Messages imported from another helpdesk keep their original time; only replies sent here and
+	// customer messages that arrived here count. One pass over the last 30 days counts both.
+	messages, err := countsByWorkspace(ctx, tx, 4, `SELECT workspace_id::text,
+		count(*) FILTER (WHERE kind = 'outgoing' AND created_at >= $1::timestamptz - interval '7 days'),
+		count(*) FILTER (WHERE kind = 'outgoing'),
+		count(*) FILTER (WHERE kind = 'outgoing' AND created_at >= $1::timestamptz - interval '7 days' AND agent_token_id IS NOT NULL),
+		count(*) FILTER (WHERE kind = 'incoming' AND created_at >= $1::timestamptz - interval '7 days')
+		FROM messages WHERE kind IN ('outgoing', 'incoming') AND origin IS NULL AND notice_kind IS NULL AND created_at >= $1::timestamptz - interval '30 days'
 		GROUP BY workspace_id`, now)
 	if err != nil {
-		return nil, fmt.Errorf("count replies: %w", err)
+		return nil, fmt.Errorf("count messages: %w", err)
 	}
 	conversations, err := countsByWorkspace(ctx, tx, 2, `SELECT workspace_id::text,
 		count(*) FILTER (WHERE status = 'open'),
@@ -87,6 +94,11 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 	emailChannels, err := workspaceSet(ctx, tx, `SELECT DISTINCT workspace_id::text FROM email_channels`)
 	if err != nil {
 		return nil, fmt.Errorf("read email channels: %w", err)
+	}
+	// A mailbox whose grant failed cannot send; only a connected one counts.
+	mailboxes, err := workspaceSet(ctx, tx, `SELECT DISTINCT workspace_id::text FROM mailbox_connections WHERE status = 'connected'`)
+	if err != nil {
+		return nil, fmt.Errorf("read mailbox connections: %w", err)
 	}
 	webForms, err := workspaceSet(ctx, tx, `SELECT DISTINCT f.workspace_id::text FROM web_form_channels f JOIN channels c ON c.workspace_id=f.workspace_id AND c.id=f.channel_id WHERE c.enabled`)
 	if err != nil {
@@ -135,7 +147,11 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 		if row, ok := firstResults[w.id]; ok {
 			firstResult = max(row[0], 0)
 		}
-		replyCounts, signIns, convCounts, chatCounts := replies.at(w.id, 3), signedIn.at(w.id, 2), conversations.at(w.id, 2), chats.at(w.id, 2)
+		email, _, err := emailState(ctx, w.id)
+		if err != nil {
+			return nil, fmt.Errorf("read email state: %w", err)
+		}
+		messageCounts, signIns, convCounts, chatCounts := messages.at(w.id, 4), signedIn.at(w.id, 2), conversations.at(w.id, 2), chats.at(w.id, 2)
 		snapshots = append(snapshots, snapshot{workspaceID: w.id, properties: map[string]any{
 			"plan":                         access.Plan,
 			"trial_days_left":              trialDaysLeft,
@@ -143,12 +159,15 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 			"agents_total":                 agents.at(w.id, 1)[0],
 			"agents_active_7d":             signIns[0],
 			"agents_active_30d":            signIns[1],
-			"replies_7d":                   replyCounts[0],
-			"replies_30d":                  replyCounts[1],
-			"ai_agent_replies_7d":          replyCounts[2],
+			"replies_7d":                   messageCounts[0],
+			"replies_30d":                  messageCounts[1],
+			"ai_agent_replies_7d":          messageCounts[2],
+			"inbound_messages_7d":          messageCounts[3],
 			"conversations_open":           convCounts[0],
 			"conversations_created_7d":     convCounts[1],
 			"email_channel":                emailChannels[w.id],
+			"email_state":                  email,
+			"mailbox_connected":            mailboxes[w.id],
 			"web_form":                     webForms[w.id],
 			"tokens_active":                tokens.at(w.id, 1)[0],
 			"help_chat":                    helpChats[w.id],

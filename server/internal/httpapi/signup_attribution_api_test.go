@@ -33,7 +33,7 @@ func TestSignupStoresTheAdLinkItCameFromAndCountsItWithTheTrial(t *testing.T) {
 		t.Fatalf("trial_started=%+v, want one", events)
 	}
 	properties := events[0].Properties
-	want := map[string]string{"source": "tiktok", "utm_source": "tiktok", "utm_medium": "paid", "utm_campaign": "launch", "utm_content": "post-07", "utm_term": "helpdesk", "fbclid": "IwAR_x-1.y"}
+	want := map[string]string{"source": "tiktok", "utm_source": "tiktok", "utm_medium": "paid", "utm_campaign": "launch", "utm_content": "post-07", "utm_term": "helpdesk", "fbclid": "IwAR_x-1.y", "signup_via": "web"}
 	if len(properties) != len(want) {
 		t.Fatalf("trial_started properties=%v, want exactly %v", properties, want)
 	}

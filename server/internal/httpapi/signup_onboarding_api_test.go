@@ -107,11 +107,12 @@ func TestTrialStartedCarriesOnlyTheOnboardingAnswersGiven(t *testing.T) {
 		t.Fatalf("events=%+v, want two trial_started", events)
 	}
 	full, partial := events[0].Properties, events[1].Properties
-	if len(full) != 3 || full["goal"] != "ai_agents" || full["role"] != "developer" || full["source"] != "github" {
-		t.Fatalf("first properties=%v, want goal ai_agents, role developer, source github", full)
+	// signup_via is always there; of the answers, only those given.
+	if len(full) != 4 || full["goal"] != "ai_agents" || full["role"] != "developer" || full["source"] != "github" || full["signup_via"] != "web" {
+		t.Fatalf("first properties=%v, want goal ai_agents, role developer, source github, signup_via web", full)
 	}
-	if len(partial) != 1 || partial["source"] != "x" {
-		t.Fatalf("second properties=%v, want only source x", partial)
+	if len(partial) != 2 || partial["source"] != "x" || partial["signup_via"] != "web" {
+		t.Fatalf("second properties=%v, want only source x and signup_via web", partial)
 	}
 }
 
